@@ -629,24 +629,29 @@ import SQLServerKit
     guard !paintingOccurrences,!editor.trackingMouseSelection, let storage = editor.textContentStorage?.textStorage else { return }
     paintingOccurrences = true; defer { paintingOccurrences = false }
     let source = editor.string as NSString, range = editor.selectedRange()
-    if occurrenceRanges.isEmpty && range.length == 0 { return }
-    let selection=editor.selectedRanges
-    storage.beginEditing()
-    for old in occurrenceRanges where NSMaxRange(old) <= storage.length { storage.removeAttribute(.backgroundColor,range:old) }
-    occurrenceRanges = []
+    var updatedRanges: [NSRange] = []
     if source.length <= 250_000, range.length > 0, range.length <= 256, NSMaxRange(range) <= source.length {
       let selected = source.substring(with:range)
       if !selected.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty, !selected.contains("\n") {
         var start = 0
-        while start < source.length, occurrenceRanges.count < 500 {
+        while start < source.length, updatedRanges.count < 500 {
           let found = source.range(of:selected,options:[.caseInsensitive,.literal],range:NSRange(location:start,length:source.length-start))
           if found.location == NSNotFound { break }
-          occurrenceRanges.append(found); start = NSMaxRange(found)
-          storage.addAttribute(.backgroundColor,value:NSColor.systemYellow.withAlphaComponent(0.34),range:found)
+          updatedRanges.append(found); start = NSMaxRange(found)
         }
       }
     }
+    let removedRanges = occurrenceRanges.filter { !updatedRanges.contains($0) }
+    let addedRanges = updatedRanges.filter { !occurrenceRanges.contains($0) }
+    guard !removedRanges.isEmpty || !addedRanges.isEmpty else { return }
+    let selection=editor.selectedRanges
+    storage.beginEditing()
+    for old in removedRanges where NSMaxRange(old) <= storage.length { storage.removeAttribute(.backgroundColor,range:old) }
+    for added in addedRanges where NSMaxRange(added) <= storage.length {
+      storage.addAttribute(.backgroundColor,value:NSColor.systemYellow.withAlphaComponent(0.34),range:added)
+    }
     storage.endEditing()
+    occurrenceRanges = updatedRanges
     if editor.selectedRanges != selection {editor.selectedRanges=selection}
     decorateCollapsedRegions()
   }

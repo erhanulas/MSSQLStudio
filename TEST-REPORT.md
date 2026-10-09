@@ -8,6 +8,10 @@ Başlangıç kontrolünde çekirdek test hedefi başarılıydı; tüm test komut
 
 Bu kontrolün kayıtları: /tmp/MSSQLStudio-audit-tests.beFMfa/tests.log, /tmp/MSSQLStudio-audit-tests.beFMfa/editor-toolbar-tests.log ve /tmp/MSSQLStudio-audit-build.oIw2HC/editor-toolbar-build.log. Aşağıdaki bölümler önceki sürümlerin tarihsel doğrulamalarıdır.
 
+## 0.2.34 yayın hazırlığı
+
+Vurgulama çizimi değişikliği için kişisel imzalı ZIP/PKG üretildi. prepare-release ZIP ve PKG imza kimliğini, metadata/binary eşleşmesini, release notes ve update manifestini doğruladı. Gerçek ZIP ile tüm testler başarılı: 52 uygulama + 88 çekirdek testi; 22 koşullu test atlandı, 118 test geçti. Canlı SQL, Keychain erişimi ve kurulum denenmedi. Kanıtlar Validation/release-0.2.34-build.txt, release-0.2.34-manifest.json ve release-0.2.34-tests.txt.
+
 ## 0.2.33 yayın hazırlığı
 
 0.2.33 / build 34 kişisel imzalı Release ZIP ve PKG üretildi. prepare-release doğrulaması sertifika kimliğini, ZIP/PKG metadata ve binary eşleşmesini, sürüm notlarını ve SHA-256 manifestini doğruladı. Gerçek ZIP ile tam test çalışması başarılı: 52 uygulama + 88 çekirdek testi raporlandı; 22 koşullu test atlandı, 118 test geçti. Önceki aralıklı arayüz çökmesi bu koşuda tekrarlanmadı; kök neden için düzeltme yapılmadı. Canlı SQL, Keychain erişimi ve gerçek kurulum bu tur denenmedi. Kanıtlar Validation/release-0.2.33-build.txt, release-0.2.33-manifest.json ve release-0.2.33-tests.txt.

@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.34",
+    "date": "2026-10-10",
+    "title": "Editör vurgulama çiziminin iyileştirilmesi",
+    "changes": [
+      "SQL editöründe aynı seçili metnin eşleşmeleri gereksiz yere silinip yeniden boyanmıyor.",
+      "Metin seçimi değişince yalnızca eklenen veya kaldırılan eşleşmeler vurgulanıyor."
+    ]
+  },
+  {
     "version": "0.2.33",
     "date": "2026-10-10",
     "title": "Daha sade SQL editörü araç çubuğu",
