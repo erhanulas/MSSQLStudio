@@ -1,0 +1,51 @@
+[
+  {
+    "version": "0.2.31",
+    "date": "2026-10-10",
+    "title": "Hakkında ve sürüm geçmişi",
+    "changes": [
+      "Hakkında penceresinde kurulu uygulamanın sürümü ve derleme numarası gösteriliyor.",
+      "Bu sürümdeki yenilikler ve önceki sürümlerin değişiklikleri internet olmadan okunabiliyor.",
+      "Hakkında penceresinden güncelleme kontrolüne ve GitHub yayınlarına erişilebiliyor.",
+      "Uygulama içindeki değişiklik notları ve GitHub yayın açıklaması aynı kaynaktan üretiliyor."
+    ]
+  },
+  {
+    "version": "0.2.30",
+    "date": "2026-10-10",
+    "title": "GitHub üzerinden güncellemeler",
+    "changes": [
+      "Uygulamanın güncelleme kaynağı GitHub Releases deposuna bağlandı.",
+      "Ayarlara alternatif herkese açık GitHub deposu tanımlama alanı eklendi.",
+      "Sürüm etiketiyle derleme, test, ZIP / PKG ve güncelleme manifesti yayını otomatikleştirildi."
+    ]
+  },
+  {
+    "version": "0.2.29",
+    "date": "2026-10-09",
+    "title": "Daha dar Object Explorer",
+    "changes": [
+      "Object Explorer yaklaşık 140 puntoya kadar daraltılabiliyor; sürükleme paneli otomatik gizlemiyor.",
+      "Gizle / göster ve yeniden açılış sonrasında panel genişliği korunuyor."
+    ]
+  },
+  {
+    "version": "0.2.28",
+    "date": "2026-10-09",
+    "title": "Uygulamalar klasörüne kurulum",
+    "changes": [
+      "PKG kurulum hedefi ana /Applications klasörü olarak düzeltildi.",
+      "Güncellemeler aynı uygulama kimliğiyle bağlantı ve Keychain kayıtlarını koruyor."
+    ]
+  },
+  {
+    "version": "0.2.27",
+    "date": "2026-10-09",
+    "title": "Nesne düzenleme ve SQL Server Agent",
+    "changes": [
+      "Açık nesne sekmelerine yeniden yönlendirme ve gerçek değişikliğe göre kapatma uyarıları eklendi.",
+      "Nesne değişiklikleri için yan yana fark önizlemesi geliştirildi.",
+      "SQL Server Agent iş geçmişi, özellikler ve iş / zamanlama komutları eklendi. Agent erişimi sunucu özelliklerine ve izinlere bağlıdır."
+    ]
+  }
+]

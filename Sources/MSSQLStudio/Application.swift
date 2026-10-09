@@ -126,6 +126,8 @@ import SwiftUI
       menu.addItem(item)
     }
     let app = menu("MSSQL Studio")
+    command(app, "MSSQL Studio Hakkında", #selector(WorkbenchController.about))
+    app.addItem(.separator())
     command(app, "Ayarlar…", #selector(WorkbenchController.settings), ",")
     command(app, "Güncellemeleri Kontrol Et", #selector(WorkbenchController.installUpdate))
     app.addItem(.separator())

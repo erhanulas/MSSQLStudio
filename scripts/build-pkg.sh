@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
-zip_path="${1:-$project_dir/releases/MSSQLStudio-0.2.30.zip}"
+zip_path="${1:-$project_dir/releases/MSSQLStudio-0.2.31.zip}"
 output_dir="${2:-$project_dir/releases}"
 stage_dir="$(mktemp -d /tmp/MSSQLStudio-pkg.XXXXXX)"
 trap 'rm -rf "$stage_dir"' EXIT

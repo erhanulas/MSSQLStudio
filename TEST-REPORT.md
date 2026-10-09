@@ -1,6 +1,14 @@
-# MSSQL Studio 0.2.30 — Doğrulama raporu
+# MSSQL Studio 0.2.31 — Doğrulama raporu
 
 Tarih: 9 Ekim 2026. Önceki NativeSQL projesi değiştirilmedi; bu uygulamanın kaynakları, arayüzü ve SQL katmanı yeniden yazıldı.
+
+## 0.2.31 — Hakkında ve ortak sürüm notları
+
+10 Ekim 2026. Menüye MSSQL Studio Hakkında eklendi. Pencere bundle metadata'sından sürüm/build okur; ReleaseNotes.json Swift Package resource olarak imzalı uygulamaya dahil edilir. Beş sürümün notları çevrimdışı seçilebilir. GitHub yayın bağlantısı ve mevcut güncelleme kontrolü sunulur. Açık pencere tekrar kullanılır. Yayın hazırlığı notes/tag eşleşmesini, JSON varlığını ve ZIP/PKG notlarının byte eşitliğini kontrol eder; GitHub açıklamasını aynı JSON'dan üretir.
+
+0.2.31 / build 32 Release derlemesi başarılı. Gerçek ZIP ile **52 uygulama + 87 çekirdek**, 26 suite / 139 test raporlandı; 22 koşullu test atlandı, **117 farklı test geçti**. Yeni regresyonlar: bundle notları, nümerik sürüm sırası ve metin eşleşmesi, yinelenen sürüm / bozuk tarih / geçersiz version / boş notların reddi, gerçek bundle kimliği ile not sürümünün ayrımı ve aynı About penceresinin sorgu oluşturmadan yeniden kullanılması. Gerçek ZIP hazırlama testi /tmp altında imza/sürüm denetimini geçti. SQL veya Keychain canlı testi gerekmedi ve yapılmadı.
+
+Native smoke yalıtılmış bundle ID ile yapıldı: uygulama menüsünden Hakkında açıldı; Sürüm 0.2.31 · Derleme 32, mevcut notlar ve kurulu sürüm etiketi görüldü. 0.2.30 seçildiğinde başlık ve üç değişiklik değişti; üstteki kurulu sürüm 0.2.31 olarak kaldı. Pencerenin görünümü kontrol edildi. Güncellemeleri Kontrol Et düğmesi gerçek GitHub kaynağına ulaşıp daha eski 0.2.30 yayınından sonra yeni sürüm olmadığını gösterdi. Test uygulaması kapatıldı; kurulu kullanıcı uygulaması ve bağlantıları değiştirilmedi. ZIP ve PKG strict/deep imzası ve release notes eşleşmesi doğrulandı. Gerçek PKG kurulumu yapılmadı; Developer ID / notarization yoktur. Uzak CI ve yayın sonucu dağıtım kaydında ayrıca belirtilir.
 
 ## 0.2.30 — GitHub güncelleme kaynağı
 

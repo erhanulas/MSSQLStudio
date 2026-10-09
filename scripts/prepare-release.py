@@ -29,6 +29,16 @@ def prepare(repository, tag, output):
         if z.testzip():
             raise ValueError('Corrupt ZIP')
         info = plistlib.loads(z.read('MSSQLStudio.app/Contents/Info.plist'))
+        resources = [n for n in z.namelist() if n.endswith('/ReleaseNotes.json')]
+        if len(resources) != 1:
+            raise ValueError('Exactly one bundled release history is required')
+        history_bytes = z.read(resources[0])
+        history = json.loads(history_bytes)
+        if not isinstance(history, list) or not history or history[0].get('version') != version:
+            raise ValueError('Current release notes must match the release tag')
+        current_notes = history[0]
+        if not current_notes.get('title') or not current_notes.get('date') or not current_notes.get('changes') or not all(isinstance(x,str) and x.strip() for x in current_notes['changes']):
+            raise ValueError('Current release notes are incomplete')
     expected_feed=f'https://github.com/{repository}/releases/latest/download/update.json'
     if info.get('CFBundleIdentifier') != 'local.mssqlstudio.app' or info.get('CFBundleShortVersionString') != version:
         raise ValueError('Tag and signed application version/bundle do not match')
@@ -41,6 +51,9 @@ def prepare(repository, tag, output):
         subprocess.run(['pkgutil','--expand-full',str(package),str(expanded)],check=True)
         payload=expanded/'MSSQLStudio-component.pkg/Payload/Applications/MSSQLStudio.app'
         subprocess.run(['codesign','--verify','--deep','--strict',str(payload)],check=True)
+        relative_history = Path(resources[0]).relative_to('MSSQLStudio.app')
+        if (payload/relative_history).read_bytes() != history_bytes:
+            raise ValueError('PKG and ZIP release notes do not match')
         package_info=plistlib.loads((payload/'Contents/Info.plist').read_bytes())
         if package_info != info:
             raise ValueError('PKG and ZIP application metadata do not match')
@@ -48,6 +61,8 @@ def prepare(repository, tag, output):
         if binary.read_bytes() != (payload/'Contents/MacOS/MSSQLStudio').read_bytes():
             raise ValueError('PKG and ZIP application binaries do not match')
     manifest={'version':version,'downloadURL':f'https://github.com/{repository}/releases/download/{tag}/{archive.name}','sha256':hashlib.sha256(archive.read_bytes()).hexdigest()}
+    markdown = f"## {current_notes['title']}\n\n{version} · {current_notes['date']}\n\n" + '\n'.join('- '+change for change in current_notes['changes']) + '\n'
+    (output/'release-notes.md').write_text(markdown)
     (output/'update.json').write_text(json.dumps(manifest,indent=2)+'\n')
     return manifest
 

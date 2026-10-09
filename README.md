@@ -4,7 +4,7 @@
 
 ## Başlatma
 
-`releases/MSSQLStudio-0.2.30.pkg` kurulum paketini açın. Açık sorgularınızı kaydedip uygulamayı kapatın; paket ana `/Applications/MSSQLStudio.app` konumuna kurar/günceller. Bu Mac'te gereken unixODBC, Microsoft ODBC 18 ve OpenSSL 3 kurulu. Uygulama bu yerel kurulumları kullanır; sürücüyü paket içinde dağıtmaz. Başka bir Mac için [Microsoft'un macOS kurulum yönergesini](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos) izleyin ve `/opt/homebrew/opt/openssl@3/lib` yolunu sağlayın.
+`releases/MSSQLStudio-0.2.31.pkg` kurulum paketini açın. Açık sorgularınızı kaydedip uygulamayı kapatın; paket ana `/Applications/MSSQLStudio.app` konumuna kurar/günceller. Bu Mac'te gereken unixODBC, Microsoft ODBC 18 ve OpenSSL 3 kurulu. Uygulama bu yerel kurulumları kullanır; sürücüyü paket içinde dağıtmaz. Başka bir Mac için [Microsoft'un macOS kurulum yönergesini](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos) izleyin ve `/opt/homebrew/opt/openssl@3/lib` yolunu sağlayın.
 
 1. Sunucu ve parolayı girip **Bağlantıyı Test Et ve Listele** düğmesine basın; yerel test adresi `localhost`, port `1433`. Başarılı testten sonra erişebildiğiniz veritabanları otomatik yüklenir. Görmek istediklerinizi işaretleyip yeni sorguların varsayılanını satırdaki yıldızla belirleyin; ardından **Bağlan** düğmesine basın. Yeni bağlantıda hiçbiri otomatik seçilmez; en az bir seçim gerekir. Parola kaynak kodunda veya örneklerde yoktur.
 2. Yerel kendinden imzalı sertifika için onaylanan **Trust server certificate** seçeneği kullanılabilir. Şifreleme her zaman açık; bu seçenek yeni bağlantılarda varsayılan olarak kapalı.
@@ -12,6 +12,12 @@
 4. Yazarken DDL önerileri açılır; Control+Space ile elle açın, Tab/Enter ile kabul edin, Escape ile kapatın. Ctrl+F / ⌘F seçili metinle bulma çubuğunu açar; ⌘⇧F SQL'i biçimlendirir.
 5. Object Explorer ve üstteki seçici yalnızca seçtiğiniz veritabanlarını gösterir. Sunucu veya Databases üzerinde sağ tık → **Bağlantı ayarları** ile seçimi değiştirin. Açık sorgular kendi veritabanlarını korur; bu nedenle açık sekmenin mevcut veritabanı seçicide görünmeye devam edebilir. Veritabanını üstteki seçiciden değiştirin. Tablonun sağ menüsünden SELECT / INSERT / UPDATE / DELETE scriptleri, özellikler ve indeks tasarımını açın.
 6. Görünüm menüsünden sorguyu ayrı pencereye taşıyın; aynı oturum, sorgu, sonuçlar ve transaction korunur. Pencere kapanınca sorgu ana çalışma alanına döner.
+
+## Hakkında ve sürüm değişiklikleri (0.2.31)
+
+**MSSQL Studio → MSSQL Studio Hakkında** menüsü kurulu bundle'ın gerçek sürümünü ve derleme numarasını gösterir. Sol listeden sürüm seçildiğinde o sürümün tarih, başlık ve değişiklikleri okunur; kurulu sürüm ayrıca işaretlidir. Son beş sürümün notları uygulamayla birlikte gelir ve internet gerekmez. GitHub Yayınları bağlantısı tüm uzak yayınları açar; Güncellemeleri Kontrol Et düğmesi mevcut güncelleme akışını kullanır. SQL oturumu veya Keychain erişimi gerekmez. Açık Hakkında penceresine tekrar menüden gidilirse aynı pencere öne gelir.
+
+Notların tek kaynağı `Sources/SQLServerKit/Resources/ReleaseNotes.json` dosyasıdır. Yeni sürüm için en üste version/date/title/changes kaydı ekleyin ve Xcode sürümünü yükseltin. JSON uygulamaya paketlenir. Yayın hazırlığı en üst kaydın tag ile eşleşmesini ve ZIP/PKG notlarının aynı olmasını zorunlu tutar; aynı kayıttan GitHub yayın açıklaması üretilir. Uygulama notları ağdan çalıştırılabilir içerik olarak almaz. Bundle sürümü hiçbir zaman notların en yeni kaydından türetilmez. Geçmiş eksik/bozuksa sürüm görünmeye devam eder ve hata metni gösterilir.
 
 ## GitHub üzerinden güncellemeler (0.2.30)
 
@@ -21,8 +27,8 @@ Yayın deposu [erhanulas/MSSQLStudio](https://github.com/erhanulas/MSSQLStudio);
 
 ### Yeni sürüm yayımlama
 
-1. Xcode projesindeki iki `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` değerini yükseltin. Gerçek ZIP güncelleme testindeki beklenen sürümü güncelleyin; testleri çalıştırıp değişiklikleri `main` dalına gönderin.
-2. Aynı sürümle etiket oluşturup gönderin, örneğin `git tag v0.2.31` ve `git push origin v0.2.31`.
+1. Xcode projesindeki iki `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` değerini yükseltin. `ReleaseNotes.json` dosyasının en üstüne yeni sürümün değişikliklerini ekleyin; testleri çalıştırıp değişiklikleri `main` dalına gönderin.
+2. Aynı sürümle etiket oluşturup gönderin, örneğin `git tag v0.2.32` ve `git push origin v0.2.32`.
 3. `.github/workflows/release.yml`, macOS 27 / Apple Silicon runner'ında uygulamayı ve PKG'yi üretir. ZIP/PKG imzası, bundle, sürüm ve depo eşleşmesini denetler, testleri çalıştırır, SHA-256 içeren manifesti üretir. Üç varlık da taslak yayına yüklendikten sonra yayını Latest olarak açar. Tag ile Xcode sürümü uyuşmazsa yayın oluşturulmaz. Aynı sürüm yeniden yayımlanmaz.
 
 İlk yayın henüz oluşturulmamışsa kontrol hata mesajı verir; bu durum "güncelsiniz" sayılmaz. GitHub Actions'ın depo için etkin olması gerekir. Workflow yalnızca yayın işi için `contents: write` ister; kullanıcı token'ı kaynakta veya uygulamada bulunmaz. Runner `xcode-27` public preview olduğundan kullanılabilirliği GitHub'a bağlıdır. Paketler yerel ad-hoc imzalıdır; Developer ID / noter onayı yoktur. SHA-256 indirme bütünlüğünü denetler; Apple yayıncı kimliği güvencesi sağlamaz. ODBC 18 / unixODBC / OpenSSL bağımlılıkları ayrı kurulur.

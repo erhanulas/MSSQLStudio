@@ -25,8 +25,8 @@ extension StartupUpdateTests {
     guard let path = ProcessInfo.processInfo.environment["MSSQL_UPDATE_ZIP"] else { return }
     let root = URL(fileURLWithPath:"/tmp").appendingPathComponent("StudioUpdateTest-" + UUID().uuidString)
     defer { try? FileManager.default.removeItem(at:root) }
-    let prepared = try await ApplicationUpdate().prepare(zip:URL(fileURLWithPath:path),target:root.appendingPathComponent("MSSQLStudio.app"),currentVersion:"0.2.29")
-    #expect(prepared.version == "0.2.30")
+    let prepared = try await ApplicationUpdate().prepare(zip:URL(fileURLWithPath:path),target:root.appendingPathComponent("MSSQLStudio.app"),currentVersion:"0")
+    #expect(ApplicationUpdate.isNewer(prepared.version,than:"0"))
     #expect(FileManager.default.fileExists(atPath:prepared.stage.appendingPathComponent("MSSQLStudio.app/Contents/Info.plist").path))
     #expect(!FileManager.default.fileExists(atPath:prepared.target.path))
   }

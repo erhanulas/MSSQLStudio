@@ -1711,7 +1711,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   @objc func extensionsPanel() { showExtensionsWindow() }
   @objc private func indexDesigner() { showIndexWindow(node: contextNode) }
   @objc private func jobDesigner() { showJobWindow(node: contextNode) }
-  func present<V: View>(_ root: V, title: String, width: CGFloat = 700, height: CGFloat = 560, minWidth:CGFloat=620, minHeight:CGFloat=480) {
+  @discardableResult func present<V: View>(_ root: V, title: String, width: CGFloat = 700, height: CGFloat = 560, minWidth:CGFloat=620, minHeight:CGFloat=480) -> NSWindow {
     let controller = NSHostingController(
       rootView: root.font(.custom(StudioTheme.uiFont.fontName, size: 12)))
     controller.sizingOptions = []
@@ -1724,6 +1724,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     let owner = NSWindowController(window: window)
     auxiliaryWindows.append(owner)
     owner.showWindow(nil)
+    return window
   }
   func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
     if let menuItem=item as? NSMenuItem,let node=menuItem.representedObject as? TreeNode,

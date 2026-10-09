@@ -6,7 +6,7 @@ let package = Package(name: "MSSQLStudio", platforms: [.macOS("27.0")], products
 ], targets: [
     .systemLibrary(name: "CODBC", pkgConfig: "odbc", providers: [.brew(["unixodbc"])]),
     .systemLibrary(name: "CSQLite"),
-    .target(name: "SQLServerKit", dependencies: ["CODBC", "CSQLite"]),
+    .target(name: "SQLServerKit", dependencies: ["CODBC", "CSQLite"], resources: [.process("Resources")]),
     .executableTarget(name: "MSSQLStudio", dependencies: ["SQLServerKit"]),
     .testTarget(name: "SQLServerKitTests", dependencies: ["SQLServerKit"]),
     .testTarget(name: "StudioStateTests", dependencies: ["MSSQLStudio", "SQLServerKit"])
