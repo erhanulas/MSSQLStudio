@@ -12,6 +12,10 @@ Bu kontrolün kayıtları: /tmp/MSSQLStudio-audit-tests.beFMfa/tests.log, /tmp/M
 
 0.2.33 / build 34 kişisel imzalı Release ZIP ve PKG üretildi. prepare-release doğrulaması sertifika kimliğini, ZIP/PKG metadata ve binary eşleşmesini, sürüm notlarını ve SHA-256 manifestini doğruladı. Gerçek ZIP ile tam test çalışması başarılı: 52 uygulama + 88 çekirdek testi raporlandı; 22 koşullu test atlandı, 118 test geçti. Önceki aralıklı arayüz çökmesi bu koşuda tekrarlanmadı; kök neden için düzeltme yapılmadı. Canlı SQL, Keychain erişimi ve gerçek kurulum bu tur denenmedi. Kanıtlar Validation/release-0.2.33-build.txt, release-0.2.33-manifest.json ve release-0.2.33-tests.txt.
 
+## 0.2.33 yayın sonucu
+
+[GitHub Actions](https://github.com/erhanulas/MSSQLStudio/actions/runs/38002272188) ilk denemede StudioStateTests signal 11 nedeniyle yayını engelledi; aynı kaynakla ikinci deneme tüm kontrolleri geçti. [v0.2.33](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.33) ZIP, PKG ve update.json ile yayımlandı. Herkese açık Latest manifesti 0.2.33 gösteriyor; uzak ZIP indirildi, SHA-256 ve sabit kişisel imza doğrulandı. Kurulum yapılmadı. Kanıtlar: Validation/release-0.2.33-ci-failure.txt, release-0.2.33-github.json, release-0.2.33-public-check.json.
+
 # MSSQL Studio 0.2.32 — Doğrulama raporu
 
 Tarih: 9 Ekim 2026. Önceki NativeSQL projesi değiştirilmedi; bu uygulamanın kaynakları, arayüzü ve SQL katmanı yeniden yazıldı.
