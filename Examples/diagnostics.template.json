@@ -1,0 +1,6 @@
+{
+  "id": "server-diagnostics",
+  "name": "Server Diagnostics",
+  "description": "Sunucu sürümü, oturum ve veritabanları; yalnızca okuma.",
+  "sql": "SELECT @@VERSION AS [SQL Server], @@SPID AS [Session];\nGO\nSELECT name, state_desc, recovery_model_desc FROM sys.databases;"
+}

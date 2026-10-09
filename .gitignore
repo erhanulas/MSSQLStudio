@@ -1,0 +1,15 @@
+.build/
+.swiftpm/
+DerivedData/
+releases/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+
+# Local validation logs and runtime data are not source code.
+Validation/
+*.log
+.env
+.env.*
+*.p12
+*.mobileprovision

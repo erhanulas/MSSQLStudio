@@ -1,0 +1,20 @@
+#!/bin/bash
+set -euo pipefail
+project_dir="$(cd "$(dirname "$0")/.." && pwd)"
+zip_path="${1:-$project_dir/releases/MSSQLStudio-0.2.30.zip}"
+output_dir="${2:-$project_dir/releases}"
+stage_dir="$(mktemp -d /tmp/MSSQLStudio-pkg.XXXXXX)"
+trap 'rm -rf "$stage_dir"' EXIT
+mkdir -p "$output_dir" "$stage_dir/root/Applications"
+ditto -x -k "$zip_path" "$stage_dir/extracted"
+app_path="$stage_dir/extracted/MSSQLStudio.app"
+codesign --verify --deep --strict "$app_path"
+version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_path/Contents/Info.plist")"
+ditto --norsrc "$app_path" "$stage_dir/root/Applications/MSSQLStudio.app"
+xattr -cr "$stage_dir/root"
+pkgbuild --analyze --root "$stage_dir/root" "$stage_dir/components.plist"
+/usr/libexec/PlistBuddy -c 'Add :0:BundleIsRelocatable bool false' "$stage_dir/components.plist"
+/usr/libexec/PlistBuddy -c 'Set :0:BundleOverwriteAction upgrade' "$stage_dir/components.plist"
+pkgbuild --root "$stage_dir/root" --component-plist "$stage_dir/components.plist" --identifier local.mssqlstudio.installer --version "$version" --install-location / "$stage_dir/MSSQLStudio-component.pkg"
+productbuild --distribution "$project_dir/installer/Distribution.xml" --resources "$project_dir/installer" --package-path "$stage_dir" "$output_dir/MSSQLStudio-$version.pkg"
+echo "Created $output_dir/MSSQLStudio-$version.pkg"

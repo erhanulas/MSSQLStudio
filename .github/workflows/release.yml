@@ -1,0 +1,41 @@
+name: Build and publish MSSQL Studio
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: xcode-27
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      MSSQL_UPDATE_FEED_URL: https://github.com/${{ github.repository }}/releases/latest/download/update.json
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        run: brew install unixodbc openssl@3
+      - name: Build signed application and installer
+        run: ./scripts/build-app.sh
+      - name: Validate release and generate update manifest
+        run: python3 scripts/prepare-release.py --repository "$GH_REPO" --tag "$RELEASE_TAG"
+      - name: Run tests with the release package
+        run: |
+          version="${RELEASE_TAG#v}"
+          export MSSQL_UPDATE_ZIP="$PWD/releases/MSSQLStudio-$version.zip"
+          ./scripts/test.sh
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          gh release create "$RELEASE_TAG" "releases/MSSQLStudio-$version.zip" "releases/MSSQLStudio-$version.pkg" releases/update.json --verify-tag --title "MSSQL Studio $version" --generate-notes --draft
+          gh release edit "$RELEASE_TAG" --draft=false --latest

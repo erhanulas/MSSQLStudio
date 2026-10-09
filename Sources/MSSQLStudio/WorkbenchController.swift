@@ -1,0 +1,2205 @@
+import AppKit
+import SQLServerKit
+import SwiftUI
+import UniformTypeIdentifiers
+
+@MainActor final class TreeNode: NSObject {
+  enum Kind {
+    case server, group, database
+    case folder(Folder)
+    case object(Folder)
+    case detail
+  }
+  let title: String
+  let generation: UUID
+  let kind: Kind
+  let server: ConnectedServer
+  let database: String
+  let item: CatalogItem?
+  weak var parent: TreeNode?
+  var children: [TreeNode] = [] { didSet { for child in children { child.parent=self } } }
+  var loaded = false
+  var loading = false
+  var error: String?
+  init(
+    _ title: String, kind: Kind, server: ConnectedServer, database: String = "master",
+    item: CatalogItem? = nil
+  ) {
+    self.title = title
+    self.generation = server.generation
+    self.kind = kind
+    self.server = server
+    self.database = database
+    self.item = item
+  }
+  var displayTitle: String {
+    if case .server = kind {
+      let badge = server.profile.appearance?.badge ?? ""
+      return (badge.isEmpty ? "" : "[\(badge)] ") + server.profile.name + (server.online ? "" : " · Çevrimdışı")
+    }
+    if case .object(.triggers)=kind { return title + (triggerDisabled ? " · Disabled" : " · Enabled") }
+    return title
+  }
+  var triggerDisabled:Bool { item?.detail.contains("Disabled") == true }
+  var ownerObject:TreeNode? {
+    var node=parent
+    while let current=node { if case .object(let f)=current.kind, [.tables,.views,.procedures,.functions].contains(f) {return current}; node=current.parent }
+    return nil
+  }
+  var objectFolder:Folder? { if case .object(let f)=kind { return f }; return nil }
+  var expandable: Bool {
+    switch kind {
+    case .server, .group, .database: return true
+    case .folder(let folder):
+      return [
+        .databases, .tables, .views, .procedures, .functions, .synonyms, .columns, .indexes, .keys,
+        .triggers, .constraints, .parameters, .logins, .users, .roles, .linkedServers, .jobs,
+        .schedules,
+      ].contains(folder)
+    case .object(let folder): return [.tables, .views, .procedures, .functions].contains(folder)
+    case .detail: return false
+    }
+  }
+  private var category: Folder? {
+    switch kind {
+    case .folder(let folder), .object(let folder): return folder
+    default: return nil
+    }
+  }
+  var tint: NSColor {
+    switch kind {
+    case .server:
+      return server.profile.appearance?.isMarked == true
+        ? server.profile.appearance!.color : StudioTheme.accent
+    case .database: return StudioTheme.color(0x278A91, 0x69C3C7)
+    case .group:
+      if title == "Security" { return StudioTheme.color(0xB77A36, 0xDDB17F) }
+      if title == "SQL Server Agent" { return StudioTheme.color(0x8B69B6, 0xBA9AD7) }
+      if title == "Management" { return StudioTheme.color(0x43866C, 0x87C0AA) }
+      return StudioTheme.accent
+    default: break
+    }
+    switch category {
+    case .databases: return StudioTheme.color(0x278A91, 0x69C3C7)
+    case .tables, .columns: return StudioTheme.accent
+    case .views: return StudioTheme.color(0x278A91, 0x69C3C7)
+    case .procedures, .functions, .parameters, .synonyms: return StudioTheme.color(0x8B69B6, 0xBA9AD7)
+    case .logins, .users, .roles, .keys, .constraints: return StudioTheme.color(0xB77A36, 0xDDB17F)
+    case .activity, .sessions, .locks, .files: return StudioTheme.color(0x43866C, 0x87C0AA)
+    case .jobs where item?.detail.contains("Disabled") == true:return .secondaryLabelColor
+    case .jobs, .jobHistory, .schedules: return StudioTheme.color(0xA46B9D, 0xD7A3CF)
+    case .triggers: return triggerDisabled ? .secondaryLabelColor : StudioTheme.color(0x43866C, 0x87C0AA)
+    case .indexes: return StudioTheme.color(0xB77A36, 0xDDB17F)
+    default: return .secondaryLabelColor
+    }
+  }
+  var icon: String {
+    switch kind {
+    case .server: return "server.rack"
+    case .database: return "cylinder.split.1x2"
+    case .group:
+      if title == "Security" { return "lock.shield" }
+      if title == "SQL Server Agent" { return "clock.badge.checkmark" }
+      if title == "Management" { return "waveform.path.ecg" }
+      return "folder"
+    case .detail: return "rectangle.split.1x2"
+    default: break
+    }
+    switch category {
+    case .databases: return "externaldrive"
+    case .tables: return "tablecells"
+    case .views: return "eye"
+    case .procedures: return "terminal"
+    case .functions: return "function"
+    case .parameters: return "at"
+    case .triggers: return triggerDisabled ? "bolt.slash.fill" : "bolt.fill"
+    case .constraints: return "checkmark.shield"
+    case .synonyms: return "link"
+    case .columns: return "rectangle.split.1x2"
+    case .logins, .users: return "person.crop.circle"
+    case .roles: return "lock.shield"
+    case .keys: return "key"
+    case .indexes: return "list.number"
+    case .activity, .sessions: return "waveform.path.ecg"
+    case .locks: return "lock"
+    case .jobs: return item?.detail.contains("Running") == true ? "play.circle.fill":item?.detail.contains("Disabled") == true ? "pause.circle":"clock.badge.checkmark"
+    case .schedules, .jobHistory: return "clock"
+    default: return "folder"
+    }
+  }
+}
+@MainActor final class DocumentButton: NSButton, NSDraggingSource {
+  var document: QueryDocument?
+  var showMenu: ((NSEvent) -> Void)?
+  var draggable = false
+  override func rightMouseDown(with event: NSEvent) { showMenu?(event) }
+  override func mouseDown(with event: NSEvent) {
+    guard draggable, let document, let window else { super.mouseDown(with: event); return }
+    let origin = event.locationInWindow
+    highlight(true)
+    while let next = window.nextEvent(matching: [.leftMouseDragged,.leftMouseUp]) {
+      if next.type == .leftMouseUp { highlight(false); if let action { _ = sendAction(action,to: target) }; return }
+      if hypot(next.locationInWindow.x-origin.x,next.locationInWindow.y-origin.y) > 4 {
+        highlight(false)
+        let item = NSPasteboardItem(); item.setString(document.id.uuidString,forType: QueryTabStrip.type)
+        let drag = NSDraggingItem(pasteboardWriter: item)
+        let image = NSImage(size: bounds.size)
+        if let rep = bitmapImageRepForCachingDisplay(in: bounds) { cacheDisplay(in: bounds,to: rep); image.addRepresentation(rep) }
+        drag.setDraggingFrame(bounds,contents: image)
+        beginDraggingSession(with: [drag],event: next,source: self)
+        return
+      }
+    }
+    highlight(false)
+  }
+  func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation { .move }
+}
+@MainActor final class QueryTabStrip: NSStackView {
+  static let type = NSPasteboard.PasteboardType("local.mssqlstudio.queryTab")
+  var documentIDs: [UUID] = []
+  var reorder: ((UUID,Int) -> Void)?
+  private let indicator = NSView()
+  override init(frame: NSRect) {
+    super.init(frame: frame)
+    registerForDraggedTypes([Self.type])
+    indicator.wantsLayer = true; indicator.isHidden = true
+    addSubview(indicator)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private func location(_ sender: NSDraggingInfo) -> Int {
+    let point = convert(sender.draggingLocation,from: nil)
+    for (index,view) in arrangedSubviews.prefix(documentIDs.count).enumerated() where point.x < view.frame.midX { return index }
+    return documentIDs.count
+  }
+  override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
+  override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+    guard let raw = sender.draggingPasteboard.string(forType: Self.type), let id = UUID(uuidString: raw), documentIDs.contains(id), sender.draggingSource is DocumentButton else { return [] }
+    let index = location(sender)
+    let x = index < documentIDs.count ? arrangedSubviews[index].frame.minX : arrangedSubviews.prefix(documentIDs.count).last?.frame.maxX ?? 0
+    indicator.frame = NSRect(x:x,y:2,width:2,height:max(0,bounds.height-4))
+    indicator.layer?.backgroundColor = StudioTheme.accent.cgColor; indicator.isHidden = false
+    return .move
+  }
+  override func draggingExited(_ sender: NSDraggingInfo?) { indicator.isHidden = true }
+  override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+    indicator.isHidden = true
+    guard sender.draggingSource is DocumentButton, let raw = sender.draggingPasteboard.string(forType: Self.type), let id = UUID(uuidString: raw), documentIDs.contains(id) else { return false }
+    reorder?(id,location(sender)); return true
+  }
+  override func draggingEnded(_ sender: NSDraggingInfo) { indicator.isHidden = true }
+}
+
+@MainActor
+final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineViewDataSource,
+  NSOutlineViewDelegate, NSMenuDelegate, NSUserInterfaceValidations
+{
+  let state: StudioState
+  private let split = NSSplitViewController()
+  private let explorer = NSViewController()
+  private let center = NSViewController()
+  private let outline = NSOutlineView()
+  private let explorerSearch = NSSearchField()
+  private let searchOperator = NSPopUpButton()
+  private let searchScopePicker = NSPopUpButton()
+  private let searchType = NSPopUpButton()
+  private var searchScopes: [TreeNode] = []
+  private let indexStatus = NSTextField(labelWithString:"DDL indeksi · Bağlantı seçin")
+  private var indexStatusTask: Task<Void,Never>?
+  private var lastIndexStatusCheck = Date.distantPast
+  private var lastIndexStatusScope = ""
+  private let searchStatus = NSTextField(labelWithString: "Seçili veritabanı / nesne türünde ara")
+  private var searchScope: TreeNode?
+  private let explorerTabs = NSSegmentedControl(labels:["Nesneler", "Arama"],trackingMode:.selectOne,target:nil,action:nil)
+  private var showingSearch = false
+  private var savedExpanded: [TreeNode] = []
+  private var savedTreeSelection: TreeNode?
+  private var savedTreeOrigin = NSPoint.zero
+  private var searchResults: [TreeNode]? 
+  private var searchTask: Task<Void, Never>?
+  private var searchToken = UUID()
+  private var searchRunning = false
+  private let explorerToggle = NSButton()
+  private let tabs = QueryTabStrip()
+  private let content = NSView()
+  private let database = NSPopUpButton()
+  private let status = NSTextField(labelWithString: "Bağlantı bekleniyor")
+  private let context = NSTextField(labelWithString: "")
+  private var roots: [TreeNode] = []
+  private var controllers: [UUID: QueryController] = [:]
+  private var auxiliaryWindows: [NSWindowController] = []
+  private var contextNode: TreeNode?
+  private var sheet: NSWindow?
+  private var detached: [UUID: DetachedQueryWindow] = [:]
+  private var sidebar: NSSplitViewItem!
+  init(state: StudioState) {
+    self.state = state
+    super.init(nibName: nil, bundle: nil)
+    NotificationCenter.default.addObserver(self,selector:#selector(agentChanged(_:)),name:.init("studioAgentChanged"),object:nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(refreshShortcuts), name: GridShortcuts.changed, object: nil)
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(themeChanged), name: StudioTheme.changed, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(refreshChangedObjects(_:)), name: .init("studioDDLCompleted"), object: nil)
+    NotificationCenter.default.addObserver(self,selector:#selector(refreshManagedObject(_:)),name:.init("studioManagedObjectCompleted"),object:nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(catalogIndexUpdated(_:)), name: .init("catalogIndexUpdated"), object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(catalogIndexUpdated(_:)), name: .init("sqlCatalogChanged"), object: nil)
+    state.changed = { [weak self] in self?.reloadWorkspace() }
+  }
+  @objc private func themeChanged() {
+    guard isViewLoaded else { return }
+    StudioTheme.decorate(view)
+    for item in view.window?.toolbar?.items ?? [] {
+      (item.view as? NSButton)?.contentTintColor = item.itemIdentifier.rawValue == "run" ? StudioTheme.color(0x287E59, 0x79CDA5) : StudioTheme.muted
+    }
+    reloadWorkspace()
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override func loadView() {
+    view = NSView()
+    StudioTheme.surface(view)
+    split.splitView.isVertical = true
+    split.splitView.autosaveName="MSSQLStudio.ExplorerWidths"
+    buildExplorer()
+    buildCenter()
+    sidebar = NSSplitViewItem(sidebarWithViewController: explorer)
+    sidebar.canCollapse = false
+    sidebar.canCollapseFromWindowResize = false
+    sidebar.minimumThickness = 140
+    sidebar.maximumThickness = 760
+    sidebar.preferredThicknessFraction = 0.20
+    split.addSplitViewItem(sidebar)
+    split.addSplitViewItem(NSSplitViewItem(viewController: center))
+    addChild(split)
+    view.addSubview(split.view)
+    split.view.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      split.view.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 5),
+      split.view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -5),
+      split.view.topAnchor.constraint(equalTo: view.topAnchor, constant: 4),
+      split.view.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -5),
+    ])
+    sidebar.isCollapsed=UserDefaults.standard.bool(forKey:"explorerCollapsed")
+    reloadWorkspace()
+  }
+  private func buildExplorer() {
+    let background = NSView()
+    StudioTheme.surface(background, card: true)
+    explorer.view = background
+    let label = NSTextField(labelWithString: "Object Explorer")
+    label.font = .systemFont(ofSize: 12, weight: .semibold)
+    let refresh = symbolButton("arrow.clockwise", tip: "Yenile", action: #selector(refreshExplorer))
+    let connect = symbolButton("plus", tip: "Sunucuya bağlan", action: #selector(showConnect))
+    let collapse = symbolButton("sidebar.left", tip: "Object Explorer’ı gizle", action: #selector(toggleExplorer))
+    let rebuild = symbolButton("externaldrive.badge.checkmark", tip: "Yerel nesne indeksini sunucudan yenile", action: #selector(rebuildCatalogIndex))
+    let header = NSStackView(views: [label, NSView(), connect, rebuild, refresh, collapse])
+    header.orientation = .horizontal
+    header.spacing = 2
+    header.heightAnchor.constraint(equalToConstant: 28).isActive = true
+    label.textColor = StudioTheme.muted
+    label.lineBreakMode = .byTruncatingTail
+    label.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+    explorerSearch.placeholderString = "Nesnelerde filtrele"
+    explorerSearch.target = self
+    explorerSearch.action = #selector(filterExplorer)
+    outline.headerView = nil
+    outline.rowHeight = 25
+    outline.intercellSpacing = NSSize(width: 1, height: 1)
+    outline.indentationPerLevel = 16
+    outline.selectionHighlightStyle = .regular
+    outline.usesAlternatingRowBackgroundColors = false
+    let column = NSTableColumn(identifier: .init("object"))
+    column.width = 330
+    outline.addTableColumn(column)
+    outline.outlineTableColumn = column
+    outline.dataSource = self
+    outline.delegate = self
+    outline.target = self
+    outline.doubleAction = #selector(openObject)
+    outline.setAccessibilityIdentifier("objectExplorer")
+    let menu = NSMenu()
+    menu.delegate = self
+    outline.menu = menu
+    let scroll = NSScrollView()
+    scroll.documentView = outline
+    scroll.hasVerticalScroller = true
+    scroll.hasHorizontalScroller = true
+    scroll.drawsBackground = false
+    searchOperator.addItems(withTitles: ["İçerir", "Eşittir", "İle başlar", "İle biter", "İçermez"])
+    searchOperator.target = self; searchOperator.action = #selector(filterExplorer)
+    searchType.addItems(withTitles:["Tüm nesneler","Tables","Views","Procedures","Functions","Synonyms"])
+    searchType.target = self; searchType.action = #selector(filterExplorer)
+    searchType.setAccessibilityLabel("Aranacak nesne türü")
+    let searchOptions = NSStackView(views:[searchOperator,searchType]); searchOptions.spacing = 4
+    searchOptions.distribution = .fillEqually
+    // Metadata names and explanatory text must not dictate the pane's minimum width.
+    for control in [searchScopePicker,searchOperator,searchType] {
+      control.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+      (control.cell as? NSPopUpButtonCell)?.lineBreakMode = .byTruncatingTail
+    }
+    for control in [indexStatus,searchStatus,explorerSearch,explorerTabs] {
+      control.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+    }
+    searchOperator.setAccessibilityLabel("Nesne arama operatörü")
+    searchStatus.font = .systemFont(ofSize: 10); searchStatus.textColor = .secondaryLabelColor
+    searchStatus.lineBreakMode = .byTruncatingMiddle
+    searchScopePicker.target = self; searchScopePicker.action = #selector(changeSearchScope)
+    searchScopePicker.setAccessibilityLabel("Nesne arama kapsamı")
+    searchScopePicker.toolTip = "Arama bu bağlantı ve veritabanında kalır; metni temizlemek kapsamı değiştirmez."
+    explorerTabs.selectedSegment = 0
+    explorerTabs.target = self; explorerTabs.action = #selector(changeExplorerTab)
+    explorerTabs.setAccessibilityLabel("Explorer sekmeleri")
+    indexStatus.maximumNumberOfLines = 3
+    indexStatus.font = .systemFont(ofSize:10); indexStatus.textColor = StudioTheme.muted
+    indexStatus.lineBreakMode = .byWordWrapping; indexStatus.setAccessibilityIdentifier("ddlIndexStatus")
+    let stack = NSStackView(views: [header, indexStatus, explorerTabs, searchScopePicker, explorerSearch, searchOptions, searchStatus, scroll])
+    stack.orientation = .vertical
+    stack.distribution = .fill
+    stack.alignment = .leading
+    stack.spacing = 4
+    background.addSubview(stack)
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      stack.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 6),
+      stack.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -6),
+      stack.topAnchor.constraint(equalTo: background.topAnchor, constant: 6),
+      stack.bottomAnchor.constraint(equalTo: background.bottomAnchor, constant: -4),
+      header.widthAnchor.constraint(equalTo: stack.widthAnchor),
+      indexStatus.widthAnchor.constraint(equalTo: stack.widthAnchor),
+      explorerTabs.widthAnchor.constraint(equalTo: stack.widthAnchor),
+      explorerSearch.widthAnchor.constraint(equalTo: stack.widthAnchor),
+      searchScopePicker.widthAnchor.constraint(equalTo: stack.widthAnchor),
+      searchOptions.widthAnchor.constraint(equalTo: stack.widthAnchor),
+      searchStatus.widthAnchor.constraint(equalTo: stack.widthAnchor),
+      scroll.widthAnchor.constraint(equalTo: stack.widthAnchor),
+    ])
+  }
+  private func buildCenter() {
+    center.view = NSView()
+    StudioTheme.surface(center.view, card: true)
+    tabs.reorder = { [weak self] id,index in self?.moveQueryTab(id,to: index) }
+    tabs.orientation = .horizontal
+    tabs.alignment = .centerY
+    tabs.spacing = 3
+    tabs.edgeInsets = NSEdgeInsets(top: 1, left: 4, bottom: 1, right: 4)
+    let tabScroll = NSScrollView()
+    tabScroll.documentView = tabs
+    tabScroll.hasHorizontalScroller = true
+    tabScroll.autohidesScrollers = true
+    tabScroll.drawsBackground = false
+    tabs.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      tabs.leadingAnchor.constraint(equalTo: tabScroll.contentView.leadingAnchor),
+      tabs.topAnchor.constraint(equalTo: tabScroll.contentView.topAnchor),
+      tabs.heightAnchor.constraint(equalToConstant: 26),
+    ])
+    database.target = self
+    database.action = #selector(changeDatabase)
+    database.setAccessibilityIdentifier("databaseSelector")
+    context.font = .systemFont(ofSize: 11)
+    context.textColor = .secondaryLabelColor
+    context.lineBreakMode = .byTruncatingMiddle
+    let databaseLabel = NSTextField(labelWithString: "Veritabanı:")
+    databaseLabel.font = .systemFont(ofSize: 11)
+    explorerToggle.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: "Object Explorer’ı Göster / Gizle")
+    explorerToggle.target = self; explorerToggle.action = #selector(toggleExplorer)
+    explorerToggle.bezelStyle = .inline; explorerToggle.isBordered = false
+    explorerToggle.toolTip = "Object Explorer’ı Göster / Gizle"
+    let row = NSStackView(views: [explorerToggle, databaseLabel, database, context, NSView()])
+    StudioTheme.surface(row)
+    row.orientation = .horizontal
+    row.spacing = 8
+    row.edgeInsets = NSEdgeInsets(top: 1, left: 8, bottom: 1, right: 8)
+    database.controlSize = .small
+    database.widthAnchor.constraint(equalToConstant: 170).isActive = true
+    status.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+    status.textColor = .secondaryLabelColor
+    let statusRow = NSStackView(views: [status, NSView()])
+    StudioTheme.surface(statusRow)
+    statusRow.edgeInsets = NSEdgeInsets(top: 1, left: 8, bottom: 1, right: 8)
+    let stack = NSStackView(views: [tabScroll, row, separator(), content, separator(), statusRow])
+    stack.orientation = .vertical
+    stack.distribution = .fill
+    stack.spacing = 0
+    center.view.addSubview(stack)
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      stack.leadingAnchor.constraint(equalTo: center.view.leadingAnchor),
+      stack.trailingAnchor.constraint(equalTo: center.view.trailingAnchor),
+      stack.topAnchor.constraint(equalTo: center.view.topAnchor),
+      stack.bottomAnchor.constraint(equalTo: center.view.bottomAnchor),
+      tabScroll.heightAnchor.constraint(equalToConstant: 34),
+      tabScroll.widthAnchor.constraint(equalTo: stack.widthAnchor),
+      row.widthAnchor.constraint(equalTo: stack.widthAnchor),
+      content.widthAnchor.constraint(equalTo: stack.widthAnchor),
+      statusRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+      row.heightAnchor.constraint(equalToConstant: 30),
+      statusRow.heightAnchor.constraint(equalToConstant: 24),
+    ])
+    content.setContentHuggingPriority(.init(1), for: .vertical)
+    content.setContentCompressionResistancePriority(.init(1), for: .vertical)
+  }
+  private func embed(_ child: NSView, in parent: NSView) {
+    parent.addSubview(child)
+    child.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      child.leadingAnchor.constraint(equalTo: parent.leadingAnchor),
+      child.trailingAnchor.constraint(equalTo: parent.trailingAnchor),
+      child.topAnchor.constraint(equalTo: parent.topAnchor),
+      child.bottomAnchor.constraint(equalTo: parent.bottomAnchor),
+    ])
+  }
+  private func separator() -> NSView {
+    let box = NSBox()
+    box.boxType = .separator
+    return box
+  }
+  private func symbolButton(_ symbol: String, tip: String, action: Selector) -> NSButton {
+    let button = NSButton(
+      image: NSImage(systemSymbolName: symbol, accessibilityDescription: tip)!, target: self,
+      action: action)
+    button.bezelStyle = .inline
+    button.toolTip = tip
+    button.isBordered = false
+    button.contentTintColor = StudioTheme.muted
+    button.image = button.image?.withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
+    button.widthAnchor.constraint(equalToConstant: 25).isActive = true
+    button.heightAnchor.constraint(equalToConstant: 25).isActive = true
+    return button
+  }
+  private var selected: TreeNode? { outline.item(atRow: outline.selectedRow) as? TreeNode }
+  var selectedServer: ConnectedServer? {
+    selected?.server ?? state.active?.server ?? state.servers.first(where: \.online)
+  }
+  static func queryDatabase(for node: TreeNode) -> String {
+    switch node.kind {
+    case .server, .group, .folder(.databases), .folder(.logins), .folder(.linkedServers), .folder(.jobs), .folder(.schedules): return node.server.profile.database
+    default: return node.database.isEmpty ? node.server.profile.database : node.database
+    }
+  }
+  var selectedDatabase: String {
+    if let node = selected { return Self.queryDatabase(for: node) }
+    return state.active?.database ?? selectedServer?.profile.database ?? "master"
+  }
+  func moveQueryTab(_ id: UUID, to insertionIndex: Int) {
+    guard let old = state.documents.firstIndex(where: { $0.id == id }) else { return }
+    let document = state.documents.remove(at: old)
+    let adjusted = insertionIndex > old ? insertionIndex - 1 : insertionIndex
+    state.documents.insert(document,at: min(state.documents.count,max(0,adjusted)))
+    state.scheduleSnapshot(); renderTabs()
+  }
+  @objc func refreshShortcuts() {
+    func update(_ menu: NSMenu) {
+      for item in menu.items {
+        if item.action == #selector(newQuery) {
+          let binding = GridShortcuts.binding(.newQuery)
+          item.keyEquivalent = binding.key; item.keyEquivalentModifierMask = binding.flags
+        }
+        if let child = item.submenu { update(child) }
+      }
+    }
+    if let menu = NSApp.mainMenu { update(menu) }
+    if isViewLoaded { renderTabs() }
+  }
+  private func reloadWorkspace() {
+    guard isViewLoaded else { return }
+    for server in state.servers {
+      if let index = roots.firstIndex(where: { $0.server === server }) {
+        roots[index].error = server.startupError
+        let existing =
+          roots[index].children.first?.children.flatMap { node -> [String] in
+            if case .database = node.kind { return [node.database] }
+            return node.children.map(\.database)
+          } ?? []
+        if roots[index].generation != server.generation
+          || Set(existing) != Set(server.databases.map(\.name))
+        {
+          roots[index] = serverTree(server)
+        }
+      } else {
+        roots.append(serverTree(server))
+      }
+    }
+    rebuildSearchScopes()
+    outline.reloadData()
+    for root in roots where outline.row(forItem: root) >= 0 && !outline.isItemExpanded(root) {
+      outline.expandItem(root)
+    }
+    renderTabs()
+    renderActive()
+    updateControls()
+  }
+  private func renderTabs() {
+    tabs.documentIDs = state.documents.map(\.id)
+    for view in tabs.arrangedSubviews {
+      tabs.removeArrangedSubview(view)
+      view.removeFromSuperview()
+    }
+    for doc in state.documents {
+      let button = DocumentButton(
+        title: (doc.needsCloseConfirmation ? "● " : "") + doc.title, target: self, action: #selector(selectTab(_:)))
+      button.document = doc
+      button.draggable = true
+      button.showMenu = { [weak self, weak button] event in
+        guard let button else { return }
+        self?.showTabMenu(doc, event: event, view: button)
+      }
+      button.bezelStyle = .inline
+      button.isBordered = false
+      button.state = state.active === doc ? .on : .off
+      button.font = .systemFont(ofSize: 12)
+      let close = DocumentButton(
+        image: NSImage(systemSymbolName: "xmark", accessibilityDescription: "Sekmeyi kapat")!,
+        target: self, action: #selector(closeSpecificTab(_:)))
+      close.document = doc
+      close.bezelStyle = .inline
+      close.isBordered = false
+      close.controlSize = .mini
+      let group = NSStackView(views: [button, close])
+      group.identifier = NSUserInterfaceItemIdentifier("connectionAccent")
+      group.wantsLayer = true
+      group.layer?.backgroundColor =
+        (state.active === doc ? StudioTheme.canvas : StudioTheme.panel).cgColor
+      button.contentTintColor = state.active === doc ? StudioTheme.accent : StudioTheme.muted
+      button.font = StudioTheme.uiFont
+      button.attributedTitle = NSAttributedString(
+        string: button.title,
+        attributes: [
+          .font: StudioTheme.uiFont,
+          .foregroundColor: state.active === doc ? StudioTheme.text : StudioTheme.muted,
+        ])
+      group.layer?.cornerRadius = 5
+      group.layer?.borderWidth = state.active === doc ? 1 : 0
+      group.layer?.borderColor = StudioTheme.border.cgColor
+      close.contentTintColor = StudioTheme.muted
+      let icon = NSImageView(image: NSImage(systemSymbolName: doc.pinned ? "pin.fill" : "doc.text", accessibilityDescription: doc.pinned ? "Sabitlenmiş sekme" : nil)!)
+      icon.contentTintColor = doc.server.profile.appearance?.isMarked == true
+        ? doc.server.profile.appearance!.color : StudioTheme.accent
+      icon.widthAnchor.constraint(equalToConstant: 14).isActive = true
+      icon.heightAnchor.constraint(equalToConstant: 14).isActive = true
+      group.insertArrangedSubview(icon, at: 0)
+      if let appearance = doc.server.profile.appearance, appearance.isMarked {
+        group.wantsLayer = true
+        group.layer?.borderColor = appearance.color.cgColor
+        group.layer?.borderWidth = 1
+      }
+      button.toolTip =
+        "\(doc.server.profile.appearance?.badge ?? "") · \(doc.server.profile.name) · \(doc.database)"
+      group.spacing = 3
+      group.edgeInsets = NSEdgeInsets(top: 5, left: 9, bottom: 5, right: 7)
+      tabs.addArrangedSubview(group)
+    }
+    let plus = symbolButton("plus", tip: "Yeni Sorgu (\(GridShortcuts.binding(.newQuery).label))", action: #selector(newQuery))
+    tabs.addArrangedSubview(plus)
+  }
+  private func renderActive() {
+    var initialFocus: QueryController?
+    let wanted: NSView
+    if let doc = state.active, detached[doc.id] == nil {
+      let controller: QueryController
+      if let existing = controllers[doc.id] {
+        controller = existing
+      } else {
+        doc.openDefinition = { [weak self, weak doc] symbol in
+          guard let self, let doc else { return }; self.openEditorDefinition(symbol,document:doc)
+        }
+        controller = QueryController(document: doc)
+        initialFocus = controller
+        controller.changed = { [weak self] in
+          self?.updateControls()
+          self?.renderTabs()
+          self?.state.scheduleSnapshot()
+        }
+        controllers[doc.id] = controller
+        addChild(controller)
+      }
+      wanted = controller.view
+    } else {
+      if content.subviews.first?.identifier?.rawValue == "welcome" { return }
+      let host = NSHostingView(
+        rootView: WelcomeView(connect: { [weak self] in self?.showConnect() }))
+      host.identifier = .init("welcome")
+      wanted = host
+    }
+    if content.subviews.first === wanted { return }
+    for subview in content.subviews { subview.removeFromSuperview() }
+    embed(wanted, in: content)
+    if let initialFocus, let id=state.active?.id {
+      DispatchQueue.main.async { [weak self, weak initialFocus] in
+        guard let self,state.active?.id == id,detached[id] == nil,
+          content.subviews.first === initialFocus?.view,view.window?.attachedSheet == nil else {return}
+        initialFocus?.focusEditor()
+      }
+    }
+  }
+  private func updateControls() {
+    guard isViewLoaded else { return }
+    updateIndexStatus()
+    let doc = state.active
+    for controller in controllers.values { controller.updateConnectionAppearance() }
+    for owner in detached.values { owner.updateConnectionAppearance() }
+    database.removeAllItems()
+    if let doc {
+      let names = doc.server.databases.map(\.name)
+      database.addItems(withTitles: names.contains(doc.database) ? names : [doc.database] + names)
+      database.selectItem(withTitle: doc.database)
+      database.isEnabled = doc.state == .ready
+      let badge = doc.server.profile.appearance?.badge ?? ""
+      context.stringValue =
+        (badge.isEmpty ? "" : "[\(badge)] ")
+        + "\(doc.server.profile.host),\(doc.server.profile.port)  •  \(doc.server.profile.login)"
+      context.textColor = .secondaryLabelColor
+      let phase: String
+      switch doc.state {
+      case .disconnected: phase = "Disconnected"
+      case .connecting: phase = "Connecting…"
+      case .ready: phase = "Ready"
+      case .running: phase = "Executing…"
+      case .cancelling: phase = "Cancelling…"
+      }
+      status.stringValue =
+        "\(phase)   |   \(doc.database)   |   \(doc.rowCount.formatted()) rows   |   \(String(format:"%.3f",doc.elapsed)) s\(doc.partial ? "   |   PARTIAL" : "")\(doc.transactionCount > 0 ? "   |   TRAN: \(doc.transactionCount)" : "")"
+    } else {
+      database.isEnabled = false
+      context.stringValue = ""
+      status.stringValue =
+        state.servers.isEmpty ? "Connect to SQL Server" : "Yeni bir sorgu açın veya nesne seçin"
+    }
+    for item in view.window?.toolbar?.items ?? [] {
+      switch item.itemIdentifier.rawValue {
+      case "run", "plan": item.isEnabled = doc?.state == .ready
+      case "cancel": item.isEnabled = doc?.state == .running
+      case "save", "format": item.isEnabled = doc != nil
+      case "query": item.isEnabled = selectedServer?.online == true
+      default: break
+      }
+      (item.view as? NSControl)?.isEnabled = item.isEnabled
+    }
+    view.window?.title =
+      doc.map { "\($0.title) — \($0.server.profile.name) / \($0.database)" } ?? "MSSQL Studio"
+  }
+  @discardableResult func activateObjectEditor(server:ConnectedServer,database:String,objectID:Int) -> Bool {
+    let key=ObjectEditorKey(serverID:server.id,database:database,objectID:objectID)
+    guard let doc=state.documents.first(where:{$0.objectEditorKey == key && $0.database == database}) else {return false}
+    state.active=doc;state.changed?()
+    if let owner=detached[doc.id] {owner.showWindow(nil);owner.query.focusEditor()}
+    else {controllers[doc.id]?.focusEditor()}
+    return true
+  }
+  @discardableResult func openObjectEditor(server:ConnectedServer,database:String,objectID:Int,sql:String,title:String,original:String?=nil) -> QueryDocument {
+    if activateObjectEditor(server:server,database:database,objectID:objectID),let doc=state.active {return doc}
+    let doc=state.newQuery(server:server,database:database,text:sql,title:title)
+    doc.objectEditorKey=ObjectEditorKey(serverID:server.id,database:database,objectID:objectID)
+    if let original {doc.moduleOriginal=original;doc.moduleInitialSQL=sql;doc.moduleObjectID=objectID}
+    doc.changed?()
+    return doc
+  }
+  private func showTabMenu(_ document: QueryDocument, event: NSEvent, view: NSView) {
+    NSMenu.popUpContextMenu(tabMenu(for: document), with: event, for: view)
+  }
+  func tabMenu(for document: QueryDocument) -> NSMenu {
+    let menu = NSMenu()
+    for (index, title) in [document.pinned ? "Unpin Tab" : "Pin Tab", "Close Tab", "Close Right Tabs", "Close Left Tabs", "Close Other Tabs", "Close All Tabs"].enumerated() {
+      let item = menu.addItem(withTitle: title, action: #selector(tabMenuAction(_:)), keyEquivalent: "")
+      item.target = self; item.tag = index; item.representedObject = document
+    }
+    return menu
+  }
+  @objc private func tabMenuAction(_ item: NSMenuItem) {
+    guard let doc = item.representedObject as? QueryDocument,
+      let index = state.documents.firstIndex(where: { $0 === doc }) else { return }
+    if item.tag == 0 { doc.pinned.toggle(); state.scheduleSnapshot(); renderTabs(); return }
+    let targets = state.documents.enumerated().filter { i, candidate in
+      switch item.tag {
+      case 1: return candidate === doc
+      case 2: return i > index && !candidate.pinned
+      case 3: return i < index && !candidate.pinned
+      case 4: return candidate !== doc && !candidate.pinned
+      default: return true
+      }
+    }.map(\.element)
+    for target in targets {
+      guard state.close(target) else { break }
+      controllers.removeValue(forKey: target.id)?.removeFromParent()
+      if let owner = detached.removeValue(forKey: target.id) { owner.redock = nil; owner.close() }
+    }
+  }
+  @objc private func selectTab(_ sender: DocumentButton) {
+    guard let doc = sender.document else { return }
+    state.active = doc
+    if let window = detached[doc.id] { window.showWindow(nil) }
+    renderTabs()
+    renderActive()
+    updateControls()
+  }
+  @objc private func closeSpecificTab(_ sender: DocumentButton) {
+    if let doc = sender.document, state.close(doc) {
+      controllers.removeValue(forKey: doc.id)?.removeFromParent()
+      if let owner = detached.removeValue(forKey: doc.id) {
+        owner.redock = nil
+        owner.close()
+      }
+    }
+  }
+  @objc func closeTab() {
+    if let doc = state.active, state.close(doc) {
+      controllers.removeValue(forKey: doc.id)?.removeFromParent()
+      if let owner = detached.removeValue(forKey: doc.id) {
+        owner.redock = nil
+        owner.close()
+      }
+    }
+  }
+  @objc private func changeDatabase() {
+    if let name = database.titleOfSelectedItem { state.active?.useDatabase(name) }
+  }
+  @objc func newQuery() {
+    guard let server = selectedServer ?? state.active?.server, server.online || Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" else {
+      showConnect()
+      return
+    }
+    state.newQuery(server: server, database: selectedDatabase)
+  }
+  @objc func execute() { state.active?.execute() }
+  @objc func cancel() { state.active?.cancel() }
+  @objc func estimatedPlan() { state.active?.execute(estimated: true) }
+  @objc func toggleActualPlan() {
+    if let doc = state.active {
+      doc.actualPlan.toggle()
+      controllers[doc.id]?.update()
+      updateControls()
+    }
+  }
+  @objc func formatSQL() {
+    if let doc = state.active {
+      controllers[doc.id]?.format()
+      renderTabs()
+      state.scheduleSnapshot()
+    }
+  }
+  @objc func beginTransaction() { state.active?.execute(override: "BEGIN TRANSACTION;") }
+  @objc func commitTransaction() { state.active?.execute(override: "COMMIT;") }
+  @objc func rollbackTransaction() { state.active?.execute(override: "ROLLBACK;") }
+  @objc func saveSQL() { if let doc = state.active { state.save(doc) } }
+  @objc func saveAsSQL() { if let doc = state.active { state.save(doc, asNew: true) } }
+  @objc func openSQL() {
+    guard let server = selectedServer else {
+      showConnect()
+      return
+    }
+    let panel = NSOpenPanel()
+    panel.allowsMultipleSelection = true
+    panel.allowedContentTypes = [.plainText, UTType(filenameExtension: "sql") ?? .plainText]
+    guard panel.runModal() == .OK else { return }
+    for url in panel.urls {
+      do {
+        guard (try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0) <= 8_000_000 else {
+          throw SQLFailure("SQL dosyası 8 MB'dan büyük.")
+        }
+        if let existing = state.documents.first(where: { $0.file == url }) {
+          state.active = existing
+          reloadWorkspace()
+          continue
+        }
+        let text = try String(contentsOf: url, encoding: .utf8)
+        let doc = state.newQuery(
+          server: server, database: selectedDatabase, text: text, title: url.lastPathComponent)
+        doc.file = url
+        doc.savedText = text
+        renderTabs()
+      } catch { state.showError(error.localizedDescription) }
+    }
+  }
+  @objc func toggleResults() {
+    guard let doc = state.active else { return }
+    (controllers[doc.id] ?? detached[doc.id]?.query)?.toggleResults()
+  }
+  @objc func showConnect() { presentConnection() }
+  @objc private func editConnection() {
+    if let server = contextNode?.server { presentConnection(editing: server) }
+  }
+  private func presentConnection(editing server: ConnectedServer? = nil) {
+    guard sheet == nil, let window = view.window else { return }
+    let saved: [SavedServer]
+    do { saved = try ServerVault().list() } catch {
+      state.showError(error.localizedDescription)
+      return
+    }
+    let form = ConnectionForm(
+      saved: server == nil ? saved : [], initial: server,
+      connect: { [weak self] profile, password, save in
+        guard let self else { throw SQLFailure("Çalışma alanı kapandı.") }
+        let server = try await state.connect(profile, password: password, save: save)
+        finishSheet()
+        state.recover(for: server)
+        if !state.documents.contains(where: { $0.server === server }) {
+          state.newQuery(
+            server: server, database: profile.database,
+            text:
+              "-- MSSQL Studio\nSELECT DB_NAME() AS [Database], @@SPID AS [Session], SYSDATETIME() AS [Server time];"
+          )
+        }
+        reloadWorkspace()
+      }, cancel: { [weak self] in self?.finishSheet() })
+    let controller = NSHostingController(
+      rootView: form.font(.custom(StudioTheme.uiFont.fontName, size: 12)))
+    let sheet = NSWindow(contentViewController: controller)
+    sheet.title = server == nil ? "Connect to Server" : "Bağlantı ayarları"
+    sheet.styleMask = [.titled]
+    self.sheet = sheet
+    window.beginSheet(sheet)
+  }
+  private func finishSheet() {
+    if let sheet {
+      view.window?.endSheet(sheet)
+      sheet.orderOut(nil)
+    }
+    sheet = nil
+  }
+  @objc private func refreshManagedObject(_ notification:Notification) {
+    guard let node=notification.object as? TreeNode else {return}
+    if case .folder = node.kind {refresh(node)} else {refresh(node.parent ?? node)}
+  }
+  private func refresh(_ node: TreeNode) {
+    if case .object = node.kind, !node.expandable,let parent=node.parent {refresh(parent);return}
+    if case .folder(.databases) = node.kind,
+      let root = roots.first(where: { $0.server === node.server })
+    {
+      refresh(root)
+      return
+    }
+    if case .server = node.kind {
+      guard node.server.online else {
+        state.showError("Sunucu bağlantısı kapalı. Bağlan ile yeniden bağlanın.")
+        return
+      }
+      Task { [weak self] in
+        guard let self else { return }
+        do {
+          let token = node.server.generation
+          let rows = Catalog.rows(try await node.server.metadata.execute(Catalog.databases))
+          guard token == node.server.generation else { return }
+          node.server.databases = node.server.profile.visibleItems(from: rows)
+          node.server.prepareCatalogIndexes()
+          rebuildSearchScopes()
+          node.children = serverTree(node.server).children
+          node.loaded = true
+          outline.reloadItem(node, reloadChildren: true)
+          updateControls()
+        } catch { state.showError(error.localizedDescription) }
+      }
+    } else if case .database = node.kind, let item = node.item {
+      node.children = databaseTree(item, server: node.server).children
+      node.loaded = true
+      outline.reloadItem(node, reloadChildren: true)
+    } else {
+      node.loaded = false
+      node.error = nil
+      load(node)
+    }
+  }
+  @objc private func refreshExplorer() {
+    if let node = selected ?? roots.first { refresh(node) }
+    if let doc = state.active { Task { await doc.loadSymbols(force:true) } }
+  }
+  @objc func reconnectQuery() {
+    guard let doc = state.active, !doc.busy else { return }
+    Task { [weak self] in
+      guard let self else { return }
+      do {
+        doc.server = try await state.connect(
+          doc.server.profile, password: doc.server.password, save: false)
+        doc.connect()
+      } catch { state.showError(error.localizedDescription) }
+    }
+  }
+  @objc private func disconnectServer() {
+    guard let server = contextNode?.server else { return }
+    let documents = state.documents.filter { $0.server === server }
+    guard documents.allSatisfy({ !$0.busy && $0.transactionCount == 0 }) else {
+      state.showError("Önce çalışan sorguları ve açık transaction'ları tamamlayın.")
+      return
+    }
+    for document in documents { document.disconnect() }
+    server.online = false
+    state.rememberExplorer(server.id, selected: false)
+    Task { await server.metadata.disconnect() }
+    if let root = roots.first(where: { $0.server === server }) { roots.removeAll { $0 === root } }
+    state.servers.removeAll { $0 === server }
+    outline.reloadData()
+    updateControls()
+  }
+  @objc func toggleExplorer() {
+    sidebar.isCollapsed.toggle()
+    UserDefaults.standard.set(sidebar.isCollapsed,forKey:"explorerCollapsed")
+    explorerToggle.state = sidebar.isCollapsed ? .on : .off
+  }
+  @objc private func refreshChangedObjects(_ notification: Notification) {
+    guard let doc = notification.object as? QueryDocument else { return }
+    let targets = ModuleEditing.changedObjects(doc.lastExecutedSQL ?? "")
+    let db = doc.database, server = doc.server
+    Task { [weak self] in
+      guard let self else { return }
+      for target in targets {
+        guard let result = try? await server.catalog(Catalog.searchObjects(target.name, operation: 1, folder: target.folder), database: db) else { continue }
+        let rows = Catalog.rows(result)
+        do {
+          try await CatalogIndexService.shared.replaceTarget(profile: server.profile, database: db, name: target.name, folder: target.folder, items: rows)
+        } catch { searchStatus.stringValue = "Disk indeksi güncellenemedi; indeksi yenileyin." }
+        var queue = roots.filter { $0.server === server }, visited = 0
+        while let node = queue.popLast() {
+          visited += 1
+          if visited % 200 == 0 { await Task.yield() }
+          queue.append(contentsOf: node.children)
+          guard node.database == db else { continue }
+          if case .folder(let folder) = node.kind, folder == target.folder, node.item == nil, node.loaded {
+            func matches(_ item: CatalogItem) -> Bool {
+              target.name.caseInsensitiveCompare(item.name) == .orderedSame || target.name.caseInsensitiveCompare(item.schema + "." + item.name) == .orderedSame
+            }
+            let previousCount = node.children.count
+            node.children.removeAll { child in
+              child.item.map { matches($0) && !rows.contains(where: { $0.id == child.item?.id }) } ?? false
+            }
+            for item in rows where !node.children.contains(where: { $0.item?.id == item.id }) {
+              node.children.append(TreeNode("\(item.schema).\(item.name)", kind: .object(folder), server: server, database: db, item: item))
+            }
+            if node.children.count != previousCount {
+              node.children.sort { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+              outline.reloadItem(node, reloadChildren: true)
+            }
+          }
+          if let item = node.item, case .object(let folder) = node.kind, folder == target.folder,
+            rows.contains(where: { $0.id == item.id }) {
+            node.loaded = false; node.children = []; load(node)
+          }
+        }
+      }
+      if searchScope?.server === server && searchScope.map({ searchDatabases($0).contains(db) }) == true && !explorerSearch.stringValue.isEmpty { filterExplorer() }
+    }
+  }
+  @objc private func catalogIndexUpdated(_ notification: Notification) {
+    lastIndexStatusCheck = .distantPast; updateIndexStatus()
+    if let server = notification.object as? ConnectedServer, let db = notification.userInfo?["database"] as? String, notification.userInfo?["error"] == nil {
+      for doc in state.documents where doc.server === server && doc.database == db { Task { await doc.loadSymbols() } }
+    }
+    guard let server = notification.object as? ConnectedServer,
+      let db = notification.userInfo?["database"] as? String,
+      searchScope?.server === server, searchScope.map({ searchDatabases($0).contains(db) }) == true,
+      !explorerSearch.stringValue.isEmpty else { return }
+    if let error = notification.userInfo?["error"] as? String {
+      searchStatus.stringValue = "Disk önbelleği · Eşitleme başarısız"
+      searchStatus.toolTip = error + " Son tamamlanan indeks kullanılıyor."
+    } else { filterExplorer() }
+  }
+  private func refreshIndexInBackground(server: ConnectedServer, database: String, force: Bool = false) {
+    Task {
+      do {
+        let key = CatalogDiskIndex.scope(profile: server.profile, database: database)
+        let before = try await CatalogDiskIndex.shared.status(scope: key)
+        let after = try await CatalogIndexService.shared.refresh(profile: server.profile, password: server.password, database: database, force: force)
+        _ = try await SQLCatalogService.shared.refresh(profile:server.profile,password:server.password,database:database,force:force)
+        if force && (searchScope ?? selected ?? roots.first)?.server === server {
+          searchStatus.stringValue = "\(database) · Disk indeksi hazır · \(after.count) nesne"
+        }
+        if !force && before?.synchronizedAt == after.synchronizedAt { return }
+        NotificationCenter.default.post(name: .init("catalogIndexUpdated"), object: server, userInfo: ["database": database])
+      } catch {
+        if force { searchStatus.stringValue = "Disk indeksi eşitlenemedi"; searchStatus.toolTip = error.localizedDescription }
+        NotificationCenter.default.post(name: .init("catalogIndexUpdated"), object: server, userInfo: ["database": database, "error": error.localizedDescription])
+      }
+    }
+  }
+  private func updateIndexStatus() {
+    guard let scope = (showingSearch ? searchScope : selected) ?? searchScope ?? roots.first else { indexStatus.stringValue = "DDL indeksi · Bağlantı seçin"; return }
+    let databases = searchDatabases(scope), key = scope.server.id.uuidString + databases.joined(separator:"|")
+    guard key != lastIndexStatusScope || Date().timeIntervalSince(lastIndexStatusCheck) > 2 else { return }
+    lastIndexStatusScope = key; lastIndexStatusCheck = Date(); indexStatusTask?.cancel()
+    let profile = scope.server.profile, server = scope.server
+    indexStatusTask = Task { [weak self] in
+      var lines: [String] = [], ready = 0
+      for db in databases {
+        guard !Task.isCancelled else { return }
+        do {
+          let objects = try await CatalogDiskIndex.shared.status(scope:CatalogDiskIndex.scope(profile:profile,database:db))
+          let columns = try await SQLCatalogService.shared.cached(profile:profile,database:db)
+          if let objects {
+            ready += 1
+            let stamp = objects.synchronizedAt.formatted(date:.numeric,time:.shortened)
+            let columnStamp = columns?.snapshot.synchronizedAt.formatted(date:.numeric,time:.shortened) ?? "yok"
+            lines.append("\(db): nesne indeksi \(objects.count) nesne · \(stamp)\nKolon indeksi: \(columnStamp) · \(columns?.fresh == true ? "güncel" : "yenileme gerekli")")
+          } else { lines.append("\(db): indeks henüz hazır değil / hazırlanıyor") }
+        } catch { lines.append("\(db): indeks okunamadı · \(error.localizedDescription)") }
+      }
+      guard !Task.isCancelled, let self else { return }
+      for db in databases {
+        if let error = server.indexErrors[db] { lines.append("\(db): eşitleme başarısız · \(error)") }
+        else if server.indexingDatabases.contains(db) { lines.append("\(db): indeks hazırlanıyor…") }
+      }
+      if let doc = state.active, doc.server === server, let error = doc.catalogError { lines.append("Editör doğrulaması kapalı: \(error)") }
+      indexStatus.stringValue = databases.count == 1 ? lines.first?.replacingOccurrences(of:"\n",with:" · ") ?? "DDL indeksi yok" : "DDL disk indeksi · \(ready)/\(databases.count) veritabanı hazır"
+      if !server.indexingDatabases.isDisjoint(with:databases) { indexStatus.stringValue += " · Eşitleniyor…" }
+      if databases.contains(where:{ server.indexErrors[$0] != nil }) { indexStatus.stringValue += " · Hata (ayrıntılar üzerine gelince)" }
+      indexStatus.toolTip = lines.joined(separator:"\n\n")
+      indexStatus.setAccessibilityLabel(indexStatus.toolTip ?? indexStatus.stringValue)
+    }
+  }
+  private func openEditorDefinition(_ symbol: CatalogSymbol, document: QueryDocument) {
+    let server = document.server, db = document.database
+    Task { [weak self] in
+      guard let self else { return }
+      do {
+        let result = try await server.catalog("SELECT object_id FROM sys.objects WHERE schema_id=SCHEMA_ID(\(SQL.literal(symbol.schema))) AND name=\(SQL.literal(symbol.name));",database:db)
+        guard let rawID = result.results.first?.values.first?.first, let rawID, let id = Int(rawID) else { throw SQLFailure("Nesne bulunamadı; DDL indeksini yenileyin.") }
+        if activateObjectEditor(server:server,database:db,objectID:id) {return}
+        if symbol.kind == "USER_TABLE" {
+          let table=try ObjectMetadata.decode(await server.catalog(ObjectMetadata.table(id),database:db),schema:symbol.schema,name:symbol.name)
+          openObjectEditor(server:server,database:db,objectID:id,sql:try table.createScript(),title:"CREATE · "+symbol.name)
+        } else {
+          let result = try await server.catalog(Catalog.definition(id),database:db)
+          guard let text = result.results.first?.values.first?.first, let text else { throw SQLFailure("Tanım alınamadı; VIEW DEFINITION iznini veya şifreli modülü kontrol edin.") }
+          openObjectEditor(server:server,database:db,objectID:id,sql:ModuleEditing.alter(text),title:"ALTER · " + symbol.name,original:text)
+        }
+      } catch { state.showError(error.localizedDescription) }
+    }
+  }
+  @objc private func rebuildCatalogIndex() {
+    guard let scope = searchScope ?? selected ?? roots.first else { return }
+    searchStatus.stringValue = "Disk indeksleri eşitleniyor…"
+    if case .server = scope.kind { scope.server.prepareCatalogIndexes(force: true) }
+    else { refreshIndexInBackground(server: scope.server, database: scope.database, force: true) }
+  }
+  private func searchDatabases(_ scope: TreeNode) -> [String] {
+    if case .server = scope.kind { return scope.server.databases.map(\.name) }
+    return [scope.database]
+  }
+  private func rebuildSearchScopes() {
+    let oldServer = searchScope?.server.id
+    let oldDatabase = searchScope?.database
+    searchScopes = roots.flatMap { root in [TreeNode("Tüm seçili veritabanları",kind:.server,server:root.server,database:"*")] + root.server.databases.map { item in
+      TreeNode(item.name,kind:.database,server:root.server,database:item.name,item:item)
+    } }
+    searchScopePicker.removeAllItems()
+    for scope in searchScopes { searchScopePicker.addItem(withTitle: "\(scope.server.profile.name) / \(scope.database == "*" ? "Tüm seçili veritabanları" : scope.database)") }
+    let previous = UserDefaults.standard.string(forKey: "explorerSearchScope")
+    let index = searchScopes.firstIndex { scope in
+      if let oldServer, let oldDatabase { return scope.server.id == oldServer && scope.database == oldDatabase }
+      return "\(scope.server.id.uuidString)|\(scope.database)" == previous
+    } ?? 0
+    if searchScopes.indices.contains(index) { searchScopePicker.selectItem(at:index); searchScope = searchScopes[index] }
+    else { searchScope = nil }
+  }
+  @objc private func changeSearchScope() {
+    guard searchScopes.indices.contains(searchScopePicker.indexOfSelectedItem) else { return }
+    searchScope = searchScopes[searchScopePicker.indexOfSelectedItem]
+    updateIndexStatus()
+    if let scope = searchScope { UserDefaults.standard.set("\(scope.server.id.uuidString)|\(scope.database)",forKey:"explorerSearchScope") }
+    filterExplorer()
+  }
+  private func showExplorerSearch(_ show: Bool) {
+    guard show != showingSearch else { return }
+    if show {
+      savedExpanded = (0..<outline.numberOfRows).compactMap { outline.item(atRow:$0) as? TreeNode }.filter { outline.isItemExpanded($0) }
+      savedTreeSelection = outline.item(atRow:outline.selectedRow) as? TreeNode
+      savedTreeOrigin = outline.enclosingScrollView?.contentView.bounds.origin ?? .zero
+    }
+    showingSearch = show
+    explorerTabs.selectedSegment = show ? 1 : 0
+    outline.reloadData()
+    if !show {
+      for node in savedExpanded { outline.expandItem(node) }
+      if let node = savedTreeSelection {
+        let row = outline.row(forItem:node)
+        if row >= 0 { outline.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false) }
+      }
+      if let scroll = outline.enclosingScrollView {
+        scroll.contentView.scroll(to:savedTreeOrigin)
+        scroll.reflectScrolledClipView(scroll.contentView)
+      }
+    }
+  }
+  @objc private func changeExplorerTab() { showExplorerSearch(explorerTabs.selectedSegment == 1) }
+  @objc private func filterExplorer() {
+    searchToken = UUID()
+    searchTask?.cancel()
+    let text = explorerSearch.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty else {
+      searchResults = nil
+      searchStatus.stringValue = searchScope.map { "Arama kapsamı: " + ($0.database == "*" ? $0.server.profile.name + " / Tüm seçili veritabanları" : $0.database) } ?? "Önce bir bağlantı / veritabanı seçin"
+      searchStatus.toolTip = nil
+      showExplorerSearch(false)
+      return
+    }
+    showExplorerSearch(true)
+    if searchScope == nil { searchScope = selected ?? roots.first }
+    guard let scope = searchScope else { return }
+    let token = searchToken
+    searchStatus.stringValue = "\(scope.displayTitle) · Aranıyor…"
+    searchTask = Task { [weak self] in
+      try? await Task.sleep(for: .milliseconds(350))
+      guard let self, !Task.isCancelled, token == searchToken else { return }
+      // At most one server search is in flight. New input invalidates its result.
+      if searchRunning { return }
+      searchRunning = true
+      defer {
+        searchRunning = false
+        if token != searchToken && !explorerSearch.stringValue.isEmpty { filterExplorer() }
+      }
+      let databases = searchDatabases(scope)
+      let types: [Folder?] = [nil,.tables,.views,.procedures,.functions,.synonyms]
+      let folder = types[max(0,min(searchType.indexOfSelectedItem,types.count-1))]
+      do {
+        var matches: [TreeNode] = []
+        var pending = 0
+        for db in databases {
+          try Task.checkCancellation()
+          let key = CatalogDiskIndex.scope(profile: scope.server.profile, database: db)
+          guard let status = try await CatalogDiskIndex.shared.status(scope: key) else {
+            pending += 1; continue
+          }
+          if Date().timeIntervalSince(status.synchronizedAt) > 300 {
+            refreshIndexInBackground(server: scope.server, database: db)
+          }
+          let rows = try await CatalogDiskIndex.shared.search(scope: key, text: text, operation: searchOperator.indexOfSelectedItem, folder: folder, limit: 501 - matches.count)
+          for item in rows {
+            let type: Folder = item.detail == "USER_TABLE" ? .tables : item.detail == "VIEW" ? .views : item.detail.contains("PROCEDURE") ? .procedures : item.detail == "SYNONYM" ? .synonyms : .functions
+            let title = (databases.count > 1 ? db + " · " : "") + item.schema + "." + item.name
+            matches.append(TreeNode(title,kind:.object(type),server:scope.server,database:db,item:item))
+          }
+          if matches.count > 500 { break }
+        }
+        guard token == searchToken, !Task.isCancelled else { return }
+        searchResults = Array(matches.prefix(500))
+        searchStatus.stringValue = "\(databases.count) veritabanı · \(searchResults!.count) sonuç" + (matches.count > 500 ? " · İlk 500" : "") + (pending > 0 ? " · \(pending) indeks hazırlanıyor" : "")
+        searchStatus.toolTip = "Seçili veritabanlarının yerel disk indeksinde arama yapılır. Sonuçlar veritabanı sırasındadır; en fazla 500 sonuç gösterilir."
+        if showingSearch { outline.reloadData() }
+      } catch {
+        guard token == searchToken else { return }
+        searchResults = []; searchStatus.stringValue = "Arama başarısız: \(error.localizedDescription)"
+        if showingSearch { outline.reloadData() }
+      }
+    }
+  }
+  private func visible(_ nodes: [TreeNode]) -> [TreeNode] { nodes }
+  func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
+    visible((item as? TreeNode)?.children ?? (showingSearch ? searchResults ?? [] : roots)).count
+  }
+  func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
+    visible((item as? TreeNode)?.children ?? (showingSearch ? searchResults ?? [] : roots))[index]
+  }
+  func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
+    (item as? TreeNode)?.expandable ?? false
+  }
+  func outlineView(_ outlineView: NSOutlineView, shouldExpandItem item: Any) -> Bool {
+    if let node = item as? TreeNode, !node.loaded { load(node) }
+    return true
+  }
+  func outlineViewSelectionDidChange(_ notification: Notification) {
+    updateControls()
+    // Search scope is explicit; tree selection does not silently move it.
+  }
+  func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any)
+    -> NSView?
+  {
+    guard let node = item as? TreeNode else { return nil }
+    let cell = NSTableCellView()
+    let label = NSTextField(
+      labelWithString: node.displayTitle + (node.loading ? " …" : "")
+        + (node.error != nil ? " ⚠" : ""))
+    label.font = .systemFont(ofSize: 12)
+    label.lineBreakMode = .byTruncatingTail
+    let image = NSImageView(
+      image: NSImage(systemSymbolName: node.icon, accessibilityDescription: nil)!)
+    image.contentTintColor = node.error == nil ? node.tint : .systemOrange
+    label.textColor = node.error == nil ? .labelColor : .systemOrange
+    if case .server = node.kind { label.font = .systemFont(ofSize: 12, weight: .semibold) }
+    cell.addSubview(label)
+    cell.addSubview(image)
+    label.translatesAutoresizingMaskIntoConstraints = false
+    image.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      image.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),
+      image.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+      image.widthAnchor.constraint(equalToConstant: 16),
+      image.heightAnchor.constraint(equalToConstant: 16),
+      label.leadingAnchor.constraint(equalTo: image.trailingAnchor, constant: 6),
+      label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -3),
+      label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+    ])
+    cell.textField = label
+    cell.imageView = image
+    cell.toolTip = node.error ?? node.item?.detail ?? "\(node.server.profile.name) · \(node.server.profile.host),\(node.server.profile.port) · \(node.database)"
+    return cell
+  }
+  func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
+    guard let node = item as? TreeNode else { return StudioRowView() }
+    guard let appearance = node.server.profile.appearance, appearance.isMarked else { return StudioRowView() }
+    let row = ConnectionTreeRow()
+    row.color = appearance.color
+    if case .server = node.kind { row.isServer = true }
+    return row
+  }
+  private func serverTree(_ server: ConnectedServer) -> TreeNode {
+    func folder(_ value: Folder, database: String = "master", item: CatalogItem? = nil) -> TreeNode
+    {
+      TreeNode(value.rawValue, kind: .folder(value), server: server, database: database, item: item)
+    }
+    let root = TreeNode(
+      server.profile.name + " (" + server.profile.host + ")", kind: .server, server: server)
+    root.loaded = true
+    root.error = server.startupError
+    let databases = folder(.databases)
+    databases.loaded = true
+    let system = TreeNode("System Databases", kind: .group, server: server)
+    system.loaded = true
+    for db in server.databases {
+      let node = databaseTree(db, server: server)
+      if db.id <= 4 { system.children.append(node) } else { databases.children.append(node) }
+    }
+    if !system.children.isEmpty { databases.children.insert(system, at: 0) }
+    let security = TreeNode("Security", kind: .group, server: server)
+    security.loaded = true
+    security.children = [folder(.logins), folder(.roles)]
+    let objects = TreeNode("Server Objects", kind: .group, server: server)
+    objects.loaded = true
+    objects.children = [folder(.linkedServers)]
+    let management = TreeNode("Management", kind: .group, server: server)
+    management.loaded = true
+    management.children = [.activity, .sessions, .locks, .files].map { folder($0) }
+    let agent = TreeNode("SQL Server Agent", kind: .group, server: server)
+    agent.loaded = true
+    agent.children = [.jobs, .jobHistory, .schedules].map { folder($0) }
+    root.children = [databases, security, objects, management, agent]
+    return root
+  }
+  private func databaseTree(_ db: CatalogItem, server: ConnectedServer) -> TreeNode {
+    let node = TreeNode(db.name, kind: .database, server: server, database: db.name, item: db)
+    node.loaded = true
+    func folder(_ f: Folder) -> TreeNode {
+      TreeNode(f.rawValue, kind: .folder(f), server: server, database: db.name)
+    }
+    let programming = TreeNode("Programmability", kind: .group, server: server, database: db.name)
+    programming.loaded = true
+    programming.children = [.procedures, .functions, .synonyms, .triggers].map(folder)
+    let security = TreeNode("Security", kind: .group, server: server, database: db.name)
+    security.loaded = true
+    security.children = [folder(.users)]
+    node.children = [folder(.tables), folder(.views), programming, security]
+    if server.catalogFixture != nil {
+      node.children[0].loaded=true; node.children[1].loaded=true
+      node.children[0].children=[TreeNode("dbo.Customers",kind:.object(.tables),server:server,database:db.name,item:CatalogItem(id:1001,name:"Customers",schema:"dbo",detail:"USER_TABLE"))]
+      node.children[1].children=[TreeNode("dbo.ActiveCustomers",kind:.object(.views),server:server,database:db.name,item:CatalogItem(id:1002,name:"ActiveCustomers",schema:"dbo",detail:"VIEW"))]
+      for branch in programming.children {branch.loaded=true}
+      programming.children[0].children=[TreeNode("dbo.SalesByCity",kind:.object(.procedures),server:server,database:db.name,item:CatalogItem(id:1003,name:"SalesByCity",schema:"dbo",detail:"SQL_STORED_PROCEDURE"))]
+      programming.children[1].children=[TreeNode("dbo.CityLabel",kind:.object(.functions),server:server,database:db.name,item:CatalogItem(id:1004,name:"CityLabel",schema:"dbo",detail:"SQL_SCALAR_FUNCTION")),TreeNode("dbo.CityRows",kind:.object(.functions),server:server,database:db.name,item:CatalogItem(id:1008,name:"CityRows",schema:"dbo",detail:"SQL_INLINE_TABLE_VALUED_FUNCTION"))]
+      programming.children[2].children=[TreeNode("dbo.CustomerAlias",kind:.object(.synonyms),server:server,database:db.name,item:CatalogItem(id:1009,name:"CustomerAlias",schema:"dbo",detail:"SYNONYM"))]
+      programming.children[3].children=[TreeNode("DDLGuard",kind:.object(.triggers),server:server,database:db.name,item:CatalogItem(id:1007,name:"DDLGuard",detail:"SQL_TRIGGER, Disabled"))]
+    }
+    return node
+  }
+  private func load(_ node: TreeNode) {
+    guard !node.loading, !node.loaded, node.server.online || node.server.catalogFixture != nil else { return }
+    if case .object(let kind) = node.kind {
+      node.loaded = true
+      node.children =
+        (kind == .tables
+        ? [Folder.columns, .keys, .indexes, .constraints, .triggers]
+        : kind == .views
+          ? [Folder.columns, .triggers]
+          : kind == .procedures ? [Folder.parameters] : [Folder.parameters, .columns]).map {
+          TreeNode(
+            $0.rawValue, kind: .folder($0), server: node.server, database: node.database,
+            item: node.item)
+        }
+      outline.reloadItem(node, reloadChildren: true)
+      return
+    }
+    guard case .folder(let folder) = node.kind else {
+      node.loaded = true
+      return
+    }
+    node.loading = true
+    outline.reloadItem(node)
+    Task { [weak self, weak node] in
+      guard let self, let node else { return }
+      do {
+        let sql =
+          node.item.map { Catalog.children(folder, object: $0.id) } ?? Catalog.objects(folder)
+        let rows = Catalog.rows(try await node.server.catalog(sql, database: node.database))
+        node.children = rows.map { item in
+          TreeNode(
+            item.schema.isEmpty
+              ? item.name + (folder == .triggers || item.detail.isEmpty ? "" : " (\(item.detail))")
+              : "\(item.schema).\(item.name)", kind: .object(folder),
+            server: node.server, database: node.database, item: item)
+        }
+        node.loaded = true
+        node.error = nil
+      } catch {
+        node.error = error.localizedDescription
+        node.loaded = true
+        node.children = [
+          TreeNode(
+            "Yükleme hatası — Yenile ile tekrar deneyin", kind: .detail, server: node.server,
+            database: node.database)
+        ]
+      }
+      node.loading = false
+      outline.reloadItem(node, reloadChildren: true)
+    }
+  }
+  @objc private func openObject() {
+    guard let node = outline.item(atRow: outline.clickedRow) as? TreeNode else { return }
+    if let error = node.error {
+      state.showError(error)
+      return
+    }
+    contextNode = node
+    switch node.kind {
+    case .object(let folder) where [.tables, .views].contains(folder): selectRows()
+    case .object(let folder) where [.procedures,.functions,.triggers].contains(folder): modifyManagedModule()
+    case .object(.jobs):showAgentProperties(node)
+    case .object(.schedules):showAgentSchedule(node)
+    case .object: objectProperties()
+    case .folder(let folder) where !node.expandable:
+      state.newQuery(
+        server: node.server, database: node.database, text: Catalog.monitoring(folder),
+        title: folder.rawValue, run: true)
+    default:
+      if node.expandable {
+        if outline.isItemExpanded(node) {
+          outline.collapseItem(node)
+        } else {
+          outline.expandItem(node)
+        }
+      }
+    }
+  }
+  func menuNeedsUpdate(_ menu: NSMenu) {
+    menu.removeAllItems()
+    contextNode =
+      outline.item(atRow: outline.clickedRow) as? TreeNode
+    func command(_ title: String, _ selector: Selector) {
+      let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
+      item.target = self
+      menu.addItem(item)
+    }
+    func scriptMenu(_ title:String,modes:[String]) {
+      let scripts=NSMenu(title:title)
+      for mode in modes {
+        let destinations=NSMenu(title:mode+" To")
+        for destination in ["New Query Editor Window","Clipboard","File…"] {
+          let item=NSMenuItem(title:destination,action:#selector(scriptManagedMenu(_:)),keyEquivalent:"");item.target=self;item.representedObject=[mode,destination];destinations.addItem(item)
+        }
+        let item=NSMenuItem(title:mode+" To",action:nil,keyEquivalent:"");item.submenu=destinations;scripts.addItem(item)
+      }
+      let item=NSMenuItem(title:title,action:nil,keyEquivalent:"");item.submenu=scripts;menu.addItem(item)
+    }
+    guard let node = contextNode else { return }
+    if case .server = node.kind {
+      command("Bağlantı ayarları", #selector(editConnection))
+      command("Bağlantıyı Kes", #selector(disconnectServer))
+    }
+    command("Yeni Sorgu", #selector(newQueryAtNode))
+    command("Yenile", #selector(refreshContextNode))
+    menu.addItem(.separator())
+    if case .object(let folder) = node.kind {
+      if [.tables, .views].contains(folder) {
+        if folder == .tables { command("Design…", #selector(designTableObject)); command("Edit Top 200 Rows…", #selector(editObjectData)) }
+        else { command("Design…", #selector(designViewObject)); command("Modify · ALTER…", #selector(scriptDefinition)) }
+        command("Select Top 1000 Rows", #selector(selectRows))
+        scriptMenu(folder == .tables ? "Script Table As" : "Script View As",modes:folder == .tables ? ["CREATE","DROP","DROP And CREATE","SELECT","INSERT","UPDATE","DELETE"] : ["CREATE","ALTER","CREATE OR ALTER","DROP","DROP And CREATE","SELECT","INSERT","UPDATE","DELETE"])
+        if folder == .tables {
+          command("Indexes / Keys…",#selector(manageObjectIndexes))
+          command("Relationships…",#selector(manageObjectRelationships))
+          command("Check Constraints…",#selector(manageObjectChecks))
+        }
+        command("View Dependencies",#selector(objectDependencies))
+        menu.addItem(.separator())
+        command("Rename…",#selector(renameManagedObject))
+        command("Delete…",#selector(deleteManagedObject))
+        command("Properties…",#selector(managedObjectProperties))
+      }
+      if [.procedures,.functions,.triggers].contains(folder) {
+        command("Modify · ALTER…",#selector(modifyManagedModule))
+        if folder != .triggers {command(folder == .procedures ? "Execute Stored Procedure…" : "Invoke Function…",#selector(invokeManagedRoutine))}
+        if folder == .triggers {command(node.triggerDisabled ? "Enable…" : "Disable…",node.triggerDisabled ? #selector(enableManagedTrigger) : #selector(disableManagedTrigger))}
+        scriptMenu(folder == .procedures ? "Script Stored Procedure As" : folder == .functions ? "Script Function As" : "Script Trigger As",modes:["CREATE","ALTER","CREATE OR ALTER","DROP","DROP And CREATE"])
+        command("View Dependencies",#selector(objectDependencies))
+        if folder != .triggers || node.item?.schema.isEmpty == false {command("Rename…",#selector(renameManagedObject))}
+        command("Delete…",#selector(deleteManagedObject));command("Properties…",#selector(managedObjectProperties))
+      }
+      if folder == .synonyms {
+        command("Modify / Re-create…",#selector(editManagedSynonym))
+        scriptMenu("Script Synonym As",modes:["CREATE","DROP","DROP And CREATE"])
+        command("View Dependencies",#selector(objectDependencies));command("Delete…",#selector(deleteManagedObject));command("Properties…",#selector(managedObjectProperties))
+      }
+      if [.indexes,.keys,.constraints].contains(folder), node.ownerObject != nil {
+        command("Modify / Properties…",#selector(manageChildStructure))
+        scriptMenu(folder == .indexes ? "Script Index As" : "Script Constraint As",modes:["CREATE","DROP","DROP And CREATE"])
+        if folder == .indexes { command("Rebuild…",#selector(rebuildManagedIndex));command("Reorganize…",#selector(reorganizeManagedIndex));command("Disable…",#selector(disableManagedIndex)) }
+        else if node.item?.detail.contains("CHECK_CONSTRAINT") == true || node.item?.detail.contains("FOREIGN_KEY") == true {command("Enable / Check…",#selector(checkManagedConstraint));command("Disable / NOCHECK…",#selector(disableManagedConstraint))}
+      }
+      if [.columns,.parameters].contains(folder), node.ownerObject != nil {command("Modify / Properties…",#selector(manageChildStructure))}
+    }
+    if case .folder(.tables) = node.kind { command("New Table…",#selector(newManagedTable)) }
+    if case .folder(.views) = node.kind { command("New View…",#selector(newManagedView)) }
+    if case .folder(.procedures)=node.kind {command("New Stored Procedure…",#selector(newManagedProcedure))}
+    if case .folder(.functions)=node.kind {command("New Scalar Function…",#selector(newManagedScalarFunction));command("New Inline Table-valued Function…",#selector(newManagedTableFunction))}
+    if case .folder(.triggers)=node.kind {command("New Trigger…",#selector(newManagedTrigger))}
+    if case .folder(.synonyms)=node.kind {command("New Synonym…",#selector(newManagedSynonym))}
+    if case .folder(let f)=node.kind, [.indexes,.keys,.constraints].contains(f), node.ownerObject != nil {command("New…",#selector(manageChildStructure))}
+    if case .folder(let folder) = node.kind, !node.expandable {
+      command("Verileri Aç", #selector(openMonitoring))
+      if folder == .jobs { command("New SQL Agent Job…", #selector(jobDesigner)) }
+    }
+    if case .database = node.kind {
+      command("Database Properties", #selector(databaseProperties))
+      command("New Table…", #selector(newManagedTable))
+      command("New View…", #selector(newManagedView))
+    }
+    if case .folder(.jobs) = node.kind { command("New SQL Agent Job…", #selector(jobDesigner)) }
+    let agentCommands=agentMenu(for:node)
+    for item in agentCommands.items {agentCommands.removeItem(item);menu.addItem(item)}
+    command("Adı Kopyala", #selector(copyNodeName))
+  }
+  func agentMenu(for node:TreeNode) -> NSMenu {
+    let menu=NSMenu()
+    func add(_ title:String,_ command:String,_ icon:String,enabled:Bool=true) {
+      let item=NSMenuItem(title:title,action:#selector(agentMenuAction(_:)),keyEquivalent:"")
+      item.target=self;item.representedObject=node;item.identifier = .init(command);item.isEnabled=enabled
+      item.image=NSImage(systemSymbolName:icon,accessibilityDescription:title);menu.addItem(item)
+    }
+    menu.autoenablesItems=false
+    if node.objectFolder == .jobs {
+      let disabled=node.item?.detail.contains("Disabled") == true,running=node.item?.detail.contains("Running") == true
+      add("View History…","history","clock.arrow.circlepath")
+      add("Start Job…","start","play.fill",enabled:!running)
+      add("Stop Job…","stop","stop.fill",enabled:running)
+      add(disabled ? "Enable…":"Disable…",disabled ? "enable":"disable",disabled ? "checkmark.circle":"pause.circle")
+      menu.addItem(.separator());add("Delete Job…","delete","trash");add("Properties…","properties","gearshape")
+    } else if node.objectFolder == .schedules {add("Properties / Enable / Disable…","schedule","calendar")}
+    else if node.title == "SQL Server Agent" || {if case .folder(let f)=node.kind {return [.jobs,.jobHistory].contains(f)};return false}() {
+      add("View History…","history","clock.arrow.circlepath");add("Job Activity Monitor…","activity","waveform.path.ecg")
+    }
+    return menu
+  }
+  @objc private func agentMenuAction(_ item:NSMenuItem) {
+    guard let node=item.representedObject as? TreeNode,let command=item.identifier?.rawValue else {return}
+    switch command {
+    case "history":showAgentHistory(node)
+    case "properties":showAgentProperties(node)
+    case "schedule":showAgentSchedule(node)
+    case "activity":showAgentActivity(node)
+    default:if let action=SQLAgent.Action(rawValue:command) {showAgentAction(node,action:action)}
+    }
+  }
+  @objc private func agentChanged(_ notification:Notification) {
+    guard let server=notification.object as? ConnectedServer else {return}
+    for root in roots where root.server === server {
+      for group in root.children where group.title == "SQL Server Agent" {
+        for branch in group.children where branch.loaded {refresh(branch)}
+      }
+    }
+  }
+  @objc private func designTableObject() { showManagedTable(contextNode) }
+  @objc private func designViewObject() { showManagedView(contextNode) }
+  @objc private func newManagedTable() { showManagedTable(contextNode,create:true) }
+  @objc private func newManagedView() { showManagedView(contextNode,create:true) }
+  @objc private func editObjectData() { showManagedData(contextNode) }
+  @objc private func deleteManagedObject() { showManagedDelete(contextNode) }
+  @objc private func renameManagedObject() { showManagedRename(contextNode) }
+  @objc private func managedObjectProperties() { showManagedProperties(contextNode) }
+  @objc private func manageObjectIndexes() { showManagedTable(contextNode,initialKind:"INDEX") }
+  @objc private func manageObjectRelationships() { showManagedTable(contextNode,initialKind:"FK") }
+  @objc private func manageObjectChecks() { showManagedTable(contextNode,initialKind:"CHECK") }
+  @objc private func modifyManagedModule() { if let node=contextNode {scriptManagedObject(node,mode:"MODIFY",destination:"New Query Editor Window")} }
+  @objc private func invokeManagedRoutine() {showRoutineInvocation(contextNode)}
+  @objc private func enableManagedTrigger() {stageTriggerState(contextNode,enabled:true)}
+  @objc private func disableManagedTrigger() {stageTriggerState(contextNode,enabled:false)}
+  @objc private func newManagedProcedure() {stageNewModule(contextNode,kind:"PROCEDURE")}
+  @objc private func newManagedScalarFunction() {stageNewModule(contextNode,kind:"SCALAR FUNCTION")}
+  @objc private func newManagedTableFunction() {stageNewModule(contextNode,kind:"TABLE FUNCTION")}
+  @objc private func newManagedTrigger() {stageNewModule(contextNode,kind:"TRIGGER")}
+  @objc private func newManagedSynonym() {showSynonymDesigner(contextNode,create:true)}
+  @objc private func editManagedSynonym() {showSynonymDesigner(contextNode)}
+  @objc private func manageChildStructure() {showChildStructure(contextNode)}
+  @objc private func rebuildManagedIndex() {stageStructureAction(contextNode,action:"REBUILD")}
+  @objc private func reorganizeManagedIndex() {stageStructureAction(contextNode,action:"REORGANIZE")}
+  @objc private func disableManagedIndex() {stageStructureAction(contextNode,action:"DISABLE")}
+  @objc private func checkManagedConstraint() {stageStructureAction(contextNode,action:"CHECK")}
+  @objc private func disableManagedConstraint() {stageStructureAction(contextNode,action:"NOCHECK")}
+  @objc private func scriptManagedMenu(_ sender:NSMenuItem) {
+    guard let node=contextNode, let request=sender.representedObject as? [String], request.count == 2 else { return }
+    scriptManagedObject(node,mode:request[0],destination:request[1])
+  }
+  @objc private func objectDependencies() {
+    guard let node = contextNode, let item = node.item else { return }
+    state.newQuery(server: node.server, database: node.database,
+      text: "SELECT OBJECT_SCHEMA_NAME(referencing_id) AS [Schema], OBJECT_NAME(referencing_id) AS [Object], referenced_schema_name, referenced_entity_name FROM sys.sql_expression_dependencies WHERE referencing_id=\(item.id) OR referenced_id=\(item.id);",
+      title: "Dependencies · " + item.name, run: true)
+  }
+  @objc private func objectProperties() {
+    guard let node = contextNode, let item = node.item, case .object(let folder) = node.kind else {
+      return
+    }
+    let sql: String
+    switch folder {
+    case .jobs:
+      sql =
+        "SELECT name,enabled,description,date_created,date_modified FROM msdb.dbo.sysjobs WHERE name=\(SQL.literal(item.name)); SELECT s.step_id,s.step_name,s.subsystem,s.database_name,s.command FROM msdb.dbo.sysjobsteps s JOIN msdb.dbo.sysjobs j ON j.job_id=s.job_id WHERE j.name=\(SQL.literal(item.name)) ORDER BY s.step_id;"
+    case .logins, .roles:
+      sql =
+        "SELECT name,type_desc,is_disabled,default_database_name,create_date,modify_date FROM sys.server_principals WHERE principal_id=\(item.id);"
+    case .users:
+      sql =
+        "SELECT name,type_desc,default_schema_name,authentication_type_desc,create_date,modify_date FROM sys.database_principals WHERE principal_id=\(item.id);"
+    case .linkedServers:
+      sql =
+        "SELECT name,product,provider,data_source,is_data_access_enabled,is_rpc_out_enabled FROM sys.servers WHERE server_id=\(item.id);"
+    case .schedules: sql = "SELECT * FROM msdb.dbo.sysschedules WHERE schedule_id=\(item.id);"
+    default: return
+    }
+    state.newQuery(
+      server: node.server, database: node.database, text: sql, title: item.name, run: true)
+  }
+  private func jobScript(_ action: String) {
+    guard let node = contextNode, let item = node.item else { return }
+    stage(
+      "USE [msdb];\nEXEC dbo.\(action) @job_name=\(SQL.literal(item.name));",
+      title: action + " · " + item.name)
+  }
+  @objc private func startJob() { jobScript("sp_start_job") }
+  @objc private func stopJob() { jobScript("sp_stop_job") }
+  @objc private func enableJob() {
+    if let item = contextNode?.item {
+      stage(
+        "USE [msdb];\nEXEC dbo.sp_update_job @job_name=\(SQL.literal(item.name)), @enabled=1;",
+        title: "Enable Job")
+    }
+  }
+  @objc private func disableJob() {
+    if let item = contextNode?.item {
+      stage(
+        "USE [msdb];\nEXEC dbo.sp_update_job @job_name=\(SQL.literal(item.name)), @enabled=0;",
+        title: "Disable Job")
+    }
+  }
+  @objc private func newQueryAtNode() {
+    if let node = contextNode {
+      let name = Self.queryDatabase(for: node)
+      state.newQuery(server: node.server, database: name)
+    }
+  }
+  @objc private func refreshContextNode() { if let node = contextNode { refresh(node) } }
+  @objc private func selectRows() {
+    if let node = contextNode, let item = node.item {
+      state.newQuery(
+        server: node.server, database: node.database,
+        text: "SELECT TOP (1000) *\nFROM \(item.qualified);", title: item.name, run: true)
+    }
+  }
+  private func stage(_ sql: String, title: String) {
+    if let node = contextNode {
+      state.newQuery(server: node.server, database: node.database, text: sql, title: title)
+    } else if let server = selectedServer {
+      state.newQuery(server: server, database: selectedDatabase, text: sql, title: title)
+    }
+  }
+  @objc private func scriptSelect() {
+    if let item = contextNode?.item {
+      stage("SELECT TOP (1000) *\nFROM \(item.qualified);", title: "SELECT \(item.name)")
+    }
+  }
+  @objc private func scriptInsert() { scriptColumns(operation: "INSERT") }
+  @objc private func scriptUpdate() { scriptColumns(operation: "UPDATE") }
+  @objc private func scriptDelete() {
+    if let item = contextNode?.item {
+      stage(
+        "-- Önce WHERE koşulunu belirleyin.\nDELETE FROM \(item.qualified)\nWHERE 1 = 0;",
+        title: "DELETE \(item.name)")
+    }
+  }
+  private func scriptColumns(operation: String) {
+    guard let node = contextNode, let item = node.item else { return }
+    Task { [weak self] in
+      guard let self else { return }
+      do {
+        let columns = Catalog.rows(
+          try await node.server.catalog(
+            Catalog.children(.columns, object: item.id), database: node.database)
+        ).filter {
+          !$0.detail.contains("identity") && !$0.detail.contains("computed")
+            && !$0.detail.hasPrefix("timestamp") && !$0.detail.hasPrefix("rowversion")
+        }
+        let sql =
+          operation == "INSERT"
+          ? "INSERT INTO \(item.qualified) (\(columns.map { SQL.identifier($0.name) }.joined(separator:", ")))\nVALUES (\(columns.map { _ in "NULL" }.joined(separator:", ")));"
+          : "-- Değerleri ve WHERE koşulunu belirleyin.\nUPDATE \(item.qualified)\nSET \(columns.map { SQL.identifier($0.name)+" = NULL" }.joined(separator:",\n    "))\nWHERE 1 = 0;"
+        state.newQuery(
+          server: node.server, database: node.database, text: sql,
+          title: "\(operation) \(item.name)")
+      } catch { state.showError(error.localizedDescription) }
+    }
+  }
+  @objc private func scriptDefinition() {
+    if let node=contextNode {scriptManagedObject(node,mode:"MODIFY",destination:"New Query Editor Window")}
+  }
+  @objc private func copyNodeName() {
+    if let node = contextNode {
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(node.item?.qualified ?? node.title, forType: .string)
+    }
+  }
+  @objc private func openMonitoring() {
+    if let node = contextNode, case .folder(let folder) = node.kind {
+      state.newQuery(
+        server: node.server, database: node.database, text: Catalog.monitoring(folder),
+        title: folder.rawValue, run: true)
+    }
+  }
+  @objc func activity() {
+    if let server = selectedServer {
+      state.newQuery(
+        server: server, text: Catalog.monitoring(.activity), title: "Activity Monitor", run: true)
+    }
+  }
+  @objc private func tableProperties() {
+    if let item = contextNode?.item {
+      stage(
+        "SELECT c.name,t.name AS type,c.max_length,c.precision,c.scale,c.is_nullable,c.is_identity FROM sys.columns c JOIN sys.types t ON t.user_type_id=c.user_type_id WHERE c.object_id=\(item.id);\nSELECT name,type_desc,is_unique,is_primary_key,is_disabled FROM sys.indexes WHERE object_id=\(item.id);",
+        title: "Properties \(item.name)")
+      state.active?.changed?()
+    }
+  }
+  @objc private func databaseProperties() {
+    if let node = contextNode {
+      stage(
+        "SELECT name,state_desc,recovery_model_desc,compatibility_level,collation_name,is_read_only FROM sys.databases WHERE name=\(SQL.literal(node.database));\nSELECT name,type_desc,size*8.0/1024 AS size_mb,physical_name FROM sys.database_files;",
+        title: "Database Properties")
+    }
+  }
+  @objc private func createTable() {
+    stage(
+      "CREATE TABLE [dbo].[NewTable]\n(\n    [Id] int IDENTITY(1,1) NOT NULL CONSTRAINT [PK_NewTable] PRIMARY KEY,\n    [Name] nvarchar(200) NOT NULL,\n    [CreatedAt] datetime2(7) NOT NULL CONSTRAINT [DF_NewTable_CreatedAt] DEFAULT SYSUTCDATETIME()\n);",
+      title: "Create Table")
+  }
+  @objc func detachQuery() {
+    guard let doc = state.active, detached[doc.id] == nil else { return }
+    renderActive()
+    guard let controller = controllers[doc.id] else { return }
+    controller.view.removeFromSuperview()
+    controller.removeFromParent()
+    let owner = DetachedQueryWindow(query: controller)
+    owner.redock = { [weak self, weak controller] in
+      guard let self, let controller else { return }
+      controller.view.removeFromSuperview()
+      controller.removeFromParent()
+      addChild(controller)
+      detached.removeValue(forKey: doc.id)
+      state.active = doc
+      renderActive()
+      updateControls()
+    }
+    detached[doc.id] = owner
+    state.active = state.documents.first { $0 !== doc && detached[$0.id] == nil }
+    renderTabs()
+    renderActive()
+    owner.showWindow(nil)
+  }
+  @objc func redockQueries() { for owner in Array(detached.values) { owner.close() } }
+  @objc func settings() { showSettingsWindow() }
+  @objc func showHistory() { showHistoryWindow() }
+  @objc func aiAssistant() { showAIWindow() }
+  @objc func extensionsPanel() { showExtensionsWindow() }
+  @objc private func indexDesigner() { showIndexWindow(node: contextNode) }
+  @objc private func jobDesigner() { showJobWindow(node: contextNode) }
+  func present<V: View>(_ root: V, title: String, width: CGFloat = 700, height: CGFloat = 560, minWidth:CGFloat=620, minHeight:CGFloat=480) {
+    let controller = NSHostingController(
+      rootView: root.font(.custom(StudioTheme.uiFont.fontName, size: 12)))
+    controller.sizingOptions = []
+    let window = NSWindow(contentViewController: controller)
+    window.title = title
+    window.styleMask = [.titled, .closable, .resizable]
+    window.setContentSize(NSSize(width: width, height: height))
+    window.minSize = NSSize(width: min(width, minWidth), height: min(height, minHeight))
+    window.center()
+    let owner = NSWindowController(window: window)
+    auxiliaryWindows.append(owner)
+    owner.showWindow(nil)
+  }
+  func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+    if let menuItem=item as? NSMenuItem,let node=menuItem.representedObject as? TreeNode,
+       item.action == #selector(agentMenuAction(_:)) {
+      let running=node.item?.detail.contains("Running") == true
+      switch menuItem.identifier?.rawValue {
+      case "start":return !running
+      case "stop":return running
+      default:return true
+      }
+    }
+    if [
+      #selector(execute), #selector(estimatedPlan), #selector(beginTransaction),
+      #selector(commitTransaction), #selector(rollbackTransaction),
+    ].contains(item.action) {
+      return state.active?.state == .ready
+    }
+    if item.action == #selector(cancel) { return state.active?.state == .running }
+    if [
+      #selector(saveSQL), #selector(saveAsSQL), #selector(formatSQL), #selector(closeTab),
+      #selector(toggleResults),
+    ]
+    .contains(item.action) {
+      return state.active != nil
+    }
+    return true
+  }
+  func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+    toolbarDefaultItemIdentifiers(toolbar) + [.space, .flexibleSpace]
+  }
+  func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+    [
+      .init("connect"), .init("query"), .init("save"), .space, .init("run"), .init("cancel"),
+      .init("plan"), .space, .init("format"), .flexibleSpace, .init("activity"), .init("history"),
+      .init("ai"),
+    ]
+  }
+  func toolbar(
+    _ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier,
+    willBeInsertedIntoToolbar: Bool
+  ) -> NSToolbarItem? {
+    let definitions: [String: (String, String, Selector)] = [
+      "connect": ("Bağlan", "network", #selector(showConnect)),
+      "query": ("Yeni Sorgu", "doc.badge.plus", #selector(newQuery)),
+      "save": ("Kaydet", "square.and.arrow.down", #selector(saveSQL)),
+      "run": ("Çalıştır", "play.fill", #selector(execute)),
+      "cancel": ("İptal", "stop.fill", #selector(cancel)),
+      "plan": ("Tahmini Plan", "point.3.connected.trianglepath.dotted", #selector(estimatedPlan)),
+      "format": ("Biçimlendir", "text.alignleft", #selector(formatSQL)),
+      "activity": ("Activity", "waveform.path.ecg", #selector(activity)),
+      "history": ("Geçmiş", "clock.arrow.circlepath", #selector(showHistory)),
+      "ai": ("AI", "sparkles", #selector(aiAssistant)),
+    ]
+    guard let definition = definitions[id.rawValue] else { return nil }
+    let item = NSToolbarItem(itemIdentifier: id)
+    item.label = definition.0
+    item.toolTip = definition.0
+    item.image = NSImage(systemSymbolName: definition.1, accessibilityDescription: definition.0)
+    item.target = self
+    item.action = definition.2
+    let button = NSButton(title: id.rawValue == "run" ? "Çalıştır" : "", target: self, action: definition.2)
+    button.image = item.image?.withSymbolConfiguration(.init(pointSize: 14, weight: .regular))
+    button.imagePosition = id.rawValue == "run" ? .imageLeading : .imageOnly
+    button.font = .systemFont(ofSize: 12, weight: .medium)
+    button.bezelStyle = .inline
+    button.isBordered = false
+    button.contentTintColor = id.rawValue == "run" ? StudioTheme.color(0x287E59, 0x79CDA5) : StudioTheme.muted
+    button.toolTip = id.rawValue == "run" ? "Çalıştır (⌘↩ / F5)" : definition.0
+    button.setAccessibilityLabel(definition.0)
+    button.widthAnchor.constraint(equalToConstant: id.rawValue == "run" ? 82 : 30).isActive = true
+    button.heightAnchor.constraint(equalToConstant: 28).isActive = true
+    item.view = button
+    return item
+  }
+}
+private struct WelcomeView: View {
+  var connect: () -> Void
+  var body: some View {
+    VStack(spacing: 18) {
+      Image(systemName: "server.rack").font(.system(size: 42, weight: .light)).foregroundStyle(Color(nsColor: StudioTheme.accent)).padding(20).background(Color(nsColor: StudioTheme.accent).opacity(0.08), in: RoundedRectangle(cornerRadius: 22))
+      Text("MSSQL Studio").font(.system(size: 30, weight: .semibold))
+      Text("SQL Server Management Workspace").font(.title3).foregroundStyle(.secondary)
+      Text(
+        "Object Explorer’dan veritabanlarını ve nesneleri gezinin.\nSorguları bağımsız sekmelerde çalıştırın, sonuçları ve planları inceleyin."
+      ).multilineTextAlignment(.center).foregroundStyle(.secondary)
+      Button("SQL Server’a Bağlan", action: connect).buttonStyle(StudioPrimaryButton())
+      HStack(spacing: 28) {
+        Label("Bağımsız sorgu sekmeleri", systemImage: "macwindow")
+        Label("Şifreli bağlantı", systemImage: "lock.shield")
+        Label("SQL Server", systemImage: "server.rack")
+      }.font(.caption).foregroundStyle(.secondary)
+    }.frame(maxWidth: .infinity, maxHeight: .infinity).studioPanel()
+  }
+}
+
+private struct DatabaseChoices: View {
+  let items: [CatalogItem]
+  @Binding var chosen: Set<String>
+  @Binding var defaultDatabase: String
+  @State private var search = ""
+  @State private var scope = DatabaseListScope.all
+  @State private var selectedOnly = false
+  @FocusState private var searchFocused: Bool
+  private var filtered: [CatalogItem] {
+    DatabaseSelection.filtered(
+      items, search: search, scope: scope, selectedOnly: selectedOnly, chosen: chosen)
+  }
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack {
+        Text("\(chosen.count) seçili / \(items.count) veritabanı").fontWeight(.semibold)
+        Spacer()
+        Menu("Toplu seçim") {
+          Button("Tüm veritabanlarını seç (\(items.count))") { chosen = Set(items.map(\.name)) }
+          Button("Bütün seçimi temizle") { chosen = [] }
+        }.fixedSize()
+      }
+      HStack(spacing: 6) {
+        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+        TextField("Veritabanı ara — ör. satış 2026", text: $search)
+          .textFieldStyle(.roundedBorder).focused($searchFocused)
+          .accessibilityIdentifier("databaseSearch")
+          .onSubmit {
+            if filtered.count == 1, let item = filtered.first { chosen.insert(item.name) }
+          }
+          .onExitCommand { search = "" }
+        if !search.isEmpty {
+          Button {
+            search = ""
+            searchFocused = true
+          } label: {
+            Image(systemName: "xmark.circle.fill")
+          }
+          .buttonStyle(.plain).help("Aramayı temizle").accessibilityLabel("Aramayı temizle")
+        }
+      }
+      HStack {
+        Picker("Veritabanı türü", selection: $scope) {
+          Text("Tümü").tag(DatabaseListScope.all)
+          Text("Kullanıcı").tag(DatabaseListScope.user)
+          Text("Sistem").tag(DatabaseListScope.system)
+        }.labelsHidden().pickerStyle(.segmented)
+        Toggle("Yalnızca seçilenler", isOn: $selectedOnly).toggleStyle(.checkbox).fixedSize()
+      }
+      HStack(spacing: 10) {
+        Text("\(filtered.count) eşleşme").font(.caption).foregroundStyle(.secondary)
+        Spacer()
+        Button("Görünenleri Seç") {
+          chosen = DatabaseSelection.changingVisible(filtered, chosen: chosen, select: true)
+        }.disabled(filtered.isEmpty)
+        Button("Görünenleri Kaldır") {
+          chosen = DatabaseSelection.changingVisible(filtered, chosen: chosen, select: false)
+        }.disabled(!filtered.contains { chosen.contains($0.name) })
+      }.controlSize(.small)
+      ScrollView {
+        LazyVStack(alignment: .leading, spacing: 0) {
+          ForEach(filtered, id: \.name) { item in
+            HStack(spacing: 8) {
+              Toggle(
+                isOn: Binding(
+                  get: { chosen.contains(item.name) },
+                  set: { value in
+                    if value { chosen.insert(item.name) } else { chosen.remove(item.name) }
+                  })
+              ) {
+                Text(item.name).lineLimit(1).truncationMode(.middle).help(item.name)
+              }.toggleStyle(.checkbox).frame(maxWidth: .infinity, alignment: .leading)
+              if (1...4).contains(item.id) {
+                Text("Sistem").font(.caption).foregroundStyle(.secondary)
+              }
+              Button {
+                chosen.insert(item.name)
+                defaultDatabase = item.name
+              } label: {
+                Image(systemName: defaultDatabase == item.name ? "star.fill" : "star")
+                  .foregroundStyle(defaultDatabase == item.name ? Color.orange : Color.secondary)
+              }.buttonStyle(.borderless)
+                .help("Yeni sorgular için varsayılan yap: \(item.name)")
+                .accessibilityLabel("Varsayılan yap: \(item.name)")
+            }.padding(.horizontal, 10).padding(.vertical, 7)
+            Divider().padding(.leading, 30)
+          }
+        }.padding(.vertical, 4)
+      }.background(Color(nsColor: .textBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.15)))
+        .overlay {
+          if filtered.isEmpty {
+            VStack(spacing: 6) {
+              Image(systemName: "line.3.horizontal.decrease.circle").font(.title2)
+              Text(selectedOnly && chosen.isEmpty ? "Henüz seçim yok" : "Eşleşen veritabanı yok")
+              Text("Aramayı veya filtreleri değiştirin.").font(.caption)
+              Button("Filtreleri Sıfırla") {
+                search = ""
+                scope = .all
+                selectedOnly = false
+              }
+            }.foregroundStyle(.secondary)
+          }
+        }.frame(minHeight: 220, maxHeight: .infinity)
+        .accessibilityIdentifier("databaseChoicesList")
+      HStack(spacing: 6) {
+        Image(systemName: "star.fill").foregroundStyle(.orange)
+        Text(
+          defaultDatabase.isEmpty
+            ? "Varsayılan için bir satırdaki yıldıza basın." : "Yeni sorgular: \(defaultDatabase)"
+        )
+        .lineLimit(1).truncationMode(.middle).help(defaultDatabase)
+        Spacer(minLength: 0)
+      }.font(.caption)
+      Text("Seçim yalnızca Object Explorer görünümünü belirler; sunucu izinlerini değiştirmez.")
+        .font(.caption).foregroundStyle(.secondary)
+    }.onChange(of: chosen) { _, names in
+      defaultDatabase = DatabaseSelection.defaultName(defaultDatabase, items: items, chosen: names)
+    }.task { searchFocused = true }
+  }
+}
+
+private struct ConnectionForm: View {
+  let saved: [SavedServer]
+  var connect: (ServerProfile, String, Bool) async throws -> Void
+  var cancel: () -> Void
+  @State private var profile = ServerProfile(visibleDatabases: [])
+  @State private var password = ""
+  @State private var remember = false
+  @State private var selected: UUID?
+  @State private var loading = false
+  @State private var tested = false
+  @State private var listed = false
+  @State private var phase = ""
+  @State private var status = ""
+  @State private var error = ""
+  @State private var items: [CatalogItem] = []
+  @State private var chosen: Set<String> = []
+  @State private var defaultDatabase = ""
+  private let editing: Bool
+  init(
+    saved: [SavedServer], initial: ConnectedServer? = nil,
+    connect: @escaping (ServerProfile, String, Bool) async throws -> Void,
+    cancel: @escaping () -> Void
+  ) {
+    self.saved = saved
+    self.connect = connect
+    self.cancel = cancel
+    editing = initial != nil
+    let last = saved.first { $0.profile.id.uuidString == UserDefaults.standard.string(forKey: "lastSavedServer") } ?? saved.first
+    _profile = State(initialValue: initial?.profile ?? last?.profile ?? ServerProfile(visibleDatabases: []))
+    _password = State(initialValue: initial?.password ?? last?.password ?? "")
+    _selected = State(initialValue: initial == nil ? last?.profile.id : nil)
+    _remember = State(initialValue: initial?.remembered ?? true)
+  }
+  private var appearance: Binding<ServerAppearance> {
+    Binding(get: { profile.appearance ?? ServerAppearance() }, set: { profile.appearance = $0 })
+  }
+  @State private var didAutoTest = false
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack {
+        Label(editing ? "Bağlantı ayarları" : "Connect to Server", systemImage: "server.rack")
+          .font(.title2.weight(.semibold))
+        Spacer()
+        Text("1 · Bağlantı   →   2 · Veritabanları   →   3 · Bağlan")
+          .font(.caption).foregroundStyle(.secondary)
+      }
+      Divider()
+      HStack(alignment: .top, spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
+          Text("Sunucu bilgileri").font(.headline)
+          if !saved.isEmpty {
+            Picker("Kayıtlı bağlantı", selection: $selected) {
+              Text("Yeni bağlantı").tag(Optional<UUID>.none)
+              ForEach(saved, id: \.profile.id) {
+                Text($0.profile.name).tag(Optional($0.profile.id))
+              }
+            }.onChange(of: selected) { _, id in
+              if let item = saved.first(where: { $0.profile.id == id }) {
+                profile = item.profile
+                password = item.password
+                remember = true
+              } else {
+                profile = ServerProfile(visibleDatabases: [])
+                password = ""
+                remember = false
+              }
+              invalidate()
+            }
+          }
+          Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+            GridRow {
+              Text("Görünen ad")
+              TextField("Bağlantı adı", text: $profile.name)
+            }
+            GridRow {
+              Text("Sunucu / port")
+              HStack(spacing: 6) {
+                TextField("Sunucu", text: $profile.host)
+                TextField("Port", value: $profile.port, format: .number.grouping(.never)).frame(
+                  width: 58)
+              }
+            }
+            GridRow {
+              Text("Kimlik")
+              Picker("Kimlik doğrulama", selection: $profile.kerberos) {
+                Text("SQL Server Authentication").tag(false)
+                Text("Windows / Kerberos").tag(true)
+              }.labelsHidden()
+            }
+            if !profile.kerberos {
+              GridRow {
+                Text("Kullanıcı")
+                TextField("Login", text: $profile.login)
+              }
+              GridRow {
+                Text("Parola")
+                SecureField("Password", text: $password)
+              }
+            }
+            GridRow {
+              Text("Test veritabanı")
+              TextField("master", text: $profile.database)
+                .help(
+                  "Bağlantı testi ve listeleme için kullanılır. Yeni sorguların veritabanını sağdaki yıldızla seçin."
+                )
+            }
+          }.textFieldStyle(.roundedBorder)
+          if profile.kerberos {
+            Text("Geçerli Kerberos bileti ve sunucu SPN ayarı gerekir.").font(.caption)
+              .foregroundStyle(.secondary)
+          }
+          Toggle("Bağlantıyı Keychain’de sakla", isOn: $remember).toggleStyle(.checkbox)
+          Toggle("Trust server certificate", isOn: $profile.trustCertificate).toggleStyle(.checkbox)
+            .help("Şifreleme açık kalır; sunucu sertifikası doğrulanmaz.")
+          if profile.trustCertificate {
+            Text("Şifreleme açık; sertifika doğrulanmayacak.").font(.caption).foregroundStyle(
+              .orange)
+          }
+          Divider()
+          Text("Ortam ve renk").font(.headline)
+          ConnectionAppearanceFields(appearance: appearance)
+          Spacer(minLength: 0)
+          if editing {
+            Text(
+              "Sunucu veya kimlik değişirse sorgu metinleri korunur; oturumlar yeniden bağlanır. SQL otomatik çalışmaz."
+            )
+            .font(.caption).foregroundStyle(.secondary)
+          }
+          if !error.isEmpty {
+            ScrollView {
+              Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled).frame(
+                maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 65)
+          }
+          if !status.isEmpty {
+            Label(status, systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(
+              .green)
+          }
+          Button("Bağlantıyı Test Et ve Listele", action: test)
+            .buttonStyle(StudioPrimaryButton()).disabled(loading)
+            .help(
+              "Önce bağlantı doğrulanır; başarılı olursa erişebildiğiniz veritabanları yüklenir.")
+        }.padding(14).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: StudioTheme.border))).frame(width: 390).disabled(loading)
+        Divider()
+        VStack(alignment: .leading, spacing: 12) {
+          HStack {
+            Text("Object Explorer veritabanları").font(.headline)
+            Spacer()
+            Button("Listeyi Yenile", action: list).disabled(loading || !tested)
+          }
+          if listed {
+            DatabaseChoices(items: items, chosen: $chosen, defaultDatabase: $defaultDatabase)
+              .disabled(loading)
+          } else {
+            VStack(spacing: 12) {
+              Image(systemName: "externaldrive.badge.magnifyingglass").font(.system(size: 32))
+                .foregroundStyle(.secondary)
+              Text("Görmek istediğin veritabanlarını seç").font(.headline)
+              Text(
+                "Soldaki bilgileri girip bağlantıyı test et. Başarılı testten sonra liste burada açılır."
+              )
+              .foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 320)
+              if loading { ProgressView(phase).controlSize(.small) }
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+          }
+        }.padding(14).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: StudioTheme.border))).frame(maxWidth: .infinity, maxHeight: .infinity)
+      }.frame(maxHeight: .infinity)
+      Divider()
+      HStack {
+        if loading {
+          ProgressView().controlSize(.small)
+          Text(phase).font(.caption)
+        } else {
+          Text("Encryption: Mandatory").font(.caption).foregroundStyle(.secondary)
+        }
+        Spacer()
+        Text("\(chosen.count) veritabanı seçili").font(.caption).foregroundStyle(.secondary)
+        Button("Vazgeç", action: cancel).disabled(loading)
+        Button(editing ? "Uygula" : "Bağlan", action: submit)
+          .buttonStyle(StudioPrimaryButton())
+          .disabled(loading || !tested || !listed || chosen.isEmpty)
+      }
+    }.padding(22).studioPanel().frame(width: 940, height: 680)
+      .task {
+        if editing && !didAutoTest {
+          didAutoTest = true
+          test()
+        }
+      }
+      .onChange(of: profile) { old, new in
+        var previous = old
+        previous.name = new.name
+        previous.appearance = new.appearance
+        if previous != new { invalidate() }
+      }
+      .onChange(of: password) { _, _ in invalidate() }
+  }
+  private func invalidate() {
+    tested = false
+    listed = false
+    items = []
+    chosen = []
+    defaultDatabase = ""
+    status = ""
+    error = ""
+  }
+  private func test() {
+    loading = true
+    phase = "Test ediliyor…"
+    tested = false
+    status = ""
+    error = ""
+    let input = profile
+    let secret = password
+    Task { @MainActor in
+      defer { loading = false }
+      do {
+        let database = try await ServerDiscovery.test(input, password: secret)
+        tested = true
+        status = "Bağlantı başarılı · \(database)"
+        try await discover()
+      } catch { self.error = error.localizedDescription }
+    }
+  }
+  private func list() {
+    guard tested, !loading else { return }
+    loading = true
+    error = ""
+    Task { @MainActor in
+      defer { loading = false }
+      do { try await discover() } catch { self.error = error.localizedDescription }
+    }
+  }
+  private func discover() async throws {
+    phase = "Veritabanları yükleniyor…"
+    let previous = listed ? chosen : Set(profile.visibleDatabases ?? [])
+    let legacy = !listed && profile.visibleDatabases == nil
+    let previousDefault = defaultDatabase.isEmpty ? profile.database : defaultDatabase
+    let available = try await ServerDiscovery.databases(profile, password: password)
+    items = available
+    chosen = Set(items.map(\.name)).intersection(legacy ? Set(items.map(\.name)) : previous)
+    defaultDatabase = DatabaseSelection.defaultName(previousDefault, items: items, chosen: chosen)
+    listed = true
+  }
+  private func submit() {
+    loading = true
+    phase = "Bağlanıyor…"
+    error = ""
+    Task { @MainActor in
+      defer { loading = false }
+      do {
+        var final = profile
+        final.appearance = try profile.appearance?.validated()
+        try final.selectDatabases(chosen, available: items)
+        if chosen.contains(defaultDatabase) { final.database = defaultDatabase }
+        try await connect(final, password, remember)
+      } catch { self.error = error.localizedDescription }
+    }
+  }
+}

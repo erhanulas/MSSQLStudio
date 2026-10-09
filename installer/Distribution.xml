@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+  <title>MSSQL Studio</title>
+  <options customize="never" require-scripts="false" hostArchitectures="arm64"/>
+  <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+  <allowed-os-versions><os-version min="27.0"/></allowed-os-versions>
+  <welcome file="Welcome.html" mime-type="text/html"/>
+  <conclusion file="Conclusion.html" mime-type="text/html"/>
+  <choices-outline><line choice="studio"/></choices-outline>
+  <choice id="studio" visible="false" title="MSSQL Studio"><pkg-ref id="local.mssqlstudio.installer"/></choice>
+  <pkg-ref id="local.mssqlstudio.installer">MSSQLStudio-component.pkg</pkg-ref>
+  <pkg-ref id="local.mssqlstudio.installer"><must-close><app id="local.mssqlstudio.app"/></must-close></pkg-ref>
+</installer-gui-script>
