@@ -812,6 +812,7 @@ private struct ColumnFilterPanel: View {
   private let messages = NSTextView()
   private let connectionBadge = NSTextField(labelWithString: "")
   private var editorHeader: NSStackView?
+  private let compareModuleButton = NSButton()
   private let position = NSTextField(labelWithString: "Ln 1, Col 1")
   private let summary = NSTextField(labelWithString: "")
   private let actual = NSButton(checkboxWithTitle: "Gerçek plan", target: nil, action: nil)
@@ -870,10 +871,17 @@ private struct ColumnFilterPanel: View {
     toggle.toolTip = "Sonuçları Göster / Gizle (⌘R)"
     toggle.setAccessibilityIdentifier("toggleResults")
     actual.controlSize = .small
-    let compare = NSButton(title: "Farkları Gör", target: self, action: #selector(compareModule))
-    let apply = NSButton(title: "DB’ye Uygula…", target: self, action: #selector(applyModule))
-    for button in [compare, apply] { button.bezelStyle = .inline; button.isHidden = document.moduleOriginal == nil }
-    let header = NSStackView(views: [connectionBadge, NSView(), compare, apply, actual, position, toggle])
+    compareModuleButton.image = NSImage(systemSymbolName: "square.split.2x1", accessibilityDescription: "Farkları Gör")
+    compareModuleButton.imagePosition = .imageOnly
+    compareModuleButton.target = self
+    compareModuleButton.action = #selector(compareModule)
+    compareModuleButton.bezelStyle = .inline
+    compareModuleButton.isBordered = false
+    compareModuleButton.toolTip = "Farkları Gör"
+    compareModuleButton.setAccessibilityLabel("Farkları Gör")
+    compareModuleButton.setAccessibilityIdentifier("compareModule")
+    compareModuleButton.isHidden = document.moduleOriginal == nil
+    let header = NSStackView(views: [connectionBadge, NSView(), compareModuleButton, actual, position, toggle])
     header.spacing = 10
     header.wantsLayer = true
     editorHeader = header
@@ -1143,10 +1151,8 @@ private struct ColumnFilterPanel: View {
       ? appearance!.color.withAlphaComponent(0.12).cgColor : StudioTheme.panel.cgColor
   }
   func update() {
-    for case let button as NSButton in editorHeader?.arrangedSubviews ?? [] where ["Farkları Gör", "DB’ye Uygula…"].contains(button.title) {
-      button.isHidden = document.moduleOriginal == nil
-      button.isEnabled = !document.busy && (button.title != "DB’ye Uygula…" || document.hasPendingDatabaseChanges && document.state == .ready && document.objectEditorKey?.database == document.database)
-    }
+    compareModuleButton.isHidden = document.moduleOriginal == nil
+    compareModuleButton.isEnabled = !document.busy
     guard isViewLoaded else { return }
     updateConnectionAppearance()
     actual.state = document.actualPlan ? .on : .off

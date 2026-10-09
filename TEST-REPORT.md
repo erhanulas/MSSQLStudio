@@ -1,3 +1,17 @@
+# MSSQL Studio 0.2.33 — Editör araç çubuğu — 10 Ekim 2026
+
+Farkları Gör düğmesi erişilebilirlik adı ve tooltip taşıyan bir karşılaştırma ikonuna çevrildi; editör başlığındaki DB’ye Uygula düğmesi kaldırıldı. Mevcut nesne sekmesi görünürlük ve sorgu çalışırken pasif olma davranışı korunur.
+
+Değişiklik sonrası imzalama kapalı Release derlemesi başarılı. ManagementWorkspaceTests, PremiumLayoutTests ve CompactLayoutTests kapsamındaki 10 test / 3 suite geçti. Yeni dağıtım paketi üretilmedi, kurulu uygulama güncellenmedi, canlı SQL Server testi yapılmadı.
+
+Başlangıç kontrolünde çekirdek test hedefi başarılıydı; tüm test komutu ise StudioStateTests sürecinin signal 11 ile çökmesi nedeniyle başarısız oldu. macOS çökme kaydı NSTextFinderIndicatorManager._delayedUpdate / objc_msgSend zincirini gösteriyor; kök neden bu küçük arayüz değişikliği kapsamında çözülmedi. Odaklı 10 testin geçmesi bütün test paketinin geçtiği anlamına gelmez. Önceden var olan EditorView.swift:225 main actor uyarısı da başlangıç derlemesinde görüldü.
+
+Bu kontrolün kayıtları: /tmp/MSSQLStudio-audit-tests.beFMfa/tests.log, /tmp/MSSQLStudio-audit-tests.beFMfa/editor-toolbar-tests.log ve /tmp/MSSQLStudio-audit-build.oIw2HC/editor-toolbar-build.log. Aşağıdaki bölümler önceki sürümlerin tarihsel doğrulamalarıdır.
+
+## 0.2.33 yayın hazırlığı
+
+0.2.33 / build 34 kişisel imzalı Release ZIP ve PKG üretildi. prepare-release doğrulaması sertifika kimliğini, ZIP/PKG metadata ve binary eşleşmesini, sürüm notlarını ve SHA-256 manifestini doğruladı. Gerçek ZIP ile tam test çalışması başarılı: 52 uygulama + 88 çekirdek testi raporlandı; 22 koşullu test atlandı, 118 test geçti. Önceki aralıklı arayüz çökmesi bu koşuda tekrarlanmadı; kök neden için düzeltme yapılmadı. Canlı SQL, Keychain erişimi ve gerçek kurulum bu tur denenmedi. Kanıtlar Validation/release-0.2.33-build.txt, release-0.2.33-manifest.json ve release-0.2.33-tests.txt.
+
 # MSSQL Studio 0.2.32 — Doğrulama raporu
 
 Tarih: 9 Ekim 2026. Önceki NativeSQL projesi değiştirilmedi; bu uygulamanın kaynakları, arayüzü ve SQL katmanı yeniden yazıldı.

@@ -4,7 +4,9 @@
 
 ## Başlatma
 
-`releases/MSSQLStudio-0.2.32.pkg` kurulum paketini açın. Açık sorgularınızı kaydedip uygulamayı kapatın; paket ana `/Applications/MSSQLStudio.app` konumuna kurar/günceller. Bu Mac'te gereken unixODBC, Microsoft ODBC 18 ve OpenSSL 3 kurulu. Uygulama bu yerel kurulumları kullanır; sürücüyü paket içinde dağıtmaz. Başka bir Mac için [Microsoft'un macOS kurulum yönergesini](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos) izleyin ve `/opt/homebrew/opt/openssl@3/lib` yolunu sağlayın.
+**SQL editörü araç çubuğu (0.2.33):** Nesne düzenleme sekmesindeki **Farkları Gör** artık yan yana iki panel simgesidir; üzerine gelince adı görünür ve erişilebilirlik etiketi korunur. Editör araç çubuğundaki **DB’ye Uygula…** düğmesi kaldırıldı. Fark penceresi karşılaştırma amaçlıdır; SQL çalıştırmak için mevcut sorgu çalıştırma komutları kullanılır. Aşağıdaki sürüm kayıtları yayımlanmış sürümlerin davranışlarını anlatır.
+
+`releases/MSSQLStudio-0.2.33.pkg` kurulum paketini açın. Açık sorgularınızı kaydedip uygulamayı kapatın; paket ana `/Applications/MSSQLStudio.app` konumuna kurar/günceller. Bu Mac'te gereken unixODBC, Microsoft ODBC 18 ve OpenSSL 3 kurulu. Uygulama bu yerel kurulumları kullanır; sürücüyü paket içinde dağıtmaz. Başka bir Mac için [Microsoft'un macOS kurulum yönergesini](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos) izleyin ve `/opt/homebrew/opt/openssl@3/lib` yolunu sağlayın.
 
 1. Sunucu ve parolayı girip **Bağlantıyı Test Et ve Listele** düğmesine basın; yerel test adresi `localhost`, port `1433`. Başarılı testten sonra erişebildiğiniz veritabanları otomatik yüklenir. Görmek istediklerinizi işaretleyip yeni sorguların varsayılanını satırdaki yıldızla belirleyin; ardından **Bağlan** düğmesine basın. Yeni bağlantıda hiçbiri otomatik seçilmez; en az bir seçim gerekir. Parola kaynak kodunda veya örneklerde yoktur.
 2. Yerel kendinden imzalı sertifika için onaylanan **Trust server certificate** seçeneği kullanılabilir. Şifreleme her zaman açık; bu seçenek yeni bağlantılarda varsayılan olarak kapalı.

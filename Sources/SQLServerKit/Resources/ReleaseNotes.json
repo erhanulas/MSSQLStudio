@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.33",
+    "date": "2026-10-10",
+    "title": "Daha sade SQL editörü araç çubuğu",
+    "changes": [
+      "Farkları Gör düğmesi, açıklama balonu ve erişilebilirlik etiketi olan karşılaştırma ikonuna dönüştürüldü.",
+      "SQL editörünün araç çubuğundaki DB’ye Uygula düğmesi kaldırıldı."
+    ]
+  },
+  {
     "version": "0.2.32",
     "date": "2026-10-10",
     "title": "Kalıcı kişisel imzalama",
