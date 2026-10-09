@@ -14,6 +14,12 @@ Tarih: 9 Ekim 2026. Önceki NativeSQL projesi değiştirilmedi; bu uygulamanın 
 
 Native smoke yalıtılmış bundle ID ile yapıldı; editör yazma ve Hakkında 0.2.32 / build 33 ile kişisel imza notları görüldü, test sorgusu kaydedilmeden test uygulaması kapatıldı. UI test kopyası izolasyon nedeniyle ad-hoc yeniden imzalanmıştır; gerçek yayın imzası ayrı ZIP / PKG policy kontrolleriyle doğrulanır. Kurulu kullanıcı uygulaması güncellenmedi, canlı SQL testi yapılmadı. Developer ID / notarization / PKG Installer imzası ve gerçek Installer çalıştırması yoktur. GitHub yayın sonucu ayrıca kaydedilir.
 
+0.2.32 ilk uzak çalışmasında imzalama / paket doğrulaması ve 88 çekirdek test geçti; StudioStateTests süreci signal 11 ile kapandığı için yayın otomatik engellendi. Aynı kaynakla ikinci çalıştırma başarılı oldu; bu ilk hata başarılı test olarak sayılmadı.
+
+### 0.2.32 yayın sonucu
+
+[GitHub Actions](https://github.com/erhanulas/MSSQLStudio/actions/runs/38000684011) ikinci denemede başarılı; aynı kaynak üzerinde 118 farklı test ve geçici Keychain imza sürekliliği testi geçti. Geçici CI imza keychain'i kaldırıldı. [v0.2.32](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.32) ZIP / PKG / update.json ile yayımlandı; yayın açıklaması paket notlarıyla eşleşti. Gerçek ApplicationUpdate katmanı GitHub'dan 0.2.32'yi indirdi, SHA-256 / sabit sertifika / designated requirement / bundle-sürüm doğrulamasından geçirdi ve /tmp altında hazırladı. Aynı sürümde yeni güncelleme önermedi. Kurulum yapılmadı. Yerel ve uzak paketler ayrı derlemelerdir; byte/hash eşitliği iddia edilmez. Kanıt: Validation/signing.txt, github-ci.txt, github-public-check.txt, github.json, pkg.json, packages.json, build.txt, tests.txt.
+
 ## 0.2.31 — Hakkında ve ortak sürüm notları
 
 10 Ekim 2026. Menüye MSSQL Studio Hakkında eklendi. Pencere bundle metadata'sından sürüm/build okur; ReleaseNotes.json Swift Package resource olarak imzalı uygulamaya dahil edilir. Beş sürümün notları çevrimdışı seçilebilir. GitHub yayın bağlantısı ve mevcut güncelleme kontrolü sunulur. Açık pencere tekrar kullanılır. Yayın hazırlığı notes/tag eşleşmesini, JSON varlığını ve ZIP/PKG notlarının byte eşitliğini kontrol eder; GitHub açıklamasını aynı JSON'dan üretir.

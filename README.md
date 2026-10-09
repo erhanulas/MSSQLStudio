@@ -367,3 +367,7 @@ SQL editöründe seçili metnin diğer kullanımları sarı arka planla görün�
 Kapanan köşeli parantezle tamamlanan eksik nesne adı için imleci taşımadan hata vurgusu yapılır. Güncel aktif veritabanı indeksi gerekir; eski indeks yazarken arka planda yeniden doğrulanır (hata halinde en fazla 30 saniyede bir deneme). Explorer başlığının altındaki DDL indeksi satırı nesne/kolon indeksinin tarihini ve hazır/eşitleniyor/hata durumunu gösterir; geniş ayrıntılar üzerine gelince görünür. Nesne ağacında seçilen bağlantı/DB, Arama sekmesinde açık arama kapsamı gösterilir. Yenileme düğmesi hem nesne hem kolon indeksini yeniler.
 
 Davranış kaynakları: [DataGrip nesne navigasyonu](https://www.jetbrains.com/help/datagrip/code-editor-navigation.html), [Apple baskın eksen kaydırması](https://developer.apple.com/documentation/appkit/nsscrollview/usespredominantaxisscrolling), [Apple Writing Tools davranışı](https://developer.apple.com/documentation/appkit/customizing-writing-tools-behavior-for-system-views).
+
+### 0.2.32 yayın doğrulaması
+
+[GitHub v0.2.32](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.32) yayımlandı. Uzak CI ikinci denemede 118 farklı testi geçti; ilk arayüz test süreci signal 11 ile kapanmıştı. GitHub paketinin gerçek güncelleyiciyle indirme, SHA-256, sabit sertifika ve sürüm hazırlığı doğrulandı; kurulu uygulama değiştirilmedi. Keychain erişim kuralları değiştirilmediği için tekrar izin istemesinin tamamen kalktığı doğrulanmış değildir.
