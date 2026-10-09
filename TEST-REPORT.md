@@ -12,6 +12,10 @@ Bu kontrolün kayıtları: /tmp/MSSQLStudio-audit-tests.beFMfa/tests.log, /tmp/M
 
 Vurgulama çizimi değişikliği için kişisel imzalı ZIP/PKG üretildi. prepare-release ZIP ve PKG imza kimliğini, metadata/binary eşleşmesini, release notes ve update manifestini doğruladı. Gerçek ZIP ile tüm testler başarılı: 52 uygulama + 88 çekirdek testi; 22 koşullu test atlandı, 118 test geçti. Canlı SQL, Keychain erişimi ve kurulum denenmedi. Kanıtlar Validation/release-0.2.34-build.txt, release-0.2.34-manifest.json ve release-0.2.34-tests.txt.
 
+## 0.2.34 yayın sonucu
+
+[GitHub Actions](https://github.com/erhanulas/MSSQLStudio/actions/runs/38003350209) başarılı; sabit imza denetimi, Release build, ZIP/PKG doğrulaması ve gerçek paketle tüm testler geçti. [v0.2.34](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.34) ZIP / PKG / update.json ile yayımlandı. Herkese açık Latest manifesti 0.2.34 sürümünü gösteriyor; ZIP indirildi, SHA-256 ve kişisel imza doğrulandı. Kurulum yapılmadı.
+
 ## 0.2.33 yayın hazırlığı
 
 0.2.33 / build 34 kişisel imzalı Release ZIP ve PKG üretildi. prepare-release doğrulaması sertifika kimliğini, ZIP/PKG metadata ve binary eşleşmesini, sürüm notlarını ve SHA-256 manifestini doğruladı. Gerçek ZIP ile tam test çalışması başarılı: 52 uygulama + 88 çekirdek testi raporlandı; 22 koşullu test atlandı, 118 test geçti. Önceki aralıklı arayüz çökmesi bu koşuda tekrarlanmadı; kök neden için düzeltme yapılmadı. Canlı SQL, Keychain erişimi ve gerçek kurulum bu tur denenmedi. Kanıtlar Validation/release-0.2.33-build.txt, release-0.2.33-manifest.json ve release-0.2.33-tests.txt.
