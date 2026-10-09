@@ -10,6 +10,12 @@ Tarih: 9 Ekim 2026. Önceki NativeSQL projesi değiştirilmedi; bu uygulamanın 
 
 Native smoke yalıtılmış bundle ID ile yapıldı: uygulama menüsünden Hakkında açıldı; Sürüm 0.2.31 · Derleme 32, mevcut notlar ve kurulu sürüm etiketi görüldü. 0.2.30 seçildiğinde başlık ve üç değişiklik değişti; üstteki kurulu sürüm 0.2.31 olarak kaldı. Pencerenin görünümü kontrol edildi. Güncellemeleri Kontrol Et düğmesi gerçek GitHub kaynağına ulaşıp daha eski 0.2.30 yayınından sonra yeni sürüm olmadığını gösterdi. Test uygulaması kapatıldı; kurulu kullanıcı uygulaması ve bağlantıları değiştirilmedi. ZIP ve PKG strict/deep imzası ve release notes eşleşmesi doğrulandı. Gerçek PKG kurulumu yapılmadı; Developer ID / notarization yoktur. Uzak CI ve yayın sonucu dağıtım kaydında ayrıca belirtilir.
 
+### 0.2.31 yayın sonucu
+
+[GitHub Actions](https://github.com/erhanulas/MSSQLStudio/actions/runs/37998408657) başarılı; aynı 117 test uzak runner üzerinde de geçti. [v0.2.31](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.31) ZIP / PKG / update.json ile yayımlandı. Yayın açıklaması, paket içindeki JSON'dan üretilen release-notes.md ile birebir eşleşti. Gerçek ApplicationUpdate katmanı sabit GitHub adresinden 0.2.30 için 0.2.31 buldu, ZIP indirme / SHA-256 / strict imza / bundle ve sürüm hazırlığını /tmp altında geçti; aynı sürüm için yeni güncelleme önermedi. Kurulum / yeniden başlatma yapılmadı. Kullanıcının kurulu sürümü 0.2.30; mevcut menüden güncelleyebilir.
+
+Sonraki sürümlerde testlerin sabit sürüm metni gerektirmemesi için bundled history regresyonu nümerik sıra / benzersizlik / kullanılabilir notlara çevrildi; dört odaklı test yeniden geçti. Uygulama kaynakları ve yayımlanan paket bu test düzenlemesinden etkilenmez. Not/tag uyumsuzluğu içeren bozulmuş örnek ZIP'in yayın öncesi reddi de doğrulandı. Kanıt: Validation/history-focused.txt, github-ci.txt, github-public-check.txt, github.json, pkg.json, build.txt, tests.txt. Aşağıdakiler tarihsel kayıttır.
+
 ## 0.2.30 — GitHub güncelleme kaynağı
 
 10 Ekim 2026. Varsayılan imzalı feed erhanulas/MSSQLStudio Releases adresine bağlandı. Ayarlar depo alanı HTTPS GitHub URL / owner/repo biçimlerini kabul eder; credentials, traversal, yabancı host, HTTP, query ve nesne alt yolları reddedilir. İlk yayın olmayan veya hatalı HTTP yanıtı güncel sürüm olarak gösterilmez. Etiket tabanlı CI derleme/test/taslak yayını hazırlayan workflow eklendi.
