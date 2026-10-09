@@ -15,7 +15,7 @@
 
 ## GitHub üzerinden güncellemeler (0.2.30)
 
-Yayın deposu [erhanulas/MSSQLStudio](https://github.com/erhanulas/MSSQLStudio). Uygulamanın varsayılan kaynağı bu deponun son yayımlanmış sürümündeki `update.json` dosyasıdır. Ayarlar → GitHub güncellemeleri alanı alternatif herkese açık bir depo için kullanılabilir; boş bırakmak yerleşik adresi kullanır. Uygulama GitHub oturumu veya erişim anahtarı istemez; bağlantılar, parolalar, sorgular ve sonuçlar yayımlanmaz.
+Yayın deposu [erhanulas/MSSQLStudio](https://github.com/erhanulas/MSSQLStudio); [ilk GitHub sürümü 0.2.30](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.30) ZIP ve PKG ile yayımlandı. Otomatik yayın akışı ve herkese açık adresten gerçek indirme/doğrulama testi geçti. Uygulamanın varsayılan kaynağı bu deponun son yayımlanmış sürümündeki `update.json` dosyasıdır. Ayarlar → GitHub güncellemeleri alanı alternatif herkese açık bir depo için kullanılabilir; boş bırakmak yerleşik adresi kullanır. Uygulama GitHub oturumu veya erişim anahtarı istemez; bağlantılar, parolalar, sorgular ve sonuçlar yayımlanmaz.
 
 **İlk geçiş:** 0.2.30 PKG'yi bir kez kurun; eski sürümler bu GitHub adresini içermez. Sonrasında MSSQL Studio → **Güncellemeleri Kontrol Et** komutunu kullanın. Yeni sürüm bulunduğunda ZIP indirilir; SHA-256, uygulama imzası, bundle kimliği ve sürüm doğrulanır. Kullanıcı onayı ve açık çalışma denetiminden sonra uygulama kapanıp aynı konumda yenisiyle değiştirilir. Önceki uygulama `.previous` olarak saklanır. Bağlantı kayıtları ve Keychain kimlikleri aynı kalır. Kurulum konumuna yazma izni yoksa hazırlama hata verir; yükseltilmiş yetki otomatik alınmaz. Geçici/ZIP konumundan çalıştırmayın, PKG ile /Applications'a kurun.
 

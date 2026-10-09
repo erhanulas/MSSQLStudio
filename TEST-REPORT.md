@@ -10,6 +10,12 @@ Release 0.2.30 / build 31 derlendi. Son ZIP ile **51 uygulama + 83 çekirdek**, 
 
 Native smoke: yalıtılmış bundle ID ile GitHub ayar alanı açıldı, HTTPS .git adresi girilip Uygula seçildi; normalize edilmiş erhanulas/MSSQLStudio ve "Ayarlar kaydedildi" mesajı görüldü. Gerçek /Applications uygulaması ve Keychain'e dokunulmadı. Canlı SQL testleri bu sürümde çalıştırılmadı. GitHub yayın/push/CI sonucu aşağıdaki dağıtım durumunda ayrıca belirtilir; yerel doğrulama uzak CI başarısı sayılmaz. Developer ID / notarization ve gerçek PKG kurulumu doğrulanmadı.
 
+### 0.2.30 dağıtım sonucu
+
+Kaynaklar main dalına, 162ec652cb8eaa1bb53c957bcbc8427f308e977b commit'i v0.2.30 etiketine gönderildi. [GitHub Actions çalışması](https://github.com/erhanulas/MSSQLStudio/actions/runs/37997352668) başarıyla tamamlandı: macOS 27 runner üzerinde gerçek derleme, ZIP/PKG doğrulama ve 112 farklı test geçti; aynı 22 koşullu test atlandı. Bu tekrarlar yerel testlerle toplanarak farklı test sayısı artırılmadı. [v0.2.30 yayını](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.30), ZIP, PKG ve update.json varlıklarıyla herkese açık yayımlandı.
+
+Ayrı /tmp Swift test aracı gerçek uygulama ApplicationUpdate katmanını kullandı: sabit latest/download/update.json adresinden 0.2.29 için yeni sürüm bulundu; yayımlanmış ZIP indirildi, SHA-256 ve strict/deep imza denetlendi, bundle/sürüm doğrulanıp /tmp hedefine hazırlandı. Aynı 0.2.30 için tekrar kontrol nil döndü. Kullanıcı uygulaması değiştirilmedi. Native ayar testinde yabancı host girildiğinde doğrulama hatası da görüldü. Mevcut /Applications sürümü 0.2.29 ve feed içermiyor; ilk 0.2.30 geçişi PKG kurulumu gerektirir. Yerel ve CI paketleri ayrı derlemelerdir; binary byte/hash eşitliği iddia edilmez. Gerçek güncelleme değiştirme/yeniden açma adımı bu sürümde çalıştırılmadı. Kanıt: Validation/github-ci.txt, github-public-check.txt, github.json, pkg.json, build.txt, tests.txt.
+
 ## 0.2.29 tarihsel doğrulama — daraltma ve gizleme
 
 Sidebar canCollapse ve canCollapseFromWindowResize kapatıldı; isCollapsed ile mevcut düğme kontrollü gizleme devam eder. MinimumThickness 140 puntoya indirildi. Header ikon aralığı, arama seçicilerinin compression resistance / truncation davranışı, arama seçenekleri ve açıklama satırının parent genişlik constraint'leri düzeltildi. Panelin içeriği yaklaşık 251 punto fiilî minimumu artık dayatmıyor.
