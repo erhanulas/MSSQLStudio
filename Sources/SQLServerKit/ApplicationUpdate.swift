@@ -94,7 +94,10 @@ public actor ApplicationUpdate {
     do {
       _ = try run("/usr/bin/ditto",["-x","-k",zip.path,stage.path])
       let app = stage.appendingPathComponent("MSSQLStudio.app")
-      _ = try run("/usr/bin/codesign",["--verify","--deep","--strict",app.path])
+      let identity = try PersonalSigningIdentity.requirement()
+      _ = try run("/usr/bin/codesign",["--verify","--deep","--strict","-R","="+identity,app.path])
+      let actual = try run("/usr/bin/codesign",["-d","-r-",app.path]).trimmingCharacters(in:.whitespacesAndNewlines)
+      guard actual == "designated => " + identity else {throw SQLFailure("Güncellemenin kalıcı imza kimliği uyuşmuyor.") }
       let data = try Data(contentsOf:app.appendingPathComponent("Contents/Info.plist"))
       let info = try PropertyListSerialization.propertyList(from:data,format:nil) as? [String:Any]
       guard info?["CFBundleIdentifier"] as? String == "local.mssqlstudio.app", let version = info?["CFBundleShortVersionString"] as? String, Self.isNewer(version,than:currentVersion) else { throw SQLFailure("Bu paket MSSQL Studio için daha yeni bir sürüm değil.") }

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import Security
 @testable import SQLServerKit
 struct StartupUpdateTests {
   @Test func explorerMigrationRestoresAllSavedButHonorsExplicitDisconnect() {
@@ -51,5 +52,35 @@ extension StartupUpdateTests {
     let release = try JSONDecoder().decode(ApplicationUpdate.Release.self,from:Data(json.utf8))
     #expect(release.version == "0.2.16")
     #expect(release.downloadURL.scheme == "https")
+  }
+}
+
+@Suite struct PersonalSigningTests {
+  @Test func pinnedRequirementParsesAndAdhocReplacementIsRejected() async throws {
+    let requirement = try PersonalSigningIdentity.requirement()
+    var compiled: SecRequirement?
+    #expect(SecRequirementCreateWithString(requirement as CFString,SecCSFlags(),&compiled) == errSecSuccess)
+    #expect(compiled != nil)
+    guard let path = ProcessInfo.processInfo.environment["MSSQL_UPDATE_ZIP"] else {return}
+    let root = URL(fileURLWithPath:"/tmp/StudioWrongSigner-"+UUID().uuidString)
+    try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true)
+    defer {try? FileManager.default.removeItem(at:root)}
+    func run(_ executable:String,_ arguments:[String]) throws {
+      let process=Process();process.executableURL=URL(fileURLWithPath:executable);process.arguments=arguments
+      process.standardOutput=FileHandle.nullDevice;process.standardError=FileHandle.nullDevice
+      try process.run();process.waitUntilExit()
+      #expect(process.terminationStatus == 0)
+    }
+    let extracted=root.appendingPathComponent("extracted")
+    try run("/usr/bin/ditto",["-x","-k",path,extracted.path])
+    let app=extracted.appendingPathComponent("MSSQLStudio.app")
+    try run("/usr/bin/codesign",["--force","--sign","-",app.path])
+    try run("/usr/bin/codesign",["--verify","--deep","--strict",app.path])
+    let archive=root.appendingPathComponent("wrong.zip")
+    try run("/usr/bin/ditto",["-c","-k","--keepParent","--norsrc",app.path,archive.path])
+    do {
+      _ = try await ApplicationUpdate().prepare(zip:archive,target:root.appendingPathComponent("target/MSSQLStudio.app"),currentVersion:"0")
+      Issue.record("A valid ad-hoc signature must not replace the pinned personal identity")
+    } catch is SQLFailure { }
   }
 }

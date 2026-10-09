@@ -1,6 +1,18 @@
-# MSSQL Studio 0.2.31 — Doğrulama raporu
+# MSSQL Studio 0.2.32 — Doğrulama raporu
 
 Tarih: 9 Ekim 2026. Önceki NativeSQL projesi değiştirilmedi; bu uygulamanın kaynakları, arayüzü ve SQL katmanı yeniden yazıldı.
+
+## 0.2.32 — kalıcı kişisel sertifika
+
+10 Ekim 2026. 3072-bit RSA / SHA-256 self-signed code-signing sertifikası üretildi (3650 gün); özel anahtar login Keychain'e aktarıldı. Şifreli yedekler depo dışında 0700/0600 izinleriyle, yedek parolası Keychain'de saklandı. GitHub Actions Secrets şifreli P12 ve parolasını taşır; CI geçici keychain kullanır. Kaynakta yalnızca açık sertifika parmak izi bulunur. Build / ZIP / PKG doğrulaması hem sertifika leaf parmak izini hem kalıcı designated requirement'ı kontrol eder. Uygulama güncelleyicisi de 0.2.32'den sonra bu imzayı zorunlu tutar.
+
+52 uygulama + 88 çekirdek, 27 suite / 140 test raporlandı; 22 koşullu atlandı, **118 farklı test geçti**. Yeni regresyon Security framework ile gereksinimin derlenmesini ve geçerli ad-hoc imzayla yeniden imzalanmış gerçek uygulama ZIP'inin reddini doğruladı. Gerçek kişisel imzalı ZIP hazırlama pozitif testi geçti. Sonraki değişiklik yalnızca release notlarındaki Keychain sınırının netleştirilmesidir; son paket ayrıca hazırlanıp doğrulandı ve uzak CI aynı son kaynak üzerinde çalıştırılır.
+
+İki farklı binary aynı sertifika ve aynı designated requirement ile imzalandı; ad-hoc replacement reddedildi. Ayrı geçici test keychain'inde aynı konumda birinci/ikinci binary arasında UI kapalıyken test kaydı okundu; ad-hoc binary okuyamadı, test kaydı/keychain silindi. Bu test gerçek kullanıcı login keychain onayını temsil etmez.
+
+**Login keychain bulgusu:** Sadece rastgele servis adındaki sahte kayıtlarla yapılan login keychain testi ikinci binary için -25293 yetkilendirme hatası verdi; ilk denemede sistem istemi görüldü ve test süreci durduruldu. Test kayıtları temizlendi. Kullanıcı ek izin/erişim-kuralı testini istemedi ve yalnızca imzalamayı tamamlamamızı seçti; ServerVault erişim kuralları ve gerçek bağlantı kayıtları değiştirilmedi. Bu sürümün her güncellemede Keychain istemini tamamen giderdiği doğrulanmış değildir.
+
+Native smoke yalıtılmış bundle ID ile yapıldı; editör yazma ve Hakkında 0.2.32 / build 33 ile kişisel imza notları görüldü, test sorgusu kaydedilmeden test uygulaması kapatıldı. UI test kopyası izolasyon nedeniyle ad-hoc yeniden imzalanmıştır; gerçek yayın imzası ayrı ZIP / PKG policy kontrolleriyle doğrulanır. Kurulu kullanıcı uygulaması güncellenmedi, canlı SQL testi yapılmadı. Developer ID / notarization / PKG Installer imzası ve gerçek Installer çalıştırması yoktur. GitHub yayın sonucu ayrıca kaydedilir.
 
 ## 0.2.31 — Hakkında ve ortak sürüm notları
 

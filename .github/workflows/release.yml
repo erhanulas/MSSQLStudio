@@ -23,6 +23,13 @@ jobs:
           persist-credentials: false
       - name: Install build dependencies
         run: brew install unixodbc openssl@3
+      - name: Import persistent personal signing identity
+        env:
+          MSSQL_SIGNING_P12: ${{ secrets.MSSQL_SIGNING_P12 }}
+          MSSQL_SIGNING_PASSWORD: ${{ secrets.MSSQL_SIGNING_PASSWORD }}
+        run: python3 scripts/ci-signing.py import
+      - name: Verify stable identity and isolated Keychain fixture
+        run: python3 scripts/test-signing.py
       - name: Build signed application and installer
         run: ./scripts/build-app.sh
       - name: Validate release and generate update manifest
@@ -39,3 +46,6 @@ jobs:
           version="${RELEASE_TAG#v}"
           gh release create "$RELEASE_TAG" "releases/MSSQLStudio-$version.zip" "releases/MSSQLStudio-$version.pkg" releases/update.json --verify-tag --title "MSSQL Studio $version" --notes-file releases/release-notes.md --draft
           gh release edit "$RELEASE_TAG" --draft=false --latest
+      - name: Remove temporary signing identity
+        if: always()
+        run: python3 scripts/ci-signing.py cleanup

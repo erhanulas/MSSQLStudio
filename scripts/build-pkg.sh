@@ -1,14 +1,14 @@
 #!/bin/bash
 set -euo pipefail
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
-zip_path="${1:-$project_dir/releases/MSSQLStudio-0.2.31.zip}"
+zip_path="${1:-$project_dir/releases/MSSQLStudio-0.2.32.zip}"
 output_dir="${2:-$project_dir/releases}"
 stage_dir="$(mktemp -d /tmp/MSSQLStudio-pkg.XXXXXX)"
 trap 'rm -rf "$stage_dir"' EXIT
 mkdir -p "$output_dir" "$stage_dir/root/Applications"
 ditto -x -k "$zip_path" "$stage_dir/extracted"
 app_path="$stage_dir/extracted/MSSQLStudio.app"
-codesign --verify --deep --strict "$app_path"
+python3 "$project_dir/scripts/signing.py" verify "$app_path"
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_path/Contents/Info.plist")"
 ditto --norsrc "$app_path" "$stage_dir/root/Applications/MSSQLStudio.app"
 xattr -cr "$stage_dir/root"

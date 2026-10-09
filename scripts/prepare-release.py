@@ -9,6 +9,7 @@ import re
 import subprocess
 import tempfile
 import zipfile
+from signing import verify
 
 
 def prepare(repository, tag, output):
@@ -46,11 +47,11 @@ def prepare(repository, tag, output):
         raise ValueError('Application update source does not match release repository')
     with tempfile.TemporaryDirectory(prefix='StudioRelease-',dir='/tmp') as temp:
         subprocess.run(['ditto','-x','-k',str(archive),temp],check=True)
-        subprocess.run(['codesign','--verify','--deep','--strict',str(Path(temp)/'MSSQLStudio.app')],check=True)
+        verify(Path(temp)/'MSSQLStudio.app')
         expanded=Path(temp)/'pkg'
         subprocess.run(['pkgutil','--expand-full',str(package),str(expanded)],check=True)
         payload=expanded/'MSSQLStudio-component.pkg/Payload/Applications/MSSQLStudio.app'
-        subprocess.run(['codesign','--verify','--deep','--strict',str(payload)],check=True)
+        verify(payload)
         relative_history = Path(resources[0]).relative_to('MSSQLStudio.app')
         if (payload/relative_history).read_bytes() != history_bytes:
             raise ValueError('PKG and ZIP release notes do not match')

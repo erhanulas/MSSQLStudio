@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.32",
+    "date": "2026-10-10",
+    "title": "Kalıcı kişisel imzalama",
+    "changes": [
+      "Uygulama ve GitHub yayınları aynı kalıcı kişisel sertifikayla imzalanıyor.",
+      "İmza kimliği yeni derlemelerde sabit kalıyor. Mevcut Keychain kayıtlarının erişim kuralları bu sürümde değiştirilmedi; izin istemlerinin tamamen giderildiği doğrulanmış değildir.",
+      "Yayın paketlerinde sertifika kimliği ve kalıcı imza gereksinimi doğrulanıyor; geçici imzalı paketler yayımlanmıyor.",
+      "Bu kişisel sertifika Apple Developer ID veya noter onayı sağlamaz."
+    ]
+  },
+  {
     "version": "0.2.31",
     "date": "2026-10-10",
     "title": "Hakkında ve sürüm geçmişi",

@@ -13,3 +13,10 @@ Validation/
 .env.*
 *.p12
 *.mobileprovision
+
+# Signing private keys must never enter Git.
+*.pem
+*.key
+*.pfx
+__pycache__/
+*.pyc

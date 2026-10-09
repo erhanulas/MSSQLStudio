@@ -4,7 +4,7 @@
 
 ## Başlatma
 
-`releases/MSSQLStudio-0.2.31.pkg` kurulum paketini açın. Açık sorgularınızı kaydedip uygulamayı kapatın; paket ana `/Applications/MSSQLStudio.app` konumuna kurar/günceller. Bu Mac'te gereken unixODBC, Microsoft ODBC 18 ve OpenSSL 3 kurulu. Uygulama bu yerel kurulumları kullanır; sürücüyü paket içinde dağıtmaz. Başka bir Mac için [Microsoft'un macOS kurulum yönergesini](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos) izleyin ve `/opt/homebrew/opt/openssl@3/lib` yolunu sağlayın.
+`releases/MSSQLStudio-0.2.32.pkg` kurulum paketini açın. Açık sorgularınızı kaydedip uygulamayı kapatın; paket ana `/Applications/MSSQLStudio.app` konumuna kurar/günceller. Bu Mac'te gereken unixODBC, Microsoft ODBC 18 ve OpenSSL 3 kurulu. Uygulama bu yerel kurulumları kullanır; sürücüyü paket içinde dağıtmaz. Başka bir Mac için [Microsoft'un macOS kurulum yönergesini](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos) izleyin ve `/opt/homebrew/opt/openssl@3/lib` yolunu sağlayın.
 
 1. Sunucu ve parolayı girip **Bağlantıyı Test Et ve Listele** düğmesine basın; yerel test adresi `localhost`, port `1433`. Başarılı testten sonra erişebildiğiniz veritabanları otomatik yüklenir. Görmek istediklerinizi işaretleyip yeni sorguların varsayılanını satırdaki yıldızla belirleyin; ardından **Bağlan** düğmesine basın. Yeni bağlantıda hiçbiri otomatik seçilmez; en az bir seçim gerekir. Parola kaynak kodunda veya örneklerde yoktur.
 2. Yerel kendinden imzalı sertifika için onaylanan **Trust server certificate** seçeneği kullanılabilir. Şifreleme her zaman açık; bu seçenek yeni bağlantılarda varsayılan olarak kapalı.
@@ -12,6 +12,16 @@
 4. Yazarken DDL önerileri açılır; Control+Space ile elle açın, Tab/Enter ile kabul edin, Escape ile kapatın. Ctrl+F / ⌘F seçili metinle bulma çubuğunu açar; ⌘⇧F SQL'i biçimlendirir.
 5. Object Explorer ve üstteki seçici yalnızca seçtiğiniz veritabanlarını gösterir. Sunucu veya Databases üzerinde sağ tık → **Bağlantı ayarları** ile seçimi değiştirin. Açık sorgular kendi veritabanlarını korur; bu nedenle açık sekmenin mevcut veritabanı seçicide görünmeye devam edebilir. Veritabanını üstteki seçiciden değiştirin. Tablonun sağ menüsünden SELECT / INSERT / UPDATE / DELETE scriptleri, özellikler ve indeks tasarımını açın.
 6. Görünüm menüsünden sorguyu ayrı pencereye taşıyın; aynı oturum, sorgu, sonuçlar ve transaction korunur. Pencere kapanınca sorgu ana çalışma alanına döner.
+
+## Kalıcı kişisel imza (0.2.32)
+
+Yayın uygulaması **MSSQL Studio Personal Signing** sertifikasıyla imzalanır. Bu kişisel, self-signed bir code-signing kimliğidir; Apple Developer ID, noter onayı veya Apple Gatekeeper dağıtım onayı değildir. PKG kapsayıcısının Developer ID Installer imzası yoktur; içindeki uygulama kişisel sertifikayla imzalıdır. Xcode'un geçici ara çıktısından sonra build-app.sh kalıcı imzayı uygular. Geçici/ad-hoc veya farklı sertifikalı yayın paketleri build-pkg / prepare-release tarafından reddedilir.
+
+Tek açık kimlik kaydı `Sources/SQLServerKit/Resources/SigningIdentity.json`: bundle ID + sertifika parmak izi. Kalıcı designated requirement bu ikisine bağlıdır; binary hash'ine bağlı değildir. 0.2.32 ve sonrasındaki uygulama içi güncelleme de aynı sertifika ve gereksinimi denetler. Farklı bir yayın deposu seçmek bu imza kısıtlamasını kaldırmaz. Sertifika kaybedilirse veya değiştirilirse eski uygulama yeni kimliği otomatik kabul etmez; elle kurulum/geçiş gerekir.
+
+Özel anahtar ve parolalar kaynakta bulunmaz. Yerel özel anahtar login Keychain'e aktarıldı; şifreli yerel P12/PEM yedekleri proje deposu dışında, yalnızca bu kullanıcıya açık dosya izinleriyle saklanır. Yedek parolası `local.mssqlstudio.signing-backup` Keychain kaydındadır, düz metin parola dosyası tutulmaz. GitHub deposundaki `MSSQL_SIGNING_P12` ve `MSSQL_SIGNING_PASSWORD` Actions Secrets yeni yayınlarda aynı kimliği sağlar. CI kimliği yalnızca geçici keychain'e aktarır ve iş sonunda siler. Özel anahtarı ya da bu Secrets değerlerini Git'e / issue'ya / sohbete koymayın. Depoya workflow yazabilen kişiler imzalama Secrets'ını kullanabileceğinden depo yazma erişimi güvenilen kişilerle sınırlı olmalıdır. Eksik Secrets durumunda ad-hoc yayına geri dönüş yoktur.
+
+**Keychain sınırı:** Kullanıcı bu aşamada yalnızca imzalamayı istedi; mevcut bağlantı kayıtlarının erişim kuralları değiştirilmedi. Gerçek login keychain'deki yalıtılmış kayıt testi, sabit imzaya rağmen ek yetkilendirme isteyebildi. İzin istemlerinin her güncellemede tamamen kalktığı iddia edilmez. İleride yalnızca uygulama kayıtları için ayrı, kullanıcı onaylı erişim kuralı geçişi gerekebilir. Geçici boş test keychain'inde iki farklı derleme aynı kimlikle erişti; bu sonuç gerçek login keychain davranışıyla eş tutulmaz.
 
 ## Hakkında ve sürüm değişiklikleri (0.2.31)
 
@@ -31,7 +41,7 @@ Yayın deposu [erhanulas/MSSQLStudio](https://github.com/erhanulas/MSSQLStudio);
 2. Aynı sürümle etiket oluşturup gönderin, örneğin `git tag v0.2.32` ve `git push origin v0.2.32`.
 3. `.github/workflows/release.yml`, macOS 27 / Apple Silicon runner'ında uygulamayı ve PKG'yi üretir. ZIP/PKG imzası, bundle, sürüm ve depo eşleşmesini denetler, testleri çalıştırır, SHA-256 içeren manifesti üretir. Üç varlık da taslak yayına yüklendikten sonra yayını Latest olarak açar. Tag ile Xcode sürümü uyuşmazsa yayın oluşturulmaz. Aynı sürüm yeniden yayımlanmaz.
 
-İlk yayın henüz oluşturulmamışsa kontrol hata mesajı verir; bu durum "güncelsiniz" sayılmaz. GitHub Actions'ın depo için etkin olması gerekir. Workflow yalnızca yayın işi için `contents: write` ister; kullanıcı token'ı kaynakta veya uygulamada bulunmaz. Runner `xcode-27` public preview olduğundan kullanılabilirliği GitHub'a bağlıdır. Paketler yerel ad-hoc imzalıdır; Developer ID / noter onayı yoktur. SHA-256 indirme bütünlüğünü denetler; Apple yayıncı kimliği güvencesi sağlamaz. ODBC 18 / unixODBC / OpenSSL bağımlılıkları ayrı kurulur.
+İlk yayın henüz oluşturulmamışsa kontrol hata mesajı verir; bu durum "güncelsiniz" sayılmaz. GitHub Actions'ın depo için etkin olması gerekir. Workflow yalnızca yayın işi için `contents: write` ister; kullanıcı token'ı kaynakta veya uygulamada bulunmaz. Runner `xcode-27` public preview olduğundan kullanılabilirliği GitHub'a bağlıdır. 0.2.30/31 paketleri ad-hoc imzalıdır; 0.2.32 kalıcı kişisel sertifika kullanır. Developer ID / noter onayı yoktur. SHA-256 indirme bütünlüğünü denetler; Apple yayıncı kimliği güvencesi sağlamaz. ODBC 18 / unixODBC / OpenSSL bağımlılıkları ayrı kurulur.
 
 ## Dar Object Explorer (0.2.29)
 

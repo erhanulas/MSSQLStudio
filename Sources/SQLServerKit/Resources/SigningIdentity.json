@@ -1,0 +1,6 @@
+{
+  "identityName": "MSSQL Studio Personal Signing",
+  "certificateSHA1": "adce16b1a3567d8c5fe2ed261e89493611cb7b9d",
+  "bundleIdentifier": "local.mssqlstudio.app",
+  "kind": "personal-self-signed"
+}
