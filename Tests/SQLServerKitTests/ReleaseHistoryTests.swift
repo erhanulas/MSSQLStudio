@@ -3,10 +3,11 @@ import Testing
 @testable import SQLServerKit
 
 @Suite struct ReleaseHistoryTests {
-  @Test func bundledHistoryIncludesCurrentAndPreviousGitHubRelease() throws {
+  @Test func bundledHistoryIsOrderedAndContainsUsableReleaseNotes() throws {
     let notes = try ReleaseHistory.bundled()
-    #expect(notes.first?.version == "0.2.31")
-    #expect(notes.contains(where: { $0.version == "0.2.30" }))
+    #expect(!notes.isEmpty)
+    #expect(Set(notes.map(\.version)).count == notes.count)
+    #expect(zip(notes, notes.dropFirst()).allSatisfy { ApplicationUpdate.isNewer($0.version,than:$1.version) })
     #expect(notes.allSatisfy { !$0.changes.isEmpty })
   }
   @Test func historySortsNumericallyAndKeepsChangesWithTheirVersion() throws {
