@@ -1,3 +1,11 @@
+# Sonuç araç çubuğu ve düzenleme modu — 10 Ekim 2026 (henüz yayımlanmadı)
+
+- Düzenleme ve doğrudan ekle/çoğalt/sil/geri al/NULL/SQL önizleme/vazgeç düğmeleri ana araç çubuğuna taşındı. İkinci sıra ve Satırlar açılır menüsü kaldırıldı. Ortak StudioToolbarButton semantik ikon/renk, hafif kenarlık/zemin, hover ve disabled görünümü kullanır. Düzenleme toggle ve Vazgeç değişiklik olmadan modu kapatır; değişiklik varsa onay korunur.
+- `/tmp/mssql-inline-toolbar-final-tests.log`: 88 uygulama + 114 core = 202 test; **178 geçti, 24 dış koşullu test atlandı**. Her iki hedefin tamamlanma özeti doğrulandı. Son kısa sayfa etiketi/arama placeholder düzeltmesinden sonra `/tmp/mssql-inline-toolbar-final-focused.log`: ilgili 7 testin tümü geçti. Yeni kontroller doğrudan satır eylemleri, nullable/generated kısıtları, gerçek native hücre editöründen değişikliksiz çıkış, vazgeç onayının kabul/red akışı ve grid konumunun korunmasını kapsar.
+- Light/dark ve 830/1280 pt pencere genişliklerinde taşma/çakışma kontrolleri geçti. `/tmp/mssql-inline-toolbar-{light,dark}-{830,1280}.png` görüntüleri üretildi; dar koyu tema ve izole Release uygulaması görsel olarak incelendi. Sayfa boyutu 500 tam görünür; düzenleme eylemleri aynı sıradadır.
+- `/tmp/mssql-inline-toolbar-build-final.log`: Release **BUILD SUCCEEDED**. İzole `local.mssqlstudio.uitest` uygulaması CUA ile açıldı; son sayfa düğmesi aralığı 1–500'den 1501–2000'e taşıdı, ileri düğmeleri devre dışı kaldı. Fixture sunucu doğrulaması içermediği için bu uygulamada edit düğmesi kapalıdır; düzenleme native uygulama testlerinde doğrulandı. Test uygulaması kapatıldı; gerçek uygulama/Keychain/SQL oturumları değiştirilmedi.
+- İlk test denemeleri native hedefte tamamlanma özeti olmadan 0 çıkış verdi; başarılı sayılmadı. Yeni düğme testlerinde animasyonlu performClick yerine AppKit target/action gönderimi kullanıldı; tam suite sonradan tamamlandı. Canlı DB yazma testi yapılmadı. Sürüm/yayın değiştirilmedi.
+
 # v0.2.54 yayın doğrulaması — 10 Ekim 2026
 
 - Public latest https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.54; build 55, kaynak 7b673e7f5eeb5fe704713cefe8a0bfe9b02cab98. Actions 38050647736 başarılı; sabit imza/izole Keychain, paket üretimi, manifest ve gerçek ZIP/PKG ile testler geçti.

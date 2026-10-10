@@ -240,9 +240,14 @@ import Testing
     func descendants(_ view:NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
     let bars = descendants(controller.view).filter { ["gridToolbar", "gridDataActions"].contains($0.accessibilityIdentifier()) }
     #expect(bars.count == 2)
+    let toolbar = try #require(bars.first { $0.accessibilityIdentifier() == "gridToolbar" })
+    let actions = try #require(bars.first { $0.accessibilityIdentifier() == "gridDataActions" })
+    #expect(actions.isDescendant(of: toolbar))
     for control in bars.flatMap(descendants).compactMap({ $0 as? NSControl }) where !control.isHidden {
       let rect = controller.view.convert(control.bounds,from:control)
       #expect(rect.minX >= 0 && rect.maxX <= 831, "Editing toolbar overflow: \(type(of:control)) / \(control.accessibilityLabel() ?? "") hidden=\(control.isHiddenOrHasHiddenAncestor) \(rect)")
+      let barRect = controller.view.convert(toolbar.bounds, from: toolbar)
+      #expect(rect.minY >= barRect.minY && rect.maxY <= barRect.maxY + 1)
     }
     if let image = controller.view.bitmapImageRepForCachingDisplay(in:controller.view.bounds) {
       controller.view.cacheDisplay(in:controller.view.bounds,to:image)

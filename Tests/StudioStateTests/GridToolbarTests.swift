@@ -5,6 +5,152 @@ import Testing
 
 @MainActor @Suite(.serialized) struct GridToolbarTests {
   func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+  func editingFixture() throws -> (QueryController, ResultController, NSWindow) {
+    _ = NSApplication.shared
+    let doc = QueryDocument(server: ConnectedServer(profile: ServerProfile(), password: ""), database: "master", title: "Inline editing")
+    doc.state = .ready
+    doc.results = [Rows(fields: [Field("Id", type: 4), Field("Name"), Field("Required")], values: [["1", "Alpha", "A"], ["2", "Beta", "B"]])]
+    let controller = QueryController(document: doc)
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 830, height: 680), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false; window.contentViewController = controller
+    let grid = try #require(controller.children.compactMap { $0 as? ResultController }.first)
+    grid.editDefinition = TableDefinition(schema: "dbo", name: "T", columns: [
+      .init(id: 1, name: "Id", type: "int", identity: true),
+      .init(id: 2, name: "Name", type: "nvarchar(50)"),
+      .init(id: 3, name: "Required", type: "nvarchar(50)", nullable: false)], primaryKey: ["Id"])
+    grid.editingAllowed = { true }; controller.update()
+    window.orderFront(nil); controller.view.layoutSubtreeIfNeeded()
+    return (controller, grid, window)
+  }
+  func button(_ id: String, in controller: QueryController) throws -> NSButton {
+    try #require(descendants(controller.view).compactMap { $0 as? NSButton }.first { $0.accessibilityIdentifier() == id })
+  }
+  func clickCell(_ column: Int, grid: ResultController, window: NSWindow) throws {
+    let rect = grid.table.frameOfCell(atColumn: column, row: 0)
+    let point = grid.table.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
+    let event = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+    grid.table.mouseDown(with: event)
+  }
+  func activate(_ button: NSButton) throws {
+    #expect(button.isEnabled)
+    let action = try #require(button.action)
+    #expect(NSApp.sendAction(action, to: button.target, from: button))
+  }
+  @Test func inlineActionsFitBothThemesWithoutMovingGridAndUntouchedModeCanClose() throws {
+    let old = UserDefaults.standard.string(forKey: "ssmsTheme")
+    defer { StudioTheme.apply(old ?? "light") }
+    let (controller, grid, window) = try editingFixture()
+    defer { window.close() }
+    let toolbar = try #require(descendants(controller.view).first { $0.accessibilityIdentifier() == "gridToolbar" })
+    let actions = try #require(descendants(toolbar).first { $0.accessibilityIdentifier() == "gridDataActions" })
+    #expect(actions.superview === toolbar)
+    let pageSize = try #require(descendants(toolbar).compactMap { $0 as? NSPopUpButton }.first { $0.itemArray.contains { $0.tag == -2 } })
+    #expect(!pageSize.title.isEmpty && pageSize.title == pageSize.selectedItem?.title)
+    #expect(!descendants(toolbar).compactMap { $0 as? NSPopUpButton }.contains { $0.itemTitles.contains("Satırlar") })
+    for theme in ["light", "dark"] {
+      StudioTheme.apply(theme)
+      for width: CGFloat in [830, 1280] {
+        window.setContentSize(NSSize(width: width, height: 680))
+        controller.view.frame.size = NSSize(width: width, height: 680)
+        controller.view.layoutSubtreeIfNeeded()
+        let barRect = controller.view.convert(toolbar.bounds, from: toolbar)
+        var rects: [NSRect] = []
+        for control in descendants(toolbar).compactMap({ $0 as? NSControl }) where !control.isHiddenOrHasHiddenAncestor {
+          let rect = controller.view.convert(control.bounds, from: control)
+          #expect(rect.minX >= 0 && rect.maxX <= width + 1, "Overflow: \(control.accessibilityLabel() ?? "") \(rect)")
+          #expect(rect.minY >= barRect.minY && rect.maxY <= barRect.maxY + 1)
+          if control is StudioToolbarButton {
+            #expect(rect.width >= 24 && rect.height >= 26)
+            #expect(control.toolTip?.isEmpty == false && control.accessibilityLabel()?.isEmpty == false)
+            #expect(!rects.contains { $0.intersects(rect) }, "Overlapping toolbar buttons: \(rect)")
+            rects.append(rect)
+          }
+        }
+        if let image = controller.view.bitmapImageRepForCachingDisplay(in: controller.view.bounds) {
+          controller.view.cacheDisplay(in: controller.view.bounds, to: image)
+          try image.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/mssql-inline-toolbar-\(theme)-\(Int(width)).png"))
+        }
+      }
+    }
+    let originalFrame = controller.view.convert(grid.view.bounds, from: grid.view)
+    let cancel = try button("gridCancelEditing", in: controller)
+    #expect(cancel.isEnabled && grid.pendingEdits.isEmpty)
+    try activate(cancel)
+    controller.view.layoutSubtreeIfNeeded()
+    #expect(grid.editDefinition == nil && window.attachedSheet == nil)
+    #expect(actions.isHidden)
+    #expect(controller.view.convert(grid.view.bounds, from: grid.view) == originalFrame)
+  }
+  @Test func directRowButtonsStageCloneDeleteUndoAndNullWithSelectionGuards() throws {
+    let (controller, grid, window) = try editingFixture()
+    defer { window.close() }
+    let add = try button("gridAddRow", in: controller), clone = try button("gridCloneRow", in: controller)
+    let delete = try button("gridDeleteRows", in: controller), undo = try button("gridUndoRows", in: controller)
+    let null = try button("gridSetNull", in: controller), preview = try button("gridPreviewChanges", in: controller)
+    #expect(add.isEnabled && !clone.isEnabled && !delete.isEnabled && !undo.isEnabled && !null.isEnabled && !preview.isEnabled)
+    grid.table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+    #expect(clone.isEnabled && delete.isEnabled && !undo.isEnabled)
+    try activate(clone)
+    #expect(grid.pageCount == 3 && grid.pendingEdits[-1]?.values == [nil, "Alpha", "A"])
+    #expect(grid.pendingEdits[-1]?.touched == [1, 2])
+    #expect(undo.isEnabled && preview.isEnabled)
+    try activate(undo)
+    #expect(grid.pendingEdits.isEmpty && grid.pageCount == 2)
+    try activate(add)
+    #expect(grid.pendingEdits[-2]?.touched.isEmpty == true)
+    try activate(delete)
+    #expect(grid.pendingEdits.isEmpty && grid.pageCount == 2)
+    grid.table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+    try activate(delete)
+    #expect(grid.pendingEdits[0]?.deleted == true)
+    grid.table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+    #expect(delete.accessibilityLabel() == "Silmeyi geri al")
+    try activate(delete)
+    #expect(grid.pendingEdits.isEmpty)
+    try clickCell(2, grid: grid, window: window)
+    #expect(null.isEnabled)
+    try activate(null)
+    #expect(grid.pendingEdits[0]?.values[1] == nil && preview.isEnabled)
+    #expect(try grid.pendingSQL().contains("[Name] = NULL"))
+    try activate(undo)
+    #expect(grid.pendingEdits.isEmpty)
+    try clickCell(3, grid: grid, window: window)
+    #expect(!null.isEnabled)
+    try clickCell(1, grid: grid, window: window)
+    #expect(!null.isEnabled)
+    #expect(grid.result.values[0] == ["1", "Alpha", "A"])
+  }
+  @Test func untouchedNativeEditorCanExitViaEditingToggle() async throws {
+    let (controller, grid, window) = try editingFixture()
+    defer { window.close() }
+    grid.table.editColumn(2, row: 0, with: nil, select: true)
+    try await Task.sleep(for: .milliseconds(50))
+    #expect((window.firstResponder as? NSTextView)?.string == "Alpha")
+    let toggle = try button("gridEdit", in: controller)
+    #expect(toggle.isEnabled && toggle.state == .on)
+    try activate(toggle)
+    #expect(grid.editDefinition == nil && grid.pendingEdits.isEmpty)
+    #expect(window.attachedSheet == nil && grid.table.currentEditor() == nil)
+    #expect(toggle.state == .off && grid.result.values[0][1] == "Alpha")
+  }
+  @Test func cancelWithPendingChangesRequiresConfirmationAndKeepsModeWhenDeclined() async throws {
+    let (controller, grid, window) = try editingFixture()
+    defer { window.close() }
+    grid.setEditValue("Changed", row: 0, column: 1)
+    let cancel = try button("gridCancelEditing", in: controller)
+    try activate(cancel)
+    let sheet = try #require(window.attachedSheet)
+    #expect(grid.editDefinition != nil && grid.pendingEdits[0]?.values[1] == "Changed")
+    window.endSheet(sheet, returnCode: .alertSecondButtonReturn)
+    try await Task.sleep(for: .milliseconds(50))
+    #expect(grid.editDefinition != nil && !grid.pendingEdits.isEmpty)
+    try activate(cancel)
+    let confirmed = try #require(window.attachedSheet)
+    window.endSheet(confirmed, returnCode: .alertFirstButtonReturn)
+    try await Task.sleep(for: .milliseconds(50))
+    #expect(grid.editDefinition == nil && grid.pendingEdits.isEmpty)
+    #expect(grid.result.values[0][1] == "Alpha")
+  }
   @Test func toolsShareOneBarAndSwitchWithResultTabs() throws {
     _ = NSApplication.shared
     let doc = QueryDocument(server: ConnectedServer(profile: ServerProfile(), password: ""), database: "master", title: "Toolbar")

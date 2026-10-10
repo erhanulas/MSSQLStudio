@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.59",
+    "date": "2026-10-10",
+    "title": "Tek sırada yenilenen sonuç araçları",
+    "changes": [
+      "Düzenleme işlemleri sayfalama ve yenileme düğmelerinin yanında, aynı araç çubuğunda gösterilir; sonuç tablosu yer değiştirmez.",
+      "Satır ekleme, çoğaltma, silme, geri alma ve NULL işlemleri doğrudan ikonlu düğmelerden yapılır.",
+      "Değişiklik yapmadan Vazgeç veya düzenleme düğmesiyle düzenleme modu kapatılabilir; bekleyen değişikliklerde onay korunur.",
+      "Sonuç araçları işlevlerine uygun renkler, ikonlar ve etkileşim görünümleriyle yenilendi."
+    ]
+  },
+  {
     "version": "0.2.58",
     "date": "2026-10-10",
     "title": "Sayısal sonuçlarda doğru sıfır gösterimi",

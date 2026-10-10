@@ -129,8 +129,9 @@ import SwiftUI
   var copyRows: (() -> Void)?
   var copyHeaders: (() -> Void)?
   var searchColumns: (() -> Void)?
+  var cellSelectionChanged: (() -> Void)?
   private(set) var cellColumns = IndexSet() {
-    didSet { if cellColumns != oldValue { needsDisplay = true } }
+    didSet { if cellColumns != oldValue { needsDisplay = true; cellSelectionChanged?() } }
   }
   override func highlightSelection(inClipRect clip: NSRect) {
     StudioTheme.selection.setFill()
@@ -367,12 +368,30 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     for index in indices { pendingEdits.removeValue(forKey: index); newRowOrder.removeAll { $0 == index } }
     table.deselectAll(nil); table.reloadData(); updateRange(); editsChanged?()
   }
+  var hasSelectedRows: Bool { table.selectedRowIndexes.contains { $0 >= 0 && $0 < pageCount } }
+  var canAppendRow: Bool { editDefinition != nil && editingAllowed?() == true && pendingEdits.count < 400 }
+  var canCloneRow: Bool { canAppendRow && hasSelectedRows }
+  var canDeleteRows: Bool { editDefinition != nil && editingAllowed?() == true && hasSelectedRows }
+  var canRevertRows: Bool {
+    editDefinition != nil && editingAllowed?() == true &&
+      (hasDraftChanges || table.selectedRowIndexes.contains { $0 < pageCount && pendingEdits[sourceIndex($0)] != nil })
+  }
+  var selectionIsDeleted: Bool {
+    hasSelectedRows && table.selectedRowIndexes.filter { $0 < pageCount }.allSatisfy { pendingEdits[sourceIndex($0)]?.deleted == true }
+  }
+  var canSetSelectedNull: Bool {
+    guard let position = table.cellColumns.first, table.tableColumns.indices.contains(position),
+      let ordinal = Int(table.tableColumns[position].identifier.rawValue),
+      canEdit(row: table.selectedRow, column: ordinal), let definition = editDefinition
+    else { return false }
+    return definition.columns[ordinal].nullable
+  }
   func editingMenu() -> [NSMenuItem] {
     guard editDefinition != nil else { return [] }
-    return [("Yeni Satır", "plus", #selector(addResultRow)), ("Satırı Çoğalt", "plus.square.on.square", #selector(cloneResultRow)), ("Satırı Sil / Silmeyi Geri Al", "trash", #selector(deleteResultRow)), ("Seçili Düzenlemeleri Geri Al", "arrow.uturn.backward", #selector(revertResultRows))].map { title, icon, action in
+    return [("Yeni Satır", "plus", #selector(addResultRow), canAppendRow), ("Satırı Çoğalt", "plus.square.on.square", #selector(cloneResultRow), canCloneRow), (selectionIsDeleted ? "Silmeyi Geri Al" : "Satırı Sil", selectionIsDeleted ? "trash.slash" : "trash", #selector(deleteResultRow), canDeleteRows), ("Seçili Düzenlemeleri Geri Al", "arrow.uturn.backward", #selector(revertResultRows), canRevertRows)].map { title, icon, action, enabled in
       let item = NSMenuItem(title: title, action: action, keyEquivalent: ""); item.target = self
       item.image = NSImage(systemSymbolName: icon, accessibilityDescription: title)
-      item.isEnabled = editingAllowed?() == true && (action == #selector(addResultRow) || table.selectedRow >= 0)
+      item.isEnabled = enabled
       return item
     }
   }
@@ -406,7 +425,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     return staged?.deleted != true && c.editableValue && !c.generated
   }
   func setSelectedNull() {
-    guard let column = table.cellColumns.first, table.tableColumns.indices.contains(column), let ordinal = Int(table.tableColumns[column].identifier.rawValue) else { return }
+    guard canSetSelectedNull, let column = table.cellColumns.first, let ordinal = Int(table.tableColumns[column].identifier.rawValue) else { return }
     setEditValue(nil, row: table.selectedRow, column: ordinal)
   }
   private(set) var result = Rows()
@@ -462,6 +481,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     table.rowActions = { [weak self] in self?.editingMenu() ?? [] }
     table.editCell = { [weak self] row, column in self?.inspectCell(row: row, position: column) }
     table.draftChanged = { [weak self] in self?.editsChanged?() }
+    table.cellSelectionChanged = { [weak self] in self?.editsChanged?() }
     table.copyRows = { [weak self] in self?.copySelectionData() }
     table.copyHeaders = { [weak self] in self?.copySelectionData(includeHeaders: true) }
     let head = FilterHeader()
@@ -469,19 +489,23 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     head.openMenu = { [weak self] column, event in self?.showColumnMenu(column, event: event) }
     head.frame.size.height = 40
     table.headerView = head
-    let clear = NSButton(title: "Filtreleri Temizle", target: self, action: #selector(clearFilters))
+    let clear = StudioToolbarButton(symbol: "line.3.horizontal.decrease.circle", label: "Filtreleri temizle", tone: .warning)
+    clear.target = self; clear.action = #selector(clearFilters)
     clear.controlSize = .small
     info.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
     info.textColor = StudioTheme.muted
     info.lineBreakMode = .byTruncatingMiddle
     info.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     navigation = ["backward.end", "chevron.left", "chevron.right", "forward.end"].enumerated().map { index, symbol in
-      let button = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: ["İlk sayfa", "Önceki sayfa", "Sonraki sayfa", "Son sayfa"][index])!, target: self, action: #selector(navigate(_:)))
-      button.tag = index; button.bezelStyle = .inline; button.isBordered = false
-      button.toolTip = ["İlk sayfa", "Önceki sayfa", "Sonraki sayfa", "Son sayfa"][index]
+      let button = StudioToolbarButton(symbol: symbol, label: ["İlk sayfa", "Önceki sayfa", "Sonraki sayfa", "Son sayfa"][index], tone: .neutral, width: 24)
+      button.tag = index; button.target = self; button.action = #selector(navigate(_:))
       return button
     }
     rangeLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+    rangeLabel.lineBreakMode = .byTruncatingMiddle
+    rangeLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    rangeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 64).isActive = true
+    rangeLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 150).isActive = true
     rangeLabel.toolTip = "Yüklenen ve filtrelenmiş satırlarda gezinir; sunucudan sayfa istemez."
     // No bounds-change observer: scrolling never formats the counter or relayouts the toolbar.
     let bar = toolbar
@@ -493,11 +517,8 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     clear.toolTip = "Tüm kolon filtrelerini ve sonuç aramasını temizle"
     bar.setAccessibilityIdentifier("gridNavigation")
     StudioTheme.surface(bar)
-    clear.bezelStyle = .inline
-    clear.isBordered = false
-    clear.contentTintColor = StudioTheme.muted
-    bar.spacing = 6
-    bar.edgeInsets = NSEdgeInsets(top: 2, left: 6, bottom: 2, right: 6)
+    bar.spacing = 3
+    bar.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
     let chipScroll = NSScrollView()
     chipScroll.hasHorizontalScroller = true
     chipScroll.autohidesScrollers = true
@@ -1028,23 +1049,25 @@ private struct ColumnFilterPanel: View {
   private let resultStrip = NSStackView()
   private let stripScroll = NSScrollView()
   private var selectedPageSize = GridPaging.defaultSize
-  private let columnSearchButton = NSButton()
-  private let loadingOptionsButton = NSButton()
+  private let columnSearchButton = StudioToolbarButton(symbol: "text.magnifyingglass", label: "Kolon başlığında ara")
+  private let loadingOptionsButton = StudioToolbarButton(symbol: "slider.horizontal.3", label: "Sonuç yükleme ayarları", tone: .neutral)
   private var optionsPopover: NSPopover?
   private var selectedRefreshSeconds = 0
   private var defaultRefreshApplied = false
   private let editor: EditorController
   private let resultTabs = NSTabView()
   private let navigationHost = NSStackView()
-  private let copyHeadersButton = NSButton()
-  private let refreshButton = NSButton()
+  private let copyHeadersButton = StudioToolbarButton(symbol: "doc.on.doc", label: "Başlıklarla kopyala")
+  private let refreshButton = StudioToolbarButton(symbol: "arrow.clockwise", label: "Sonuçları yenile", tone: .success)
   private let dataActionsBar = NSStackView()
-  private var dataActionsHeight: NSLayoutConstraint?
-  private let rowActionsButton = NSPopUpButton(frame: .zero, pullsDown: true)
-  private let editDataButton = NSButton(title: "Düzenle", target: nil, action: nil)
-  private let previewDataButton = NSButton(title: "Önizle", target: nil, action: nil)
-  private let revertDataButton = NSButton(title: "Vazgeç", target: nil, action: nil)
-  private let nullDataButton = NSButton(title: "NULL", target: nil, action: nil)
+  private let addRowButton = StudioToolbarButton(symbol: "plus", label: "Yeni satır", tone: .success)
+  private let cloneRowButton = StudioToolbarButton(symbol: "plus.square.on.square", label: "Satırı çoğalt")
+  private let deleteRowButton = StudioToolbarButton(symbol: "trash", label: "Satırı sil", tone: .danger)
+  private let undoRowButton = StudioToolbarButton(symbol: "arrow.uturn.backward", label: "Seçili düzenlemeleri geri al", tone: .warning)
+  private let editDataButton = StudioToolbarButton(symbol: "square.and.pencil", label: "Satır düzenlemeyi aç")
+  private let previewDataButton = StudioToolbarButton(symbol: "doc.text.magnifyingglass", label: "SQL önizle ve gönder", title: "SQL", width: 56, prominent: true)
+  private let revertDataButton = StudioToolbarButton(symbol: "xmark", label: "Düzenlemeden vazgeç ve düzenleme modunu kapat", tone: .warning)
+  private let nullDataButton = StudioToolbarButton(symbol: "nosign", label: "Seçili hücreyi NULL yap", tone: .warning)
   private var preparingData = false
   private var submittingData = false
   private var dataReview: NSWindowController?
@@ -1066,7 +1089,7 @@ private struct ColumnFilterPanel: View {
   private let filter = NSSearchField()
   private let rowLimit = NSPopUpButton()
   private let export = NSPopUpButton(frame: .zero, pullsDown: true)
-  private let cancelExport = NSButton(title: "Aktarımı İptal Et", target: nil, action: nil)
+  private let cancelExport = StudioToolbarButton(symbol: "stop.circle", label: "Dışa aktarmayı iptal et", tone: .warning)
   private var exportJob: Task<Void, Never>?
   private var tables: [Int: ResultController] = [:]
   private var plans: [Int: String] = [:]
@@ -1174,10 +1197,6 @@ private struct ColumnFilterPanel: View {
     resultTabs.tabViewType = .noTabsNoBorder
     resultTabs.setAccessibilityIdentifier("resultSelector")
     refreshButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Sonuçları yenile")
-    refreshButton.bezelStyle = .rounded
-    refreshButton.controlSize = .small
-    refreshButton.contentTintColor = StudioTheme.accent
-    refreshButton.widthAnchor.constraint(equalToConstant:30).isActive=true
     refreshButton.target = self
     refreshButton.action = #selector(refreshResults)
     refreshButton.toolTip = "Son çalıştırılan SELECT sorgusunu yenile"
@@ -1203,7 +1222,7 @@ private struct ColumnFilterPanel: View {
     messageItem.label = "Messages"
     messageItem.view = messageScroll
     resultTabs.addTabViewItem(messageItem)
-    filter.placeholderString = "Yüklenen sonuçlarda filtrele"
+    filter.placeholderString = "Sonuç ara"
     filter.sendsSearchStringImmediately = true
     filter.target = self
     filter.action = #selector(filterChanged)
@@ -1232,36 +1251,39 @@ private struct ColumnFilterPanel: View {
     export.action = #selector(exportResult(_:))
     summary.font = .systemFont(ofSize: 11)
     summary.textColor = .secondaryLabelColor
+    let editingDivider = NSBox()
+    editingDivider.boxType = .separator
+    editingDivider.widthAnchor.constraint(equalToConstant: 1).isActive = true
+    editingDivider.heightAnchor.constraint(equalToConstant: 18).isActive = true
     let resultHeader = NSStackView(views: [
-      navigationHost, refreshButton, rowLimit, loadingOptionsButton, columnSearchButton, copyHeadersButton, export, cancelExport, editDataButton, NSView(), filter,
+      navigationHost, refreshButton, rowLimit, loadingOptionsButton, columnSearchButton,
+      copyHeadersButton, export, cancelExport, editingDivider, editDataButton, dataActionsBar,
+      previewDataButton, revertDataButton, NSView(), filter,
     ])
-    for (button, icon, action) in [(editDataButton, "pencil", #selector(beginDataEditing)), (previewDataButton, "doc.text.magnifyingglass", #selector(previewDataEditing)), (revertDataButton, "arrow.uturn.backward", #selector(revertDataEditing)), (nullDataButton, "nosign", #selector(nullDataEditing))] {
-      button.target = self; button.action = action; button.controlSize = .small
-      button.image = NSImage(systemSymbolName: icon, accessibilityDescription: button.title)
-      button.imagePosition = .imageLeading; button.bezelStyle = .rounded
-      button.contentTintColor = button === revertDataButton || button === nullDataButton ? .systemOrange : .controlAccentColor
+    for (button, action, id) in [
+      (editDataButton, #selector(beginDataEditing), "gridEdit"),
+      (addRowButton, #selector(addDataRow), "gridAddRow"),
+      (cloneRowButton, #selector(cloneDataRow), "gridCloneRow"),
+      (deleteRowButton, #selector(deleteDataRows), "gridDeleteRows"),
+      (undoRowButton, #selector(undoDataRows), "gridUndoRows"),
+      (nullDataButton, #selector(nullDataEditing), "gridSetNull"),
+      (revertDataButton, #selector(revertDataEditing), "gridCancelEditing"),
+      (previewDataButton, #selector(previewDataEditing), "gridPreviewChanges")
+    ] {
+      button.target = self; button.action = action; button.setAccessibilityIdentifier(id)
     }
-    dataActionsBar.setViews([rowActionsButton, nullDataButton, revertDataButton, NSView(), previewDataButton], in: .leading)
-    dataActionsBar.spacing = 8; dataActionsBar.edgeInsets = NSEdgeInsets(top: 2, left: 8, bottom: 2, right: 8)
+    dataActionsBar.setViews([addRowButton, cloneRowButton, deleteRowButton, undoRowButton, nullDataButton], in: .leading)
+    dataActionsBar.spacing = 3
     dataActionsBar.setAccessibilityIdentifier("gridDataActions")
-    StudioTheme.surface(dataActionsBar)
-    rowActionsButton.controlSize = .small; rowActionsButton.menu?.autoenablesItems = false
-    rowActionsButton.toolTip = "Yeni satır, çoğaltma, silme ve geri alma. Değişiklikler önizlemeden onayla gönderilir; yeni satırlar sayfanın sonunda görünür."
-    editDataButton.toolTip = "Kaynağı doğrula, hücreleri çift tıklayarak yerelde düzenle. Göndermeden önce SQL önizlemesi zorunludur."
-    previewDataButton.toolTip = "Bekleyen INSERT / UPDATE / DELETE komutlarını incele ve onaylayarak gönder"
-    for (button,icon,label,action) in [(columnSearchButton,"text.magnifyingglass","Kolon başlığında ara",#selector(showColumnSearch)),(loadingOptionsButton,"slider.horizontal.3","Sonuç yükleme ayarları",#selector(showLoadingOptions))] {
-      button.image=NSImage(systemSymbolName:icon,accessibilityDescription:label)
-      button.imagePosition = .imageOnly; button.bezelStyle = .rounded; button.controlSize = .small
-      button.contentTintColor = StudioTheme.accent; button.target=self; button.action=action
-      button.setAccessibilityLabel(label); button.toolTip=label
-      button.widthAnchor.constraint(equalToConstant:30).isActive=true
+    addRowButton.toolTip = "Yeni satır ekle · Değer girilmeyen alanlar DEFAULT kullanır"
+    cloneRowButton.toolTip = "Seçili satırı çoğalt · Anahtar ve üretilen alanlar kopyalanmaz"
+    undoRowButton.toolTip = "Seçili satırlardaki yerel değişiklikleri geri al"
+    nullDataButton.toolTip = "Seçili düzenlenebilir hücreyi NULL yap"
+    for (button, action) in [(columnSearchButton, #selector(showColumnSearch)), (loadingOptionsButton, #selector(showLoadingOptions))] {
+      button.target = self; button.action = action
     }
     resultHeader.setAccessibilityIdentifier("gridToolbar")
     navigationHost.spacing = 0
-    copyHeadersButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Başlıklarla kopyala")
-    copyHeadersButton.bezelStyle = .rounded; copyHeadersButton.controlSize = .small
-    copyHeadersButton.contentTintColor = StudioTheme.accent
-    copyHeadersButton.widthAnchor.constraint(equalToConstant:30).isActive=true
     copyHeadersButton.target = self; copyHeadersButton.action = #selector(copyHeadersSelection)
     updateShortcutHints()
     NotificationCenter.default.addObserver(self, selector: #selector(updateShortcutHints), name: GridShortcuts.changed, object: nil)
@@ -1269,12 +1291,18 @@ private struct ColumnFilterPanel: View {
     refreshInterval.toolTip = "Son başarılı SELECT için otomatik yenileme süresi"
     StudioTheme.surface(resultHeader)
     resultHeader.edgeInsets = NSEdgeInsets(top: 1, left: 6, bottom: 1, right: 6)
-    resultHeader.spacing = 8
+    resultHeader.spacing = 3
     filter.controlSize = .small
     export.controlSize = .small
     summary.lineBreakMode = .byTruncatingTail
     summary.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-    filter.widthAnchor.constraint(equalToConstant: 140).isActive = true
+    filter.widthAnchor.constraint(greaterThanOrEqualToConstant: 90).isActive = true
+    filter.widthAnchor.constraint(lessThanOrEqualToConstant: 140).isActive = true
+    filter.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    rowLimit.widthAnchor.constraint(equalToConstant: 76).isActive = true
+    rowLimit.setContentCompressionResistancePriority(.required, for: .horizontal)
+    export.bezelStyle = .rounded; export.contentTintColor = StudioTheme.accent
+    export.setAccessibilityLabel("Sonuçları dışa aktar")
     resultStrip.spacing = 2
     resultStrip.edgeInsets = NSEdgeInsets(top: 2,left: 6,bottom: 2,right: 6)
     resultStrip.setAccessibilityIdentifier("resultTabStrip")
@@ -1284,9 +1312,6 @@ private struct ColumnFilterPanel: View {
     resultPane.addSubview(stripScroll)
     stripScroll.translatesAutoresizingMaskIntoConstraints = false
     resultPane.addSubview(resultHeader)
-    resultPane.addSubview(dataActionsBar)
-    dataActionsBar.translatesAutoresizingMaskIntoConstraints = false
-    dataActionsHeight = dataActionsBar.heightAnchor.constraint(equalToConstant: 0); dataActionsHeight?.isActive = true
     resultPane.addSubview(resultTabs)
     resultHeader.translatesAutoresizingMaskIntoConstraints = false
     resultTabs.translatesAutoresizingMaskIntoConstraints = false
@@ -1304,10 +1329,7 @@ private struct ColumnFilterPanel: View {
       resultHeader.heightAnchor.constraint(equalToConstant: 34),
       resultTabs.leadingAnchor.constraint(equalTo: resultPane.leadingAnchor, constant: 2),
       resultTabs.trailingAnchor.constraint(equalTo: resultPane.trailingAnchor, constant: -2),
-      dataActionsBar.topAnchor.constraint(equalTo: resultHeader.bottomAnchor),
-      dataActionsBar.leadingAnchor.constraint(equalTo: resultPane.leadingAnchor),
-      dataActionsBar.trailingAnchor.constraint(equalTo: resultPane.trailingAnchor),
-      resultTabs.topAnchor.constraint(equalTo: dataActionsBar.bottomAnchor),
+      resultTabs.topAnchor.constraint(equalTo: resultHeader.bottomAnchor),
       resultTabs.bottomAnchor.constraint(equalTo: resultPane.bottomAnchor),
     ])
     panes.addArrangedSubview(editorPane)
@@ -1390,33 +1412,46 @@ private struct ColumnFilterPanel: View {
   private var hasDataEdits: Bool { tables.values.contains { !$0.pendingEdits.isEmpty } }
   private func syncDataActions() {
     let grid = selectedGrid
-    rowActionsButton.removeAllItems(); rowActionsButton.addItem(withTitle: "Satırlar")
-    rowActionsButton.item(at: 0)?.image = NSImage(systemSymbolName: "list.bullet", accessibilityDescription: "Satır işlemleri")
-    for item in grid?.editingMenu() ?? [] { rowActionsButton.menu?.addItem(item) }
-    dataActionsBar.isHidden = grid?.editDefinition == nil
-    dataActionsHeight?.constant = grid?.editDefinition == nil ? 0 : 34
-    rowActionsButton.isHidden = grid?.editDefinition == nil
+    let editing = grid?.editDefinition != nil
     let safe = document.canRefresh && !preparingData && !submittingData
-    editDataButton.title = preparingData ? "Hazırlanıyor…" : grid?.editDefinition == nil ? "Düzenle" : "Düzenleme Açık"
-    editDataButton.image = NSImage(systemSymbolName:preparingData ? "hourglass" : grid?.editDefinition == nil ? "pencil" : "pencil.circle.fill",accessibilityDescription:"Veri düzenleme")
+    dataActionsBar.isHidden = !editing
+    previewDataButton.isHidden = !editing
+    revertDataButton.isHidden = !editing
+    editDataButton.state = editing ? .on : .off
+    editDataButton.tone = editing ? .success : .accent
+    editDataButton.image = NSImage(systemSymbolName: preparingData ? "hourglass" : editing ? "pencil.circle.fill" : "square.and.pencil", accessibilityDescription: "Veri düzenleme")
+    editDataButton.setAccessibilityLabel(preparingData ? "Düzenleme hazırlanıyor" : editing ? "Satır düzenlemeyi kapat" : "Satır düzenlemeyi aç")
+    editDataButton.toolTip = editing ? "Düzenleme açık · Kapatmak için tıklayın" : "Hücreleri düzenlemek için kaynağı doğrula ve düzenleme modunu aç"
+    editDataButton.isEnabled = editing ? !preparingData && !submittingData : safe && grid != nil && document.results.count == 1 && !document.partial
     columnSearchButton.isEnabled = grid != nil
     loadingOptionsButton.isEnabled = !document.busy && !submittingData
-    editDataButton.toolTip = grid?.editDefinition == nil ? "Düzenleme bilgilerini yerel disk indeksinden hazırla; ilk kullanımda sunucudan doğrulanır." : (grid?.editMetadataCached == true ? "Yerel disk indeksinden hazırlandı. Göndermeden önce güncel yapı sunucudan doğrulanır." : "Sunucudan doğrulandı ve disk indeksine kaydedildi.")
-    editDataButton.isEnabled = safe && grid != nil && grid?.editDefinition == nil && document.results.count == 1 && !document.partial
     let pending = !(grid?.pendingEdits.isEmpty ?? true) || grid?.hasDraftChanges == true
-    previewDataButton.isEnabled = safe && pending
-    previewDataButton.title = "SQL Önizle ve Gönder"
-    previewDataButton.toolTip = pending ? "Bekleyen değişikliklerin SQL komutlarını incele; yalnız onaylarsanız veritabanına gönderilir." : "Bekleyen değişiklik yok. Bir hücreyi değiştirdiğinizde etkinleşir."
+    let canChange = !preparingData && !submittingData
+    previewDataButton.isEnabled = canChange && grid?.editingAllowed?() == true && pending
+    previewDataButton.toolTip = pending ? "SQL önizle ve gönder · Değişiklikler yalnız önizlemedeki onayınızla veritabanına gönderilir" : "SQL önizle ve gönder · Bir hücreyi değiştirdiğinizde etkinleşir"
     previewDataButton.setAccessibilityLabel("Bekleyen değişikliklerin SQL önizlemesi")
-    revertDataButton.isEnabled = pending && !submittingData
-    rowActionsButton.isEnabled = safe && grid?.editDefinition != nil
-    nullDataButton.isEnabled = safe && grid?.editDefinition != nil
+    // Closing an untouched editing session must always be possible.
+    revertDataButton.isEnabled = editing && !submittingData && !preparingData
+    revertDataButton.toolTip = pending ? "Vazgeç · Bekleyen değişiklikleri onayınızla sil ve düzenleme modunu kapat" : "Vazgeç · Düzenleme modunu kapat"
+    addRowButton.isEnabled = canChange && grid?.canAppendRow == true
+    cloneRowButton.isEnabled = canChange && grid?.canCloneRow == true
+    deleteRowButton.isEnabled = canChange && grid?.canDeleteRows == true
+    undoRowButton.isEnabled = canChange && grid?.canRevertRows == true
+    nullDataButton.isEnabled = canChange && grid?.canSetSelectedNull == true
+    let restoring = grid?.selectionIsDeleted == true
+    deleteRowButton.image = NSImage(systemSymbolName: restoring ? "trash.slash" : "trash", accessibilityDescription: restoring ? "Silmeyi geri al" : "Satırı sil")
+    deleteRowButton.tone = restoring ? .warning : .danger
+    deleteRowButton.setAccessibilityLabel(restoring ? "Silmeyi geri al" : "Satırı sil")
+    deleteRowButton.toolTip = restoring ? "Seçili satırların silme işaretini kaldır" : "Seçili satırları silinmek üzere işaretle · SQL önizlemesinden onayla uygulanır"
   }
   private func dataError(_ error: Error) {
     let alert = NSAlert(); alert.messageText = "Veri düzenleme"; alert.informativeText = error.localizedDescription
     if let window = view.window { alert.beginSheetModal(for: window) } else { alert.runModal() }
   }
-  @objc private func beginDataEditing() { prepareDataEditing() }
+  @objc private func beginDataEditing() {
+    if selectedGrid?.editDefinition != nil { revertDataEditing() }
+    else { prepareDataEditing() }
+  }
   private func prepareDataEditing(cell: (Int, Int)? = nil) {
     guard !preparingData, !submittingData else { return }
     guard let grid = selectedGrid, document.canRefresh, !document.partial, document.results.count == 1, let sql = document.lastExecutedSQL else { return }
@@ -1448,7 +1483,12 @@ private struct ColumnFilterPanel: View {
       } catch { dataError(error) }
     }
   }
-  @objc private func nullDataEditing() { selectedGrid?.setSelectedNull() }
+  @objc private func addDataRow() { commitDataCell(); selectedGrid?.appendRow() }
+  @objc private func cloneDataRow() { commitDataCell(); selectedGrid?.appendRow(cloning: true) }
+  @objc private func deleteDataRows() { commitDataCell(); selectedGrid?.toggleSelectedDeletion() }
+  @objc private func undoDataRows() { commitDataCell(); selectedGrid?.revertSelectedRows() }
+  private func commitDataCell() { view.window?.makeFirstResponder(nil) }
+  @objc private func nullDataEditing() { commitDataCell(); selectedGrid?.setSelectedNull() }
   @objc private func revertDataEditing() {
     guard let grid = selectedGrid, !submittingData else { return }
     view.window?.makeFirstResponder(nil)
@@ -1641,6 +1681,7 @@ private struct ColumnFilterPanel: View {
             prepareDataEditing(cell: (row, column))
             return true
           }
+          controller.editsChanged = { [weak self] in self?.syncDataActions() }
           controller.table.searchColumns = { [weak self] in self?.showColumnSearch() }
           controller.toolbarHosted = true
           controller.setPageSize(selectedPageSize)
@@ -1783,10 +1824,13 @@ private struct ColumnFilterPanel: View {
   }
   private func syncPageMenu() {
     for item in rowLimit.itemArray where !item.isSeparatorItem && item.submenu == nil && item.tag >= 0 && GridPaging.choices.contains(item.tag) {
-      item.title = (item.tag == 0 ? "All" : item.tag.formatted()) + (item.tag == GridPaging.defaultSize ? " · Varsayılan" : "")
+      item.title = item.tag == 0 ? "All" : item.tag.formatted()
+      item.toolTip = item.tag == GridPaging.defaultSize ? "Varsayılan sayfa boyutu" : nil
     }
     if let item = rowLimit.itemArray.first(where: { $0.tag == selectedPageSize && $0.tag >= 0 }) { rowLimit.select(item) }
-    else { rowLimit.itemArray.first(where: { $0.tag == -1 })?.title = "Özel: \(selectedPageSize.formatted())…"; rowLimit.selectItem(withTag: -1) }
+    else { rowLimit.itemArray.first(where: { $0.tag == -1 })?.title = selectedPageSize.formatted(); rowLimit.selectItem(withTag: -1) }
+    rowLimit.toolTip = "Sayfa boyutu: \(selectedPageSize == 0 ? "Tüm yüklenenler" : selectedPageSize.formatted()) · Varsayılan: \(GridPaging.defaultSize == 0 ? "All" : GridPaging.defaultSize.formatted())"
+
   }
   @objc private func changeReadLimit(_ item: NSMenuItem) {
     guard !document.busy else { return }

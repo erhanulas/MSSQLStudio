@@ -752,6 +752,65 @@ struct StudioFormField<Content: View>: View {
     }.frame(maxWidth: .infinity, alignment: .leading)
   }
 }
+/// Compact native actions share semantic colors, hit areas and theme handling.
+@MainActor final class StudioToolbarButton: NSButton {
+  enum Tone { case neutral, accent, success, warning, danger }
+  var tone: Tone { didSet { refreshStyle() } }
+  var prominent: Bool { didSet { refreshStyle() } }
+  private var hovered = false
+  private var pressed = false
+  private var hoverArea: NSTrackingArea?
+  override var isEnabled: Bool { didSet { refreshStyle() } }
+  override var state: NSControl.StateValue { didSet { refreshStyle() } }
+
+  init(symbol: String, label: String, tone: Tone = .accent, title: String = "", width: CGFloat = 28, prominent: Bool = false) {
+    self.tone = tone; self.prominent = prominent
+    super.init(frame: .zero)
+    self.title = title
+    image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)?
+      .withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
+    imagePosition = title.isEmpty ? .imageOnly : .imageLeading
+    bezelStyle = .rounded; isBordered = false; controlSize = .small
+    font = .systemFont(ofSize: 11, weight: .semibold)
+    setAccessibilityLabel(label); toolTip = label
+    wantsLayer = true; layer?.cornerRadius = 6; layer?.borderWidth = 1
+    widthAnchor.constraint(equalToConstant: width).isActive = true
+    heightAnchor.constraint(equalToConstant: 26).isActive = true
+    setContentCompressionResistancePriority(.required, for: .horizontal)
+    refreshStyle()
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func refreshStyle() {
+    let color: NSColor
+    switch tone {
+    case .neutral: color = StudioTheme.muted
+    case .accent: color = StudioTheme.accent
+    case .success: color = .systemGreen
+    case .warning: color = .systemOrange
+    case .danger: color = .systemRed
+    }
+    let active = prominent || state == .on
+    contentTintColor = isEnabled ? color : StudioTheme.muted.withAlphaComponent(0.4)
+    layer?.backgroundColor = (isEnabled
+      ? color.withAlphaComponent(pressed ? 0.24 : hovered ? 0.17 : active ? 0.13 : 0.06)
+      : StudioTheme.muted.withAlphaComponent(0.035)).cgColor
+    layer?.borderColor = (isEnabled ? color.withAlphaComponent(active || hovered ? 0.3 : 0.13) : StudioTheme.border.withAlphaComponent(0.45)).cgColor
+  }
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    if let hoverArea { removeTrackingArea(hoverArea) }
+    let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
+    addTrackingArea(area); hoverArea = area
+  }
+  override func mouseEntered(with event: NSEvent) { hovered = true; refreshStyle() }
+  override func mouseExited(with event: NSEvent) { hovered = false; refreshStyle() }
+  override func mouseDown(with event: NSEvent) {
+    pressed = true; refreshStyle()
+    defer { pressed = false; refreshStyle() }
+    super.mouseDown(with: event)
+  }
+}
+
 struct StudioActionButton: View {
   let title: String
   let icon: String
@@ -921,6 +980,7 @@ extension View {
     NotificationCenter.default.post(name: changed, object: nil)
   }
   static func decorate(_ view: NSView) {
+    if let button = view as? StudioToolbarButton { button.refreshStyle() }
     if let table = view as? NSTableView {
       table.backgroundColor = canvas
       table.gridColor = border
