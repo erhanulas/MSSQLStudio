@@ -1,3 +1,7 @@
+# MSSQL Studio 0.2.36 — yayın doğrulaması
+
+10 Ekim 2026. `dd0e99e` commit’i `v0.2.36` etiketiyle GitHub’da yayımlandı ve latest olarak doğrulandı. Actions çalışması https://github.com/erhanulas/MSSQLStudio/actions/runs/38008676383 başarıyla tamamlandı: kalıcı imza kontrolü, uygulama/PKG derlemesi, manifest doğrulaması ve yayın paketiyle testler geçti. 143 test raporlandı: 121 geçti, 22 koşullu test atlandı. Yayın varlıkları: `MSSQLStudio-0.2.36.pkg`, `MSSQLStudio-0.2.36.zip`, `update.json`. Kurulu uygulamaya bu görevde güncelleme uygulanmadı.
+
 0.2.35 etiketi için CI derleme/imzalama başarılı oldu; yayın, vurgu testinin paralel tema değişimlerini de sayması nedeniyle durdu. Vurgu işleminin storage gözlemi eşzamanlı bölüme alındı; tema değişikliğiyle karışmadan sıfır düzenleme koşulu korunuyor. 0.2.35 yayını oluşturulmadı; yeniden yayın 0.2.36 olarak hazırlanıyor.
 
 # MSSQL Studio 0.2.36 — editörde katlama ve kelime vurgusu
