@@ -1,3 +1,10 @@
+# v0.2.46 yayın doğrulaması — 10 Ekim 2026
+
+- https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.46 en son yayın; draft değil. ZIP, PKG ve update.json mevcut. Kaynak commit: 0af18584d6c700d435ad8fb7b5e04196de7213b5; sürüm 0.2.46, build 47.
+- GitHub Actions 38039150656 başarıyla tamamlandı: sabit imza/izole Keychain testi, imzalı uygulama ve installer, manifest doğrulaması ve yayın paketiyle testler geçti.
+- Herkese açık ZIP indirildi; SHA256 318ec088111307163a0415a96551c8a09b96e7f574544031a381599859be59c3 manifest ve GitHub digest ile aynı. PKG GitHub digest: ffb70536b21cb5310d181196436f78baf1d6176861c942a6ca756b0170f93ba1.
+- Çıkarılan uygulama codesign --verify --deep --strict kontrolünü geçti; designated requirement bundle local.mssqlstudio.app ve sabit sertifika adce16b1a3567d8c5fe2ed261e89493611cb7b9d. Kullanıcının kurulu uygulaması değiştirilmedi; gerçek Keychain yükseltme testi bu yayında yapılmadı.
+
 # Ayarlar ve tıklama alanları — 10 Ekim 2026
 
 - Hakkında sürüm satırlarının genişletilmiş etiketi Rectangle contentShape ile tamamen tıklanabilir; seçili sürüm erişilebilirlik durumu eklendi. Kolon seçme ve veritabanı arama temizleme ikonlarının boş alanları da tıklamaya dahil edildi. Job Properties sayfa satırları mevcut tam satır tıklama alanını korur.
