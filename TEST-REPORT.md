@@ -1,3 +1,12 @@
+# İkon açıklamaları, sadeleştirme ve hızlı paneller — 10 Ekim 2026
+
+- Son tam doğrulama `/tmp/mssql-060-tests-verified.log`: 89 uygulama + 114 core = 203 test; **179 geçti, 24 dış koşullu test atlandı**. Önceki iki tur başarılı sayılmadı: ilkinde eski export konumu beklentisi ve sabit 900 ms arama beklemesi, ikincide paralel pencere testlerinin paylaştığı hover alanı etkilendi. Yerleşim beklentisi güncellendi, async arama sınırlı completion bekleyişi kullanır, hover testi ayrı helper örneğiyle izoledir.
+
+- StudioHoverHelp sonuç ikonlarında 200 ms sonra işlev adını gösterir; fareyi/odağı yakalamaz, çıkış/tıklama sırasında kapanır. Sayfa boyutu ve export da aynı davranışı kullanır. Düzenle/Vazgeç aynı toggle'da birleştirildi; export en sağda arrow.down.document, işlem sürerken aynı yerde iptal görünür. İlgili kalıcı kurallar AGENTS.md'ye eklendi.
+- Sonuç yükleme/kolon arama/kolon filtre ve Explorer indeks detay popover'larında animasyon kaldırıldı. Kolon filtresinin boş aramadaki ilk değer yüklemesinden 200 ms yapay bekleme kaldırıldı; yazılı aramada debounce ve detached veri okuma korunur. Ağ gecikmesinin kaldırıldığı iddia edilmez.
+- `/tmp/mssql-060-focused-final.log`: GridToolbarTests 8/8 geçti; hover adının gösterilmesi/iptali, tek kapatma kontrolü, export'un sağda olması, native düzenlemeden değişikliksiz çıkış, bekleyen değişiklik onayları, doğrudan satır eylemleri ve 830/1280 light/dark yerleşimleri kapsandı. `/tmp/mssql-060-build.log`: Release BUILD SUCCEEDED. Mevcut EditorView actor izolasyonu derleyici uyarısı devam eder; bu kapsamda değiştirilmedi.
+- İzole local.mssqlstudio.uitest uygulamasında CUA ile yükleme ayarları ve kolon arama açıldı; içerikleri ve export'un sağdaki yeni simgesi görsel olarak kontrol edildi. İzole uygulama kapatıldı. Gerçek uygulama/Keychain/SQL oturumları değiştirilmedi; canlı DB yazma testi yapılmadı.
+
 # v0.2.59 yayın doğrulaması — 10 Ekim 2026
 
 - Public latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.59; build 60, kaynak 77b7afbca6f96f8c29898d64d28bad611446b39c. Actions 38080851487 tüm adımlarıyla başarılı; sabit imza, izole Keychain, paket üretimi ve gerçek yayın paketleriyle testler geçti.

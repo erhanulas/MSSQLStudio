@@ -753,6 +753,62 @@ struct StudioFormField<Content: View>: View {
   }
 }
 /// Compact native actions share semantic colors, hit areas and theme handling.
+// Shared, non-interactive hover names avoid the system tooltip's long initial delay.
+@MainActor final class StudioHoverHelp {
+  static let shared = StudioHoverHelp()
+  private var pending: Task<Void, Never>?
+  private var panel: NSPanel?
+  private weak var source: NSView?
+  var visibleTitle: String? { panel?.isVisible == true ? (panel?.contentView as? NSTextField)?.stringValue : nil }
+  func schedule(for view: NSView) {
+    hide(); source = view
+    pending = Task { [weak self, weak view] in
+      do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+      guard let self, let view, let window = view.window, window.isVisible,
+        !view.isHiddenOrHasHiddenAncestor, let name = view.accessibilityLabel(), !name.isEmpty else { return }
+      let label = NSTextField(labelWithString: name)
+      label.font = .systemFont(ofSize: 11, weight: .medium)
+      label.textColor = StudioTheme.text
+      label.alignment = .center
+      label.sizeToFit()
+      let size = NSSize(width: label.frame.width + 16, height: 26)
+      let anchor = window.convertToScreen(view.convert(view.bounds, to: nil))
+      let screen = window.screen?.visibleFrame ?? anchor
+      let rect = NSRect(x: min(max(screen.minX, anchor.midX - size.width / 2), screen.maxX - size.width),
+        y: max(screen.minY, anchor.minY - size.height - 5), width: size.width, height: size.height)
+      let panel = NSPanel(contentRect: rect, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+      panel.isReleasedWhenClosed = false; panel.level = .popUpMenu
+      panel.ignoresMouseEvents = true; panel.hasShadow = true
+      panel.backgroundColor = StudioTheme.panel
+      panel.contentView = label
+      window.addChildWindow(panel, ordered: .above)
+      panel.orderFront(nil); self.panel = panel
+    }
+  }
+  func hide(for view: NSView? = nil) {
+    if let view, source !== view { return }
+    pending?.cancel(); pending = nil
+    if let panel { panel.parent?.removeChildWindow(panel); panel.orderOut(nil) }
+    panel = nil; source = nil
+  }
+}
+
+@MainActor final class StudioToolbarPopUpButton: NSPopUpButton {
+  private var hoverArea: NSTrackingArea?
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    if let hoverArea { removeTrackingArea(hoverArea) }
+    let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
+    addTrackingArea(area); hoverArea = area
+  }
+  override func mouseEntered(with event: NSEvent) { StudioHoverHelp.shared.schedule(for: self) }
+  override func mouseExited(with event: NSEvent) { StudioHoverHelp.shared.hide(for: self) }
+  override func mouseDown(with event: NSEvent) { StudioHoverHelp.shared.hide(); super.mouseDown(with: event) }
+  override func viewWillMove(toWindow newWindow: NSWindow?) {
+    StudioHoverHelp.shared.hide(for: self); super.viewWillMove(toWindow: newWindow)
+  }
+}
+
 @MainActor final class StudioToolbarButton: NSButton {
   enum Tone { case neutral, accent, success, warning, danger }
   var tone: Tone { didSet { refreshStyle() } }
@@ -802,9 +858,13 @@ struct StudioFormField<Content: View>: View {
     let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
     addTrackingArea(area); hoverArea = area
   }
-  override func mouseEntered(with event: NSEvent) { hovered = true; refreshStyle() }
-  override func mouseExited(with event: NSEvent) { hovered = false; refreshStyle() }
+  override func mouseEntered(with event: NSEvent) { hovered = true; refreshStyle(); StudioHoverHelp.shared.schedule(for: self) }
+  override func mouseExited(with event: NSEvent) { hovered = false; refreshStyle(); StudioHoverHelp.shared.hide(for: self) }
+  override func viewWillMove(toWindow newWindow: NSWindow?) {
+    StudioHoverHelp.shared.hide(for: self); super.viewWillMove(toWindow: newWindow)
+  }
   override func mouseDown(with event: NSEvent) {
+    StudioHoverHelp.shared.hide()
     pressed = true; refreshStyle()
     defer { pressed = false; refreshStyle() }
     super.mouseDown(with: event)

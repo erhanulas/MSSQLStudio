@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.60",
+    "date": "2026-10-10",
+    "title": "Açıklamalı ikonlar ve hızlı sonuç panelleri",
+    "changes": [
+      "Sonuç araçlarının üzerine gelince işlev adları kısa sürede gösterilir.",
+      "Düzenlemeyi kapatma ve vazgeçme tek düğmede birleştirildi; dışa aktarma yeni belge/indirme simgesiyle en sağa taşındı.",
+      "Yükleme ayarları, kolon arama, kolon filtresi ve indeks detay panelleri açılış animasyonu olmadan gösterilir.",
+      "Kolon filtresinin ilk değer yüklemesindeki ek bekleme kaldırıldı; yazarken arama gecikmesi ve arka plan veri işleme korunur."
+    ]
+  },
+  {
     "version": "0.2.59",
     "date": "2026-10-10",
     "title": "Tek sırada yenilenen sonuç araçları",

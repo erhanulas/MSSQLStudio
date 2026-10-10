@@ -1158,7 +1158,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   private func showIndexDetails(_ scope:TreeNode?,relativeTo button:NSButton) {
     guard let scope else {return}
-    let popover=NSPopover();popover.behavior = .transient
+    let popover=NSPopover();popover.animates = false;popover.behavior = .transient
     popover.contentViewController=NSHostingController(rootView:ExplorerIndexPanel(server:scope.server,databases:searchDatabases(scope)) { [weak self] in
       if case .server = scope.kind {scope.server.prepareCatalogIndexes(force:true)}
       else {self?.refreshIndexInBackground(server:scope.server,database:scope.database,force:true)}

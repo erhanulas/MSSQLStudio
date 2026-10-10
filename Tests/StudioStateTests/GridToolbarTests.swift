@@ -44,6 +44,9 @@ import Testing
     let toolbar = try #require(descendants(controller.view).first { $0.accessibilityIdentifier() == "gridToolbar" })
     let actions = try #require(descendants(toolbar).first { $0.accessibilityIdentifier() == "gridDataActions" })
     #expect(actions.superview === toolbar)
+    let export = try #require((toolbar as? NSStackView)?.arrangedSubviews.last as? NSPopUpButton)
+    #expect(export.accessibilityLabel() == "Sonuçları dışa aktar")
+    #expect(!descendants(toolbar).contains { $0.accessibilityIdentifier() == "gridCancelEditing" })
     let pageSize = try #require(descendants(toolbar).compactMap { $0 as? NSPopUpButton }.first { $0.itemArray.contains { $0.tag == -2 } })
     #expect(!pageSize.title.isEmpty && pageSize.title == pageSize.selectedItem?.title)
     #expect(!descendants(toolbar).compactMap { $0 as? NSPopUpButton }.contains { $0.itemTitles.contains("Satırlar") })
@@ -73,7 +76,7 @@ import Testing
       }
     }
     let originalFrame = controller.view.convert(grid.view.bounds, from: grid.view)
-    let cancel = try button("gridCancelEditing", in: controller)
+    let cancel = try button("gridEdit", in: controller)
     #expect(cancel.isEnabled && grid.pendingEdits.isEmpty)
     try activate(cancel)
     controller.view.layoutSubtreeIfNeeded()
@@ -137,7 +140,7 @@ import Testing
     let (controller, grid, window) = try editingFixture()
     defer { window.close() }
     grid.setEditValue("Changed", row: 0, column: 1)
-    let cancel = try button("gridCancelEditing", in: controller)
+    let cancel = try button("gridEdit", in: controller)
     try activate(cancel)
     let sheet = try #require(window.attachedSheet)
     #expect(grid.editDefinition != nil && grid.pendingEdits[0]?.values[1] == "Changed")
@@ -150,6 +153,24 @@ import Testing
     try await Task.sleep(for: .milliseconds(50))
     #expect(grid.editDefinition == nil && grid.pendingEdits.isEmpty)
     #expect(grid.result.values[0][1] == "Alpha")
+  }
+  @Test func hoverNamesAppearPromptlyAndCancelOnExit() async throws {
+    let (controller, _, window) = try editingFixture()
+    let help = StudioHoverHelp()
+    defer { help.hide(); window.close() }
+    let edit = try button("gridEdit", in: controller)
+    help.schedule(for: edit)
+    let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+    while help.visibleTitle == nil && ContinuousClock.now < deadline {
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    #expect(help.visibleTitle == "Vazgeç ve düzenleme modunu kapat")
+    help.hide(for: edit)
+    #expect(help.visibleTitle == nil)
+    help.schedule(for: edit)
+    help.hide(for: edit)
+    try await Task.sleep(for: .milliseconds(250))
+    #expect(help.visibleTitle == nil)
   }
   @Test func toolsShareOneBarAndSwitchWithResultTabs() throws {
     _ = NSApplication.shared

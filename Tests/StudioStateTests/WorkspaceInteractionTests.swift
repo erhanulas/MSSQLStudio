@@ -69,8 +69,12 @@ import Testing
     picker.selectItem(at:0); NSApp.sendAction(picker.action!,to:picker.target,from:picker)
     let search = try #require(controls.compactMap { $0 as? NSSearchField }.first { $0.placeholderString == "Nesnelerde filtrele" })
     search.stringValue = "ScopeNeedle"; NSApp.sendAction(search.action!,to:search.target,from:search)
-    try await Task.sleep(for:.milliseconds(900))
     let outline = try #require(controls.compactMap { $0 as? NSOutlineView }.first)
+    // Wait for asynchronous disk search completion rather than assuming a fixed machine speed.
+    let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+    while outline.numberOfRows != 2 && ContinuousClock.now < deadline {
+      try await Task.sleep(for: .milliseconds(100))
+    }
     #expect(outline.numberOfRows == 2)
     let first = try #require(outline.item(atRow:0) as? TreeNode)
     let second = try #require(outline.item(atRow:1) as? TreeNode)
@@ -170,7 +174,8 @@ import Testing
     #expect(first.title.hasPrefix("Results"))
     let search = try #require(views(query.view).compactMap { $0 as? NSSearchField }.first)
     let bar = try #require(views(query.view).first { $0.accessibilityIdentifier() == "gridToolbar" } as? NSStackView)
-    #expect(bar.arrangedSubviews.last === search)
+    #expect(bar.arrangedSubviews.contains { $0 === search })
+    #expect(bar.arrangedSubviews.last?.accessibilityLabel() == "Sonuçları dışa aktar")
     grid.table.tableColumns[2].width = 222
     grid.update(doc.results[0],generation:55)
     #expect(grid.table.tableColumns[2].width == 222)

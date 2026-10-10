@@ -805,6 +805,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     else { return }
     popover?.close()
     let popup = NSPopover()
+    popup.animates = false
     popup.behavior = .transient
     popup.contentSize = NSSize(width: 400, height: 540)
     popup.contentViewController = NSHostingController(
@@ -1018,7 +1019,7 @@ private struct ColumnFilterPanel: View {
         loading = true
         error = ""
         do {
-          try await Task.sleep(for: .milliseconds(200))
+          if !search.isEmpty { try await Task.sleep(for: .milliseconds(200)) }
           let input = search
           let worker = Task.detached(priority: .userInitiated) {
             try ResultFiltering.choices(rows, column: column, search: input)
@@ -1066,7 +1067,6 @@ private struct ColumnFilterPanel: View {
   private let undoRowButton = StudioToolbarButton(symbol: "arrow.uturn.backward", label: "Seçili düzenlemeleri geri al", tone: .warning)
   private let editDataButton = StudioToolbarButton(symbol: "square.and.pencil", label: "Satır düzenlemeyi aç")
   private let previewDataButton = StudioToolbarButton(symbol: "doc.text.magnifyingglass", label: "SQL önizle ve gönder", title: "SQL", width: 56, prominent: true)
-  private let revertDataButton = StudioToolbarButton(symbol: "xmark", label: "Düzenlemeden vazgeç ve düzenleme modunu kapat", tone: .warning)
   private let nullDataButton = StudioToolbarButton(symbol: "nosign", label: "Seçili hücreyi NULL yap", tone: .warning)
   private var preparingData = false
   private var submittingData = false
@@ -1087,8 +1087,8 @@ private struct ColumnFilterPanel: View {
   private let summary = NSTextField(labelWithString: "")
   private let actual = NSButton(checkboxWithTitle: "Gerçek plan", target: nil, action: nil)
   private let filter = NSSearchField()
-  private let rowLimit = NSPopUpButton()
-  private let export = NSPopUpButton(frame: .zero, pullsDown: true)
+  private let rowLimit = StudioToolbarPopUpButton()
+  private let export = StudioToolbarPopUpButton(frame: .zero, pullsDown: true)
   private let cancelExport = StudioToolbarButton(symbol: "stop.circle", label: "Dışa aktarmayı iptal et", tone: .warning)
   private var exportJob: Task<Void, Never>?
   private var tables: [Int: ResultController] = [:]
@@ -1231,7 +1231,7 @@ private struct ColumnFilterPanel: View {
       "Tüm yüklenen · JSON…",
     ])
     export.item(at: 0)?.title = ""
-    export.item(at: 0)?.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "Sonuçları dışa aktar")
+    export.item(at: 0)?.image = NSImage(systemSymbolName: "arrow.down.document", accessibilityDescription: "Sonuçları dışa aktar")
     export.toolTip = "Görünen veya tüm yüklenen sonuçları CSV / JSON olarak dışa aktar"
     export.widthAnchor.constraint(equalToConstant: 38).isActive = true
     configurePageMenu()
@@ -1257,8 +1257,8 @@ private struct ColumnFilterPanel: View {
     editingDivider.heightAnchor.constraint(equalToConstant: 18).isActive = true
     let resultHeader = NSStackView(views: [
       navigationHost, refreshButton, rowLimit, loadingOptionsButton, columnSearchButton,
-      copyHeadersButton, export, cancelExport, editingDivider, editDataButton, dataActionsBar,
-      previewDataButton, revertDataButton, NSView(), filter,
+      copyHeadersButton, editingDivider, editDataButton, dataActionsBar,
+      previewDataButton, NSView(), filter, cancelExport, export,
     ])
     for (button, action, id) in [
       (editDataButton, #selector(beginDataEditing), "gridEdit"),
@@ -1267,7 +1267,6 @@ private struct ColumnFilterPanel: View {
       (deleteRowButton, #selector(deleteDataRows), "gridDeleteRows"),
       (undoRowButton, #selector(undoDataRows), "gridUndoRows"),
       (nullDataButton, #selector(nullDataEditing), "gridSetNull"),
-      (revertDataButton, #selector(revertDataEditing), "gridCancelEditing"),
       (previewDataButton, #selector(previewDataEditing), "gridPreviewChanges")
     ] {
       button.target = self; button.action = action; button.setAccessibilityIdentifier(id)
@@ -1400,6 +1399,7 @@ private struct ColumnFilterPanel: View {
       for child in navigationHost.arrangedSubviews { navigationHost.removeArrangedSubview(child); child.removeFromSuperview() }
       if let toolbar { navigationHost.addArrangedSubview(toolbar) }
     }
+    export.isHidden = exportJob != nil
     export.isEnabled = toolbar != nil && exportJob == nil
     copyHeadersButton.isEnabled = toolbar != nil
     filter.isEnabled = toolbar != nil
@@ -1416,11 +1416,10 @@ private struct ColumnFilterPanel: View {
     let safe = document.canRefresh && !preparingData && !submittingData
     dataActionsBar.isHidden = !editing
     previewDataButton.isHidden = !editing
-    revertDataButton.isHidden = !editing
     editDataButton.state = editing ? .on : .off
-    editDataButton.tone = editing ? .success : .accent
-    editDataButton.image = NSImage(systemSymbolName: preparingData ? "hourglass" : editing ? "pencil.circle.fill" : "square.and.pencil", accessibilityDescription: "Veri düzenleme")
-    editDataButton.setAccessibilityLabel(preparingData ? "Düzenleme hazırlanıyor" : editing ? "Satır düzenlemeyi kapat" : "Satır düzenlemeyi aç")
+    editDataButton.tone = editing ? .warning : .accent
+    editDataButton.image = NSImage(systemSymbolName: preparingData ? "hourglass" : editing ? "xmark" : "square.and.pencil", accessibilityDescription: "Veri düzenleme")
+    editDataButton.setAccessibilityLabel(preparingData ? "Düzenleme hazırlanıyor" : editing ? "Vazgeç ve düzenleme modunu kapat" : "Satır düzenlemeyi aç")
     editDataButton.toolTip = editing ? "Düzenleme açık · Kapatmak için tıklayın" : "Hücreleri düzenlemek için kaynağı doğrula ve düzenleme modunu aç"
     editDataButton.isEnabled = editing ? !preparingData && !submittingData : safe && grid != nil && document.results.count == 1 && !document.partial
     columnSearchButton.isEnabled = grid != nil
@@ -1430,9 +1429,6 @@ private struct ColumnFilterPanel: View {
     previewDataButton.isEnabled = canChange && grid?.editingAllowed?() == true && pending
     previewDataButton.toolTip = pending ? "SQL önizle ve gönder · Değişiklikler yalnız önizlemedeki onayınızla veritabanına gönderilir" : "SQL önizle ve gönder · Bir hücreyi değiştirdiğinizde etkinleşir"
     previewDataButton.setAccessibilityLabel("Bekleyen değişikliklerin SQL önizlemesi")
-    // Closing an untouched editing session must always be possible.
-    revertDataButton.isEnabled = editing && !submittingData && !preparingData
-    revertDataButton.toolTip = pending ? "Vazgeç · Bekleyen değişiklikleri onayınızla sil ve düzenleme modunu kapat" : "Vazgeç · Düzenleme modunu kapat"
     addRowButton.isEnabled = canChange && grid?.canAppendRow == true
     cloneRowButton.isEnabled = canChange && grid?.canCloneRow == true
     deleteRowButton.isEnabled = canChange && grid?.canDeleteRows == true
@@ -1777,7 +1773,7 @@ private struct ColumnFilterPanel: View {
   @objc private func actualChanged() { document.actualPlan = actual.state == .on }
   @objc private func showLoadingOptions() {
     optionsPopover?.close()
-    let popup=NSPopover(); popup.behavior = .transient
+    let popup=NSPopover(); popup.animates = false; popup.behavior = .transient
     popup.contentViewController=NSHostingController(rootView:ResultLoadingPanel(rows:document.limits.rows,page:selectedPageSize,refresh:selectedRefreshSeconds,refreshAllowed:!tables.values.contains { $0.editDefinition != nil }) { [weak self,weak popup] rows,page,refresh,save in
       guard let self, !document.busy, !submittingData else { return }
       document.limits=ResultReadPreferences.limits(rows:rows)
@@ -1793,7 +1789,7 @@ private struct ColumnFilterPanel: View {
     let columns=grid.result.fields.enumerated().map { ordinal,field in
       ResultColumnChoice(id:ordinal,name:field.name,type:field.dataType,hidden:grid.table.tableColumns.first { $0.identifier.rawValue == String(ordinal) }?.isHidden ?? false)
     }
-    let popup=NSPopover(); popup.behavior = .transient
+    let popup=NSPopover(); popup.animates = false; popup.behavior = .transient
     popup.contentViewController=NSHostingController(rootView:ResultColumnSearch(columns:columns) { [weak grid,weak popup] ordinal in
       grid?.revealColumn(ordinal); popup?.close()
     })
@@ -1877,6 +1873,7 @@ private struct ColumnFilterPanel: View {
     panel.nameFieldStringValue = "Results.\(json ? "json" : "csv")"
     guard panel.runModal() == .OK, let url = panel.url else { return }
     cancelExport.isHidden = false
+    export.isHidden = true
     export.isEnabled = false
     exportJob = Task { [weak self] in
       let worker = Task.detached(priority: .utility) {
