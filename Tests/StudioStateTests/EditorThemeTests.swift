@@ -230,7 +230,10 @@ import Testing
     #expect(storage.attribute(.backgroundColor,at:chosen.location,effectiveRange:nil) == nil)
     #expect(controller.editor.undoManager?.canUndo != true)
     controller.editor.setSelectedRange(NSRange(location:0,length:0))
-    try await Task.sleep(for:.milliseconds(140))
+    for _ in 0..<100 {
+      if controller.occurrenceRanges.isEmpty {break}
+      try await Task.sleep(for:.milliseconds(20))
+    }
     #expect(controller.occurrenceRanges.isEmpty)
     #expect(storage.attribute(.backgroundColor,at:chosen.location,effectiveRange:nil) == nil)
     #expect(controller.occurrenceHighlights.ranges.isEmpty)
