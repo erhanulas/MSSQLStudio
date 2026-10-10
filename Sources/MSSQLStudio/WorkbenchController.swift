@@ -1949,7 +1949,7 @@ private struct DatabaseChoices: View {
             search = ""
             searchFocused = true
           } label: {
-            Image(systemName: "xmark.circle.fill")
+            Image(systemName: "xmark.circle.fill").frame(width: 24, height: 24).contentShape(Rectangle())
           }
           .buttonStyle(.plain).help("Aramayı temizle").accessibilityLabel("Aramayı temizle")
         }

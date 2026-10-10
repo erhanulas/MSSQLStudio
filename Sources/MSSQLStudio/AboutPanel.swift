@@ -100,7 +100,8 @@ struct AboutPanel: View {
         .foregroundStyle(selection == version ? Color.accentColor : Color.primary)
         .background(selection == version ? Color.accentColor.opacity(0.10) : Color.clear,
           in: RoundedRectangle(cornerRadius: 6))
-    }.buttonStyle(.plain).accessibilityLabel("\(version)\(current ? " Kurulu sürüm" : "")")
+      .contentShape(Rectangle())
+    }.buttonStyle(.plain).accessibilityAddTraits(selection == version ? .isSelected : []).accessibilityLabel("\(version)\(current ? " Kurulu sürüm" : "")")
       .accessibilityIdentifier("aboutRelease-\(version)")
   }
 }

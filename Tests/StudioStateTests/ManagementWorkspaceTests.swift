@@ -163,6 +163,60 @@ import SwiftUI
     #expect(requests == [Catalog.databases])
   }
 
+  @Test func agentCommandSharesSQLColorsAndPreservesSelectionAndUndoAcrossThemes() async throws {
+    _=NSApplication.shared
+    let previous=UserDefaults.standard.string(forKey:"ssmsTheme")
+    defer {StudioTheme.apply(previous ?? "light");if previous == nil {UserDefaults.standard.removeObject(forKey:"ssmsTheme")}}
+    StudioTheme.apply("light")
+    let original="DECLARE @unused int;\n/* first\nsecond */\nSELECT N'İstanbul 😀', GETDATE(), 42;"
+    var command=original
+    let host=WorkbenchController(state:StudioState())
+    let window=host.present(AgentCommandEditor(text:Binding(get:{command},set:{command=$0})),title:"Synthetic Command Colors",width:900,height:650)
+    defer {window.close()}
+    func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+    var editor:NSTextView?
+    for _ in 0..<100 {
+      window.contentView?.layoutSubtreeIfNeeded()
+      editor=descendants(try #require(window.contentView)).compactMap {$0 as? NSTextView}.first {$0.identifier?.rawValue == "agentCommandEditor"}
+      if editor?.string == original {break}
+      try await Task.sleep(for:.milliseconds(20))
+    }
+    let view=try #require(editor),storage=try #require(view.textContentStorage?.textStorage)
+    func expectColors() {
+      for (needle,color) in [("DECLARE",StudioTheme.syntax(.keyword)),("second */",StudioTheme.syntax(.comment)),("N'İstanbul 😀'",StudioTheme.syntax(.string)),("@unused",StudioTheme.unusedVariable)] {
+        let offset=(view.string as NSString).range(of:needle).location
+        #expect(offset != NSNotFound)
+        if offset != NSNotFound {#expect(storage.attribute(.foregroundColor,at:offset,effectiveRange:nil) as? NSColor == color)}
+      }
+      #expect(view.backgroundColor == StudioTheme.editorCanvas && view.textLayoutManager != nil)
+    }
+    expectColors()
+    let selection=(original as NSString).range(of:"İstanbul 😀")
+    view.setSelectedRange(selection)
+    let viewport=view.enclosingScrollView?.contentView.bounds.origin
+    StudioTheme.apply("dark")
+    expectColors()
+    #expect(view.selectedRange() == selection && view.string == original && command == original)
+    #expect(view.enclosingScrollView?.contentView.bounds.origin == viewport)
+    #expect(window.makeFirstResponder(view))
+    view.setSelectedRange(NSRange(location:storage.length,length:0));view.breakUndoCoalescing()
+    view.insertText("\nSELECT @unused;",replacementRange:view.selectedRange())
+    #expect(command == view.string && view.undoManager?.canUndo == true)
+    let variable=(view.string as NSString).range(of:"@unused")
+    #expect(storage.attribute(.foregroundColor,at:variable.location,effectiveRange:nil) as? NSColor != StudioTheme.unusedVariable)
+    view.undoManager?.undo()
+    for _ in 0..<100 {
+      if command == original && storage.attribute(.foregroundColor,at:variable.location,effectiveRange:nil) as? NSColor == StudioTheme.unusedVariable {break}
+      try await Task.sleep(for:.milliseconds(20))
+    }
+    #expect(view.string == original && command == original)
+    expectColors()
+    #expect(view.undoManager?.canRedo == true)
+    view.undoManager?.redo()
+    #expect(view.string == original+"\nSELECT @unused;" && command == view.string)
+    #expect(storage.attribute(.foregroundColor,at:variable.location,effectiveRange:nil) as? NSColor != StudioTheme.unusedVariable)
+  }
+
   @Test func agentMenusExposeStateAwareCommandsAndDistinctIcons() {
     let server=ConnectedServer(profile:ServerProfile(),password:""),host=WorkbenchController(state:StudioState())
     let disabled=TreeNode("DisabledJob",kind:.object(.jobs),server:server,item:CatalogItem(name:"DisabledJob",detail:"Disabled, Idle"))

@@ -447,3 +447,9 @@ Sorgu sonuçlarının arayüz güncellemeleri 50 ms aralıklarla birleştirilir;
 T-SQL job adımının veritabanı, [SSMS Genel sayfasındaki](https://learn.microsoft.com/en-us/ssms/agent/create-a-transact-sql-job-step) gibi açılır listeden seçilir. Liste, ayrı metadata bağlantısıyla sunucunun HAS_DBACCESS ile görünür veritabanlarından okunur; Explorer'ın kişisel görünürlük filtresiyle sınırlanmaz. Yükleme göstergesi ve yenileme düğmesi vardır. Mevcut veritabanı görünmüyorsa adı korunur ve uyarı gösterilir; hata/kısmi sonuç başka bir veritabanı seçmez. T-SQL dışındaki salt okunur adımlar için liste sorgusu yapılmaz. Değişiklik hâlâ önce SQL önizlemesine gider.
 
 Job Properties sol sayfa düğmelerinde tüm genişliği kapsayan dikdörtgen tıklama alanı tanımlandı; seçili satır kalın yazı, zemin rengi ve erişilebilirlik seçili durumu ile belirtilir.
+
+## Job adımı komut editörünün SQL renkleri
+
+T-SQL job adımındaki Komut alanı ana SQL editörünün ortak renklendiricisini ve SSMS paletini kullanır: anahtar sözcükler, fonksiyonlar, metinler, yorumlar, sayılar ve değişkenler aynı temaya uyar; kullanılmayan DECLARE adları soluk gösterilir. Açık/koyu tema değişimi alanı düz renge çevirmez. Renklendirme metni yeniden oluşturmaz; yalnızca renk/font niteliklerini günceller. TextKit 2, seçim, kaydırma ve undo/redo korunur. Bu alan SQL çalıştırmaz; değişiklikler mevcut SQL önizleme akışına gider.
+
+Ayarlar, Görünüm / SQL Editörü / Kısayollar / Çalışma Alanı / Güncellemeler / Güvenlik sekmelerinde kart düzeniyle sunulur. Uygula ve işlem mesajı sabit kalır; sekme geçişleri kaydedilmemiş tercihleri korur. Açık Ayarlar penceresi yeniden kullanılır. Hakkında ekranında sürüm satırlarının tüm genişliği, kolon seçimi ve arama temizleme ikonlarının boş alanları tıklanabilir.

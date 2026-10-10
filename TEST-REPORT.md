@@ -1,3 +1,19 @@
+# Ayarlar ve tıklama alanları — 10 Ekim 2026
+
+- Hakkında sürüm satırlarının genişletilmiş etiketi Rectangle contentShape ile tamamen tıklanabilir; seçili sürüm erişilebilirlik durumu eklendi. Kolon seçme ve veritabanı arama temizleme ikonlarının boş alanları da tıklamaya dahil edildi. Job Properties sayfa satırları mevcut tam satır tıklama alanını korur.
+- Ayarlar altı native sekmeye ayrıldı: Görünüm, SQL Editörü, Kısayollar, Çalışma Alanı, Güncellemeler, Güvenlik. Kart yüzeyleri, bölüm ikonları, sabit Uygula/geri bildirim alanı ve daha büyük, yeniden kullanılan pencere eklendi. Mevcut ayarlar, repo doğrulaması, Keychain işlemi ve yerel kayıt silme davranışları korundu. Kısayolların hemen kaydedildiği belirtilir.
+- `/tmp/mssql-settings-final-tests.log`: 67 uygulama + 99 core = 166 test; 144 geçti, 22 dış koşul testi atlandı. Yeni native pencere testi boyutları ve aynı pencerenin yeniden kullanımını doğrular. `/tmp/mssql-settings-build.log`: Release BUILD SUCCEEDED (CODE_SIGNING_ALLOWED=NO). git diff --check temiz.
+- `/tmp/MSSQLStudio-settings-ui/MSSQLStudio.app` ayrı UI-test kimliğiyle çevrimdışı açıldı. Altı sekmenin erişilebilirlik ağacı ve SQL Editörü görünümü kontrol edildi; SQL Editörü → Güncellemeler → SQL Editörü geçişinde kaydedilmemiş alias seçimi korundu ve NOLOCK kontrolü devre dışı kaldı. Uygula çalıştırılmadı. Hakkında ekranında 1440×1224 ekran görüntüsünde (250,525) noktasındaki, 0.2.43 yazısının sağındaki boş alana tıklama seçimi ve sürüm notlarını değiştirdi. Test kopyası kapatıldı; kurulu kullanıcı uygulaması değiştirilmedi.
+- Keychain izin yenileme ve kayıt silme çalıştırılmadı; gerçek DB değişikliği yapılmadı. Bu değişiklikler henüz yayımlanmadı.
+
+# Job adımı Komut alanında SQL renklendirme — 10 Ekim 2026
+
+- AgentCommandEditor, ana editörün SQLSourceHighlighting renkleri/fontu ve kullanılmayan DECLARE analizini kullanır. Renkler karakterleri değiştirmeden nitelik olarak uygulanır; kaynak/tema değişmedikçe yeniden uygulanmaz. IME marked text sırasında biçimlendirme ertelenir. Genel tema dekorasyonu bu editörün syntax renklerini sıfırlamaz; editör tema bildirimini kendisi işler.
+- Native test ilk aşamada undo sonrası metin–binding uyumsuzluğunu ortaya çıkardı. Renklendirme undo kaydına eklenmez; aynı editörün UndoManager undo/redo bildiriminde geri yüklenen metin binding'e senkronize edilip renklendirilir. Başka editörün undo bildirimi işlenmez. Son regresyon undo ve redo'nun hem metni hem binding'i ve DECLARE rengini koruduğunu doğrular.
+- `/tmp/mssql-agent-command-all-tests.log`: 66 uygulama + 99 core = 165 test; 143 geçti, 22 koşullu atlandı. Yeni native NSHosting/NSTextView testi keyword, çok satırlı yorum, Unicode string ve kullanılmayan DECLARE renklerini, açık/koyu tema geçişini, seçimi, viewport'u, TextKit 2'yi, yazma/binding ve undo/redo'yu doğruladı.
+- `/tmp/mssql-agent-command-final-build.log`: BUILD SUCCEEDED; imzasız yerel Release doğrulaması. Tüm build/test çıktıları /tmp altında. git diff --check temiz.
+- Gerçek SQL Server/job üzerinde değişiklik yapılmadı. Yeni renklendirme özelliği henüz yayımlanmadı; son yayın v0.2.45.
+
 # v0.2.45 yayın doğrulaması — 10 Ekim 2026
 
 - Yayın: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.45 — draft değil; ZIP, PKG ve update.json mevcut.

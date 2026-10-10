@@ -5,7 +5,10 @@ import SwiftUI
 
 extension WorkbenchController {
   func showSettingsWindow() {
-    present(SettingsPanel(state: state), title: "MSSQL Studio Ayarları", width: 620, height: 600)
+    if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "studio.settings" && $0.isVisible }) {
+      window.makeKeyAndOrderFront(nil); return
+    }
+    present(SettingsPanel(state: state), title: "MSSQL Studio Ayarları", width: 920, height: 700, minWidth: 780, minHeight: 600, identity: "studio.settings")
   }
   func showHistoryWindow() {
     state.loadHistory()
@@ -118,10 +121,12 @@ private struct SettingsPanel: View {
   @State private var keychainMessage = ""
   @State private var renewingKeychain = false
   @State private var message = ""
+  @State private var selectedTab = "appearance"
   var body: some View {
-    ScrollView {
-    VStack(alignment: .leading, spacing: 16) {
-      StudioPanelHeading(title: "Görünüm ve çalışma alanı", icon: "slider.horizontal.3", subtitle: "Temanı ve yerel çalışma tercihlerini düzenle")
+    VStack(alignment: .leading, spacing: 18) {
+      StudioPanelHeading(title: "Ayarlar", icon: "slider.horizontal.3", subtitle: "Çalışma alanını kendine göre düzenle")
+      TabView(selection: $selectedTab) {
+        settingsPage(title: "Görünüm", subtitle: "Sana uygun çalışma ortamı", icon: "paintpalette") {
       Picker("Renk teması", selection: $theme) {
         Text("Studio Açık").tag("light")
         Text("Studio Koyu").tag("dark")
@@ -134,8 +139,8 @@ private struct SettingsPanel: View {
         "Dengeli yüzeyler, ince ayrımlar ve ortak ikon dili. Açık ve koyu temalarda SQL renk kategorileri korunur."
       )
       .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-      Divider()
-      Text("SQL editörü").font(.headline)
+        }.tabItem { Label("Görünüm", systemImage: "paintpalette") }.tag("appearance")
+        settingsPage(title: "SQL Editörü", subtitle: "Yazarken yardımcı olan araçlar", icon: "chevron.left.forwardslash.chevron.right") {
       Toggle("Yazarken DDL indeksinden önerileri göster", isOn:$completion)
       HStack {
         Text("Öneri gecikmesi")
@@ -149,8 +154,8 @@ private struct SettingsPanel: View {
       Toggle("Otomatik alias sonrasında WITH(NOLOCK) ekle", isOn:$noLock).disabled(!aliases)
       Text("Yalnızca FROM/JOIN tablo veya view tamamlamalarında. Varsayılan kapalıdır; NOLOCK henüz commit edilmemiş verileri okuyabilir.").font(.caption).foregroundStyle(.secondary)
       Text("⌃Space: önerileri aç · Tab / Enter: kabul et · Escape: kapat. Alias yalnızca öneriyi kabul ettiğinizde eklenir. Doğrulama güncel, doğrulanmış aktif veritabanı indeksini kullanır.").font(.caption).foregroundStyle(.secondary)
-      Divider()
-      Text("Klavye kısayolları").font(.headline)
+        }.tabItem { Label("SQL Editörü", systemImage: "chevron.left.forwardslash.chevron.right") }.tag("editor")
+        settingsPage(title: "Kısayollar", subtitle: "Sık kullandığın işlemlere hızlı erişim", icon: "command") {
       ForEach(GridShortcuts.Action.allCases, id: \.rawValue) { action in
         HStack {
           Text(action == .headers ? "Grid · Başlıklarla kopyala" : "Yeni sorgu")
@@ -162,12 +167,33 @@ private struct SettingsPanel: View {
       .id(shortcutRevision)
       Text("Değiştir’e basıp istediğiniz tuş birleşimine basın. ⌘ veya ⌃ ile harf/rakam kullanın. Ayrılmış ve çakışan kısayollar reddedilir; Escape iptal eder.")
         .font(.caption).foregroundStyle(.secondary)
+      Text("Kısayol değişiklikleri hemen kaydedilir.").font(.caption).foregroundStyle(.secondary)
+        }.tabItem { Label("Kısayollar", systemImage: "command") }.tag("shortcuts")
+        settingsPage(title: "Çalışma Alanı", subtitle: "Geçmiş ve oturum kurtarma", icon: "square.stack") {
+      Toggle("Sorgu geçmişini bu Mac'te sakla", isOn: $history)
+      Toggle("Açık sorgu sekmelerini sonraki açılışta kurtar", isOn: $recovery)
+      Text(
+        "Sorgu metinleri değerler içerebilir. Kayıtlar yalnızca bu Mac'te Application Support/MSSQLStudio altında tutulur. Bağlantı parolaları bu dosyalara yazılmaz."
+      ).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
       Divider()
-      Text("GitHub güncellemeleri").font(.headline)
+        Button("Yerel Kayıtları Sil") {
+          do {
+            for name in ["history.json", "tabs.json"] {
+              let url = state.folder.appendingPathComponent(name)
+              if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+              }
+            }
+            state.history = []
+            message = "Yerel kayıtlar silindi."
+          } catch { message = error.localizedDescription }
+        }
+        }.tabItem { Label("Çalışma Alanı", systemImage: "square.stack") }.tag("workspace")
+        settingsPage(title: "Güncellemeler", subtitle: "Yeni sürümlerin kaynağı", icon: "arrow.down.circle") {
       TextField("kullanıcı/depo veya GitHub depo adresi",text:$updateRepository).accessibilityIdentifier("githubUpdateRepository")
       Text("Herkese açık Releases kullanılır. Depoyu girip Uygula’ya basın; ardından MSSQL Studio → Güncellemeleri Kontrol Et. Bağlantı parolaları ve sorgular GitHub’a gönderilmez. Boş bırakırsanız uygulamanın yayın adresi kullanılır.").font(.caption).foregroundStyle(.secondary)
-      Divider()
-      Text("Kayıtlı bağlantı parolaları").font(.headline)
+        }.tabItem { Label("Güncellemeler", systemImage: "arrow.down.circle") }.tag("updates")
+        settingsPage(title: "Güvenlik", subtitle: "Bağlantı parolaları ve uygulama erişimi", icon: "lock.shield") {
       Text("Güncellemelerden sonra tekrarlayan Keychain izni için eski kayıtların uygulama erişimini bir kez yenileyin. macOS bu işlemde parola isteyebilir. Kalıcı imzalı MSSQL Studio'nun erişimi yenilenir; parolalar silinmez veya dışarı aktarılmaz. Önceki izin girdileri otomatik temizlenmez.").font(.caption).foregroundStyle(.secondary)
       Button(renewingKeychain ? "İzinler yenileniyor…" : "Keychain izinlerini yenile") {
         renewingKeychain=true;keychainMessage=""
@@ -180,15 +206,40 @@ private struct SettingsPanel: View {
         }
       }.disabled(renewingKeychain).accessibilityIdentifier("renewKeychainAccess")
       if !keychainMessage.isEmpty {Text(keychainMessage).font(.caption).textSelection(.enabled)}
-      Divider()
-      Text("Yerel çalışma alanı").font(.headline)
-      Toggle("Sorgu geçmişini bu Mac'te sakla", isOn: $history)
-      Toggle("Açık sorgu sekmelerini sonraki açılışta kurtar", isOn: $recovery)
-      Text(
-        "Sorgu metinleri değerler içerebilir. Kayıtlar yalnızca bu Mac'te Application Support/MSSQLStudio altında tutulur. Bağlantı parolaları bu dosyalara yazılmaz."
-      ).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-      HStack {
-        Button("Uygula") {
+        }.tabItem { Label("Güvenlik", systemImage: "lock.shield") }.tag("security")
+      }.accessibilityIdentifier("settingsTabs")
+      HStack(spacing: 16) {
+        Text(message.isEmpty ? "Tercihlerini düzenledikten sonra Uygula’ya bas." : message)
+          .font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+          .accessibilityIdentifier("settingsMessage")
+        Spacer(minLength: 12)
+        Button("Uygula", action: applySettings).buttonStyle(StudioPrimaryButton())
+          .accessibilityIdentifier("settingsApply")
+      }
+    }.padding(24).studioPanel().onAppear {
+      history = state.historyEnabled
+      recovery = state.recoveryEnabled
+    }
+  }
+  private func settingsPage<Content: View>(title: String, subtitle: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 20) {
+        HStack(spacing: 12) {
+          Image(systemName: icon).font(.system(size: 22)).foregroundStyle(Color.accentColor)
+            .frame(width: 44, height: 44).background(Color.accentColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 12))
+          VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.title3.weight(.semibold))
+            Text(subtitle).font(.callout).foregroundStyle(.secondary)
+          }
+        }
+        VStack(alignment: .leading, spacing: 16, content: content)
+          .frame(maxWidth: .infinity, alignment: .leading).padding(20)
+          .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+          .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+      }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+  private func applySettings() {
           let source=updateRepository.trimmingCharacters(in:.whitespacesAndNewlines)
           if !source.isEmpty {
             do {updateRepository=try GitHubUpdateSource.repository(source)}catch {message=error.localizedDescription;return}
@@ -208,28 +259,9 @@ private struct SettingsPanel: View {
           UserDefaults.standard.set(recovery, forKey: "recoveryEnabled")
           state.scheduleSnapshot()
           message = "Ayarlar kaydedildi."
-        }
-        Button("Yerel Kayıtları Sil") {
-          do {
-            for name in ["history.json", "tabs.json"] {
-              let url = state.folder.appendingPathComponent(name)
-              if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
-              }
-            }
-            state.history = []
-            message = "Yerel kayıtlar silindi."
-          } catch { message = error.localizedDescription }
-        }
-      }
-      Text(message).font(.caption)
-    }.padding(24)
-    }.studioPanel().onAppear {
-      history = state.historyEnabled
-      recovery = state.recoveryEnabled
-    }
   }
 }
+
 private struct HistoryPanel: View {
   let records: [QueryRecord]
   let enabled: Bool
@@ -757,7 +789,7 @@ extension View {
       table.enumerateAvailableRowViews { row, _ in row.needsDisplay = true }
     } else if let scroll = view as? NSScrollView {
       scroll.backgroundColor = canvas
-    } else if let textView = view as? NSTextView, !(textView is SQLTextView), textView.identifier?.rawValue != "sqlSourcePreview" {
+    } else if let textView = view as? NSTextView, !(textView is SQLTextView), !["sqlSourcePreview","agentCommandEditor"].contains(textView.identifier?.rawValue ?? "") {
       textView.backgroundColor = canvas
       textView.textColor = text
       textView.font = codeFont

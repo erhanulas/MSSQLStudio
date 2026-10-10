@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.46",
+    "date": "2026-10-10",
+    "title": "Yeni Ayarlar düzeni ve editör iyileştirmeleri",
+    "changes": [
+      "Ayarlar altı sekmeye ayrıldı; kart düzeni, bölüm ikonları ve sabit Uygula alanı eklendi. Sekme geçişlerinde kaydedilmemiş tercihler korunuyor.",
+      "Hakkında sürüm satırları, kolon seçimi ve arama temizleme ikonlarının tıklama alanları genişletildi.",
+      "Job adımının Komut editörü ana SQL editörüyle aynı SQL renklerini, fontu ve kullanılmayan DECLARE vurgusunu kullanıyor.",
+      "Komut editöründe tema geçişleri, seçim ve undo/redo davranışı iyileştirildi."
+    ]
+  },
+  {
     "version": "0.2.45",
     "date": "2026-10-10",
     "title": "Job adımlarında veritabanı seçimi ve sayfa geçişleri",
