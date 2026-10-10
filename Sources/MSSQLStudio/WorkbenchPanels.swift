@@ -123,6 +123,9 @@ private struct SettingsPanel: View {
   @State private var renewingKeychain = false
   @State private var message = ""
   @State private var selectedTab = "appearance"
+  @State private var resultReadLimit = ResultReadPreferences.readLimit
+  @State private var resultPageSize = GridPaging.defaultSize
+  @State private var resultRefreshSeconds = ResultReadPreferences.refreshSeconds
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
       StudioPanelHeading(title: "Ayarlar", icon: "slider.horizontal.3", subtitle: "Çalışma alanını kendine göre düzenle")
@@ -156,10 +159,18 @@ private struct SettingsPanel: View {
       Text("Yalnızca FROM/JOIN tablo veya view tamamlamalarında. Varsayılan kapalıdır; NOLOCK henüz commit edilmemiş verileri okuyabilir.").font(.caption).foregroundStyle(.secondary)
       Text("⌃Space: önerileri aç · Tab / Enter: kabul et · Escape: kapat. Alias yalnızca öneriyi kabul ettiğinizde eklenir. Doğrulama güncel, doğrulanmış aktif veritabanı indeksini kullanır.").font(.caption).foregroundStyle(.secondary)
         }.tabItem { Label("SQL Editörü", systemImage: "chevron.left.forwardslash.chevron.right") }.tag("editor")
+        settingsPage(title:"Sonuçlar",subtitle:"Yeni sorgular için yükleme tercihleri",icon:"tablecells") {
+          StudioFormField("Okuma sınırı") { TextField("Satır",value:$resultReadLimit,format:.number.grouping(.never)).textFieldStyle(.roundedBorder) }
+          StudioFormField("Sayfa boyutu") { TextField("Satır",value:$resultPageSize,format:.number.grouping(.never)).textFieldStyle(.roundedBorder) }
+          StudioFormField("Otomatik yenileme") { HStack { TextField("Saniye",value:$resultRefreshSeconds,format:.number.grouping(.never)).textFieldStyle(.roundedBorder); Text("sn").foregroundStyle(.secondary) } }
+          Text("Okuma sınırı 1–5.000.000; sayfa boyutu 0–1.000.000. Sayfada 0 tüm yüklenen satırları gösterir. Yenileme 0–3.600 saniye; 0 kapalıdır.").font(.caption).foregroundStyle(.secondary)
+          Label("Otomatik yenileme yalnız başarılı SELECT sonuçlarında çalışır; hücre düzenlerken durur.",systemImage:"arrow.clockwise.circle").font(.caption).foregroundStyle(.secondary)
+          Text("Bu tercihler yeni sorgulara uygulanır. Açık sorgunun yükleme tercihlerini sonuç çubuğundaki ayar ikonundan değiştirebilirsiniz. Yüksek sınırlar daha fazla disk ve zaman kullanır; bellek/disk ve süre korumaları devam eder.").font(.caption).foregroundStyle(.secondary)
+        }.tabItem { Label("Sonuçlar",systemImage:"tablecells") }.tag("results")
         settingsPage(title: "Kısayollar", subtitle: "Sık kullandığın işlemlere hızlı erişim", icon: "command") {
       ForEach(GridShortcuts.Action.allCases, id: \.rawValue) { action in
         HStack {
-          Text(action == .headers ? "Grid · Başlıklarla kopyala" : "Yeni sorgu")
+          Text(action == .headers ? "Grid · Başlıklarla kopyala" : action == .columns ? "Grid · Kolon başlığında ara" : "Yeni sorgu")
           Spacer()
           ShortcutCapture(action: action) { message = $0; shortcutRevision += 1 }.frame(width:220,height:28)
           StudioActionButton("Sıfırla", icon:"arrow.counterclockwise", tint:.accentColor) { GridShortcuts.reset(action); shortcutRevision += 1 }
@@ -247,12 +258,14 @@ private struct SettingsPanel: View {
     }
   }
   private func applySettings() {
+          guard (1...5_000_000).contains(resultReadLimit), (0...1_000_000).contains(resultPageSize), (0...3600).contains(resultRefreshSeconds) else { message="Sonuç yükleme değerlerini belirtilen aralıklarda girin."; return }
           let source=updateRepository.trimmingCharacters(in:.whitespacesAndNewlines)
           if !source.isEmpty {
             do {updateRepository=try GitHubUpdateSource.repository(source)}catch {message=error.localizedDescription;return}
           }
           if source.isEmpty {UserDefaults.standard.removeObject(forKey:"githubUpdateRepository")}
           else {UserDefaults.standard.set(updateRepository,forKey:"githubUpdateRepository")}
+          ResultReadPreferences.save(rows:resultReadLimit,page:resultPageSize,refresh:resultRefreshSeconds)
           StudioTheme.apply(theme)
           UserDefaults.standard.set(completion,forKey:"sqlAutomaticCompletion")
           UserDefaults.standard.set(Int(completionDelay),forKey:SQLEditorPreferences.completionDelayKey)
@@ -338,27 +351,65 @@ struct HistoryPanel: View {
   }
 }
 
+@MainActor private final class SQLPreviewRuler: NSRulerView {
+  var lines = 1
+  override func drawHashMarksAndLabels(in rect: NSRect) {
+    StudioTheme.editorCanvas.setFill(); bounds.fill()
+    guard let clip=scrollView?.contentView else { return }
+    let top=clip.bounds.minY
+    let first=max(0,Int((top-10)/20)), last=min(lines-1,Int((top+clip.bounds.height)/20)+1)
+    guard first <= last else { return }
+    for line in first...last {
+      let label=String(line+1) as NSString
+      let attributes:[NSAttributedString.Key:Any] = [.font:NSFont.monospacedDigitSystemFont(ofSize:11,weight:.regular),.foregroundColor:StudioTheme.lineNumber]
+      let width=label.size(withAttributes:attributes).width
+      label.draw(at:NSPoint(x:ruleThickness-width-10,y:10+CGFloat(line)*20-top+3),withAttributes:attributes)
+    }
+    StudioTheme.border.setFill(); NSRect(x:bounds.maxX-1,y:bounds.minY,width:1,height:bounds.height).fill()
+  }
+}
+@MainActor final class SQLPreviewScrollView: NSScrollView {
+  private let preview = NSTextView(usingTextLayoutManager:true)
+  private var lastSQL: String?
+  private var lastDark: Bool?
+  override init(frame frameRect: NSRect) {
+    super.init(frame:frameRect)
+    preview.identifier=NSUserInterfaceItemIdentifier("sqlSourcePreview")
+    preview.isEditable=false; preview.isSelectable=true
+    preview.isHorizontallyResizable=true; preview.isVerticallyResizable=true
+    preview.textContainer?.widthTracksTextView=false
+    preview.textContainerInset=NSSize(width:14,height:10)
+    preview.setAccessibilityLabel("SQL önizleme editörü")
+    documentView=preview; hasVerticalScroller=true; hasHorizontalScroller=true
+    borderType = .noBorder
+    let ruler=SQLPreviewRuler(scrollView:self,orientation:.verticalRuler); ruler.ruleThickness=48
+    verticalRulerView=ruler; hasVerticalRuler=true; rulersVisible=true
+    NotificationCenter.default.addObserver(self,selector:#selector(themeChanged),name:StudioTheme.changed,object:nil)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  @objc private func themeChanged() { if let lastSQL { display(lastSQL) } }
+  func display(_ sql: String) {
+    guard lastSQL != sql || lastDark != StudioTheme.dark else { return }
+    let sameSource=lastSQL == sql, selection=preview.selectedRanges, origin=contentView.bounds.origin
+    lastSQL=sql; lastDark=StudioTheme.dark
+    preview.backgroundColor=StudioTheme.editorCanvas; backgroundColor=StudioTheme.editorCanvas
+    let attributed=NSMutableAttributedString(attributedString:SQLSourceHighlighting.attributed(sql))
+    let paragraph=NSMutableParagraphStyle(); paragraph.minimumLineHeight=20; paragraph.maximumLineHeight=20
+    attributed.addAttribute(.paragraphStyle,value:paragraph,range:NSRange(location:0,length:attributed.length))
+    preview.textContentStorage?.textStorage?.setAttributedString(attributed)
+    let lines=sql.components(separatedBy:"\n")
+    let width=min(100000,max(600,(lines.map { ($0 as NSString).size(withAttributes:[.font:StudioTheme.codeFont]).width }.max() ?? 0)+40))
+    preview.textContainer?.containerSize=NSSize(width:width,height:10000000)
+    preview.setFrameSize(NSSize(width:width,height:max(200,CGFloat(lines.count)*20+32)))
+    (verticalRulerView as? SQLPreviewRuler)?.lines=lines.count
+    verticalRulerView?.needsDisplay=true
+    if sameSource { preview.selectedRanges=selection; contentView.scroll(to:origin); reflectScrolledClipView(contentView) }
+  }
+}
 struct SQLReadOnlyPreview: NSViewRepresentable {
   let sql: String
-  func makeNSView(context: Context) -> NSScrollView {
-    let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.hasHorizontalScroller = true
-    let text = NSTextView(usingTextLayoutManager: true); text.isEditable = false; text.isSelectable = true
-    text.isHorizontallyResizable = true; text.isVerticallyResizable = true
-    text.textContainer?.widthTracksTextView = false; text.textContainer?.containerSize = NSSize(width: 100000, height: 10000000)
-    text.textContainerInset = NSSize(width: 12, height: 10); scroll.documentView = text
-    return scroll
-  }
-  func updateNSView(_ scroll: NSScrollView, context: Context) {
-    guard let text = scroll.documentView as? NSTextView else { return }
-    text.backgroundColor = StudioTheme.editorCanvas
-    if text.string != sql {
-      text.textContentStorage?.textStorage?.setAttributedString(SQLSourceHighlighting.attributed(sql))
-      let lines = sql.components(separatedBy: "\n")
-      let width = min(100000, max(600, (lines.map { ($0 as NSString).size(withAttributes: [.font: StudioTheme.codeFont]).width }.max() ?? 0) + 32))
-      text.textContainer?.containerSize = NSSize(width: width, height: 10000000)
-      text.setFrameSize(NSSize(width: width, height: max(200, CGFloat(lines.count) * 20 + 32)))
-    }
-  }
+  func makeNSView(context: Context) -> SQLPreviewScrollView { SQLPreviewScrollView(frame:.zero) }
+  func updateNSView(_ scroll: SQLPreviewScrollView, context: Context) { scroll.display(sql) }
 }
 private struct IndexPanel: View {
   var table: String

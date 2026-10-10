@@ -82,3 +82,74 @@ struct CatalogDiskIndexTests {
     do { _ = try await task.value; Issue.record("Cancelled search must not publish results") } catch is CancellationError { }
   }
 }
+
+struct ResultEditingDiskCacheTests {
+  @Test func persistedProvenanceSkipsNetworkAndSeparatesScopeQueryAndProjection() async throws {
+    let folder=URL(fileURLWithPath:"/tmp/StudioEditing-"+UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at:folder) }
+    let url=folder.appendingPathComponent("index.sqlite"), profile=ServerProfile()
+    let index=CatalogDiskIndex(url:url), sql="SELECT Id, Code FROM dbo.T;", fields=[Field("Id",type:4),Field("Code")]
+    let table=TableDefinition(schema:"dbo",name:"T",columns:[.init(id:1,name:"Id",type:"int"),.init(id:2,name:"Code",type:"[dbo].[CodeType]",defaultSQL:"'PRIVATE_DEFAULT'",baseType:"varchar(12)")],primaryKey:["Id"])
+    let snapshot=ResultEditingSnapshot(objectID:42,table:table)
+    let scope=CatalogDiskIndex.scope(profile:profile,database:"D"), key=CatalogDiskIndex.editingFingerprint(sql:sql,fields:fields)
+    try await index.saveEditingMetadata(snapshot,scope:scope,fingerprint:key)
+    let reopened=CatalogDiskIndex(url:url)
+    let cached=try await ResultEditingPreparation.load(sql:sql,fields:fields,profile:profile,database:"D",index:reopened) { _ in throw SQLFailure("Network must not be used on cache hit") }
+    #expect(cached.cached && cached.snapshot.objectID == 42)
+    #expect(cached.snapshot.columns[1].baseType == "varchar(12)")
+    #expect(cached.snapshot.metadataSignature == ResultEditingSnapshot.signature(table:table))
+    #expect(cached.snapshot.columns[1].defaultSQL.isEmpty)
+    let payload=String(decoding:try JSONEncoder().encode(cached.snapshot),as:UTF8.self)
+    #expect(!payload.contains("PRIVATE_DEFAULT") && !payload.contains("SELECT"))
+    #expect(try await reopened.editingMetadata(scope:scope,fingerprint:CatalogDiskIndex.editingFingerprint(sql:sql+" ",fields:fields)) == nil)
+    #expect(try await reopened.editingMetadata(scope:scope,fingerprint:CatalogDiskIndex.editingFingerprint(sql:sql,fields:fields.reversed())) == nil)
+    #expect(try await reopened.editingMetadata(scope:CatalogDiskIndex.scope(profile:profile,database:"Other"),fingerprint:key) == nil)
+    #expect(try await reopened.editingMetadata(scope:scope,fingerprint:key,now:Date().addingTimeInterval(86401)) == nil)
+    var changed=table; changed.columns[1].baseType="varchar(13)"
+    #expect(ResultEditingSnapshot.signature(table:changed) != snapshot.metadataSignature)
+    changed=table; changed.columns[1].defaultSQL="'OTHER'"
+    #expect(ResultEditingSnapshot.signature(table:changed) != snapshot.metadataSignature)
+    try await reopened.finishBuild(staging:"empty",scope:scope)
+    #expect(try await reopened.editingMetadata(scope:scope,fingerprint:key) == nil)
+  }
+}
+
+private actor EditingMetadataFixture {
+  var calls=0
+  func fetch(_ sql: String) -> Execution {
+    calls += 1
+    var result=Execution()
+    if sql.contains("dm_exec_describe_first_result_set") {
+      result.results=[Rows(values:[["Id",nil,"D","dbo","T","Id",nil,nil,"1"],["Code",nil,"D","dbo","T","Code",nil,nil,"2"]])]
+    } else if sql.hasPrefix("SELECT object_id") {
+      result.results=[Rows(values:[["42"]])]
+    } else {
+      result.results=[Rows(values:[["1","Id","int","0","0",nil,nil,nil,"0",nil,nil,nil,"0","0","0","int"],["2","Code","[dbo].[CodeType]","1","0",nil,nil,nil,"0",nil,"'PRIVATE_DEFAULT'",nil,"0","0","0","varchar(12)"]]),Rows(values:[["Id","PK_T"]]),Rows(),Rows(),Rows(),Rows(),Rows(values:[["0",nil]])]
+    }
+    return result
+  }
+}
+struct ResultEditingPreparationTests {
+  @Test func cacheMissLoadsThenSubsequentPreparationUsesDiskAndSourceChangesFail() async throws {
+    let folder=URL(fileURLWithPath:"/tmp/StudioPreparation-"+UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at:folder) }
+    let index=CatalogDiskIndex(url:folder.appendingPathComponent("index.sqlite")), profile=ServerProfile(), fixture=EditingMetadataFixture()
+    let sql="SELECT Id, Code FROM dbo.T;", fields=[Field("Id",type:4),Field("Code")]
+    let first=try await ResultEditingPreparation.load(sql:sql,fields:fields,profile:profile,database:"D",index:index) { await fixture.fetch($0) }
+    #expect(!first.cached && first.snapshot.objectID == 42)
+    #expect(await fixture.calls == 3)
+    let second=try await ResultEditingPreparation.load(sql:sql,fields:fields,profile:profile,database:"D",index:index) { await fixture.fetch($0) }
+    #expect(second.cached && second.snapshot.metadataSignature == first.snapshot.metadataSignature)
+    #expect(await fixture.calls == 3)
+    let fresh=try ResultEditSource.decode(await fixture.fetch("dm_exec_describe_first_result_set"),fields:fields,database:"D")
+    #expect(second.snapshot.matchesSource(fresh))
+    var other=await fixture.fetch("dm_exec_describe_first_result_set")
+    other.results=[Rows(values:[["Id",nil,"D","other","T","Id",nil,nil,"1"],["Code",nil,"D","other","T","Code",nil,nil,"2"]])]
+    let changed=try ResultEditSource.decode(other,fields:fields,database:"D")
+    #expect(!second.snapshot.matchesSource(changed))
+    try await index.invalidateEditingMetadata(scope:CatalogDiskIndex.scope(profile:profile,database:"D"))
+    let refreshed=try await ResultEditingPreparation.load(sql:sql,fields:fields,profile:profile,database:"D",index:index) { await fixture.fetch($0) }
+    #expect(!refreshed.cached)
+    #expect(await fixture.calls == 8)
+  }
+}

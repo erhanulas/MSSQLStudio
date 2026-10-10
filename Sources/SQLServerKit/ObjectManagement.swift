@@ -1,6 +1,6 @@
 import Foundation
 
-public struct TableColumn: Identifiable, Equatable, Sendable {
+public struct TableColumn: Identifiable, Equatable, Sendable, Codable {
   public var id: Int
   public var name: String
   public var type: String

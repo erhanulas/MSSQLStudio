@@ -167,7 +167,7 @@ import Testing
     editor.setSelectedRange(multiple);editor.normalizeSQLWordSelection()
     #expect(editor.selectedRange() == multiple && editor.string == text as String)
   }
-  @Test func findShortcutUsesSelectionAndKeepsSQLAndUndo() throws {
+  @Test func findShortcutUsesSelectionAndKeepsSQLAndUndo() async throws {
     let doc=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Find")
     doc.server.online=false;doc.sql="SELECT @STOK_KODU; SELECT @STOK_KODU;"
     let controller=EditorController(document:doc)
@@ -188,6 +188,11 @@ import Testing
     controller.editor.showSelectionFind()
     #expect(all(bar).compactMap {$0 as? NSTextField}.contains {$0.stringValue == "SELECT"})
     #expect(controller.editor.string == doc.sql && controller.editor.undoManager?.canUndo != true)
+    controller.editor.performFindPanelAction(hide)
+    window.makeFirstResponder(nil)
+    // NSTextFinder schedules a delayed indicator update; retain its client until it settles.
+    try await Task.sleep(for:.milliseconds(400))
+    #expect(controller.editor.string == doc.sql)
   }
   @Test func completionDelayPersistsAndClampsInvalidPreferences() throws {
     let name="MSSQLStudio.EditorDelayTests.\(UUID().uuidString)"

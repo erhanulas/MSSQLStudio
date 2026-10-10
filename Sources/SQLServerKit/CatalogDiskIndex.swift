@@ -40,6 +40,7 @@ public actor CatalogDiskIndex {
     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     try execute("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-4096; PRAGMA temp_store=FILE;")
     try execute("CREATE TABLE IF NOT EXISTS scopes(scope TEXT PRIMARY KEY, synced REAL NOT NULL, count INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS builds(staging TEXT PRIMARY KEY, created REAL NOT NULL); CREATE TABLE IF NOT EXISTS objects(scope TEXT NOT NULL, id INTEGER NOT NULL, name TEXT NOT NULL, schema_name TEXT NOT NULL, kind TEXT NOT NULL, folded_name TEXT NOT NULL, folded_qualified TEXT NOT NULL, PRIMARY KEY(scope,id)) WITHOUT ROWID; CREATE INDEX IF NOT EXISTS catalog_name ON objects(scope,folded_name); CREATE INDEX IF NOT EXISTS catalog_qualified ON objects(scope,folded_qualified); CREATE INDEX IF NOT EXISTS catalog_kind ON objects(scope,kind);")
+    try execute("CREATE TABLE IF NOT EXISTS editing_metadata(scope TEXT NOT NULL, fingerprint TEXT NOT NULL, saved REAL NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(scope,fingerprint)) WITHOUT ROWID;")
     try execute("DELETE FROM objects WHERE scope IN (SELECT staging FROM builds WHERE created<CAST(strftime('%s','now') AS REAL)-86400); DELETE FROM builds WHERE created<CAST(strftime('%s','now') AS REAL)-86400;")
     return raw
   }
@@ -61,6 +62,28 @@ public actor CatalogDiskIndex {
   private func write(_ sql: String, _ args: [String] = []) throws {
     let s = try statement(sql,args); defer { sqlite3_finalize(s) }
     guard sqlite3_step(s) == SQLITE_DONE else { throw SQLFailure("Yerel katalog güncellenemedi.") }
+  }
+  public nonisolated static func editingFingerprint(sql: String, fields: [Field]) -> String {
+    let signature = [sql] + fields.flatMap { [$0.name, String($0.type)] }
+    return SHA256.hash(data:(try? JSONEncoder().encode(signature)) ?? Data()).map { String(format:"%02x",$0) }.joined()
+  }
+  public func invalidateEditingMetadata(scope: String) throws {
+    try write("DELETE FROM editing_metadata WHERE scope=?",[scope])
+  }
+  public func editingMetadata(scope: String, fingerprint: String, now: Date = Date()) throws -> ResultEditingSnapshot? {
+    let s = try statement("SELECT payload FROM editing_metadata WHERE scope=? AND fingerprint=? AND saved>=?",[scope,fingerprint,String(now.timeIntervalSince1970-86400)])
+    defer { sqlite3_finalize(s) }
+    guard sqlite3_step(s) == SQLITE_ROW, let raw = sqlite3_column_text(s,0) else { return nil }
+    return try JSONDecoder().decode(ResultEditingSnapshot.self,from:Data(String(cString:raw).utf8))
+  }
+  public func saveEditingMetadata(_ snapshot: ResultEditingSnapshot, scope: String, fingerprint: String, now: Date = Date()) throws {
+    let payload = String(decoding:try JSONEncoder().encode(snapshot),as:UTF8.self)
+    guard payload.utf8.count <= 1_048_576 else { return }
+    try write("INSERT OR REPLACE INTO editing_metadata VALUES(?,?,?,?)",[scope,fingerprint,String(now.timeIntervalSince1970),payload])
+    try write("DELETE FROM editing_metadata WHERE scope=? AND fingerprint NOT IN (SELECT fingerprint FROM editing_metadata WHERE scope=? ORDER BY saved DESC LIMIT 128)",[scope,scope])
+    try write("DELETE FROM editing_metadata WHERE saved<?",[String(now.timeIntervalSince1970-86400)])
+    try execute("DELETE FROM editing_metadata WHERE (scope,fingerprint) NOT IN (SELECT scope,fingerprint FROM editing_metadata ORDER BY saved DESC LIMIT 4096)")
+    try execute("DELETE FROM editing_metadata WHERE (scope,fingerprint) IN (SELECT scope,fingerprint FROM (SELECT scope,fingerprint,SUM(length(CAST(payload AS BLOB))) OVER(ORDER BY saved DESC,scope,fingerprint) AS bytes FROM editing_metadata) WHERE bytes>16777216)")
   }
   public func status(scope: String) throws -> CatalogIndexStatus? {
     let s = try statement("SELECT synced,count FROM scopes WHERE scope=?",[scope]); defer { sqlite3_finalize(s) }
@@ -89,6 +112,7 @@ public actor CatalogDiskIndex {
   public func finishBuild(staging: String, scope: String, at: Date = Date()) throws {
     try execute("BEGIN IMMEDIATE")
     do {
+      try write("DELETE FROM editing_metadata WHERE scope=?",[scope])
       try write("DELETE FROM objects WHERE scope=?",[scope])
       try write("UPDATE objects SET scope=? WHERE scope=?",[scope,staging])
       try write("DELETE FROM builds WHERE staging=?",[staging])
@@ -106,6 +130,7 @@ public actor CatalogDiskIndex {
     try execute("BEGIN IMMEDIATE")
     do {
       try write("DELETE FROM objects WHERE scope=? AND kind IN (\(kinds)) AND (folded_name=? OR folded_qualified=?)",[scope,Self.fold(name),Self.fold(name)])
+      try write("DELETE FROM editing_metadata WHERE scope=?",[scope])
       // append has its own transaction, so insert here with one prepared statement per changed object.
       for item in items {
         try write("INSERT OR REPLACE INTO objects VALUES(?,?,?,?,?,?,?)",[scope,String(item.id),item.name,item.schema,item.detail,Self.fold(item.name),Self.fold(item.schema + "." + item.name)])

@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.57",
+    "date": "2026-10-10",
+    "title": "Hızlı düzenleme hazırlığı ve yenilenen sonuç görünümü",
+    "changes": [
+      "Sonuç düzenlemesi aynı sorgu için disk indeksinden hazırlanır; gönderim öncesinde güncel kaynak ve tablo yapısı sunucudan doğrulanır.",
+      "Sonuç çubuğu, ikonlar ve ad/tip içeren kolon başlıkları yenilendi.",
+      "Satır sınırı, sayfa boyutu ve otomatik yenileme sonuç panelinden ve Ayarlar → Sonuçlar bölümünden özelleştirilebilir.",
+      "SQL önizlemesi ana editörle ortak renkleri, satır numaralarını ve yatay kaydırmayı kullanır.",
+      "Kolon başlığı arama eklendi; varsayılan ⌘⇧J kısayolu Ayarlar bölümünden değiştirilebilir."
+    ]
+  },
+  {
     "version": "0.2.56",
     "date": "2026-10-10",
     "title": "Özel SQL veri tiplerinde hücre düzenleme",

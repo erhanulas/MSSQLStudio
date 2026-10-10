@@ -133,11 +133,7 @@ struct ObjectEditorKey: Codable, Equatable {
   var elapsed = 0.0
   var rowCount = 0
   var partial = false
-  var limits: Limits = {
-    var value = Limits()
-    value.diskResults = true
-    return value
-  }()
+  var limits: Limits = ResultReadPreferences.limits(rows:ResultReadPreferences.readLimit)
   var actualPlan = false
   var task: Task<Void, Never>?
   var changed: (() -> Void)?

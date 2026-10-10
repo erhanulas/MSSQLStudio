@@ -229,3 +229,76 @@ import Testing
     #expect(header.filterHitRect(column:0) == .zero)
   }
 }
+
+@MainActor @Suite(.serialized) struct PremiumResultWorkflowTests {
+  @Test func previewThemePreservesSQLColorsSelectionAndTextKit2() throws {
+    _ = NSApplication.shared
+    let old=UserDefaults.standard.object(forKey:"ssmsTheme")
+    defer { UserDefaults.standard.set(old,forKey:"ssmsTheme"); NotificationCenter.default.post(name:StudioTheme.changed,object:nil) }
+    UserDefaults.standard.set("light",forKey:"ssmsTheme")
+    let scroll=SQLPreviewScrollView(frame:NSRect(x:0,y:0,width:800,height:400))
+    let sql="SELECT @x, N'Value' FROM dbo.T;\n-- comment"
+    scroll.display(sql)
+    let text=try #require(scroll.documentView as? NSTextView)
+    #expect(text.textLayoutManager != nil)
+    text.setSelectedRange(NSRange(location:7,length:2))
+    StudioTheme.decorate(scroll)
+    let color=text.textContentStorage?.textStorage?.attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor
+    #expect(color == SQLSourceHighlighting.attributed(sql).attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor)
+    UserDefaults.standard.set("dark",forKey:"ssmsTheme"); NotificationCenter.default.post(name:StudioTheme.changed,object:nil)
+    #expect(text.string == sql && text.selectedRange() == NSRange(location:7,length:2))
+    #expect(text.textContentStorage?.textStorage?.attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor == SQLSourceHighlighting.attributed(sql).attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor)
+    #expect(scroll.hasVerticalRuler && scroll.rulersVisible)
+  }
+  @Test func columnRevealUsesOrdinalAfterReorderAndCustomShortcutRoutes() throws {
+    _ = NSApplication.shared
+    let grid=ResultController()
+    grid.update(Rows(fields:[Field("Id",type:4),Field("LongColumn")],values:[["1","A"]]),generation:1)
+    grid.table.moveColumn(2,toColumn:1); grid.table.tableColumns[1].isHidden=true
+    grid.revealColumn(1)
+    #expect(!grid.table.tableColumns[1].isHidden)
+    let old=UserDefaults.standard.object(forKey:"shortcut.columns")
+    defer { UserDefaults.standard.set(old,forKey:"shortcut.columns") }
+    UserDefaults.standard.removeObject(forKey:"shortcut.columns")
+    let event=try #require(NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:[.command,.shift],timestamp:0,windowNumber:0,context:nil,characters:"j",charactersIgnoringModifiers:"j",isARepeat:false,keyCode:38))
+    let root=ResultWorkspaceView(); var opened=false; root.searchColumns={opened=true}
+    #expect(root.performKeyEquivalent(with:event) && opened)
+    #expect(GridShortcuts.save(event,action:.headers) != nil)
+  }
+  @Test func readPreferencesHaveBoundsAndApplyToNewQueriesOnly() throws {
+    let defaults=UserDefaults.standard, keys=["gridReadLimit","gridDefaultPageSize","gridRefreshSeconds"]
+    let saved=keys.map { defaults.object(forKey:$0) }
+    defer { for (key,value) in zip(keys,saved) { defaults.set(value,forKey:key) } }
+    let existing=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Existing")
+    let original=existing.limits.rows
+    ResultReadPreferences.save(rows:12345,page:123,refresh:17)
+    let new=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"New")
+    #expect(new.limits.rows == 12345 && existing.limits.rows == original)
+    #expect(GridPaging.defaultSize == 123 && ResultReadPreferences.refreshSeconds == 17)
+    #expect(ResultReadPreferences.limits(rows:0).rows == 50_000)
+    #expect(ResultReadPreferences.limits(rows:100000).totalBytes == 2_147_483_648)
+  }
+}
+
+@MainActor @Suite(.serialized) struct ResultOptionsVisualTests {
+  @Test func loadingAndColumnSearchPanelsRenderAtCompactSize() async throws {
+    _ = NSApplication.shared
+    let panels:[(String,NSViewController)] = [
+      ("loading",NSHostingController(rootView:ResultLoadingPanel(rows:50000,page:500,refresh:0,apply:{_,_,_,_ in}))),
+      ("columns",NSHostingController(rootView:ResultColumnSearch(columns:[.init(id:0,name:"CustomerCode",type:"varchar(20)",hidden:false),.init(id:1,name:"CustomerDisplayName",type:"nvarchar(100)",hidden:true)],select:{_ in})))
+    ]
+    for (name,controller) in panels {
+      let window=NSWindow(contentViewController:controller); window.isReleasedWhenClosed=false
+      let size=NSSize(width:name == "loading" ? 440 : 420,height:440)
+      window.setContentSize(size); controller.view.frame.size=size; window.orderFront(nil)
+      controller.view.layoutSubtreeIfNeeded()
+      try await Task.sleep(for:.milliseconds(60))
+      #expect(controller.view.frame.width <= 460)
+      #expect(controller.view.frame.height > 300)
+      let image=try #require(controller.view.bitmapImageRepForCachingDisplay(in:controller.view.bounds))
+      controller.view.cacheDisplay(in:controller.view.bounds,to:image)
+      try image.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-premium-\(name).png"))
+      window.close()
+    }
+  }
+}

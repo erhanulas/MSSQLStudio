@@ -143,7 +143,7 @@ import Testing
     #expect(grid.table.numberOfRows == 77)
     #expect(doc.limits.rows == cap)
     let popup = try #require(views(query.view).compactMap { $0 as? NSPopUpButton }.first { $0.accessibilityLabel() == "Page Size" })
-    #expect(popup.itemArray.contains { $0.title == "Set as Default" })
+    #expect(popup.itemArray.contains { $0.title == "Varsayılan Yap" })
     #expect(popup.itemArray.contains { $0.title == "Sorgu okuma sınırı" })
   }
   @Test func automaticWidthsHorizontalScrollingAndLeftResultTabs() throws {
