@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.51",
+    "date": "2026-10-10",
+    "title": "Explorer bilgi kartları ve bağlantı yönetimi",
+    "changes": [
+      "Yeni bağlantı formunda kayıtlı bağlantı seçimi ve otomatik doldurma kaldırıldı.",
+      "Bağlantıyı kaldır işlemi onay ister; Explorer ağacı ve arama kapsamı temizlenirken kayıtlı bilgiler ve açık sorgular korunur.",
+      "Veritabanı bilgileri ayrı salt okunur pencerede genel alanlar ve dosya kartlarıyla gösteriliyor.",
+      "Yerel indeks durumu nesne sayısı, kolon güncelliği ve eşitleme tarihlerini gösteren kartlarla düzenlendi."
+    ]
+  },
+  {
     "version": "0.2.50",
     "date": "2026-10-10",
     "title": "Güncelleme yedeği temizliği",

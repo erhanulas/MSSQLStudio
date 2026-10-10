@@ -479,6 +479,13 @@ struct ObjectEditorKey: Codable, Equatable {
     changed?()
     await previous.disconnect()
   }
+  func removeExplorer(_ server: ConnectedServer) async {
+    guard !server.reconnecting else { return }
+    servers.removeAll { $0 === server }
+    rememberExplorer(server.id, selected:false)
+    await disconnectExplorer(server)
+    changed?()
+  }
   func reconnectExplorer(_ server: ConnectedServer) async {
     guard !server.reconnecting else { return }
     server.reconnecting = true

@@ -104,10 +104,14 @@ Sistem UI fontu 12 pt; yardımcı metin 10–11 pt; SQL varsa Consolas 13 pt, yo
 
 ## Bağlantı formu ve Explorer yenileme düzeni
 
+- Yeni bağlantı formu kayıtlı bağlantı seçmez/otomatik doldurmaz; yeni profil ve boş parola ile açılır, ServerVault listesi okumaz. Düzenleme yalnız seçili bağlantının mevcut bilgilerini kullanır.
+- Bağlantıyı kaldır eylemi onay ister; yalnız Explorer bağlantısını, ağacını ve arama kapsamını kaldırır. Keychain kaydı/parola ve açık sorgu oturumu/transaction korunur. Otomatik restore seçimi kaldırılır.
+- Veritabanı bilgileri ayrı salt okunur pencerede metadata bağlantısıyla yüklenir; SQL sekmesi açılmaz. Genel alanlar ve dosyalar hizalı kartlarda gösterilir. İndeks popup'ı DB başına kart ve nesne/kolon metrikleri, eşitleme zamanları, yükleme/hata durumları gösterir; katalog bildiriminde yenilenir.
+
 - Bağlantı Genel/Gelişmiş seçenekleri ve ayrı görünür veritabanı paneli kullanır. Tek alt ana işlem önce Veritabanlarını Yükle, başarılı liste/seçim sonrası Bağlan/Uygula'dır. Liste yenilemesi yalnız liste hazırken görünür; loading/hata/başarı tek alt alandadır. Sekme geçişleri girdileri korur. Mevcut bağlantıyı düzenlerken tüm ServerVault kayıtları yeniden okunmaz; UI smoke yeni bağlantısı Keychain listesi okumaz.
 - Nesneleri Yenile seçili Explorer dalının katalog listesini yeniler; açık sorguyu veya onun SQL intelligence indeksini zorla yenilemez. DB yenilemesinde yüklenmiş klasör listeleri yeniden okunur, klasör nesneleri korunur; açılmamış klasörler lazy kalır. Yerel İndeksi Yenile ayrı ve açık kapsamlı metadata önbelleği işlemidir.
 - Üstte uzun DDL indeks metni yoktur. Header'da kompakt indeks düğmesi ve DB adının hemen yanında 24 pt durum düğmesi vardır; geniş tablonun sağ kenarına bağlayıp dar Explorer'da görünmez bırakmayın. Ayrıntı popup'ı nesne/kolon zamanı, hata/hazırlık ve açık yenileme eylemi sunar. Offline durumda yenileme kapalıdır. Her metadata status yenilemesinde tüm ağacı yeniden kurmayın.
-- DB sağ tık menüsü Yeni Sorgu, Nesneleri Yenile, Yeni Nesne alt menüsü, yerel indeks ve Özellikler SQL önizlemesi işlevlerini ayırır. SSMS'te var diye desteklenmeyen Backup/Restore/Tasks sihirbazlarını sahte menü olarak eklemeyin. Kaynak: [Microsoft Explorer yönetimi](https://learn.microsoft.com/en-us/ssms/object/manage-objects-by-using-object-explorer).
+- DB sağ tık menüsü Yeni Sorgu, Nesneleri Yenile, Yeni Nesne alt menüsü, yerel indeks ve Veritabanı bilgileri penceresini ayırır. SSMS'te var diye desteklenmeyen Backup/Restore/Tasks sihirbazlarını sahte menü olarak eklemeyin. Kaynak: [Microsoft Explorer yönetimi](https://learn.microsoft.com/en-us/ssms/object/manage-objects-by-using-object-explorer).
 
 ## Agent, Linked Server ve ürün sınırları
 

@@ -148,6 +148,28 @@ import SQLServerKit
     #expect(state.active?.sql == "SELECT TOP (1000) *\nFROM [Remote].[RemoteDb].[dbo].[Customers];")
     #expect(state.active?.runAfterConnect == false && queries.count == 4)
   }
+  @Test func explorerRemovalPreservesOpenQueryAndSavedCredentials() async throws {
+    let key="explorerActiveServerIDs", defaults=UserDefaults.standard
+    let old=defaults.object(forKey:key)
+    defer {if let old {defaults.set(old,forKey:key)} else {defaults.removeObject(forKey:key)}}
+    let state=StudioState()
+    let server=ConnectedServer(profile:ServerProfile(),password:"fixture-only")
+    server.remembered=true;state.servers=[server]
+    defaults.set([server.id.uuidString],forKey:key)
+    let doc=QueryDocument(server:server,database:"master",title:"Keep")
+    doc.state = .ready;doc.transactionCount=1;doc.sql="SELECT 1;"
+    state.documents=[doc];state.active=doc
+    let host=WorkbenchController(state:state);_ = host.view
+    func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+    let outline=try #require(descendants(host.view).compactMap {$0 as? NSOutlineView}.first)
+    await state.removeExplorer(server)
+    #expect(outline.numberOfRows == 0)
+    #expect(state.servers.isEmpty && !server.online)
+    #expect(state.documents.first === doc && state.active === doc)
+    #expect(doc.server === server && doc.transactionCount == 1 && doc.sql == "SELECT 1;")
+    #expect(server.remembered && server.password == "fixture-only")
+    #expect(defaults.stringArray(forKey:key) == [])
+  }
   @Test func explorerDisconnectPreservesQuerySessionAndCachedNativeTree() async throws {
     let state = StudioState()
     let server = ConnectedServer(profile: ServerProfile(), password: "")

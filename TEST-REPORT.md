@@ -1,3 +1,13 @@
+# Explorer bağlantı ve bilgi kartları — 10 Ekim 2026 (yerel, yayımlanmadı)
+
+- Yeni bağlantıda kayıtlı bağlantı seçimi/otomatik doldurma ve ServerVault liste okuması kaldırıldı. Düzenleme seçili profil bilgilerini korur.
+- Bağlantıyı kaldır, native onay sonrası yalnız Explorer sunucusunu ve restore seçimini kaldırır. Metadata kapanırken ağaç ve arama kapsamı temizlenir; kayıtlı parola/Keychain ve açık sorgu/transaction korunur. Yeni native test gerçek outline satırının kalkmasını da doğrular.
+- Veritabanı bilgileri SQL sekmesi yerine yeniden kullanılabilen 760x620 salt okunur pencerede genel alan/dosya kartlarıyla gösterilir. Ayrı katalog bağlantısı, yükleme/hata, yenileme ve SQL escaping korunur.
+- İndeks popup'ında DB kartı, nesne sayısı, kolon güncelliği, ayrı eşitleme tarihleri, offline/hata/hazırlık durumları ve yenileme eylemi vardır. Katalog bildirimleri görünümü günceller; metin özeti parse edilmez.
+- `/tmp/mssql-explorer-cards-final-tests.log`: 70 uygulama + 100 core = 170 test; 148 geçti, 22 dış koşullu test atlandı. Son kaldırma sıralaması sonrası `/tmp/mssql-explorer-removal-final-test.log` odaklı regresyon geçti. `/tmp/mssql-explorer-cards-final-build.log`: Release BUILD SUCCEEDED; git diff --check temiz.
+- İzole local.mssqlstudio.uitest uygulamasında kayıtlı seçim olmadan yeni form, indeks kartlarının son çerçeveli görünümü, offline yenilemenin kapalı olması, kaldırma onayı/Vazgeç ve son derlemede Kaldır sonrası ağacın boşalıp sorgu sekmesinin kalması doğrulandı. İlk görsel kontrolde eski ağaç kalma sorunu yakalanıp düzeltildi; test bu regresyonu kapsar.
+- Gerçek kullanıcı uygulaması/Keychain/veritabanı değiştirilmedi. Canlı veritabanı bilgi okuması ve dolu bilgi penceresinin görsel kontrolü bu turda yapılmadı. Yayın sürümü hâlâ v0.2.50.
+
 # v0.2.50 yayın doğrulaması — 10 Ekim 2026
 
 - Public latest https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.50, build 51, kaynak bb0a6193daffcf1cd0995efc923346f0871b8fab. Actions 38044468276 tüm adımları geçti; ZIP/PKG/update.json mevcut.
