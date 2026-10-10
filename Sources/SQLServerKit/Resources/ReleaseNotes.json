@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.52",
+    "date": "2026-10-10",
+    "title": "macOS Kurulum ile güvenilir güncelleme",
+    "changes": [
+      "Özel dosya taşıma yardımcısı, previous yedeği ve eski sürüme geri dönme akışı kaldırıldı.",
+      "Güncellemeler PKG bütünlüğü ve uygulama imzası doğrulandıktan sonra macOS Kurulum ekranında tamamlanıyor.",
+      "Sonraki açılışta çalışan sürüm ve konum kontrol ediliyor; tamamlanmamış kurulum açıkça bildiriliyor.",
+      "Aynı anda birden fazla güncelleme başlatılması engellendi. Bu sürüme ilk geçiş doğrudan PKG ile yapılmalıdır."
+    ]
+  },
+  {
     "version": "0.2.51",
     "date": "2026-10-10",
     "title": "Explorer bilgi kartları ve bağlantı yönetimi",

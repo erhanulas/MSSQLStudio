@@ -86,34 +86,31 @@ extension StartupUpdateTests {
 }
 
 extension StartupUpdateTests {
-  @Test(arguments:["success", "signatureFailure", "launchFailure", "missingPackage"])
-  func updateHelperCleansBackupOrRestoresOldVersion(_ outcome:String) throws {
-    let fm=FileManager.default
-    let root=URL(fileURLWithPath:"/tmp/Studio Update '"+UUID().uuidString)
-    let stage=root.appendingPathComponent(".MSSQLStudio-update-test")
-    let target=root.appendingPathComponent("MSSQLStudio.app")
-    try fm.createDirectory(at:stage,withIntermediateDirectories:true)
-    defer {try? fm.removeItem(at:root)}
-    try fm.createDirectory(at:target,withIntermediateDirectories:true)
-    try Data("old".utf8).write(to:target.appendingPathComponent("version"))
-    if outcome != "missingPackage" {
-      let candidate=stage.appendingPathComponent("MSSQLStudio.app")
-      try fm.createDirectory(at:candidate,withIntermediateDirectories:true)
-      try Data("new".utf8).write(to:candidate.appendingPathComponent("version"))
-    }
-    // Execute the production shell flow on disposable bundles; stub only OS signing/open.
-    let script=ApplicationUpdate.installationScript
-      .replacingOccurrences(of:"/usr/bin/codesign",with:outcome == "signatureFailure" ? "/usr/bin/false" : "/usr/bin/true")
-      .replacingOccurrences(of:"/usr/bin/open",with:outcome == "launchFailure" ? "/usr/bin/false" : "/usr/bin/true")
-    let helper=stage.appendingPathComponent("helper.sh")
-    try script.write(to:helper,atomically:true,encoding:.utf8)
-    let process=Process();process.executableURL=URL(fileURLWithPath:"/bin/sh")
-    process.arguments=[helper.path,stage.path,target.path,"2147483647"]
-    process.standardOutput=FileHandle.nullDevice;process.standardError=FileHandle.nullDevice
-    try process.run();process.waitUntilExit()
-    #expect(try String(contentsOf:target.appendingPathComponent("version"),encoding:.utf8) == (outcome == "success" ? "new" : "old"))
-    #expect(!fm.fileExists(atPath:target.path+".previous"))
-    #expect(!fm.fileExists(atPath:stage.appendingPathComponent("previous").path))
-    if outcome == "success" {#expect(!fm.fileExists(atPath:stage.path))}
+  @Test func installerValidatesPinnedPayloadWithoutInstalling() async throws {
+    guard let path=ProcessInfo.processInfo.environment["MSSQL_UPDATE_PKG"] else {return}
+    let package=URL(fileURLWithPath:path)
+    let version=package.deletingPathExtension().lastPathComponent.replacingOccurrences(of:"MSSQLStudio-",with:"")
+    let prepared=try await ApplicationUpdate().prepareInstaller(package:package,expectedVersion:version,currentVersion:"0")
+    defer {try? FileManager.default.removeItem(at:prepared.directory)}
+    #expect(prepared.version == version)
+    #expect(FileManager.default.fileExists(atPath:prepared.package.path))
+    #expect(!FileManager.default.fileExists(atPath:prepared.directory.appendingPathComponent("expanded").path))
+    do {
+      _ = try await ApplicationUpdate().prepareInstaller(package:package,expectedVersion:"999.0",currentVersion:"0")
+      Issue.record("Mismatched payload version was accepted")
+    } catch is SQLFailure {}
+  }
+  @Test func oldFeedCannotSilentlyUseLegacyUpdateHelper() async throws {
+    let release=try JSONDecoder().decode(ApplicationUpdate.Release.self,from:Data(#"{"version":"1.0","downloadURL":"https://example.invalid/release.zip","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#.utf8))
+    do {_ = try await ApplicationUpdate().downloadInstaller(release);Issue.record("ZIP-only feed accepted")}
+    catch {#expect(error.localizedDescription.contains("PKG"))}
+  }
+}
+
+extension StartupUpdateTests {
+  @Test func installationCompletionRequiresNewVersionAtCanonicalLocation() {
+    #expect(ApplicationUpdate.installationCompleted(expected:"0.2.52",runningVersion:"0.2.52",bundleURL:URL(fileURLWithPath:"/Applications/MSSQLStudio.app")))
+    #expect(!ApplicationUpdate.installationCompleted(expected:"0.2.52",runningVersion:"0.2.50",bundleURL:URL(fileURLWithPath:"/Applications/MSSQLStudio.app")))
+    #expect(!ApplicationUpdate.installationCompleted(expected:"0.2.52",runningVersion:"0.2.52",bundleURL:URL(fileURLWithPath:"/tmp/MSSQLStudio.app")))
   }
 }

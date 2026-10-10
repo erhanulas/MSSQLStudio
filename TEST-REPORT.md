@@ -1,3 +1,12 @@
+# PKG tabanlı güncelleme — 10 Ekim 2026 (yerel, yayımlanmadı)
+
+- Salt okunur yerel incelemede /Applications/MSSQLStudio.app sürümü 0.2.50; iki .MSSQLStudio-update-* klasöründe v0.2.51 uygulaması/helper.sh bulundu. Helper süreçleri çalışmıyordu; kurulum uygulanmamıştı. Bunlar değiştirilmedi/silinmedi. Yardımcının neden sona erdiği kesin olarak kanıtlanmadı; uygulama kapanışına bağlı özel taşıma yolu kaldırıldı.
+- Güncelleme UI artık PKG indirir, SHA256 ve açılmış uygulama payload'ında sabit sertifika/DR, bundle ID ve tam sürümü doğrular. Component Scripts reddedilir. macOS Installer açılır, çalışma/transaction kapanış denetiminden sonra uygulama kapanır. Kullanıcı kurulumu tamamlar ve Uygulamalar'dan yeniden açar. Eski app yedeği/.previous/rollback helper yoktur.
+- Yeni manifest installerURL/installerSHA256 içerir; ZIP alanları eski uygulamalar için korunur. Eski ZIP-only feed yeni UI tarafından açık PKG uyarısıyla reddedilir. Sonraki açılışta pendingInstallerVersion ve çalışan sürüm/konum karşılaştırılır; eski veya farklı konumdaki uygulama başarı olarak bildirilmez. Eşzamanlı update başlatma engeli eklendi.
+- `/tmp/mssql-installer-final-tests.log`: 70 app + 102 core = 172 test; 150 geçti, 22 dış koşullu test atlandı. MSSQL_UPDATE_PKG=/tmp/MSSQLStudio-0.2.51.pkg ile gerçek imzalı PKG payload doğrulandı; yanlış sürüm reddedildi. Yeni completion testi eski sürümü ve yanlış konumu reddeder. Eski shell yedek/rollback testleri kaldırıldı.
+- Gerçek PKG SHA256 c9f745a20d67e55a5551c86bf5296303b874562ae615082797537854ba95106c önceki doğrulanmış GitHub digest ile eşleşti. `/tmp/mssql-installer-manifest-test.log`: gerçek ZIP/PKG ile yeni manifest üretimi ve yayın kontrolleri geçti. `/tmp/mssql-installer-final-build.log`: Release BUILD SUCCEEDED. git diff --check temiz.
+- Gerçek kullanıcı uygulaması/Keychain/veritabanı değiştirilmedi; macOS Installer içinde gerçek yerinde upgrade ve yeni akışın tüm görsel adımları bu turda çalıştırılmadı. İlk geçiş mevcut updater ile olmaz, yeni sürümün PKG'siyle yapılmalıdır. Kişisel sertifika Developer ID/notarization değildir; sistem güvenlik denetimleri atlanmaz. Son yayın hâlâ v0.2.51.
+
 # v0.2.51 yayın doğrulaması — 10 Ekim 2026
 
 - Public latest https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.51; build 52, kaynak 07a268c2fc6180d134b76c31563e1cbae94cc98f. Actions 38046699005 tüm adımları geçti; ZIP, PKG, update.json mevcut.

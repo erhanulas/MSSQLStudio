@@ -206,6 +206,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   NSOutlineViewDelegate, NSMenuDelegate, NSUserInterfaceValidations
 {
   let state: StudioState
+  var updateInProgress=false
   private let split = NSSplitViewController()
   private let explorer = NSViewController()
   private let center = NSViewController()

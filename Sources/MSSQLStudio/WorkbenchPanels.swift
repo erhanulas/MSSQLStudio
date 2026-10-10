@@ -873,6 +873,7 @@ private struct SSMSMarkdown: View {
 
 extension WorkbenchController {
   @objc func installUpdate() {
+    guard !updateInProgress else {return}
     let feed:URL
     do {
       if let source=UserDefaults.standard.string(forKey:"githubUpdateRepository"),!source.isEmpty {
@@ -881,32 +882,28 @@ extension WorkbenchController {
         let url=URL(string:address),url.scheme == "https" {feed=url}
       else {throw SQLFailure("GitHub yayın deposu henüz tanımlanmadı. Ayarlar → GitHub güncellemeleri alanına kullanıcı/depo adresini girin.")}
     }catch {state.showError(error.localizedDescription);return}
-    let current = Bundle.main.bundleURL
-    let userApps = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")
-    let stable = current.deletingLastPathComponent().path == "/Applications" || current.deletingLastPathComponent() == userApps
-    let target = stable ? current : URL(fileURLWithPath:"/Applications/MSSQLStudio.app")
     let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+    updateInProgress=true
     Task {
+      defer {updateInProgress=false}
       let updater = ApplicationUpdate()
       do {
         guard let release = try await updater.check(feed:feed,currentVersion:version) else {
           let alert = NSAlert(); alert.messageText = "MSSQL Studio güncel"; alert.runModal(); return
         }
-        let zip = try await updater.download(release)
-        defer { try? FileManager.default.removeItem(at:zip) }
-        let prepared = try await updater.prepare(zip:zip,target:target,currentVersion:version)
-        guard prepared.version == release.version else {
-          try? FileManager.default.removeItem(at:prepared.stage)
-          throw SQLFailure("İndirilen paketin sürümü yayın bilgisiyle uyuşmuyor.")
-        }
-        let alert = NSAlert(); alert.messageText = "MSSQL Studio \(prepared.version) hazır"
-        alert.informativeText = "Uygulama kapanıp aynı konumda güncellenecek: \(target.path). Önceki sürüm .previous yedeğinde tutulur."
-        alert.addButton(withTitle:"Güncelle ve Yeniden Aç"); alert.addButton(withTitle:"Vazgeç")
-        guard alert.runModal() == .alertFirstButtonReturn else { try? FileManager.default.removeItem(at:prepared.stage); return }
-        guard state.canQuit() else { try? FileManager.default.removeItem(at:prepared.stage); return }
-        // A successful preflight is followed by the normal application termination flow.
-        try await updater.schedule(prepared,parentPID:ProcessInfo.processInfo.processIdentifier)
-        Application.updateTerminationApproved = true
+        let package = try await updater.downloadInstaller(release)
+        defer {try? FileManager.default.removeItem(at:package)}
+        let prepared = try await updater.prepareInstaller(package:package,expectedVersion:release.version,currentVersion:version)
+        var installerOpened=false
+        defer {if !installerOpened {try? FileManager.default.removeItem(at:prepared.directory)}}
+        let alert=NSAlert();alert.messageText="MSSQL Studio \(prepared.version) kuruluma hazır"
+        alert.informativeText="macOS Kurulum penceresinde kurulumu tamamlayın, ardından MSSQL Studio’yu Uygulamalar’dan yeniden açın. Mevcut uygulama yerinde güncellenir; önceki sürüm saklanmaz. Kayıtlı bağlantılarınız korunur."
+        alert.addButton(withTitle:"Kurulum’u Aç ve Kapat");alert.addButton(withTitle:"Vazgeç")
+        guard alert.runModal() == .alertFirstButtonReturn, state.canQuit() else {return}
+        _ = try await NSWorkspace.shared.open([prepared.package],withApplicationAt:URL(fileURLWithPath:"/System/Library/CoreServices/Installer.app"),configuration:NSWorkspace.OpenConfiguration())
+        installerOpened=true
+        UserDefaults.standard.set(prepared.version,forKey:"pendingInstallerVersion")
+        Application.updateTerminationApproved=true
         NSApp.terminate(nil)
       } catch { state.showError(error.localizedDescription) }
     }

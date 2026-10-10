@@ -15,6 +15,15 @@ import SwiftUI
     withExtendedLifetime(delegate) { app.run() }
   }
   func applicationDidFinishLaunching(_ notification: Notification) {
+    if let expected=UserDefaults.standard.string(forKey:"pendingInstallerVersion") {
+      let installed=Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+      let completed=ApplicationUpdate.installationCompleted(expected:expected,runningVersion:installed,bundleURL:Bundle.main.bundleURL)
+      let alert=NSAlert()
+      alert.messageText=completed ? "MSSQL Studio \(installed) kuruldu" : "Güncelleme henüz tamamlanmadı"
+      alert.informativeText=completed ? "Yeni sürüm Uygulamalar klasöründen çalışıyor." : "Çalışan sürüm: \(installed). Beklenen sürüm: \(expected). macOS Kurulum penceresinde kurulumu tamamlayıp Uygulamalar’daki MSSQL Studio’yu açın."
+      alert.runModal()
+      if completed {UserDefaults.standard.removeObject(forKey:"pendingInstallerVersion")}
+    }
     StudioTheme.start()
     studio.loadHistory()
     workbench = WorkbenchController(state: studio)

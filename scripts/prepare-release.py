@@ -61,7 +61,7 @@ def prepare(repository, tag, output):
         binary=Path(temp)/'MSSQLStudio.app/Contents/MacOS/MSSQLStudio'
         if binary.read_bytes() != (payload/'Contents/MacOS/MSSQLStudio').read_bytes():
             raise ValueError('PKG and ZIP application binaries do not match')
-    manifest={'version':version,'downloadURL':f'https://github.com/{repository}/releases/download/{tag}/{archive.name}','sha256':hashlib.sha256(archive.read_bytes()).hexdigest()}
+    manifest={'version':version,'downloadURL':f'https://github.com/{repository}/releases/download/{tag}/{archive.name}','sha256':hashlib.sha256(archive.read_bytes()).hexdigest(),'installerURL':f'https://github.com/{repository}/releases/download/{tag}/{package.name}','installerSHA256':hashlib.sha256(package.read_bytes()).hexdigest()}
     markdown = f"## {current_notes['title']}\n\n{version} · {current_notes['date']}\n\n" + '\n'.join('- '+change for change in current_notes['changes']) + '\n'
     (output/'release-notes.md').write_text(markdown)
     (output/'update.json').write_text(json.dumps(manifest,indent=2)+'\n')

@@ -4,7 +4,7 @@ SQL Server için native macOS çalışma alanı. Solda Object Explorer, ortada S
 
 ## Kurulum ve başlangıç
 
-[Son GitHub yayınından](https://github.com/erhanulas/MSSQLStudio/releases/latest) PKG'yi indirip uygulama kapalıyken kurun. Hedef `/Applications/MSSQLStudio.app` konumudur. Son doğrulanmış sürüm **0.2.47 / build 48**.
+[Son GitHub yayınından](https://github.com/erhanulas/MSSQLStudio/releases/latest) PKG'yi indirip uygulama kapalıyken kurun. Hedef `/Applications/MSSQLStudio.app` konumudur. Son doğrulanmış sürüm **0.2.51 / build 52**.
 
 Microsoft ODBC Driver 18, unixODBC ve OpenSSL 3 ayrı kurulur; sürücüler app paketinde dağıtılmaz. [Microsoft macOS kurulum yönergesi](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos) kullanılabilir. Apple Silicon bağımlılık yolları `/opt/homebrew` altındadır.
 
@@ -16,7 +16,7 @@ Microsoft ODBC Driver 18, unixODBC ve OpenSSL 3 ayrı kurulur; sürücüler app 
 
 Bağlantı ekranında Genel/Gelişmiş seçenekleri ve tek ana işlem kullanılır. Explorer’da **Nesneleri Yenile** sunucudaki yüklenmiş nesne listelerini yeniden okur; **Yerel İndeksi Yenile** arama/tamamlama önbelleğini yeniler. İndeks ayrıntıları veritabanı adının yanındaki düğmeden açılır.
 
-Ayarlar (⌘,) altı sekmede tema, editör, kısayollar, yerel kayıt, güncelleme kaynağı ve Keychain erişimini yönetir. Uygulama menüsündeki **Güncellemeleri Kontrol Et** aynı imzalı yeni sürümü indirir. **Hakkında** ekranındaki sürüm notları çevrimdışı okunabilir.
+Ayarlar (⌘,) altı sekmede tema, editör, kısayollar, yerel kayıt, güncelleme kaynağı ve Keychain erişimini yönetir. v0.2.52 ile yeni güncelleme akışı, uygulama menüsündeki **Güncellemeleri Kontrol Et** ile PKG indirip içindeki uygulamanın sabit imzasını doğrular ve macOS Kurulum ekranını açar. Kurulumu tamamlayıp uygulamayı Uygulamalar’dan yeniden açın; önceki sürüm yedeği oluşturulmaz. **Hakkında** ekranındaki sürüm notları çevrimdışı okunabilir.
 
 ## Kapsam ve sınırlar
 

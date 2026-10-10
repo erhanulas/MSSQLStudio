@@ -38,6 +38,7 @@ jobs:
         run: |
           version="${RELEASE_TAG#v}"
           export MSSQL_UPDATE_ZIP="$PWD/releases/MSSQLStudio-$version.zip"
+          export MSSQL_UPDATE_PKG="$PWD/releases/MSSQLStudio-$version.pkg"
           ./scripts/test.sh
       - name: Publish complete release
         env:

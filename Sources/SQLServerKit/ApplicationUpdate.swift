@@ -30,6 +30,8 @@ public actor ApplicationUpdate {
     public let version: String
     public let downloadURL: URL
     public let sha256: String
+    public let installerURL: URL?
+    public let installerSHA256: String?
   }
   public func check(feed: URL, currentVersion: String) async throws -> Release? {
     guard feed.scheme == "https",feed.user == nil,feed.password == nil else { throw SQLFailure("Güncelleme adresi HTTPS olmalı.") }
@@ -58,6 +60,9 @@ public actor ApplicationUpdate {
       guard digest == release.sha256.lowercased() else { throw SQLFailure("Paket bütünlüğü doğrulanamadı.") }
       return url
     } catch { try? FileManager.default.removeItem(at:url); throw error }
+  }
+  public nonisolated static func installationCompleted(expected:String,runningVersion:String,bundleURL:URL) -> Bool {
+    bundleURL.standardizedFileURL.path == "/Applications/MSSQLStudio.app" && (runningVersion == expected || isNewer(runningVersion,than:expected))
   }
   public init() {}
   public nonisolated static func isNewer(_ candidate: String, than current: String) -> Bool {
@@ -104,31 +109,39 @@ public actor ApplicationUpdate {
       return PreparedApplicationUpdate(stage:stage,target:target,version:version)
     } catch { try? FileManager.default.removeItem(at:stage); throw error }
   }
-  // Kept beside the target on the same volume, inside the private staging directory.
-  nonisolated static let installationScript = """
-    #!/bin/sh
-    stage="$1"
-    target="$2"
-    parent="$3"
-    while kill -0 "$parent" 2>/dev/null; do sleep 1; done
-    backup="${stage}/previous"
-    log="${stage}/update.log"
-    if [ -e "$target" ]; then /bin/mv "$target" "$backup" || exit 1; fi
-    if /bin/mv "$stage/MSSQLStudio.app" "$target" && /usr/bin/codesign --verify --deep --strict "$target" 2>"$log" && /usr/bin/open -n "$target"; then
-      /bin/rm -rf "$backup"
-      /bin/rm -f "$stage/helper.sh" "$log"
-      /bin/rmdir "$stage" 2>/dev/null
-    else
-      if [ -e "$target" ]; then /bin/mv "$target" "$stage/failed.app"; fi
-      if [ -e "$backup" ]; then /bin/mv "$backup" "$target"; /usr/bin/open -n "$target"; fi
-    fi
-    """
-  public func schedule(_ update: PreparedApplicationUpdate, parentPID: Int32) throws {
-    let helper = update.stage.appendingPathComponent("helper.sh")
-    try Self.installationScript.write(to:helper,atomically:true,encoding:.utf8)
-    let process = Process(); process.executableURL = URL(fileURLWithPath:"/bin/sh")
-    process.arguments = [helper.path,update.stage.path,update.target.path,String(parentPID)]
-    process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
-    try process.run()
+  public struct Installer: Sendable {
+    public let directory:URL
+    public let package:URL
+    public let version:String
+  }
+  public func downloadInstaller(_ release:Release) async throws -> URL {
+    guard let url=release.installerURL, let sha=release.installerSHA256, url.scheme == "https", sha.count == 64, sha.allSatisfy({$0.isHexDigit}) else {
+      throw SQLFailure("Bu yayın uygulama içi PKG güncellemesini desteklemiyor. GitHub yayınındaki PKG paketini kullanın.")
+    }
+    return try await download(Release(version:release.version,downloadURL:url,sha256:sha,installerURL:nil,installerSHA256:nil))
+  }
+  public func prepareInstaller(package:URL,expectedVersion:String,currentVersion:String) throws -> Installer {
+    guard Self.isNewer(expectedVersion,than:currentVersion) else {throw SQLFailure("Kurulum sürümü güncel sürümden yeni değil.")}
+    let fm=FileManager.default
+    let directory=fm.temporaryDirectory.appendingPathComponent("MSSQLStudio-installer-"+UUID().uuidString)
+    try fm.createDirectory(at:directory,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
+    do {
+      let copy=directory.appendingPathComponent("MSSQLStudio-"+expectedVersion+".pkg")
+      try fm.copyItem(at:package,to:copy)
+      try fm.setAttributes([.posixPermissions:0o600],ofItemAtPath:copy.path)
+      let expanded=directory.appendingPathComponent("expanded")
+      _ = try run("/usr/sbin/pkgutil",["--expand-full",copy.path,expanded.path])
+      let component=expanded.appendingPathComponent("MSSQLStudio-component.pkg")
+      let payload=component.appendingPathComponent("Payload/Applications/MSSQLStudio.app")
+      guard !fm.fileExists(atPath:component.appendingPathComponent("Scripts").path) else {throw SQLFailure("Kurulum paketi beklenmeyen betikler içeriyor.")}
+      let identity=try PersonalSigningIdentity.requirement()
+      _ = try run("/usr/bin/codesign",["--verify","--deep","--strict","-R","="+identity,payload.path])
+      let actual=try run("/usr/bin/codesign",["-d","-r-",payload.path]).trimmingCharacters(in:.whitespacesAndNewlines)
+      guard actual == "designated => " + identity else {throw SQLFailure("Kurulum uygulamasının imza kimliği uyuşmuyor.")}
+      let info=try PropertyListSerialization.propertyList(from:Data(contentsOf:payload.appendingPathComponent("Contents/Info.plist")),format:nil) as? [String:Any]
+      guard info?["CFBundleIdentifier"] as? String == "local.mssqlstudio.app",info?["CFBundleShortVersionString"] as? String == expectedVersion else {throw SQLFailure("Kurulum paketinin uygulama kimliği veya sürümü uyuşmuyor.")}
+      try fm.removeItem(at:expanded)
+      return Installer(directory:directory,package:copy,version:expectedVersion)
+    } catch {try? fm.removeItem(at:directory);throw error}
   }
 }
