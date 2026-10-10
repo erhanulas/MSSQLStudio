@@ -1,3 +1,9 @@
+# Güncelleme yedeği — 10 Ekim 2026
+
+- Updater eski uygulamayı hedef.app.previous yerine gizli, özel staging/previous yoluna taşır. Taşıma/imza/open başarı zinciri sonunda yedek temizlenir; hata halinde eski uygulama geri getirilir. İmza/manifest kontrolleri korunur.
+- `/tmp/mssql-update-backup-tests.log`: odaklı 8 test geçti; üretim shell akışı geçici sahte bundle'larla başarı, imza hatası, open hatası ve eksik paket durumlarında çalıştırıldı. Gerçek codesign/open yerine test stub'ları kullanıldı; gerçek kullanıcı uygulaması/Keychain değişmedi. open başarısı sonradan oluşan crash'i algılamaz.
+- Eski updater'ın bu sürüme geçişte oluşturacağı veya geçmişten kalan .previous kopyalarına otomatik silme uygulanmaz. İlk geçişte bu davranışı önlemek için yayımlanan PKG kullanılabilir; yeni updater sonraki güncellemelerde geçerlidir.
+
 # v0.2.49 yayın doğrulaması — 10 Ekim 2026
 
 - Public latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.49; sürüm 0.2.49/build 50, kaynak 8f203c56e3b16e6b0c314b44364b3d850d83c9f6. ZIP, PKG ve update.json mevcut.

@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.50",
+    "date": "2026-10-10",
+    "title": "Güncelleme yedeği temizliği",
+    "changes": [
+      "Güncellemelerde önceki uygulama artık Uygulamalar klasöründe previous kopyası olarak bırakılmıyor.",
+      "Geri alma yedeği gizli geçici klasörde tutuluyor; yeni sürüm doğrulanıp açıldığında temizleniyor.",
+      "Dosya taşıma, imza veya açılış komutu başarısız olursa önceki sürüm geri yükleniyor."
+    ]
+  },
+  {
     "version": "0.2.49",
     "date": "2026-10-10",
     "title": "Bağlantı ekranı ve Object Explorer düzeni",

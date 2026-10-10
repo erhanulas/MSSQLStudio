@@ -104,19 +104,18 @@ public actor ApplicationUpdate {
       return PreparedApplicationUpdate(stage:stage,target:target,version:version)
     } catch { try? FileManager.default.removeItem(at:stage); throw error }
   }
-  public func schedule(_ update: PreparedApplicationUpdate, parentPID: Int32) throws {
-    let script = """
+  // Kept beside the target on the same volume, inside the private staging directory.
+  nonisolated static let installationScript = """
     #!/bin/sh
     stage="$1"
     target="$2"
     parent="$3"
     while kill -0 "$parent" 2>/dev/null; do sleep 1; done
-    backup="${target}.previous"
+    backup="${stage}/previous"
     log="${stage}/update.log"
-    if [ -e "$backup" ]; then /bin/mv "$backup" "${backup}.$(/bin/date +%s)" || exit 1; fi
     if [ -e "$target" ]; then /bin/mv "$target" "$backup" || exit 1; fi
-    if /bin/mv "$stage/MSSQLStudio.app" "$target" && /usr/bin/codesign --verify --deep --strict "$target" 2>"$log"; then
-      /usr/bin/open -n "$target"
+    if /bin/mv "$stage/MSSQLStudio.app" "$target" && /usr/bin/codesign --verify --deep --strict "$target" 2>"$log" && /usr/bin/open -n "$target"; then
+      /bin/rm -rf "$backup"
       /bin/rm -f "$stage/helper.sh" "$log"
       /bin/rmdir "$stage" 2>/dev/null
     else
@@ -124,8 +123,9 @@ public actor ApplicationUpdate {
       if [ -e "$backup" ]; then /bin/mv "$backup" "$target"; /usr/bin/open -n "$target"; fi
     fi
     """
+  public func schedule(_ update: PreparedApplicationUpdate, parentPID: Int32) throws {
     let helper = update.stage.appendingPathComponent("helper.sh")
-    try script.write(to:helper,atomically:true,encoding:.utf8)
+    try Self.installationScript.write(to:helper,atomically:true,encoding:.utf8)
     let process = Process(); process.executableURL = URL(fileURLWithPath:"/bin/sh")
     process.arguments = [helper.path,update.stage.path,update.target.path,String(parentPID)]
     process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice

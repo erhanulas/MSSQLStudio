@@ -84,3 +84,36 @@ extension StartupUpdateTests {
     } catch is SQLFailure { }
   }
 }
+
+extension StartupUpdateTests {
+  @Test(arguments:["success", "signatureFailure", "launchFailure", "missingPackage"])
+  func updateHelperCleansBackupOrRestoresOldVersion(_ outcome:String) throws {
+    let fm=FileManager.default
+    let root=URL(fileURLWithPath:"/tmp/Studio Update '"+UUID().uuidString)
+    let stage=root.appendingPathComponent(".MSSQLStudio-update-test")
+    let target=root.appendingPathComponent("MSSQLStudio.app")
+    try fm.createDirectory(at:stage,withIntermediateDirectories:true)
+    defer {try? fm.removeItem(at:root)}
+    try fm.createDirectory(at:target,withIntermediateDirectories:true)
+    try Data("old".utf8).write(to:target.appendingPathComponent("version"))
+    if outcome != "missingPackage" {
+      let candidate=stage.appendingPathComponent("MSSQLStudio.app")
+      try fm.createDirectory(at:candidate,withIntermediateDirectories:true)
+      try Data("new".utf8).write(to:candidate.appendingPathComponent("version"))
+    }
+    // Execute the production shell flow on disposable bundles; stub only OS signing/open.
+    let script=ApplicationUpdate.installationScript
+      .replacingOccurrences(of:"/usr/bin/codesign",with:outcome == "signatureFailure" ? "/usr/bin/false" : "/usr/bin/true")
+      .replacingOccurrences(of:"/usr/bin/open",with:outcome == "launchFailure" ? "/usr/bin/false" : "/usr/bin/true")
+    let helper=stage.appendingPathComponent("helper.sh")
+    try script.write(to:helper,atomically:true,encoding:.utf8)
+    let process=Process();process.executableURL=URL(fileURLWithPath:"/bin/sh")
+    process.arguments=[helper.path,stage.path,target.path,"2147483647"]
+    process.standardOutput=FileHandle.nullDevice;process.standardError=FileHandle.nullDevice
+    try process.run();process.waitUntilExit()
+    #expect(try String(contentsOf:target.appendingPathComponent("version"),encoding:.utf8) == (outcome == "success" ? "new" : "old"))
+    #expect(!fm.fileExists(atPath:target.path+".previous"))
+    #expect(!fm.fileExists(atPath:stage.appendingPathComponent("previous").path))
+    if outcome == "success" {#expect(!fm.fileExists(atPath:stage.path))}
+  }
+}
