@@ -1,3 +1,9 @@
+# MSSQL Studio 0.2.40 — yayın doğrulaması
+
+10 Ekim 2026. `61e5a57` commit’i `v0.2.40` etiketiyle yayımlandı. GitHub Actions: https://github.com/erhanulas/MSSQLStudio/actions/runs/38012283943 . Kalıcı üretim imzasıyla gerçek ServerVault create/update/read ve ad-hoc reddi testi, imzalı uygulama/PKG derlemesi, paket/manifest doğrulaması ve yayın paketiyle testler başarılı. ZIP, PKG ve update.json yayımlandı; latest sürüm ve herkese açık latest/download/update.json 0.2.40 olarak doğrulandı. ZIP SHA-256: `85f899fae99ecd55f3ba3f33dc6cdf7164ce77a10f5c4f1d8abb549f9243e383`.
+
+Eski kullanıcı ACL'lerini sistem onayıyla yenileme bu yayında kullanıcı tarafından doğrulanmalıdır; gerçek kullanıcı kayıtları test edilmedi/değiştirilmedi. Kurulu uygulamaya bu görevde müdahale edilmedi. Aşağıdaki henüz yayımlanmadı/üretim sertifikasıyla çalıştırılmadı ifadeleri yayın öncesi yerel test aşamasına aittir.
+
 # Keychain izinleri — yerel geliştirme doğrulaması
 
 10 Ekim 2026. Yeni kayıtlar uygulamaya özel SecAccess ve anlaşılır etiketle oluşturulur. Normal parola güncellemesi ACL'yi tekrar yazmaz. Ayarlardaki açık izin yenileme işlemi önce kalıcı yayın imzasını doğrular, yalnız `local.mssqlstudio.servers` hizmetindeki UUID hesaplarının ACL/etiketini değiştirir; secret verisini okumaz veya değiştirmez. Kurulu uygulamanın mevcut kalıcı designated requirement imzası geçerli bulundu. Kullanıcıya ait bağlantılar/anahtar zinciri kayıtları okunmadı, değiştirilmedi.
