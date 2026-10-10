@@ -2,6 +2,10 @@
 
 Önceki NativeSQL uygulamasından bağımsız, sıfırdan yazılmış yeni proje. SSMS düzenini kullanır: solda Object Explorer, ortada bağımsız SQL oturumlarına sahip sorgu sekmeleri, altta Results / Messages / Execution Plan. macOS 27+, Apple Silicon, Swift 6, AppKit + SwiftUI ve TextKit 2; veritabanı katmanı Microsoft ODBC Driver 18.
 
+## Güncel imza ve Keychain durumu
+
+10 Ekim 2026: v0.2.42 ve v0.2.43 aynı kalıcı kişisel sertifika ve designated requirement ile doğrulandı. Eski ad-hoc imza/güncelleme açıklamaları tarihsel sürümlere aittir. Mevcut imza, Actions secrets, güvenli izin yenileme, test sonuçları ve Gatekeeper sınırları için [kişisel imzalama belgesini](docs/PERSONAL-SIGNING.md) okuyun. Yerel sertifika Developer ID/notarization yerine geçmez; gerçek kullanıcı oturumunda tam sürüm yükseltmesi bu incelemede denenmedi.
+
 ## Başlatma
 
 **0.2.39 — fark önizlemesi ve veritabanına gönderme:** Farkları Gör ikonu karşılıklı oklarla gösterilir; nesne sekmelerinde yanında Veritabanına Gönder ikonu bulunur. İkisi de yan yana farklar / çalıştırılacak SQL önizlemesini açar. Önizleme ana SQL editörünün syntax ve kullanılmayan DECLARE renklerini paylaşır; multiline yorumlar ve string'ler tam kaynak üzerinden renklendirilir. Pencere 1400×840 hedef boyutuyla, ekranın görünür alanına göre açılır ve yeniden boyutlandırılabilir. Uzun satırlar yatay kaydırılır; açılışta satır başı korunur. Bağlı ve hazır nesne sekmesinde bekleyen değişiklik varsa, açık transaction yoksa Veritabanına Gönder etkinleşir. Son düğmeye basıldığında sunucudaki tanım açılan ham tanımla yeniden karşılaştırılır; çakışmada gönderme durur. Kontrol esnasında yinelenen gönderme engellenir; uygulama başarılı olursa baseline ilerler. Bu bir GitHub publish işlemi değildir.
@@ -395,7 +399,7 @@ Davranış kaynakları: [DataGrip nesne navigasyonu](https://www.jetbrains.com/h
 
 ## Keychain erişim izinleri
 
-Bağlantı parolaları `local.mssqlstudio.servers` hizmetinde kalır; yeni kayıtların görünen etiketi “MSSQL Studio · Kayıtlı bağlantı”dır. Bu teknik hizmet adı bir hata değildir. Aynı kalıcı sertifika ve uygulama kimliğiyle yayımlanan güncellemeler mevcut uygulama erişimini korur. Eski/ad-hoc derlemelerden kalan izinler için Ayarlar → Keychain izinlerini yenile işlemi eklendi. İşlem yalnızca yayın imzasını doğrulayan uygulamada çalışır; parolaları okumadan, silmeden veya dışarı aktarmadan bu hizmetteki bağlantı kayıtlarının erişimini çağıran uygulamaya yeniler. macOS eski izinleri değiştirmek için bir defalık onay/parola isteyebilir. Normal kayıt güncellemeleri erişim kuralını tekrar yazmaz.
+Bağlantı parolaları `local.mssqlstudio.servers` hizmetinde kalır; yeni kayıtların görünen etiketi “MSSQL Studio · Kayıtlı bağlantı”dır. Bu teknik hizmet adı bir hata değildir. Aynı kalıcı sertifika ve uygulama kimliği, Keychain için sürümler arasında eşleşen kod kimliği sağlar; eski ACL, kilitli Keychain veya zorunlu sistem onaylarını tek başına ortadan kaldırmaz. Eski/ad-hoc derlemelerden kalan izinler için Ayarlar → Keychain izinlerini yenile işlemi eklendi. İşlem yalnızca yayın imzasını doğrulayan uygulamada çalışır; parolaları okumadan, silmeden veya dışarı aktarmadan bu hizmetteki bağlantı kayıtlarında çağıran uygulamanın erişimini yeniler. Eski ACL girdilerini sıfırlamaz. macOS eski izinleri değiştirmek için bir defalık onay/parola isteyebilir. Normal kayıt güncellemeleri erişim kuralını tekrar yazmaz.
 
 Sistem erişim penceresinde “Her Zaman İzin Ver” seçeneği kalıcı uygulama iznini kaydeder; yalnız “İzin Ver” seçimi sonraki erişimlerde tekrar sorabilir. Kilitli anahtar zinciri veya sistem güvenlik değişikliklerinde macOS yine kimlik doğrulayabilir. Yerel imzasız/ad-hoc test derlemesinde gerçek kayıtların izinlerini yenilemeyin.
 

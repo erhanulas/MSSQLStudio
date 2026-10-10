@@ -168,7 +168,7 @@ private struct SettingsPanel: View {
       Text("Herkese açık Releases kullanılır. Depoyu girip Uygula’ya basın; ardından MSSQL Studio → Güncellemeleri Kontrol Et. Bağlantı parolaları ve sorgular GitHub’a gönderilmez. Boş bırakırsanız uygulamanın yayın adresi kullanılır.").font(.caption).foregroundStyle(.secondary)
       Divider()
       Text("Kayıtlı bağlantı parolaları").font(.headline)
-      Text("Güncellemelerden sonra tekrarlayan Keychain izni için eski kayıtların uygulama erişimini bir kez yenileyin. macOS bu işlemde parola isteyebilir. Kayıtlar yalnızca kalıcı imzalı MSSQL Studio'ya açılır; parolalar silinmez veya dışarı aktarılmaz.").font(.caption).foregroundStyle(.secondary)
+      Text("Güncellemelerden sonra tekrarlayan Keychain izni için eski kayıtların uygulama erişimini bir kez yenileyin. macOS bu işlemde parola isteyebilir. Kalıcı imzalı MSSQL Studio'nun erişimi yenilenir; parolalar silinmez veya dışarı aktarılmaz. Önceki izin girdileri otomatik temizlenmez.").font(.caption).foregroundStyle(.secondary)
       Button(renewingKeychain ? "İzinler yenileniyor…" : "Keychain izinlerini yenile") {
         renewingKeychain=true;keychainMessage=""
         Task {
