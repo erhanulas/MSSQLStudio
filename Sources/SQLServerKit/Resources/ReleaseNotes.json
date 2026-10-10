@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.35",
+    "date": "2026-10-10",
+    "title": "SQL editöründe kararlı katlama ve kelime vurgusu",
+    "changes": [
+      "IF ve BEGIN blokları açılıp kapatıldığında blok başlığının ekrandaki konumu korunuyor; son değiştirilen blok işaretleniyor.",
+      "Tüm bloklar açıldığında görünür kaynak satırı ve yatay kaydırma konumu korunuyor.",
+      "Çift tıklamayla seçilen kelimenin eşleşmeleri metin yerleşimini değiştirmeden vurgulanıyor; geçici metin kaybolması gideriliyor."
+    ]
+  },
+  {
     "version": "0.2.34",
     "date": "2026-10-10",
     "title": "Editör vurgulama çiziminin iyileştirilmesi",

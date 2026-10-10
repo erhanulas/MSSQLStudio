@@ -4,7 +4,128 @@ import Testing
 
 @testable import MSSQLStudio
 
+@MainActor private final class EditorStorageChanges: NSObject {
+  var count=0
+  @objc func changed(_ notification:Notification) {count+=1}
+}
+
 @MainActor @Suite(.serialized) struct EditorThemeTests {
+  private func lineScreenY(_ controller:EditorController,offset:Int) throws -> CGFloat {
+    let content=try #require(controller.editor.textContentStorage)
+    let layout=try #require(controller.editor.textLayoutManager)
+    let start=try #require(content.location(content.documentRange.location,offsetBy:offset))
+    let end=try #require(content.location(start,offsetBy:1))
+    let range=try #require(NSTextRange(location:start,end:end))
+    layout.ensureLayout(for:range)
+    var y:CGFloat?
+    layout.enumerateTextSegments(in:range,type:.standard,options:[]) { _,rect,_,_ in
+      y=rect.minY+controller.editor.textContainerOrigin.y-controller.scroll.contentView.bounds.minY
+      return false
+    }
+    return try #require(y)
+  }
+
+  @Test func selectionHighlightNeverEditsStorageOrMovesViewport() async throws {
+    let doc=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Stable matches")
+    doc.server.online=false
+    doc.sql=String(repeating:"SELECT Customer_Name, Customer_ID; -- İstanbul 😀\n",count:120)
+    let controller=EditorController(document:doc)
+    let window=NSWindow(contentRect:NSRect(x:0,y:0,width:800,height:320),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=controller.surface
+    defer {window.close()}
+    controller.surface.layoutSubtreeIfNeeded();controller.resizeToViewport()
+    try await Task.sleep(for:.milliseconds(400))
+    controller.scroll.contentView.scroll(to:NSPoint(x:0,y:800))
+    let origin=controller.scroll.contentView.bounds.origin
+    let storage=try #require(controller.editor.textContentStorage?.textStorage)
+    let counter=EditorStorageChanges()
+    NotificationCenter.default.addObserver(counter,selector:#selector(EditorStorageChanges.changed(_:)),name:NSTextStorage.didProcessEditingNotification,object:storage)
+    defer {NotificationCenter.default.removeObserver(counter)}
+    let original=NSAttributedString(attributedString:storage)
+    let source=doc.sql as NSString
+    for word in ["Customer_Name","Customer_","Customer_ID"] {
+      controller.editor.setSelectedRange(source.range(of:word,options:[],range:NSRange(location:2100,length:source.length-2100)))
+      controller.updateOccurrences()
+      try await Task.sleep(for:.milliseconds(350))
+      #expect(controller.occurrenceRanges.count == (word == "Customer_" ? 240 : 120))
+      #expect(controller.scroll.contentView.bounds.origin == origin)
+      #expect(!controller.occurrenceHighlights.highlightRects(in:controller.occurrenceHighlights.bounds).isEmpty)
+      #expect(controller.occurrenceHighlights.hitTest(.zero) == nil)
+      #expect(controller.occurrenceHighlights.frame == controller.scroll.contentView.bounds)
+    }
+    controller.editor.setSelectedRange(NSRange(location:2100,length:0));controller.updateOccurrences()
+    #expect(counter.count == 0)
+    #expect(storage.isEqual(to:original))
+    #expect(controller.editor.textLayoutManager != nil && controller.editor.string == doc.sql)
+    #expect(controller.editor.undoManager?.canUndo != true)
+  }
+
+  @Test func repeatedEndOfDocumentFoldsKeepActualHeaderPositionAfterLayoutSettles() async throws {
+    let doc=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Stable fold")
+    doc.server.online=false
+    doc.sql=String(repeating:"SELECT 0;\n",count:1200)+"IF 1=1\nBEGIN\n"+String(repeating:" SELECT N'İstanbul 😀';\n",count:120)+"END"
+    let controller=EditorController(document:doc)
+    let window=NSWindow(contentRect:NSRect(x:0,y:0,width:800,height:320),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=controller.surface
+    defer {window.close()}
+    controller.surface.layoutSubtreeIfNeeded();controller.resizeToViewport()
+    let region=try #require(controller.regions.first)
+    let content=try #require(controller.editor.textContentStorage)
+    controller.editor.textLayoutManager?.ensureLayout(for:content.documentRange)
+    let headerDocumentY=try lineScreenY(controller,offset:region.header.location)+controller.scroll.contentView.bounds.minY
+    controller.scroll.contentView.scroll(to:NSPoint(x:0,y:headerDocumentY-140))
+    let before=try lineScreenY(controller,offset:region.header.location)
+    #expect(before >= 0)
+    #expect(before < 320, "headerY=\(before), scrollY=\(controller.scroll.contentView.bounds.minY), height=\(controller.editor.frame.height)")
+    controller.editor.setSelectedRange(NSRange(location:region.hidden.location+10,length:0))
+    for _ in 0..<4 {
+      controller.toggleFold(region)
+      try await Task.sleep(for:.milliseconds(100))
+      controller.resizeToViewport()
+      #expect(abs(try lineScreenY(controller,offset:region.header.location)-before) < 1)
+      #expect(controller.editor.selectedRange() == NSRange(location:region.header.location,length:0))
+      controller.toggleFold(region)
+      try await Task.sleep(for:.milliseconds(350))
+      controller.resizeToViewport()
+      #expect(abs(try lineScreenY(controller,offset:region.header.location)-before) < 1)
+      #expect(controller.editor.string == doc.sql)
+    }
+    #expect(controller.editor.undoManager?.canUndo != true)
+    let bodyOffset=region.hidden.location+1000
+    controller.editor.setSelectedRange(NSRange(location:bodyOffset,length:0))
+    let bodyY=try lineScreenY(controller,offset:bodyOffset)+controller.scroll.contentView.bounds.minY
+    controller.scroll.contentView.scroll(to:NSPoint(x:0,y:bodyY-80))
+    controller.toggleCurrentFold()
+    let revealedY=try lineScreenY(controller,offset:region.header.location)
+    #expect(revealedY >= 0 && revealedY < controller.scroll.contentView.bounds.height)
+    #expect(controller.collapsedMarkers.first?.region == region)
+  }
+
+  @Test func expandAllKeepsVisibleSourceLineAndHorizontalScroll() throws {
+    let doc=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Expand anchor")
+    doc.server.online=false
+    doc.sql="IF 1=1\nBEGIN\n SELECT N'"+String(repeating:"wide",count:100)+"';\n"+String(repeating:" SELECT 1;\n",count:80)+"END\n"+String(repeating:"SELECT N'visible';\n",count:80)
+    let controller=EditorController(document:doc)
+    let window=NSWindow(contentRect:NSRect(x:0,y:0,width:800,height:320),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=controller.surface;defer {window.close()}
+    controller.surface.layoutSubtreeIfNeeded();controller.resizeToViewport()
+    let region=try #require(controller.regions.first)
+    controller.scroll.contentView.scroll(to:NSPoint(x:160,y:0))
+    let x=controller.scroll.contentView.bounds.minX
+    controller.toggleFold(region)
+    #expect(controller.scroll.contentView.bounds.minX == x)
+    let folded=controller.editor.string as NSString
+    let markerOffset=folded.range(of:"SELECT N'visible'").location
+    let markerY=try lineScreenY(controller,offset:markerOffset)+controller.scroll.contentView.bounds.minY
+    controller.scroll.contentView.scroll(to:NSPoint(x:x,y:markerY+240))
+    let before=try lineScreenY(controller,offset:markerOffset)
+    controller.expandAll()
+    let sourceOffset=(doc.sql as NSString).range(of:"SELECT N'visible'").location
+    #expect(abs(try lineScreenY(controller,offset:sourceOffset)-before) < 1)
+    #expect(controller.scroll.contentView.bounds.minX == x)
+    #expect(controller.editor.string == doc.sql)
+  }
+
   @Test func finalMouseSelectionRestoresSQLPrefixesWithoutExpandingMultipleWords() {
     let editor=SQLTextView(usingTextLayoutManager:true)
     editor.string="SELECT @STOK_KODU, @@ROWCOUNT, #Temp, @şehir; SELECT @STOK_KODU;"
@@ -76,12 +197,14 @@ import Testing
     #expect(controller.editor.selectedRange() == chosen)
     #expect(doc.sql == source as String)
     let storage=try #require(controller.editor.textContentStorage?.textStorage)
-    for match in controller.occurrenceRanges {#expect(storage.attribute(.backgroundColor,at:match.location,effectiveRange:nil) != nil)}
+    #expect(controller.occurrenceHighlights.ranges == controller.occurrenceRanges)
+    #expect(storage.attribute(.backgroundColor,at:chosen.location,effectiveRange:nil) == nil)
     #expect(controller.editor.undoManager?.canUndo != true)
     controller.editor.setSelectedRange(NSRange(location:0,length:0))
     try await Task.sleep(for:.milliseconds(140))
     #expect(controller.occurrenceRanges.isEmpty)
     #expect(storage.attribute(.backgroundColor,at:chosen.location,effectiveRange:nil) == nil)
+    #expect(controller.occurrenceHighlights.ranges.isEmpty)
   }
   @Test func conditionAndElseFoldsHaveShadedMarkersAndUnchangedHostRefreshKeepsState() throws {
     let doc=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"IF folds")

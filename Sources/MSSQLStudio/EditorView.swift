@@ -57,6 +57,36 @@ import SQLServerKit
     return rect
   }
 }
+/// A mouse-transparent decoration above the native text layers. Selection matches
+/// must not edit text attributes or invalidate TextKit's cached paragraph fragments.
+@MainActor final class OccurrenceHighlights: NSView {
+  weak var editor: NSTextView?
+  var ranges:[NSRange]=[] {didSet {if oldValue != ranges {needsDisplay=true}}}
+  override var isFlipped: Bool {true}
+  override func hitTest(_ point:NSPoint) -> NSView? {nil}
+  func highlightRects(in dirtyRect:NSRect) -> [NSRect] {
+    guard let editor,let content=editor.textContentStorage,let layout=editor.textLayoutManager else {return []}
+    var rects:[NSRect]=[]
+    let viewport=layout.textViewportLayoutController.viewportRange
+    for range in ranges where range != editor.selectedRange() {
+      guard NSMaxRange(range) <= (content.textStorage?.length ?? 0),
+        let start=content.location(content.documentRange.location,offsetBy:range.location),
+        let end=content.location(start,offsetBy:range.length),
+        let textRange=NSTextRange(location:start,end:end),
+        viewport == nil || viewport!.intersects(textRange) else {continue}
+      layout.enumerateTextSegments(in:textRange,type:.standard,options:[]) { _,rect,_,_ in
+        let frame=self.convert(rect.offsetBy(dx:editor.textContainerOrigin.x,dy:editor.textContainerOrigin.y),from:editor)
+        if frame.intersects(dirtyRect) {rects.append(frame)}
+        return true
+      }
+    }
+    return rects
+  }
+  override func draw(_ dirtyRect:NSRect) {
+    NSColor.systemYellow.withAlphaComponent(0.25).setFill()
+    for rect in highlightRects(in:dirtyRect) {NSBezierPath(roundedRect:rect,xRadius:2,yRadius:2).fill()}
+  }
+}
 @MainActor enum SQLEditorPreferences {
   static let completionDelayKey = "sqlCompletionDelayMilliseconds"
   static let defaultCompletionDelay = 260
@@ -232,6 +262,7 @@ import SQLServerKit
   var lineNumber: ((Int) -> Int)?
   var foldRegions: (() -> [SQLFolding.Region])?
   var collapsed: ((SQLFolding.Region) -> Bool)?
+  var lastToggled: ((SQLFolding.Region) -> Bool)?
   var toggle: ((SQLFolding.Region) -> Void)?
   var selectLine: ((NSRange) -> Void)?
   private var hits: [(CGFloat, NSRange, SQLFolding.Region?)] = []
@@ -330,6 +361,10 @@ import SQLServerKit
         let top = baseline-font.ascender
         hits.append((top,originalLine,region))
         if let region {
+          if lastToggled?(region) == true {
+            NSColor.controlAccentColor.setFill()
+            NSBezierPath(roundedRect:NSRect(x:ruleThickness-3,y:top,width:3,height:18),xRadius:1.5,yRadius:1.5).fill()
+          }
           addToolTip(NSRect(x:ruleThickness-20,y:top,width:20,height:18),owner:self,userData:nil)
           let isCollapsed=collapsed?(region) == true
           let box=NSRect(x:ruleThickness-18,y:top+2,width:13,height:13)
@@ -363,6 +398,7 @@ import SQLServerKit
   let surface = NSView()
   let scroll = SQLEditorScrollView()
   let editor = SQLTextView(usingTextLayoutManager: true)
+  let occurrenceHighlights = OccurrenceHighlights()
   private let ruler: LineNumbers
   private let document: QueryDocument
   var edited: (() -> Void)?
@@ -376,11 +412,14 @@ import SQLServerKit
   private var analysisSource = ""
   private var cachedTokens: [Lexeme]?
   private var cachedTokenSource = ""
+  private var highlightedSource: String?
+  private var highlightedDiagnostics: [SQLIntelligence.Diagnostic] = []
   private(set) var diagnostics: [SQLIntelligence.Diagnostic] = []
   private var suppressNextPopup = false
   private var initializedText = false
   private(set) var regions: [SQLFolding.Region] = []
   private var folded: [SQLFolding.Region] = []
+  private var lastToggledFold: SQLFolding.Region?
   private var projection: SQLFolding.Projection?
   private var changingPresentation = false
   private var lineStarts = [0]
@@ -429,7 +468,9 @@ import SQLServerKit
       .font: editor.font!, .paragraphStyle: paragraph, .foregroundColor: StudioTheme.editorText,
     ]
     editor.textContainerInset = NSSize(width: 8, height: 8)
-    editor.isVerticallyResizable = true
+    // Frame geometry is explicit: lazy TextKit estimates must not shrink the scroll
+    // range after a fold and move the line the user just clicked.
+    editor.isVerticallyResizable = false
     editor.isHorizontallyResizable = false
     editor.frame = NSRect(x: 0, y: 0, width: 900, height: 400)
     editor.minSize = NSSize(width: 100, height: 100)
@@ -449,6 +490,12 @@ import SQLServerKit
     editor.run = { [weak document] in document?.execute() }
     editor.setAccessibilityIdentifier("sqlEditor")
     scroll.documentView = editor
+    occurrenceHighlights.editor=editor
+    occurrenceHighlights.frame=scroll.contentView.bounds
+    occurrenceHighlights.wantsLayer=true
+    occurrenceHighlights.setAccessibilityElement(false)
+    // Keep the backing layer viewport-sized even for very long documents.
+    scroll.contentView.addSubview(occurrenceHighlights)
     ruler.wantsLayer = true
     ruler.clipsToBounds = true
     ruler.layer?.masksToBounds = true
@@ -468,6 +515,7 @@ import SQLServerKit
     ruler.sourceOffset = { [weak self] in self?.projection?.sourceOffset($0) ?? $0 }
     ruler.foldRegions = { [weak self] in self?.regions ?? [] }
     ruler.collapsed = { [weak self] region in self?.folded.contains(region) == true }
+    ruler.lastToggled = { [weak self] in self?.lastToggledFold == $0 }
     ruler.toggle = { [weak self] in self?.toggleFold($0) }
     ruler.selectLine = { [weak self] in self?.selectSourceLine($0) }
     suggestionPopover.contentViewController = suggestionList
@@ -519,6 +567,7 @@ import SQLServerKit
     }
   }
   @objc func applyTheme() {
+    highlightedSource = nil
     editor.backgroundColor = StudioTheme.editorCanvas
     editor.textColor = StudioTheme.editorText
     editor.insertionPointColor = StudioTheme.editorText
@@ -534,7 +583,7 @@ import SQLServerKit
   func resizeToViewport() {
     scroll.tile()
     let metrics: [NSAttributedString.Key:Any] = [.font:editor.font ?? StudioTheme.codeFont,.paragraphStyle:Self.codeParagraph()]
-    let longest = editor.string.components(separatedBy:"\n").map { ($0 as NSString).size(withAttributes:metrics).width }.max() ?? 0
+    let longest = document.sql.components(separatedBy:"\n").map { ($0 as NSString).size(withAttributes:metrics).width }.max() ?? 0
     let textWidth = ceil(longest) + editor.textContainerInset.width * 2 + 10
     let horizontal = textWidth > scroll.contentView.bounds.width + 1
     (scroll.contentView as? SQLClipView)?.allowsHorizontalMovement = horizontal
@@ -544,12 +593,17 @@ import SQLServerKit
     if editor.textContainer?.containerSize.width != containerWidth {
       editor.textContainer?.containerSize = NSSize(width:containerWidth,height:CGFloat.greatestFiniteMagnitude)
     }
-    let measuredHeight =
-      (editor.textLayoutManager?.usageBoundsForTextContainer.maxY ?? 0) + editor.textContainerInset
-      .height * 2
-    let height = max(
-      scroll.contentView.bounds.height,
-      max(measuredHeight, CGFloat(editor.string.filter { $0 == "\n" }.count + 1) * 18 + 20))
+    // Resolve bounded documents before using TextKit's height: its lazy estimates
+    // change as paragraphs enter the viewport. Font leading can exceed the configured
+    // paragraph height, so counting lines is not an accurate scroll geometry.
+    if editor.string.utf16.count <= 250_000,let content=editor.textContentStorage {
+      editor.textLayoutManager?.ensureLayout(for:content.documentRange)
+    }
+    let lineCount=editor.string.utf16.reduce(1) {$1 == 10 ? $0+1 : $0}
+    let measuredHeight=editor.textLayoutManager?.usageBoundsForTextContainer.maxY ?? 0
+    let textHeight=max(measuredHeight,CGFloat(lineCount)*18)+editor.textContainerInset.height*2
+    // Trailing space lets the final fold header stay under the pointer near EOF.
+    let height=max(scroll.contentView.bounds.height,textHeight+scroll.contentView.bounds.height)
     if editor.frame.size != NSSize(width: width, height: height) {
       editor.setFrameSize(NSSize(width: width, height: height))
       editor.needsDisplay = true
@@ -558,6 +612,8 @@ import SQLServerKit
       scroll.contentView.scroll(to: NSPoint(x: 0, y: scroll.contentView.bounds.origin.y))
       scroll.reflectScrolledClipView(scroll.contentView)
     }
+    occurrenceHighlights.frame=scroll.contentView.bounds
+    occurrenceHighlights.needsDisplay=true
   }
   func replaceText(_ text: String) {
     editor.insertText(
@@ -566,6 +622,8 @@ import SQLServerKit
   }
   @objc private func scrolled() {
     let clip = scroll.contentView
+    occurrenceHighlights.frame=clip.bounds
+    occurrenceHighlights.needsDisplay=true
     if editor.frame.width <= clip.bounds.width + 1 && abs(clip.bounds.origin.x) > 0.5 {
       clip.scroll(to:NSPoint(x:0,y:clip.bounds.origin.y))
       scroll.reflectScrolledClipView(clip)
@@ -575,8 +633,8 @@ import SQLServerKit
   func setText() {
     // A host refresh is not a request to unfold or replace an unchanged document.
     if initializedText && document.sql == (projection?.source ?? editor.string) { return }
-    occurrenceTask?.cancel(); occurrenceRanges=[]
-    folded.removeAll(); projection = nil;collapsedMarkers=[]
+    occurrenceTask?.cancel(); clearOccurrences(); highlightedSource=nil
+    folded.removeAll(); projection = nil;collapsedMarkers=[];lastToggledFold=nil
     // Even an empty initial document must initialize NSTextView's text input/layout state.
     // Skipping the first assignment leaves a fresh blank TextKit 2 view without a click target.
     if editor.string != document.sql || !initializedText {
@@ -595,7 +653,9 @@ import SQLServerKit
   }
   func textDidChange(_ notification: Notification) {
     guard !changingPresentation else { return }
+    clearOccurrences()
     document.sql = editor.string
+    lastToggledFold=nil
     updateOutline(refreshRegions:false)
     regions = []
     resizeToViewport()
@@ -606,7 +666,7 @@ import SQLServerKit
     suppressNextPopup = false
   }
   func textViewDidChangeSelection(_ notification: Notification) {
-    guard !paintingOccurrences else {return}
+    guard !paintingOccurrences, !changingPresentation else {return}
     let range = editor.selectedRange()
     occurrenceTask?.cancel()
     let selectedSource=editor.string
@@ -625,35 +685,38 @@ import SQLServerKit
   }
   private var paintingOccurrences = false
   private(set) var occurrenceRanges: [NSRange] = []
+  private func textRange(_ range: NSRange) -> NSTextRange? {
+    guard let content=editor.textContentStorage, range.location != NSNotFound,
+      NSMaxRange(range) <= (content.textStorage?.length ?? 0),
+      let start=content.location(content.documentRange.location,offsetBy:range.location),
+      let end=content.location(start,offsetBy:range.length) else {return nil}
+    return NSTextRange(location:start,end:end)
+  }
+  private func clearOccurrences() {
+    occurrenceRanges=[]
+    occurrenceHighlights.ranges=[]
+  }
   func updateOccurrences() {
-    guard !paintingOccurrences,!editor.trackingMouseSelection, let storage = editor.textContentStorage?.textStorage else { return }
-    paintingOccurrences = true; defer { paintingOccurrences = false }
-    let source = editor.string as NSString, range = editor.selectedRange()
-    var updatedRanges: [NSRange] = []
-    if source.length <= 250_000, range.length > 0, range.length <= 256, NSMaxRange(range) <= source.length {
-      let selected = source.substring(with:range)
-      if !selected.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty, !selected.contains("\n") {
-        var start = 0
-        while start < source.length, updatedRanges.count < 500 {
-          let found = source.range(of:selected,options:[.caseInsensitive,.literal],range:NSRange(location:start,length:source.length-start))
-          if found.location == NSNotFound { break }
-          updatedRanges.append(found); start = NSMaxRange(found)
+    guard !paintingOccurrences,!editor.trackingMouseSelection else {return}
+    paintingOccurrences=true;defer {paintingOccurrences=false}
+    let source=editor.string as NSString,range=editor.selectedRange()
+    var updatedRanges:[NSRange]=[]
+    if source.length <= 250_000,range.length > 0,range.length <= 256,NSMaxRange(range) <= source.length {
+      let selected=source.substring(with:range)
+      if !selected.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,!selected.contains("\n") {
+        var start=0
+        while start < source.length,updatedRanges.count < 500 {
+          let found=source.range(of:selected,options:[.caseInsensitive,.literal],range:NSRange(location:start,length:source.length-start))
+          if found.location == NSNotFound {break}
+          updatedRanges.append(found);start=NSMaxRange(found)
         }
       }
     }
-    let removedRanges = occurrenceRanges.filter { !updatedRanges.contains($0) }
-    let addedRanges = updatedRanges.filter { !occurrenceRanges.contains($0) }
-    guard !removedRanges.isEmpty || !addedRanges.isEmpty else { return }
-    let selection=editor.selectedRanges
-    storage.beginEditing()
-    for old in removedRanges where NSMaxRange(old) <= storage.length { storage.removeAttribute(.backgroundColor,range:old) }
-    for added in addedRanges where NSMaxRange(added) <= storage.length {
-      storage.addAttribute(.backgroundColor,value:NSColor.systemYellow.withAlphaComponent(0.34),range:added)
-    }
-    storage.endEditing()
-    occurrenceRanges = updatedRanges
-    if editor.selectedRanges != selection {editor.selectedRanges=selection}
-    decorateCollapsedRegions()
+    occurrenceRanges=updatedRanges
+    occurrenceHighlights.ranges=updatedRanges
+    // Also repaint when the selected occurrence changes within the same match set.
+    // The selected word keeps its native selection color; the other matches get yellow.
+    occurrenceHighlights.needsDisplay=true
   }
   func navigateDefinition() {
     guard projection == nil, editor.string.utf16.count <= 100_000, let catalog = document.intelligenceCatalog, document.catalogDatabase == document.database else { return }
@@ -679,29 +742,54 @@ import SQLServerKit
   }
   func toggleFold(_ region: SQLFolding.Region) {
     guard regions.contains(region) else {return}
+    lastToggledFold=region
     var selection = projection?.sourceRange(editor.selectedRange()) ?? editor.selectedRange()
     if projection != nil,let marker=collapsedMarkers.first(where:{$0.region == region}),NSIntersectionRange(editor.selectedRange(),marker.range).length > 0 {
       // Expanding an ellipsis must not turn its small visual selection into a whole block selection.
       selection=NSRange(location:region.header.location,length:0)
     }
     let displayHeader=projection?.displayOffset(region.header.location) ?? region.header.location
-    let oldTop=displayLineTop(displayHeader)
-    let anchorY=oldTop.map {$0-scroll.contentView.bounds.minY}
-    if let index = folded.firstIndex(of:region) { folded.remove(at:index) } else { folded.append(region) }
-    presentFolds(selection:selection)
-    if let anchorY,let top=displayLineTop(projection?.displayOffset(region.header.location) ?? region.header.location) {
-      let desiredY=max(0,top-max(0,anchorY))
-      scroll.contentView.scroll(to:NSPoint(x:scroll.contentView.bounds.minX,y:desiredY))
-      scroll.reflectScrolledClipView(scroll.contentView);ruler.needsDisplay=true
+    let oldOrigin=scroll.contentView.bounds.origin
+    // Keyboard folding can target a block whose header is above the viewport.
+    // Reveal that header; a visible gutter click keeps its exact screen position.
+    let anchorY=max(0,min(displayLineTop(displayHeader)-oldOrigin.y,scroll.contentView.bounds.height-24))
+    if let index=folded.firstIndex(of:region) {folded.remove(at:index)} else {
+      folded.append(region)
+      if NSIntersectionRange(selection,region.hidden).length > 0 ||
+        (selection.length == 0 && NSLocationInRange(selection.location,region.hidden)) {
+        selection=NSRange(location:region.header.location,length:0)
+      }
     }
+    presentFolds(selection:selection)
+    let header=projection?.displayOffset(region.header.location) ?? region.header.location
+    restoreViewport(NSPoint(x:oldOrigin.x,y:max(0,displayLineTop(header)-anchorY)))
   }
-  private func displayLineTop(_ offset:Int) -> CGFloat? {
-    guard let content=editor.textContentStorage,let layout=editor.textLayoutManager,
-      let location=content.location(content.documentRange.location,offsetBy:offset),let range=NSTextRange(location:location,end:location) else {return nil}
+  private func displayLineTop(_ offset:Int) -> CGFloat {
+    guard let range=textRange(NSRange(location:offset,length:0)),let layout=editor.textLayoutManager else {return 0}
     layout.ensureLayout(for:range)
-    var top:CGFloat?
-    layout.enumerateTextSegments(in:range,type:.selection,options:[]) { _,rect,_,_ in top=rect.minY+self.editor.textContainerOrigin.y;return false }
+    var top:CGFloat=0
+    layout.enumerateTextSegments(in:range,type:.selection,options:[]) { _,rect,_,_ in
+      top=rect.minY+self.editor.textContainerOrigin.y;return false
+    }
     return top
+  }
+  private func viewportDisplayAnchor() -> Int {
+    guard let content=editor.textContentStorage,let layout=editor.textLayoutManager else {return 0}
+    var offset=editor.string.utf16.count
+    layout.enumerateTextLayoutFragments(from:content.documentRange.location,options:[.ensuresLayout]) { fragment in
+      if fragment.layoutFragmentFrame.maxY+self.editor.textContainerOrigin.y >= self.scroll.contentView.bounds.minY {
+        offset=content.offset(from:content.documentRange.location,to:fragment.rangeInElement.location)
+        return false
+      }
+      return true
+    }
+    return offset
+  }
+  private func restoreViewport(_ origin:NSPoint) {
+    scroll.contentView.scroll(to:origin)
+    scroll.reflectScrolledClipView(scroll.contentView)
+    editor.textLayoutManager?.textViewportLayoutController.layoutViewport()
+    ruler.needsDisplay=true
   }
   private(set) var collapsedMarkers:[(region:SQLFolding.Region,range:NSRange)]=[]
   private func decorateCollapsedRegions() {
@@ -709,38 +797,62 @@ import SQLServerKit
     let source=document.sql as NSString
     for marker in collapsedMarkers where NSMaxRange(marker.range) <= storage.length {
       let region=marker.region,preview=NSRange(location:region.header.location,length:min(4000,NSMaxRange(region.hidden)-region.header.location))
-      storage.addAttributes([.backgroundColor:NSColor.controlAccentColor.withAlphaComponent(0.16),.foregroundColor:NSColor.secondaryLabelColor,.toolTip:"Katlanmış blok · Çift tık veya + ile aç (⌥⌘[)\n"+source.substring(with:preview)],range:marker.range)
+      storage.addAttributes([.backgroundColor:NSColor.controlAccentColor.withAlphaComponent(0.16),.foregroundColor:NSColor.secondaryLabelColor,.toolTip:"Katlanmış blok · \(source.substring(with:region.hidden).utf16.filter {$0 == 10}.count) satır gizli · Çift tık veya + ile aç (⌥⌘[)\n"+source.substring(with:preview)],range:marker.range)
     }
   }
   func expandAll() {
     guard projection != nil else { return }
     let selection = projection!.sourceRange(editor.selectedRange())
-    folded.removeAll(); presentFolds(selection:selection)
+    let oldOrigin=scroll.contentView.bounds.origin
+    let offset=viewportDisplayAnchor()
+    let sourceAnchor=projection!.sourceOffset(offset)
+    let relativeY=displayLineTop(offset)-oldOrigin.y
+    folded.removeAll();presentFolds(selection:selection)
+    restoreViewport(NSPoint(x:oldOrigin.x,y:max(0,displayLineTop(sourceAnchor)-relativeY)))
   }
   private func presentFolds(selection: NSRange) {
-    intelligenceTask?.cancel();occurrenceTask?.cancel();occurrenceRanges=[]; suggestionPopover.close(); diagnostics = []
+    intelligenceTask?.cancel();occurrenceTask?.cancel();clearOccurrences();highlightedSource=nil; suggestionPopover.close(); diagnostics = []
     changingPresentation = true
+    defer {changingPresentation=false; textViewDidChangeSelection(Notification(name:NSTextView.didChangeSelectionNotification,object:editor))}
+    if let storage=editor.textContentStorage?.textStorage {
+      storage.beginEditing()
+      for marker in collapsedMarkers where NSMaxRange(marker.range) <= storage.length {
+        storage.removeAttribute(.backgroundColor,range:marker.range)
+        storage.removeAttribute(.toolTip,range:marker.range)
+      }
+      storage.endEditing()
+    }
     projection = folded.isEmpty ? nil : SQLFolding.Projection(source:document.sql,collapsed:folded)
     collapsedMarkers=projection?.regions.map {($0,NSRange(location:projection!.displayOffset($0.hidden.location),length:2))} ?? []
-    editor.string = projection?.text ?? document.sql
-    if let storage = editor.textContentStorage?.textStorage {
-      storage.removeAttribute(.backgroundColor,range:NSRange(location:0,length:storage.length))
-      storage.addAttributes([.font:StudioTheme.codeFont,.paragraphStyle:Self.codeParagraph(),.foregroundColor:StudioTheme.editorText],range:NSRange(location:0,length:storage.length))
+    let presented=projection?.text ?? document.sql
+    // Replace only the changed span. Reassigning .string destroys every paragraph
+    // and its viewport fragments, even those above the block being toggled.
+    if let content=editor.textContentStorage,let storage=content.textStorage {
+      let old=Array(editor.string.utf16),new=Array(presented.utf16)
+      var prefix=0,suffix=0
+      while prefix < min(old.count,new.count),old[prefix] == new[prefix] {prefix+=1}
+      if prefix > 0,prefix < old.count,(0xDC00...0xDFFF).contains(old[prefix]) {prefix-=1}
+      while suffix < min(old.count,new.count)-prefix,old[old.count-1-suffix] == new[new.count-1-suffix] {suffix+=1}
+      if suffix > 0,(0xDC00...0xDFFF).contains(old[old.count-suffix]) {suffix-=1}
+      let replacement=(presented as NSString).substring(with:NSRange(location:prefix,length:new.count-prefix-suffix))
+      content.performEditingTransaction {
+        storage.replaceCharacters(in:NSRange(location:prefix,length:old.count-prefix-suffix),
+          with:NSAttributedString(string:replacement,attributes:[.font:StudioTheme.codeFont,
+            .paragraphStyle:Self.codeParagraph(),.foregroundColor:StudioTheme.editorText]))
+      }
     }
     let start = projection?.displayOffset(selection.location) ?? selection.location
     let end = projection?.displayOffset(NSMaxRange(selection)) ?? NSMaxRange(selection)
     editor.setSelectedRange(NSRange(location:start,length:max(0,end-start)))
-    changingPresentation = false
-    highlight(); resizeToViewport(); ruler.needsDisplay = true
+    highlight(); resizeToViewport()
+    // Fold projections are capped at 250k UTF-16 units. Resolve their layout before
+    // restoring the anchor, rather than letting estimates correct it a frame later.
+    if let content=editor.textContentStorage {editor.textLayoutManager?.ensureLayout(for:content.documentRange)}
+    ruler.needsDisplay = true
     if projection == nil { scheduleIntelligence(allowPopup:false) }
   }
   func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
-    if !occurrenceRanges.isEmpty, let storage = editor.textContentStorage?.textStorage {
-      paintingOccurrences = true
-      storage.beginEditing()
-      for range in occurrenceRanges where NSMaxRange(range) <= storage.length { storage.removeAttribute(.backgroundColor,range:range) }
-      occurrenceRanges = []; storage.endEditing(); paintingOccurrences = false
-    }
+    clearOccurrences()
     editor.typingAttributes.removeValue(forKey:.backgroundColor)
     guard let projection else { return true }
     let range = projection.sourceRange(affectedCharRange)
@@ -840,6 +952,9 @@ import SQLServerKit
   private func highlight() {
     guard let storage = editor.textContentStorage?.textStorage else { return }
     let source = editor.string
+    let activeDiagnostics = cachedTokenSource == source && projection == nil ? diagnostics : []
+    guard highlightedSource != source || highlightedDiagnostics != activeDiagnostics else {return}
+    highlightedSource=source;highlightedDiagnostics=activeDiagnostics
     let tokens = cachedTokenSource == source ? cachedTokens ?? [] : source.utf16.count <= 250_000 ? TSQL.lex(source) : []
     var changes: [(NSRange,NSColor)] = []
     func collect(_ range: NSRange, color: NSColor) {

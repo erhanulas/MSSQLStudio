@@ -4,9 +4,11 @@
 
 ## Başlatma
 
+**SQL editörü (0.2.35):** IF/BEGIN bloklarını açıp kapatırken başlık ekrandaki yerini korur. Son değiştirilen bloğun yanında ince bir vurgu çizgisi görünür; katlanmış bloğun açıklaması gizlenen satır sayısını gösterir. Dosyanın sonunda kaydırma payı vardır; büyük bir blok kapatılınca görünüm yukarı sıçramaz. Tüm blokları açma görünür kaynak satırını, katlama yatay kaydırma konumunu korur. Kelime eşleşmeleri metin özelliklerini değiştirmeyen, fare olaylarını engellemeyen ayrı bir çizim katmanında gösterilir; seçili kelime native seçim rengini korur.
+
 **SQL editörü (0.2.33–0.2.34):** Nesne düzenleme sekmesindeki **Farkları Gör** artık yan yana iki panel simgesidir; üzerine gelince adı görünür ve erişilebilirlik etiketi korunur. Editör araç çubuğundaki **DB’ye Uygula…** düğmesi kaldırıldı. Fark penceresi karşılaştırma amaçlıdır; SQL çalıştırmak için mevcut sorgu çalıştırma komutları kullanılır. Metin eşleşmesi vurguları yalnızca değişiklik olduğunda yeniden çizilir.
 
-`releases/MSSQLStudio-0.2.34.pkg` kurulum paketini açın. Açık sorgularınızı kaydedip uygulamayı kapatın; paket ana `/Applications/MSSQLStudio.app` konumuna kurar/günceller. Bu Mac'te gereken unixODBC, Microsoft ODBC 18 ve OpenSSL 3 kurulu. Uygulama bu yerel kurulumları kullanır; sürücüyü paket içinde dağıtmaz. Başka bir Mac için [Microsoft'un macOS kurulum yönergesini](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos) izleyin ve `/opt/homebrew/opt/openssl@3/lib` yolunu sağlayın.
+`releases/MSSQLStudio-0.2.35.pkg` kurulum paketini açın. Açık sorgularınızı kaydedip uygulamayı kapatın; paket ana `/Applications/MSSQLStudio.app` konumuna kurar/günceller. Bu Mac'te gereken unixODBC, Microsoft ODBC 18 ve OpenSSL 3 kurulu. Uygulama bu yerel kurulumları kullanır; sürücüyü paket içinde dağıtmaz. Başka bir Mac için [Microsoft'un macOS kurulum yönergesini](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos) izleyin ve `/opt/homebrew/opt/openssl@3/lib` yolunu sağlayın.
 
 1. Sunucu ve parolayı girip **Bağlantıyı Test Et ve Listele** düğmesine basın; yerel test adresi `localhost`, port `1433`. Başarılı testten sonra erişebildiğiniz veritabanları otomatik yüklenir. Görmek istediklerinizi işaretleyip yeni sorguların varsayılanını satırdaki yıldızla belirleyin; ardından **Bağlan** düğmesine basın. Yeni bağlantıda hiçbiri otomatik seçilmez; en az bir seçim gerekir. Parola kaynak kodunda veya örneklerde yoktur.
 2. Yerel kendinden imzalı sertifika için onaylanan **Trust server certificate** seçeneği kullanılabilir. Şifreleme her zaman açık; bu seçenek yeni bağlantılarda varsayılan olarak kapalı.
@@ -176,7 +178,20 @@ Tablo CREATE çıktısı standart rowstore kolonlarını, named default, identit
 
 ## Derleme ve test
 
-`MSSQLStudio.xcodeproj` → **MSSQLStudio** scheme → Run. Shared scheme OpenSSL 3 yolunu yalnızca uygulama sürecine ekler. `scripts/build-app.sh` Release derlemesi, ad-hoc imza doğrulaması ve ZIP oluşturur. Sistem OpenSSL bağlantıları değiştirilmez.
+`MSSQLStudio.xcodeproj` → **MSSQLStudio** scheme → Run. Shared scheme OpenSSL 3 yolunu yalnızca uygulama sürecine ekler. `scripts/build-app.sh` Release derlemesi, kalıcı kişisel imza doğrulaması, ZIP ve PKG oluşturur; depoda tanımlanan imzalama kimliğinin yerel Keychain'de bulunması gerekir. Sistem OpenSSL bağlantıları değiştirilmez.
+
+10 Ekim 2026 tarihinde geliştirme başlangıcı GitHub'daki son yayın `v0.2.34` / `822c36f4c7922ff780400f7e72b0808f22dddd44` olarak doğrulandı. Yerel çalışma dalı `codex/continue-v0.2.34`. Başlangıç ve sonraki değişikliklerin Release derlemesi, otomatik testleri ve yalıtılmış native arayüz kontrolü için [güncel doğrulama kaydına](TEST-REPORT.md) bakın.
+
+İmzalama kimliği kullanmadan geliştirme derlemesini kontrol etmek için:
+
+```sh
+build_dir="$(mktemp -d /tmp/MSSQLStudio-dev.XXXXXX)"
+xcodebuild -project MSSQLStudio.xcodeproj -scheme MSSQLStudio -configuration Release \
+  -derivedDataPath "$build_dir" CODE_SIGNING_ALLOWED=NO build
+./scripts/test.sh
+```
+
+Bu komut dağıtım paketi üretmez. Gerçek yayın ZIP'ini güncelleme/imza testlerine dahil etmek için `scripts/test.sh` çağrısına `MSSQL_UPDATE_ZIP` ortam değişkeniyle ZIP'in yolunu verin; verilmezse ilgili testler doğrulamayı çalıştırmadan döner.
 
 `scripts/verify.py`, yerel geçici AI fixture ve Keychain testiyle tüm doğrulama paketini çalıştırır. `scripts/test.sh` bağımsız testleri çalıştırır. Canlı testler yalnızca `MSSQL_TEST_PASSWORD` ortam değişkeni sağlandığında çalışır; yerel localhost test sunucusunu kullanır. `MSSQL_KEYCHAIN_TEST=1` geçici ve rastgele bir test servisiyle Keychain yaşam döngüsünü sınar. `MSSQL_MOCK_URL` yerel AI HTTP test sunucusunu belirtir. Parolaları komut geçmişi veya dosyalara yazmadan ortamınıza sağlayın.
 

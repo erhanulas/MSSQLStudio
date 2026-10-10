@@ -1,3 +1,35 @@
+# MSSQL Studio 0.2.35 — editörde katlama ve kelime vurgusu
+
+10 Ekim 2026. `v0.2.34` üzerine hazırlanan 0.2.35 / derleme 36. Aşağıdaki sonuçlar yerel geliştirme doğrulamasıdır; kişisel imzalı yayın paketinin derleme ve testleri GitHub Actions tarafından ayrıca yürütülür.
+
+Katlama artık bütün `NSTextView.string` değerini yeniden atamak yerine değişen UTF-16 aralığını güncelliyor. Gizlenen kod, kaynak SQL'de korunuyor. Tam yerleşim hesabı katlamanın desteklendiği 250.000 UTF-16 sınırı içindeki metinlerde tamamlanıyor; başlığın gerçek ekran konumu geri yükleniyor. TextKit'in tahmini kullanım yüksekliğinin sonradan kaydırmayı değiştirmemesi için editör boyutu açıkça yönetiliyor. Satırların gerçek yüksekliği font leading nedeniyle 18 punto paragraf ayarından farklı olabildiğinden konum hesabında satır sayısı çarpımı kullanılmıyor. Dosya sonunda bir görünüm yüksekliği kadar kaydırma payı bulunuyor. Yatay kaydırma, iç içe katlama ve tümünü açarken görünür kaynak satırı korunuyor. Gizlenen alanın içindeki imleç blok başlığına taşınıyor; son değiştirilen başlık gutter'da ince renkli çizgiyle işaretleniyor.
+
+Kelime eşleşmeleri `NSTextStorage` biçim özelliklerine yazılmıyor. Fareyi engellemeyen `OccurrenceHighlights` görünümü mevcut TextKit 2 geometrisi üzerinde sarı işaretleri çiziyor; seçili kelime native seçim rengini koruyor. Kaydırmada görünür eşleşmeler yeniden çiziliyor; metin düzenlendiğinde eski işaretler temizleniyor. Değişmeyen metin/tanı sonuçlarında syntax biçimleri tekrar uygulanmıyor.
+
+**Son doğrulama:** Release derlemesi başarılı. Tüm test çalışması **55 uygulama + 88 çekirdek = 143 test / 27 suite** raporladı: **121 geçti, 22 koşullu test atlandı**. Üç yeni regresyon; (1) seçim/vurgu değişimlerinde sıfır text-storage edit bildirimi, değişmeyen biçim/metin/viewport ve çizilebilir eşleşme geometrisi, (2) 1.200 ön satırdan sonraki büyük IF bloğunun dört aç/kapa döngüsünde gecikmiş layout sonrası gerçek başlık konumunun 1 punto altında farkla korunması, (3) yatay kaydırma ve tümünü açmada görünür kaynak satırının korunması. Mevcut Unicode, iç içe katlama, SQL kaynak eşleme, undo/redo, Bul ve completion testleri de geçti. Önceki aralıklı UI test çökmesi bu çalışmada tekrarlanmadı. Mevcut gutter accessibility/main-actor uyarısı sürüyor.
+
+**Native UI:** Son Release'in ayrı `local.mssqlstudio.uitest` bundle kimlikli/ad-hoc imzalı kopyası kullanıldı. Gerçek çift tıklama `Customer_Name` kelimesini seçti; diğer üç kullanım sarı görünürken bütün SQL okunabilir kaldı. Seçim açıkken IF kapatılıp açıldı; başlık aynı konumda, kaynak satır numaraları doğru, seçim aynı kelimede kaldı. Son değiştirilen başlığın çizgisi ve katlanmış marker görüldü. Test sorgusu temizlenip uygulama kapatıldı. Kare bazında yüksek hızlı video/FPS ölçümü yapılmadı.
+
+`releases/MSSQLStudio-editor-onizleme.zip`, bu yalıtılmış ve çevrimdışı oturumla başlayan UI önizlemesini içerir; ZIP yeniden çıkarıldıktan sonra strict/deep ad-hoc imza doğrulaması geçti. Kişisel sertifikalı dağıtım paketi, PKG veya otomatik güncelleme değildir. Kurulu uygulama değiştirilmedi. Canlı SQL/Agent, gerçek AI/Kerberos ve Keychain testleri yürütülmedi. Güncelleyici testleri önceki yayımlanmış kişisel imzalı 0.2.34 ZIP'ini doğruladı; önizleme ZIP'inin yayın imzasını temsil etmez.
+
+Kanıtlar: `Validation/editor-stability-build.log`, `Validation/editor-stability-full-tests.log`, `Validation/editor-stability-tests.log`, `Validation/editor-stability-ui.txt`. Önceki başlangıç doğrulaması aşağıdadır.
+
+# MSSQL Studio 0.2.34 — geliştirme başlangıcı doğrulaması
+
+10 Ekim 2026, Europe/Istanbul. GitHub `releases/latest` yanıtı `erhanulas/MSSQLStudio` deposunda `v0.2.34` sürümünü gösterdi (yayın: 02:16:03). Etiket commit'i `822c36f4c7922ff780400f7e72b0808f22dddd44` yeni yerel kopyaya alındı; çalışma dalı `codex/continue-v0.2.34`. Kontrol anında `origin/main` üzerindeki `3fd4b1b3172a73dd8cdd6de80ef3df6460f90c24` yalnızca yayın sonucu belgesini değiştiriyordu. Başlangıç kodu yayın etiketinde tutuldu.
+
+- Ortam: Apple Silicon, macOS 27.2, Xcode 27.0 (27A266a), Swift 6.4, unixODBC 2.3.14. Microsoft ODBC Driver 18 kaydı ve OpenSSL 3 kütüphanesi mevcut.
+- Kaynaktan Release derlemesi `CODE_SIGNING_ALLOWED=NO` ile başarılı. Derleme çıktısı `/tmp/MSSQLStudio-baseline.wKRJyj/DerivedData` altında; bu geliştirme doğrulaması yeni bir kişisel imzalı yayın değildir.
+- Yayımlanan ZIP indirildi. SHA-256 `44b481b72ad103131a93907f79cc811b98f80fbb50f58c87a03bd2935962f77b`, GitHub varlık özetiyle eşleşti. ZIP açıldıktan sonra `scripts/signing.py verify` sabit kişisel sertifika ve designated requirement denetiminden geçti.
+- `MSSQL_UPDATE_ZIP` bu gerçek ZIP'e yönlendirilerek `scripts/test.sh` bir kez çalıştırıldı: **52 uygulama + 88 çekirdek = 140 test / 27 suite raporlandı; 22 koşullu test atlandı, 118 test geçti.** Gerçek imzalı güncelleme hazırlama ve farklı imzalı paketi reddetme testleri yürütüldü; güncelleme kurulmadı. Ortam gerektiren performans testlerindeki erken dönüşler benchmark doğrulaması sayılmaz.
+- Yerel Release çıktısının farklı bundle ID (`local.mssqlstudio.uitest`) ve ad-hoc imzalı kopyasında native arayüz kontrolü yapıldı. Geçmiş/kurtarma kapalıydı, sentetik çevrimdışı oturum kullanıldı. SQL yazma ve undo/redo sonrasında metin korundu; seçili `BaselineCheck` ile ⌘F iki eşleşme gösterdi. Hakkında penceresi **0.2.34 / derleme 35** ve doğru sürüm notlarını gösterdi. Test metni temizlendi ve test uygulaması kapatıldı. SQL yürütülmedi.
+
+Mevcut `EditorView.swift:225` uyarısı sürüyor: `GutterAction.perform` main actor özelliğine nonisolated erişilebilirlik callback'inden erişiliyor. Derlemeyi engellemedi; bu başlangıç çalışmasında düzeltilmedi. AppIntents bağımlılığı bulunmadığı için metadata çıkarımı atlandı. Önceden kaydedilen `NSTextFinderIndicatorManager` / signal 11 arayüz testi çökmesi bu koşuda tekrarlanmadı; kök nedenin giderildiği iddia edilmez.
+
+Canlı SQL Server/Agent, gerçek AI sağlayıcısı, Kerberos, Keychain yaşam döngüsü, Installer ve performans benchmark'ları bu çalışmada doğrulanmadı. Uygulama kaynakları değiştirilmedi; yalnızca geliştirme ve test belgeleri güncellendi. Yeni sürüm yayımlanmadı.
+
+Kanıtlar: `Validation/baseline-build.log`, `Validation/baseline-tests.log`, `Validation/baseline-context.json`, `Validation/baseline-ui.txt`. `Validation/` yerel ve Git dışında tutulur; `/tmp` çıktıları geçicidir. Aşağıdaki bölümler önceki çalışmaların tarihsel kayıtlarıdır.
+
 # MSSQL Studio 0.2.33 — Editör araç çubuğu — 10 Ekim 2026
 
 Farkları Gör düğmesi erişilebilirlik adı ve tooltip taşıyan bir karşılaştırma ikonuna çevrildi; editör başlığındaki DB’ye Uygula düğmesi kaldırıldı. Mevcut nesne sekmesi görünürlük ve sorgu çalışırken pasif olma davranışı korunur.
