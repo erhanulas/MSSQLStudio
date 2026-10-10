@@ -868,3 +868,10 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Microsoft kaynakları: https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-types-transact-sql ve https://learn.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql (alias tip CONVERT hedefi olamaz).
 - Son test: 79 uygulama + 108 core = 187 test, 164 geçti, 23 dış koşullu test atlandı. `/tmp/mssql-alias-final-tests.log`. Metadata decode/orijinal DDL tipi, alias anahtar UPDATE/eski değer, decimal(28,8), binary hex doğrulama, NULL/INSERT ve grid hücre düzenlenebilirliği sınandı. Bilinmeyen CLR/spatial türlerin salt okunur kalması doğrulandı.
 - Release derlemesi başarılı: `/tmp/mssql-alias-build.log`; `git diff --check` temiz. Kullanıcının gerçek tipi veya canlı DB yazımı test edilmedi; kullanıcı uygulamasına/Keychain’e dokunulmadı. Henüz yayımlanmadı.
+
+
+## 10 Ekim 2026 — v0.2.56 yayın doğrulaması
+
+- Alias veri tipi düzeltmesi v0.2.56 / build 57 olarak yayımlandı: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.56 . Kaynak `ca3a9daf103a7f436996e92e8aa9c422c15b268b`; Actions `38052622305` başarılı (sabit imza/izole Keychain fixture, imzalı uygulama/installer, manifest ve yayın paketi testleri).
+- Public latest v0.2.56; ZIP, PKG ve update.json doğrulandı. İndirilen ZIP SHA-256 `c1c46a853208f3a58637dd76cd41be3d306a61b9163b71e8235fa1f27d88fdf8`, PKG `578c9bf2bafdc8ee14159543683b0ebaf19d0377478b9fe622cdc3a431d0bb43`; manifest ve GitHub digest eşleşiyor.
+- `/tmp/mssql-v56-verify/extracted/MSSQLStudio.app` strict/deep codesign doğrulamasından geçti. Sürüm/build 0.2.56/57, sabit DR `identifier "local.mssqlstudio.app" and certificate leaf = H"adce16b1a3567d8c5fe2ed261e89493611cb7b9d"` doğrulandı. Gerçek kullanıcı app’i yüklenmedi/değiştirilmedi; canlı DB yazımı test edilmedi.
