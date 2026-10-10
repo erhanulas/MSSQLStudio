@@ -74,3 +74,21 @@ struct TimelineEditingTests {
     }
   }
 }
+
+struct RowversionOptionalTests {
+  @Test func legacyAndXMLValuesUseExplicitBinaryComparisonWithoutRowversion() throws {
+    let table = TableDefinition(schema:"dbo", name:"T", columns:[.init(id:1,name:"Id",type:"int"),.init(id:2,name:"Body",type:"ntext"),.init(id:3,name:"Document",type:"xml"),.init(id:4,name:"Picture",type:"image"),.init(id:5,name:"Location",type:"geography")],primaryKey:["Id"])
+    let row = DataEditRow(original:["1","old","<a />","0x0102","POINT(0 0)"], values:["1","new","<a />","0x0102","POINT(0 0)"])
+    let sql = try DataEditScripts.changes(table:table,rows:[row])
+    #expect(sql.contains("CONVERT(nvarchar(max),[Body])"))
+    #expect(sql.contains("CONVERT(nvarchar(max),[Document])"))
+    #expect(sql.contains("CONVERT(varbinary(max),[Picture]) = 0x0102"))
+    #expect(!sql.contains("[Location]"))
+    #expect(sql.contains("IF @@ROWCOUNT <> 1"))
+    #expect(!table.columns[4].editableValue)
+    var inserted = DataEditRow(original:nil,values:[nil,"copy",nil,nil,nil]); inserted.touched=[1]
+    #expect(try DataEditScripts.changes(table:table,rows:[inserted]).contains("INSERT INTO [dbo].[T] ([Body]) VALUES (CONVERT(nvarchar(max), N'copy'))"))
+    var deleted = row; deleted.deleted = true
+    #expect(try DataEditScripts.changes(table:table,rows:[deleted]).contains("DELETE FROM [dbo].[T]"))
+  }
+}

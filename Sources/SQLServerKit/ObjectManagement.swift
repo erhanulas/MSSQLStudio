@@ -19,6 +19,7 @@ public struct TableColumn: Identifiable, Equatable, Sendable {
     self.id=id; self.name=name; self.type=type; self.nullable=nullable; self.identity=identity; self.seed=seed; self.increment=increment; self.computed=computed; self.persisted=persisted; self.defaultName=defaultName; self.defaultSQL=defaultSQL; self.collation=collation; self.sparse=sparse; self.rowGUID=rowGUID
   }
   public var generated: Bool { identity || !computed.isEmpty || ["timestamp","rowversion"].contains(type.lowercased()) }
+  public var editableValue: Bool { comparable || ["text", "ntext", "image", "xml"].contains(type.lowercased()) }
   public var comparable: Bool { !["text","ntext","image","xml","geography","geometry","hierarchyid","sql_variant"].contains(type.lowercased()) && !type.hasPrefix("[") }
 }
 public struct ManagedDefinition: Identifiable, Sendable {
@@ -200,6 +201,8 @@ public struct DataEditRow: Identifiable, Sendable {
 public enum DataEditScripts {
   public static func value(_ value:String?,column:TableColumn) throws -> String {
     guard let value else { return "NULL" }
+    var column = column
+    if let type = ["text":"varchar(max)", "ntext":"nvarchar(max)", "image":"varbinary(max)"][column.type.lowercased()] { column.type = type }
     let type=column.type.lowercased()
     if type.hasPrefix("varbinary") || type.hasPrefix("binary") || ["timestamp","rowversion"].contains(type) {
       guard value.range(of:#"^0x(?:[0-9a-fA-F]{2})*$"#,options:.regularExpression) != nil else { throw SQLFailure("Binary değer 0x… biçiminde olmalı.") }
@@ -233,13 +236,17 @@ public enum DataEditScripts {
       let compared:[Int]
       if let version { compared=Array(Set(keyIndices+[version])).sorted() }
       else {
-        guard table.columns.allSatisfy(\.comparable) else { throw SQLFailure("rowversion olmayan ve karşılaştırılamayan tip içeren tablo için güvenli veri düzenlemesi desteklenmiyor.") }
-        compared=Array(table.columns.indices)
+        compared=table.columns.indices.filter { keyIndices.contains($0) || table.columns[$0].editableValue }
       }
       let predicate=try compared.map { i -> String in
         let c=table.columns[i], name=SQL.identifier(c.name)
         guard original[i] != nil else { return name+" IS NULL" }
         let literal=try value(original[i],column:c)
+        if ["text", "ntext", "xml"].contains(c.type.lowercased()) {
+          let cast = c.type.lowercased() == "text" ? "varchar(max)" : "nvarchar(max)"
+          return "CONVERT(varbinary(max),CONVERT(\(cast),\(name))) = CONVERT(varbinary(max),CONVERT(\(cast),\(literal)))"
+        }
+        if c.type.lowercased() == "image" { return "CONVERT(varbinary(max),\(name)) = \(literal)" }
         if ["varchar","nvarchar","char","nchar"].contains(where:{ c.type.lowercased().hasPrefix($0+"(") }) {
           return "CONVERT(varbinary(max),\(name)) = CONVERT(varbinary(max),\(literal))"
         }
@@ -407,9 +414,6 @@ public struct ResultEditSource: Sendable {
     result.columns = try columns.map { name in
       guard let column = definition.columns.first(where: { $0.name == name }) else { throw SQLFailure("Kaynak kolon bulunamadı.") }
       return column
-    }
-    guard result.columns.contains(where: { ["timestamp", "rowversion"].contains($0.type.lowercased()) }) || result.columns.allSatisfy(\.comparable) else {
-      throw SQLFailure("Karşılaştırılamayan kolonlar için rowversion gerekli.")
     }
     return result
   }

@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.54",
+    "date": "2026-10-10",
+    "title": "Rowversion olmadan düzenleme ve satır işlemleri",
+    "changes": [
+      "Rowversion zorunluluğu kaldırıldı; anahtar ve karşılaştırılabilen özgün değerlerle çakışma kontrolü korunuyor. XML ve eski text/image kolonları dönüşümle karşılaştırılıyor.",
+      "Sonuç tablosuna yeni satır, satır çoğaltma, satır silme ve seçili değişiklikleri geri alma işlemleri eklendi.",
+      "INSERT, UPDATE ve DELETE değişiklikleri yerelde birikir; SQL önizlemesinden onay verilerek tek transaction içinde gönderilir. Çoğaltmada anahtarlar yeniden girilir, identity/üretilen alanları sunucu oluşturur.",
+      "Sonuç tablosuna tıklandığında görünen mavi odak çerçevesi kaldırıldı."
+    ]
+  },
+  {
     "version": "0.2.53",
     "date": "2026-10-10",
     "title": "Gelişmiş Timeline ve önizlemeli veri güncelleme",

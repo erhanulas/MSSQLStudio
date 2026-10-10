@@ -81,3 +81,67 @@ import Testing
     }
   }
 }
+
+@MainActor @Suite(.serialized) struct RowActionsTests {
+  @Test func newCloneDeleteAndRevertKeepOriginalSnapshotAndDefaultFields() throws {
+    _ = NSApplication.shared
+    let grid = ResultController()
+    grid.update(Rows(fields:[Field("Id",type:4),Field("Name")],values:[["1","A"],["2","B"]]),generation:1)
+    grid.editDefinition = TableDefinition(schema:"dbo",name:"T",columns:[.init(id:1,name:"Id",type:"int"),.init(id:2,name:"Name",type:"nvarchar(50)")],primaryKey:["Id"])
+    grid.editingAllowed = { true }
+    #expect(grid.table.focusRingType == .none)
+    grid.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
+    grid.appendRow(cloning:true)
+    #expect(grid.pageCount == 3)
+    #expect(grid.pendingEdits[-1]?.values == [nil,"A"])
+    #expect(grid.tableView(grid.table,objectValueFor:grid.table.tableColumns[1],row:2) as? String == "")
+    grid.setEditValue("3",row:2,column:0)
+    #expect(try grid.pendingSQL().contains("INSERT INTO [dbo].[T] ([Id], [Name])"))
+    grid.appendRow()
+    grid.setEditValue("4",row:3,column:0)
+    grid.setEditValue(nil,row:3,column:1)
+    #expect(grid.pendingEdits[-2]?.touched == [0,1])
+    grid.table.selectRowIndexes(IndexSet(integersIn:2...3),byExtendingSelection:false)
+    grid.toggleSelectedDeletion()
+    #expect(grid.pageCount == 2 && grid.pendingEdits.isEmpty)
+    grid.table.selectRowIndexes(IndexSet(integer:1),byExtendingSelection:false)
+    grid.toggleSelectedDeletion()
+    #expect(try grid.pendingSQL().contains("DELETE FROM [dbo].[T]"))
+    #expect(grid.pendingEdits[1]?.original == ["2","B"])
+    #expect(!grid.tableView(grid.table,shouldEdit:grid.table.tableColumns[2],row:1))
+    grid.table.selectRowIndexes(IndexSet(integer:1),byExtendingSelection:false)
+    grid.revertSelectedRows()
+    #expect(grid.pendingEdits.isEmpty)
+    #expect(grid.result.values.count == 2)
+  }
+}
+
+@MainActor @Suite(.serialized) struct RowActionsLayoutTests {
+  @Test func editingToolbarFitsAndNewRowsStayVisibleUnderFilters() async throws {
+    _ = NSApplication.shared
+    let doc = QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Rows")
+    doc.state = .ready; doc.results = [Rows(fields:[Field("Id",type:4),Field("Name")],values:[["1","A"]])]
+    let controller = QueryController(document:doc)
+    let window = NSWindow(contentRect:NSRect(x:0,y:0,width:830,height:680),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed = false; window.contentViewController = controller; defer { window.close() }
+    let grid = try #require(controller.children.compactMap { $0 as? ResultController }.first)
+    grid.editDefinition = TableDefinition(schema:"dbo",name:"T",columns:[.init(id:1,name:"Id",type:"int",identity:true),.init(id:2,name:"Name",type:"nvarchar(50)")],primaryKey:["Id"])
+    grid.editingAllowed = { true }; controller.update()
+    window.setContentSize(NSSize(width:830,height:680)); controller.view.frame.size = NSSize(width:830,height:680)
+    window.orderFront(nil); controller.view.layoutSubtreeIfNeeded()
+    func descendants(_ view:NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+    let bar = try #require(descendants(controller.view).first { $0.accessibilityIdentifier() == "gridToolbar" })
+    for control in descendants(bar).compactMap({ $0 as? NSControl }) where !control.isHidden {
+      let rect = controller.view.convert(control.bounds,from:control)
+      #expect(rect.minX >= 0 && rect.maxX <= 831, "Editing toolbar overflow: \(type(of:control)) / \(control.accessibilityLabel() ?? "") hidden=\(control.isHiddenOrHasHiddenAncestor) \(rect)")
+    }
+    grid.filter = "no match"
+    for _ in 0..<100 where grid.isProcessing { try await Task.sleep(for:.milliseconds(10)) }
+    grid.appendRow()
+    #expect(grid.pageCount == 1)
+    grid.setEditValue("New",row:0,column:1)
+    #expect(grid.pendingEdits[-1]?.values == [nil,"New"])
+    #expect(try grid.pendingSQL().contains("([Name]) VALUES"))
+    #expect(grid.pageExportIndices?.isEmpty == true)
+  }
+}

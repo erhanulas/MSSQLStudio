@@ -68,7 +68,7 @@ import SwiftUI
   override init(textCell string: String) {
     super.init(textCell:string)
     font = StudioTheme.uiFont; lineBreakMode = .byTruncatingTail
-    isEditable = false; isSelectable = false; isBordered = false
+    isEditable = false; isSelectable = false; isBordered = false; focusRingType = .none
     checkbox.setButtonType(.switch); checkbox.title = ""; checkbox.isEnabled = false; checkbox.controlSize = .small
   }
   required init(coder: NSCoder) { fatalError() }
@@ -79,7 +79,7 @@ import SwiftUI
     cell.isBit = isBit; cell.font = font; cell.alignment = alignment
     cell.textColor = textColor; cell.lineBreakMode = lineBreakMode
     cell.isEditable = isEditable; cell.isSelectable = isSelectable
-    cell.isBordered = isBordered; cell.isEnabled = isEnabled
+    cell.isBordered = isBordered; cell.isEnabled = isEnabled; cell.placeholderString = placeholderString
     return cell
   }
   override func draw(withFrame frame: NSRect, in view: NSView) {
@@ -95,6 +95,7 @@ import SwiftUI
   }
 }
 @MainActor final class CopyTable: NSTableView {
+  var rowActions: (() -> [NSMenuItem])?
   var copyRows: (() -> Void)?
   var copyHeaders: (() -> Void)?
   private(set) var cellColumns = IndexSet() {
@@ -145,12 +146,13 @@ import SwiftUI
       cellColumns = c == 0 ? IndexSet() : IndexSet(integer: c)
       anchor = (r, c)
     }
-    let menu = NSMenu()
+    let menu = NSMenu(); menu.autoenablesItems = false
     let item = menu.addItem(withTitle: "Kopyala", action: #selector(copySelection), keyEquivalent: "c")
     item.target = self
     let headers = menu.addItem(withTitle: "Başlıklarla Kopyala", action: #selector(copyWithHeaders), keyEquivalent: GridShortcuts.binding(.headers).key)
     headers.keyEquivalentModifierMask = GridShortcuts.headersModifiers
     headers.target = self
+    if let items = rowActions?(), !items.isEmpty { menu.addItem(.separator()); for item in items { menu.addItem(item) } }
     NSMenu.popUpContextMenu(menu, with: event, for: self)
   }
   @objc func copyWithHeaders() { copyHeaders?() }
@@ -236,12 +238,63 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   var editDefinition: TableDefinition?
   var editObjectID: Int?
   private(set) var pendingEdits: [Int: DataEditRow] = [:]
+  private var newRowOrder: [Int] = []
+  private var nextNewRow = -1
+  private func values(at index: Int) -> [String?] { pendingEdits[index]?.values ?? (index >= 0 ? Array(result.values[index]) : []) }
+  func appendRow(cloning: Bool = false) {
+    guard editingAllowed?() == true, let definition = editDefinition, pendingEdits.count < 400 else { return }
+    var row = DataEditRow(original: nil, values: Array(repeating: nil, count: definition.columns.count))
+    if cloning {
+      guard table.selectedRow >= 0, table.selectedRow < pageCount else { return }
+      let source = values(at: sourceIndex(table.selectedRow))
+      for i in definition.columns.indices where !definition.columns[i].generated && definition.columns[i].editableValue && !definition.primaryKey.contains(definition.columns[i].name) {
+        row.values[i] = source[i]; row.touched.insert(i)
+      }
+    }
+    let index = nextNewRow; nextNewRow -= 1
+    pendingEdits[index] = row; newRowOrder.append(index)
+    table.reloadData(); updateRange(); let visible = basePageCount + newRowOrder.count - 1
+    table.selectRowIndexes(IndexSet(integer: visible), byExtendingSelection: false); table.scrollRowToVisible(visible); editsChanged?()
+  }
+  func toggleSelectedDeletion() {
+    guard editingAllowed?() == true, editDefinition != nil else { return }
+    let selected = table.selectedRowIndexes.filter { $0 < pageCount }.map(sourceIndex)
+    for index in selected {
+      if index < 0 { pendingEdits.removeValue(forKey: index); newRowOrder.removeAll { $0 == index }; continue }
+      if pendingEdits[index] == nil {
+        guard pendingEdits.count < 400 else { break }
+        let original = values(at: index); pendingEdits[index] = DataEditRow(original: original, values: original)
+      }
+      pendingEdits[index]?.deleted.toggle()
+      if pendingEdits[index]?.deleted == false && pendingEdits[index]?.original == pendingEdits[index]?.values { pendingEdits.removeValue(forKey: index) }
+    }
+    table.deselectAll(nil); table.reloadData(); updateRange(); editsChanged?()
+  }
+  func revertSelectedRows() {
+    guard editingAllowed?() == true else { return }
+    let indices = table.selectedRowIndexes.filter { $0 < pageCount }.map(sourceIndex)
+    for index in indices { pendingEdits.removeValue(forKey: index); newRowOrder.removeAll { $0 == index } }
+    table.deselectAll(nil); table.reloadData(); updateRange(); editsChanged?()
+  }
+  func editingMenu() -> [NSMenuItem] {
+    guard editDefinition != nil else { return [] }
+    return [("Yeni Satır", "plus", #selector(addResultRow)), ("Satırı Çoğalt", "plus.square.on.square", #selector(cloneResultRow)), ("Satırı Sil / Silmeyi Geri Al", "trash", #selector(deleteResultRow)), ("Seçili Düzenlemeleri Geri Al", "arrow.uturn.backward", #selector(revertResultRows))].map { title, icon, action in
+      let item = NSMenuItem(title: title, action: action, keyEquivalent: ""); item.target = self
+      item.image = NSImage(systemSymbolName: icon, accessibilityDescription: title)
+      item.isEnabled = editingAllowed?() == true && (action == #selector(addResultRow) || table.selectedRow >= 0)
+      return item
+    }
+  }
+  @objc private func addResultRow() { table.window?.makeFirstResponder(nil); appendRow() }
+  @objc private func cloneResultRow() { table.window?.makeFirstResponder(nil); appendRow(cloning: true) }
+  @objc private func deleteResultRow() { table.window?.makeFirstResponder(nil); toggleSelectedDeletion() }
+  @objc private func revertResultRows() { table.window?.makeFirstResponder(nil); revertSelectedRows() }
   var editsChanged: (() -> Void)?
   var editingAllowed: (() -> Bool)?
-  func discardEdits() { pendingEdits = [:]; editDefinition = nil; editObjectID = nil; table.reloadData(); editsChanged?() }
+  func discardEdits() { pendingEdits = [:]; newRowOrder = []; nextNewRow = -1; editDefinition = nil; editObjectID = nil; table.reloadData(); editsChanged?() }
   func pendingSQL() throws -> String {
     guard let editDefinition else { throw SQLFailure("Önce düzenlemeyi açın.") }
-    return try DataEditScripts.changes(table: editDefinition, rows: pendingEdits.keys.sorted().compactMap { pendingEdits[$0] }, expectedObjectID: editObjectID)
+    return try DataEditScripts.changes(table: editDefinition, rows: (pendingEdits.keys.filter { $0 >= 0 }.sorted() + newRowOrder).compactMap { pendingEdits[$0] }, expectedObjectID: editObjectID)
   }
   func setEditValue(_ value: String?, row: Int, column: Int) {
     guard canEdit(row: row, column: column) else { return }
@@ -251,13 +304,15 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       let original = Array(result.values[index]); pendingEdits[index] = DataEditRow(original: original, values: original)
     }
     pendingEdits[index]?.values[column] = value
-    if pendingEdits[index]?.values == pendingEdits[index]?.original { pendingEdits.removeValue(forKey: index) }
+    pendingEdits[index]?.touched.insert(column)
+    if pendingEdits[index]?.original != nil && pendingEdits[index]?.values == pendingEdits[index]?.original { pendingEdits.removeValue(forKey: index) }
     editsChanged?(); table.reloadData()
   }
   private func canEdit(row: Int, column: Int) -> Bool {
     guard editingAllowed?() == true, let definition = editDefinition, row >= 0, row < pageCount, definition.columns.indices.contains(column) else { return false }
     let c = definition.columns[column]
-    return !c.generated && !definition.primaryKey.contains(c.name)
+    let staged = pendingEdits[sourceIndex(row)]
+    return staged?.deleted != true && c.editableValue && !c.generated && (staged?.original == nil && sourceIndex(row) < 0 || !definition.primaryKey.contains(c.name))
   }
   func setSelectedNull() {
     guard let column = table.cellColumns.first, table.tableColumns.indices.contains(column), let ordinal = Int(table.tableColumns[column].identifier.rawValue) else { return }
@@ -312,6 +367,8 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     table.allowsColumnReordering = true
     table.setAccessibilityIdentifier("resultsGrid")
     table.target = self
+    table.focusRingType = .none; scroll.focusRingType = .none
+    table.rowActions = { [weak self] in self?.editingMenu() ?? [] }
     table.doubleAction = #selector(inspectCell)
     table.copyRows = { [weak self] in self?.copySelectionData() }
     table.copyHeaders = { [weak self] in self?.copySelectionData(includeHeaders: true) }
@@ -385,9 +442,10 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   }
   var pageExportIndices: [Int]? {
     if pageSize == 0 { return visibleIndices }
-    return (pageStart..<pageStart + pageCount).map { visibleIndices?[$0] ?? $0 }
+    return (pageStart..<pageStart + basePageCount).map { visibleIndices?[$0] ?? $0 }
   }
-  var pageCount: Int { pageSize == 0 ? visibleCount : min(pageSize, max(0, visibleCount - pageStart)) }
+  private var basePageCount: Int { pageSize == 0 ? visibleCount : min(pageSize, max(0, visibleCount - pageStart)) }
+  var pageCount: Int { basePageCount + newRowOrder.count }
   func setPageSize(_ size: Int) {
     guard (0...1_000_000).contains(size) else { return }
     pageSize = size; pageStart = 0
@@ -403,10 +461,10 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   }
   @objc private func updateRange() {
     pageStart = pageSize == 0 || visibleCount == 0 ? 0 : min(((visibleCount - 1) / pageSize) * pageSize, pageStart)
-    let label = visibleCount == 0 ? "0 / 0" : "\(pageStart + 1)–\(pageStart + pageCount) / \(visibleCount.formatted())\(partial ? "+" : "")"
+    let label = (visibleCount == 0 ? "0 / 0" : "\(pageStart + 1)–\(pageStart + basePageCount) / \(visibleCount.formatted())\(partial ? "+" : "")") + (newRowOrder.isEmpty ? "" : " + \(newRowOrder.count) yeni")
     if rangeLabel.stringValue != label { rangeLabel.stringValue = label }
     rangeLabel.toolTip = "Geçerli sayfa / yüklenen satırlar. \(visibleCount.formatted()) gösterilen / \(result.values.count.formatted()) yüklenen satır. All yalnızca yüklenen sonuçları kapsar."
-    for button in navigation { button.isEnabled = pageSize > 0 && visibleCount > 0 && (button.tag < 2 ? pageStart > 0 : pageStart + pageCount < visibleCount) }
+    for button in navigation { button.isEnabled = pageSize > 0 && visibleCount > 0 && (button.tag < 2 ? pageStart > 0 : pageStart + basePageCount < visibleCount) }
   }
   func update(_ rows: Rows, generation: Int = 0) {
     _ = view
@@ -638,6 +696,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
         of: table.headerView ?? table, preferredEdge: .maxY)
     }
   }
+  func tableViewSelectionDidChange(_ notification: Notification) { editsChanged?() }
   func numberOfRows(in tableView: NSTableView) -> Int { pageCount }
   func tableView(
     _ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]
@@ -645,7 +704,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   func tableView(_ tableView: NSTableView, shouldReorderColumn columnIndex: Int, toColumn newColumnIndex: Int) -> Bool {
     columnIndex != 0 && newColumnIndex != 0
   }
-  private func sourceIndex(_ row: Int) -> Int { visibleIndices?[pageStart + row] ?? (pageStart + row) }
+  private func sourceIndex(_ row: Int) -> Int { row >= basePageCount ? newRowOrder[row - basePageCount] : (visibleIndices?[pageStart + row] ?? (pageStart + row)) }
   func tableView(_ tableView: NSTableView, shouldEdit column: NSTableColumn?, row: Int) -> Bool {
     guard let ordinal = column.flatMap({ Int($0.identifier.rawValue) }) else { return false }
     return canEdit(row: row, column: ordinal)
@@ -657,8 +716,9 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   func tableView(_ tableView: NSTableView, objectValueFor column: NSTableColumn?, row: Int) -> Any? {
     guard let column, row >= 0, row < pageCount else { return nil }
     let index = sourceIndex(row)
-    guard let ordinal = Int(column.identifier.rawValue) else { return (pendingEdits[index] == nil ? "" : "✎ ") + String(index+1) }
-    let values = pendingEdits[index]?.values ?? Array(result.values[index])
+    guard let ordinal = Int(column.identifier.rawValue) else { return (pendingEdits[index]?.deleted == true ? "− " : index < 0 ? "+ " : pendingEdits[index] == nil ? "" : "✎ ") + (index < 0 ? "Yeni" : String(index+1)) }
+    let values = values(at: index)
+    if index < 0, pendingEdits[index]?.touched.contains(ordinal) != true { return "" }
     guard values.indices.contains(ordinal), let value = values[ordinal] else { return "NULL" }
     if editDefinition != nil { return value }
     return String(value.prefix(1000)).replacingOccurrences(of: "\n", with: " ↵ ")
@@ -667,12 +727,13 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     guard row >= 0, row < pageCount, let cell = cell as? GridDataCell else { return }
     let ordinal = column.flatMap { Int($0.identifier.rawValue) }
     let index = sourceIndex(row)
-    let values = pendingEdits[index]?.values ?? Array(result.values[index])
+    let values = values(at: index)
     let missing = ordinal.map { !values.indices.contains($0) || values[$0] == nil } ?? false
     let changed = ordinal.map { pendingEdits[index]?.values[$0] != pendingEdits[index]?.original?[$0] } ?? (pendingEdits[index] != nil)
+    cell.placeholderString = index < 0 && ordinal.map({ pendingEdits[index]?.touched.contains($0) != true }) == true ? "DEFAULT" : nil
     cell.isEditable = ordinal.map { canEdit(row: row, column: $0) } ?? false
     cell.isSelectable = cell.isEditable
-    cell.textColor = changed ? .systemOrange : missing ? .secondaryLabelColor : StudioTheme.text
+    cell.textColor = pendingEdits[index]?.deleted == true ? .systemRed : index < 0 ? .systemGreen : changed ? .systemOrange : missing ? .secondaryLabelColor : StudioTheme.text
     cell.font = missing ? nullFont : StudioTheme.uiFont
   }
   private let nullFont = NSFontManager.shared.convert(StudioTheme.uiFont,toHaveTrait:.italicFontMask)
@@ -692,7 +753,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     }
     var bytes = includeHeaders ? ordinals.reduce(0) { $0 + result.fields[$1].name.utf8.count * 2 + 4 } : 0
     for row in chosen where row < pageCount {
-      let values = pendingEdits[sourceIndex(row)]?.values ?? Array(result.values[sourceIndex(row)])
+      let values = values(at: sourceIndex(row))
       bytes += ordinals.reduce(0) { $0 + (values[$1]?.utf8.count ?? 4) * 2 + 4 }
       if bytes > 16_777_216 {
         let alert = NSAlert()
@@ -704,7 +765,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     }
     let body = chosen.filter { $0 < pageCount }.map { row in
       ordinals.map { ordinal in
-        let value = (pendingEdits[sourceIndex(row)]?.values ?? Array(result.values[sourceIndex(row)]))[ordinal]
+        let value = (values(at: sourceIndex(row)))[ordinal]
         let v = value ?? "NULL"
         return v.contains("\t") || v.contains("\n") || v.contains("\"")
           ? "\"" + v.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : v
@@ -725,7 +786,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       let i = Int(table.tableColumns[c].identifier.rawValue)
     else { return }
     if canEdit(row: r, column: i) { table.editColumn(c, row: r, with: nil, select: true); return }
-    let values = pendingEdits[sourceIndex(r)]?.values ?? Array(result.values[sourceIndex(r)])
+    let values = values(at: sourceIndex(r))
     guard values.indices.contains(i) else { return }
     let alert = NSAlert()
     alert.messageText = result.fields[i].name
@@ -860,6 +921,9 @@ private struct ColumnFilterPanel: View {
   private let navigationHost = NSStackView()
   private let copyHeadersButton = NSButton()
   private let refreshButton = NSButton()
+  private let dataActionsBar = NSStackView()
+  private var dataActionsHeight: NSLayoutConstraint?
+  private let rowActionsButton = NSPopUpButton(frame: .zero, pullsDown: true)
   private let editDataButton = NSButton(title: "Düzenle", target: nil, action: nil)
   private let previewDataButton = NSButton(title: "Önizle", target: nil, action: nil)
   private let revertDataButton = NSButton(title: "Vazgeç", target: nil, action: nil)
@@ -1048,7 +1112,7 @@ private struct ColumnFilterPanel: View {
     summary.font = .systemFont(ofSize: 11)
     summary.textColor = .secondaryLabelColor
     let resultHeader = NSStackView(views: [
-      navigationHost, refreshButton, refreshInterval, rowLimit, copyHeadersButton, export, cancelExport, editDataButton, previewDataButton, revertDataButton, nullDataButton, NSView(), filter,
+      navigationHost, refreshButton, refreshInterval, rowLimit, copyHeadersButton, export, cancelExport, editDataButton, NSView(), filter,
     ])
     for (button, icon, action) in [(editDataButton, "pencil", #selector(beginDataEditing)), (previewDataButton, "doc.text.magnifyingglass", #selector(previewDataEditing)), (revertDataButton, "arrow.uturn.backward", #selector(revertDataEditing)), (nullDataButton, "nosign", #selector(nullDataEditing))] {
       button.target = self; button.action = action; button.controlSize = .small
@@ -1056,8 +1120,14 @@ private struct ColumnFilterPanel: View {
       button.imagePosition = .imageLeading; button.bezelStyle = .rounded
       button.contentTintColor = button === revertDataButton || button === nullDataButton ? .systemOrange : .controlAccentColor
     }
+    dataActionsBar.setViews([rowActionsButton, nullDataButton, revertDataButton, NSView(), previewDataButton], in: .leading)
+    dataActionsBar.spacing = 8; dataActionsBar.edgeInsets = NSEdgeInsets(top: 2, left: 8, bottom: 2, right: 8)
+    dataActionsBar.setAccessibilityIdentifier("gridDataActions")
+    StudioTheme.surface(dataActionsBar)
+    rowActionsButton.controlSize = .small; rowActionsButton.menu?.autoenablesItems = false
+    rowActionsButton.toolTip = "Yeni satır, çoğaltma, silme ve geri alma. Değişiklikler önizlemeden onayla gönderilir; yeni satırlar sayfanın sonunda görünür."
     editDataButton.toolTip = "Kaynağı doğrula, hücreleri çift tıklayarak yerelde düzenle. Göndermeden önce SQL önizlemesi zorunludur."
-    previewDataButton.toolTip = "Bekleyen UPDATE komutlarını incele ve onaylayarak gönder"
+    previewDataButton.toolTip = "Bekleyen INSERT / UPDATE / DELETE komutlarını incele ve onaylayarak gönder"
     resultHeader.setAccessibilityIdentifier("gridToolbar")
     navigationHost.spacing = 0
     copyHeadersButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Başlıklarla kopyala")
@@ -1084,6 +1154,9 @@ private struct ColumnFilterPanel: View {
     resultPane.addSubview(stripScroll)
     stripScroll.translatesAutoresizingMaskIntoConstraints = false
     resultPane.addSubview(resultHeader)
+    resultPane.addSubview(dataActionsBar)
+    dataActionsBar.translatesAutoresizingMaskIntoConstraints = false
+    dataActionsHeight = dataActionsBar.heightAnchor.constraint(equalToConstant: 0); dataActionsHeight?.isActive = true
     resultPane.addSubview(resultTabs)
     resultHeader.translatesAutoresizingMaskIntoConstraints = false
     resultTabs.translatesAutoresizingMaskIntoConstraints = false
@@ -1101,7 +1174,10 @@ private struct ColumnFilterPanel: View {
       resultHeader.heightAnchor.constraint(equalToConstant: 34),
       resultTabs.leadingAnchor.constraint(equalTo: resultPane.leadingAnchor, constant: 2),
       resultTabs.trailingAnchor.constraint(equalTo: resultPane.trailingAnchor, constant: -2),
-      resultTabs.topAnchor.constraint(equalTo: resultHeader.bottomAnchor),
+      dataActionsBar.topAnchor.constraint(equalTo: resultHeader.bottomAnchor),
+      dataActionsBar.leadingAnchor.constraint(equalTo: resultPane.leadingAnchor),
+      dataActionsBar.trailingAnchor.constraint(equalTo: resultPane.trailingAnchor),
+      resultTabs.topAnchor.constraint(equalTo: dataActionsBar.bottomAnchor),
       resultTabs.bottomAnchor.constraint(equalTo: resultPane.bottomAnchor),
     ])
     panes.addArrangedSubview(editorPane)
@@ -1181,12 +1257,19 @@ private struct ColumnFilterPanel: View {
   private var hasDataEdits: Bool { tables.values.contains { !$0.pendingEdits.isEmpty } }
   private func syncDataActions() {
     let grid = selectedGrid
+    rowActionsButton.removeAllItems(); rowActionsButton.addItem(withTitle: "Satırlar")
+    rowActionsButton.item(at: 0)?.image = NSImage(systemSymbolName: "list.bullet", accessibilityDescription: "Satır işlemleri")
+    for item in grid?.editingMenu() ?? [] { rowActionsButton.menu?.addItem(item) }
+    dataActionsBar.isHidden = grid?.editDefinition == nil
+    dataActionsHeight?.constant = grid?.editDefinition == nil ? 0 : 34
+    rowActionsButton.isHidden = grid?.editDefinition == nil
     let safe = document.canRefresh && !preparingData && !submittingData
     editDataButton.title = grid?.editDefinition == nil ? "Düzenle" : "Düzenleme Açık"
     editDataButton.isEnabled = safe && grid != nil && grid?.editDefinition == nil && document.results.count == 1 && !document.partial
     previewDataButton.isEnabled = safe && !(grid?.pendingEdits.isEmpty ?? true)
     previewDataButton.title = "Önizle (\(grid?.pendingEdits.count ?? 0))"
     revertDataButton.isEnabled = grid?.editDefinition != nil && !submittingData
+    rowActionsButton.isEnabled = safe && grid?.editDefinition != nil
     nullDataButton.isEnabled = safe && grid?.editDefinition != nil
   }
   private func dataError(_ error: Error) {
@@ -1252,7 +1335,7 @@ private struct ColumnFilterPanel: View {
           if document.resultGeneration == generation && document.database == db && document.canRefresh { refreshResults() }
         } catch { await connection.disconnect(); throw error }
       })
-      let window = NSWindow(contentViewController: NSHostingController(rootView: panel)); window.title = "UPDATE Önizlemesi"; window.setContentSize(NSSize(width: 1000, height: 720)); window.styleMask = [.titled, .closable, .resizable]; window.minSize = NSSize(width: 760, height: 520)
+      let window = NSWindow(contentViewController: NSHostingController(rootView: panel)); window.title = "Veri Değişiklikleri — SQL Önizlemesi"; window.setContentSize(NSSize(width: 1000, height: 720)); window.styleMask = [.titled, .closable, .resizable]; window.minSize = NSSize(width: 760, height: 520)
       let controller = DataReviewWindowController(window: window); controller.canClose = { [weak self] in self?.submittingData != true }; window.delegate = controller; dataReview = controller; controller.showWindow(nil)
     } catch { dataError(error) }
   }
@@ -1694,7 +1777,7 @@ struct DataChangesPreview: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       StudioPanelHeading(title: "Değişiklikleri İncele", icon: "doc.text.magnifyingglass", subtitle: target)
-      Text("Aşağıdaki SQL onayınızla tek transaction içinde gönderilir. Satır başka biri tarafından değiştirilmişse tüm işlem geri alınır.").foregroundStyle(.secondary)
+      Text("Aşağıdaki SQL onayınızla tek transaction içinde gönderilir. Anahtar ve karşılaştırılabilen özgün değerler denetlenir; çakışmada tüm işlem geri alınır.").foregroundStyle(.secondary)
       SQLReadOnlyPreview(sql: sql)
       if !message.isEmpty { Text(message).foregroundStyle(completed ? Color.green : Color.red).textSelection(.enabled) }
       HStack {
