@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.2.43",
+    "date": "2026-10-10",
+    "title": "Explorer ve SQL Server Agent iyileştirmeleri",
+    "changes": [
+      "Explorer bağlantısını kesip yeniden bağlarken nesne ağacı ve açık sorgu oturumları korunuyor; bağlantı durumu ve hata mesajları belirginleştirildi.",
+      "Linked Server altında sağlayıcının sunduğu kataloglar, tablolar, view ve diğer nesneler ile sütunlar görüntülenebiliyor; dört parçalı adlarla SELECT hazırlanabiliyor.",
+      "Job History varsayılan olarak son 7 günü ve iş özetlerini gösteriyor; adım ayrıntıları isteğe bağlı yükleniyor.",
+      "Agent dalı açıkken Jobs listesi 15 saniyede bir yenileniyor; seçim ve kaydırma konumu korunuyor. Otomatik yenileme menüden durdurulabiliyor.",
+      "Job ve trigger durumları parantez içi yazılar yerine ikonlar ve açıklamalarla gösteriliyor.",
+      "Geçmiş ve özellik verilerinin işlenmesi arka plana alındı; aynı işin açık penceresi yeniden kullanılıyor ve yükleme durumu gösteriliyor.",
+      "Çalışan sorguların arayüz güncellemeleri birleştirildi; sekmelerde yükleme göstergesi ve sekmeler arası geçiş iyileştirildi."
+    ]
+  },
+  {
     "version": "0.2.42",
     "date": "2026-10-10",
     "title": "SQL Server Agent iş yönetimi ve geçmiş ekranları",

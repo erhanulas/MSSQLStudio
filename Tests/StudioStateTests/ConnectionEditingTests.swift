@@ -80,6 +80,11 @@ import Testing
     let newSession = try await doc.connection.execute(
       "SELECT OBJECT_ID('tempdb..#StudioEditSession');")
     #expect(newSession.results.first?.values.first?[0] == nil)
+    await state.disconnectExplorer(server)
+    #expect(!server.online && doc.state == .ready)
+    let restored = try await state.connect(server.profile, password: password, save: false)
+    #expect(restored === server && doc.server === restored)
+    #expect(doc.state == .ready && doc.sql == "SELECT N'keep this text';")
     await doc.connection.disconnect()
     await server.metadata.disconnect()
   }

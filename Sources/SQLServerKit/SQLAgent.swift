@@ -130,7 +130,7 @@ public enum SQLAgent {
     /* StudioAgent.history */
     WITH runs AS (
       SELECT TOP (500) h.instance_id,h.job_id,
-        COALESCE((SELECT MAX(p.instance_id) FROM msdb.dbo.sysjobhistory p WHERE p.job_id=h.job_id AND p.step_id=0 AND p.instance_id<h.instance_id),0) AS previous_id
+        \(includeSteps ? "COALESCE((SELECT MAX(p.instance_id) FROM msdb.dbo.sysjobhistory p WHERE p.job_id=h.job_id AND p.step_id=0 AND p.instance_id<h.instance_id),0)" : "0") AS previous_id
       FROM msdb.dbo.sysjobhistory h JOIN msdb.dbo.sysjobs j ON j.job_id=h.job_id
       WHERE h.step_id=0 AND h.run_date>=CONVERT(int,CONVERT(char(8),DATEADD(day,-\(max(1,min(3650,days))),GETDATE()),112))
       \(name.map {" AND j.name="+SQL.literal($0)} ?? "") \(statusFilter)

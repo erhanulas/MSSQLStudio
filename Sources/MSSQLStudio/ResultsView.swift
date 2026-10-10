@@ -827,6 +827,7 @@ private struct ColumnFilterPanel: View {
   private var plans: [Int: String] = [:]
   private var displayed = Set<Int>()
   private var initialSplitApplied = false
+  private var pendingResultUpdate:Task<Void,Never>?
   private var moduleReview: ModuleReviewController?
   private var refreshSelection: Any?
   init(document: QueryDocument) {
@@ -834,8 +835,7 @@ private struct ColumnFilterPanel: View {
     editor = EditorController(document: document)
     super.init(nibName: nil, bundle: nil)
     document.changed = { [weak self] in
-      self?.update()
-      self?.changed?()
+      self?.documentDidChange()
     }
     editor.edited = { [weak self] in self?.changed?() }
     editor.position = { [weak self] line, column in
@@ -1161,6 +1161,18 @@ private struct ColumnFilterPanel: View {
       appearance?.isMarked == true
       ? appearance!.color.withAlphaComponent(0.12).cgColor : StudioTheme.panel.cgColor
   }
+  private func documentDidChange() {
+    guard document.state == .running else {
+      pendingResultUpdate?.cancel();pendingResultUpdate=nil
+      update();changed?();return
+    }
+    guard pendingResultUpdate == nil else {return}
+    pendingResultUpdate=Task { [weak self] in
+      do {try await Task.sleep(for:.milliseconds(50))} catch {return}
+      guard let self else {return}
+      pendingResultUpdate=nil;update();changed?()
+    }
+  }
   func update() {
     compareModuleButton.isHidden = document.moduleOriginal == nil
     compareModuleButton.isEnabled = !document.busy
@@ -1242,7 +1254,7 @@ private struct ColumnFilterPanel: View {
     syncNavigation()
     syncResultStrip()
     syncResultSelector()
-    messages.string = document.messages
+    if messages.string != document.messages {messages.string = document.messages}
     summary.stringValue =
       document.state == .running
       ? "Sonuçlar okunuyor · \(document.rowCount.formatted()) satır"

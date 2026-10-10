@@ -10,12 +10,17 @@ import UniformTypeIdentifiers
     case object(Folder)
     case detail
   }
+  enum LinkedBranch {
+    case catalogs(String), catalog(String, String?), group
+    case relation(LinkedCatalog.Relation), columns(LinkedCatalog.Relation), detail
+  }
+  var linked: LinkedBranch?
   let title: String
   let generation: UUID
   let kind: Kind
   let server: ConnectedServer
   let database: String
-  let item: CatalogItem?
+  var item: CatalogItem?
   weak var parent: TreeNode?
   var children: [TreeNode] = [] { didSet { for child in children { child.parent=self } } }
   var loaded = false
@@ -35,9 +40,10 @@ import UniformTypeIdentifiers
   var displayTitle: String {
     if case .server = kind {
       let badge = server.profile.appearance?.badge ?? ""
-      return (badge.isEmpty ? "" : "[\(badge)] ") + server.profile.name + (server.online ? "" : " · Çevrimdışı")
+      return (badge.isEmpty ? "" : "[\(badge)] ") + server.profile.name + (server.reconnecting ? " · Bağlanıyor…" : server.online ? " · Bağlı" : " · Bağlantı kapalı")
     }
-    if case .object(.triggers)=kind { return title + (triggerDisabled ? " · Disabled" : " · Enabled") }
+    if case .object(.triggers)=kind { return title }
+    if case .object(.jobs)=kind { return item?.name ?? title }
     return title
   }
   var triggerDisabled:Bool { item?.detail.contains("Disabled") == true }
@@ -48,6 +54,9 @@ import UniformTypeIdentifiers
   }
   var objectFolder:Folder? { if case .object(let f)=kind { return f }; return nil }
   var expandable: Bool {
+    if case .detail = linked {return false}
+    if linked != nil {return true}
+    if case .object(.linkedServers) = kind {return true}
     switch kind {
     case .server, .group, .database: return true
     case .folder(let folder):
@@ -114,6 +123,7 @@ import UniformTypeIdentifiers
     case .parameters: return "at"
     case .triggers: return triggerDisabled ? "bolt.slash.fill" : "bolt.fill"
     case .constraints: return "checkmark.shield"
+    case .linkedServers: return "network"
     case .synonyms: return "link"
     case .columns: return "rectangle.split.1x2"
     case .logins, .users: return "person.crop.circle"
@@ -225,6 +235,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private let status = NSTextField(labelWithString: "Bağlantı bekleniyor")
   private let context = NSTextField(labelWithString: "")
   private var roots: [TreeNode] = []
+  private var agentPolling: Task<Void,Never>?
+  private var agentAutoRefresh = true
+  private var tabSignature: [String]?
   private var controllers: [UUID: QueryController] = [:]
   private var auxiliaryWindows: [NSWindowController] = []
   private var contextNode: TreeNode?
@@ -244,7 +257,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     NotificationCenter.default.addObserver(self, selector: #selector(catalogIndexUpdated(_:)), name: .init("sqlCatalogChanged"), object: nil)
     state.changed = { [weak self] in self?.reloadWorkspace() }
   }
+  deinit {agentPolling?.cancel()}
   @objc private func themeChanged() {
+    tabSignature=nil
     guard isViewLoaded else { return }
     StudioTheme.decorate(view)
     for item in view.window?.toolbar?.items ?? [] {
@@ -528,6 +543,20 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     updateControls()
   }
   private func renderTabs() {
+    if agentPolling == nil {
+      agentPolling=Task { [weak self] in
+        while !Task.isCancelled {
+          do {try await Task.sleep(for:.seconds(15))} catch {return}
+          guard self != nil else {return}
+          await self?.refreshExpandedAgentJobs()
+        }
+      }
+    }
+    let signature=state.documents.map {doc in
+      "\(doc.id)|\(doc.title)|\(doc.needsCloseConfirmation)|\(doc.pinned)|\(doc.busy)|\(state.active === doc)|\(doc.server.profile)"
+    }
+    guard signature != tabSignature else {return}
+    tabSignature=signature
     tabs.documentIDs = state.documents.map(\.id)
     for view in tabs.arrangedSubviews {
       tabs.removeArrangedSubview(view)
@@ -575,7 +604,13 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         ? doc.server.profile.appearance!.color : StudioTheme.accent
       icon.widthAnchor.constraint(equalToConstant: 14).isActive = true
       icon.heightAnchor.constraint(equalToConstant: 14).isActive = true
-      group.insertArrangedSubview(icon, at: 0)
+      if doc.busy {
+        let progress=NSProgressIndicator();progress.style = .spinning;progress.isIndeterminate=true;progress.controlSize = .small
+        progress.setAccessibilityLabel("Sekmede işlem sürüyor")
+        progress.widthAnchor.constraint(equalToConstant:14).isActive=true
+        progress.heightAnchor.constraint(equalToConstant:14).isActive=true
+        progress.startAnimation(nil);group.insertArrangedSubview(progress,at:0)
+      } else {group.insertArrangedSubview(icon, at: 0)}
       if let appearance = doc.server.profile.appearance, appearance.isMarked {
         group.wantsLayer = true
         group.layer?.borderColor = appearance.color.cgColor
@@ -866,17 +901,31 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       refresh(root)
       return
     }
-    if case .server = node.kind {
-      guard node.server.online else {
-        state.showError("Sunucu bağlantısı kapalı. Bağlan ile yeniden bağlanın.")
-        return
-      }
+    guard !node.server.reconnecting else { return }
+    guard node.server.online else {
       Task { [weak self] in
         guard let self else { return }
+        await state.reconnectExplorer(node.server)
+        if node.server.online { refresh(node) }
+      }
+      return
+    }
+    if node.linked != nil || node.objectFolder == .linkedServers {
+      if case .group = node.linked, let parent=node.parent {refresh(parent);return}
+      if case .detail = node.linked, let parent=node.parent {refresh(parent);return}
+      node.loaded=false; node.error=nil; loadLinked(node);return
+    }
+    if case .server = node.kind {
+      Task { [weak self] in
+        guard let self else { return }
+        let token = node.server.generation
+        let connection = node.server.metadata
         do {
-          let token = node.server.generation
-          let rows = Catalog.rows(try await node.server.metadata.execute(Catalog.databases))
-          guard token == node.server.generation else { return }
+          let rows = Catalog.rows(try await connection.execute(Catalog.databases))
+          guard token == node.server.generation, node.server.online,
+            node.server.metadata === connection else { return }
+          node.server.startupError = nil
+          node.error = nil
           node.server.databases = node.server.profile.visibleItems(from: rows)
           node.server.prepareCatalogIndexes()
           rebuildSearchScopes()
@@ -884,7 +933,14 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
           node.loaded = true
           outline.reloadItem(node, reloadChildren: true)
           updateControls()
-        } catch { state.showError(error.localizedDescription) }
+        } catch {
+          guard token == node.server.generation, node.server.online,
+            node.server.metadata === connection else { return }
+          node.server.recordExplorerFailure(error)
+          node.error = error.localizedDescription
+          outline.reloadItem(node)
+          updateControls()
+        }
       }
     } else if case .database = node.kind, let item = node.item {
       node.children = databaseTree(item, server: node.server).children
@@ -898,7 +954,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   @objc private func refreshExplorer() {
     if let node = selected ?? roots.first { refresh(node) }
-    if let doc = state.active { Task { await doc.loadSymbols(force:true) } }
+    if let doc = state.active, doc.server.online { Task { await doc.loadSymbols(force:true) } }
   }
   @objc func reconnectQuery() {
     guard let doc = state.active, !doc.busy else { return }
@@ -911,21 +967,13 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       } catch { state.showError(error.localizedDescription) }
     }
   }
+  @objc private func reconnectServer() {
+    guard let server = contextNode?.server else { return }
+    Task { await state.reconnectExplorer(server) }
+  }
   @objc private func disconnectServer() {
     guard let server = contextNode?.server else { return }
-    let documents = state.documents.filter { $0.server === server }
-    guard documents.allSatisfy({ !$0.busy && $0.transactionCount == 0 }) else {
-      state.showError("Önce çalışan sorguları ve açık transaction'ları tamamlayın.")
-      return
-    }
-    for document in documents { document.disconnect() }
-    server.online = false
-    state.rememberExplorer(server.id, selected: false)
-    Task { await server.metadata.disconnect() }
-    if let root = roots.first(where: { $0.server === server }) { roots.removeAll { $0 === root } }
-    state.servers.removeAll { $0 === server }
-    outline.reloadData()
-    updateControls()
+    Task { await state.disconnectExplorer(server) }
   }
   @objc func toggleExplorer() {
     sidebar.isCollapsed.toggle()
@@ -1205,9 +1253,16 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         + (node.error != nil ? " ⚠" : ""))
     label.font = .systemFont(ofSize: 12)
     label.lineBreakMode = .byTruncatingTail
+    if node.objectFolder == .jobs || node.objectFolder == .triggers {
+      label.setAccessibilityLabel(node.displayTitle + " · " + (node.item?.detail ?? ""))
+    }
     let image = NSImageView(
       image: NSImage(systemSymbolName: node.icon, accessibilityDescription: nil)!)
     image.contentTintColor = node.error == nil ? node.tint : .systemOrange
+    if case .server = node.kind {
+      image.image = NSImage(systemSymbolName: node.server.reconnecting ? "arrow.triangle.2.circlepath" : node.server.online ? "externaldrive.connected.to.line.below" : "externaldrive.badge.xmark", accessibilityDescription: node.displayTitle)
+      image.contentTintColor = node.server.reconnecting ? .systemOrange : node.server.online ? .systemGreen : .secondaryLabelColor
+    }
     label.textColor = node.error == nil ? .labelColor : .systemOrange
     if case .server = node.kind { label.font = .systemFont(ofSize: 12, weight: .semibold) }
     cell.addSubview(label)
@@ -1225,7 +1280,10 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     ])
     cell.textField = label
     cell.imageView = image
-    cell.toolTip = node.error ?? node.item?.detail ?? "\(node.server.profile.name) · \(node.server.profile.host),\(node.server.profile.port) · \(node.database)"
+    cell.toolTip = node.error ?? (!node.server.online ? "Explorer bağlantısı kapalı. Son yüklenen nesneler gösteriliyor. Yenile veya çift tıklama ile yeniden bağlanın; açık sorgu oturumları korunur." : nil) ?? node.item?.detail ?? "\(node.server.profile.name) · \(node.server.profile.host),\(node.server.profile.port) · \(node.database)"
+    if case .relation(let relation)=node.linked {
+      cell.toolTip=relation.qualified + " · " + relation.type + (relation.remarks.isEmpty ? "" : "\n"+relation.remarks)
+    }
     return cell
   }
   func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
@@ -1296,6 +1354,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   private func load(_ node: TreeNode) {
     guard !node.loading, !node.loaded, node.server.online || node.server.catalogFixture != nil else { return }
+    if node.linked != nil || node.objectFolder == .linkedServers {loadLinked(node);return}
     if case .object(let kind) = node.kind {
       node.loaded = true
       node.children =
@@ -1347,11 +1406,22 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   @objc private func openObject() {
     guard let node = outline.item(atRow: outline.clickedRow) as? TreeNode else { return }
+    guard node.server.online else {
+      Task { await state.reconnectExplorer(node.server) }
+      return
+    }
     if let error = node.error {
       state.showError(error)
       return
     }
     contextNode = node
+    if node.linked != nil || node.objectFolder == .linkedServers {
+      if case .relation = node.linked {openLinkedRelation(node,run:true)}
+      else if node.expandable {
+        if outline.isItemExpanded(node) {outline.collapseItem(node)} else {outline.expandItem(node)}
+      }
+      return
+    }
     switch node.kind {
     case .object(let folder) where [.tables, .views].contains(folder): selectRows()
     case .object(let folder) where [.procedures,.functions,.triggers].contains(folder): modifyManagedModule()
@@ -1395,7 +1465,22 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     guard let node = contextNode else { return }
     if case .server = node.kind {
       command("Bağlantı ayarları", #selector(editConnection))
-      command("Bağlantıyı Kes", #selector(disconnectServer))
+    }
+    if !node.server.online || node.server.startupError != nil {
+      command(node.server.reconnecting ? "Bağlanıyor…" : "Yeniden Bağlan", #selector(reconnectServer))
+      menu.items.last?.isEnabled = !node.server.reconnecting
+      command("Bağlantı ayarları…", #selector(editConnection))
+      command("Bağlan ve Yenile", #selector(refreshContextNode))
+      menu.items.last?.isEnabled = !node.server.reconnecting
+      return
+    }
+    if node.linked != nil || node.objectFolder == .linkedServers {
+      let linkedCommands=linkedMenu(for:node)
+      for item in linkedCommands.items {linkedCommands.removeItem(item);menu.addItem(item)}
+      return
+    }
+    if case .server = node.kind {
+      command("Explorer Bağlantısını Kes", #selector(disconnectServer))
     }
     command("Yeni Sorgu", #selector(newQueryAtNode))
     command("Yenile", #selector(refreshContextNode))
@@ -1462,6 +1547,10 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   func agentMenu(for node:TreeNode) -> NSMenu {
     let menu=NSMenu()
+    if node.title == "SQL Server Agent" || {if case .folder(.jobs)=node.kind {return true};return false}() {
+      let item=NSMenuItem(title:"Otomatik Yenile · 15 sn",action:#selector(toggleAgentAutoRefresh),keyEquivalent:"")
+      item.target=self;item.state=agentAutoRefresh ? .on:.off;menu.addItem(item)
+    }
     func add(_ title:String,_ command:String,_ icon:String,enabled:Bool=true) {
       let item=NSMenuItem(title:title,action:#selector(agentMenuAction(_:)),keyEquivalent:"")
       item.target=self;item.representedObject=node;item.identifier = .init(command);item.isEnabled=enabled
@@ -1711,11 +1800,15 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   @objc func extensionsPanel() { showExtensionsWindow() }
   @objc private func indexDesigner() { showIndexWindow(node: contextNode) }
   @objc private func jobDesigner() { showJobWindow(node: contextNode) }
-  @discardableResult func present<V: View>(_ root: V, title: String, width: CGFloat = 700, height: CGFloat = 560, minWidth:CGFloat=620, minHeight:CGFloat=480) -> NSWindow {
+  @discardableResult func present<V: View>(_ root: V, title: String, width: CGFloat = 700, height: CGFloat = 560, minWidth:CGFloat=620, minHeight:CGFloat=480,identity:String?=nil) -> NSWindow {
+    if let identity,let existing=auxiliaryWindows.compactMap(\.window).first(where:{$0.identifier?.rawValue == identity && $0.isVisible}) {
+      existing.makeKeyAndOrderFront(nil);return existing
+    }
     let controller = NSHostingController(
       rootView: root.font(.custom(StudioTheme.uiFont.fontName, size: 12)))
     controller.sizingOptions = []
     let window = NSWindow(contentViewController: controller)
+    if let identity {window.identifier = .init(identity)}
     window.title = title
     window.styleMask = [.titled, .closable, .resizable]
     window.setContentSize(NSSize(width: width, height: height))
@@ -2201,6 +2294,160 @@ private struct ConnectionForm: View {
         if chosen.contains(defaultDatabase) { final.database = defaultDatabase }
         try await connect(final, password, remember)
       } catch { self.error = error.localizedDescription }
+    }
+  }
+}
+
+extension WorkbenchController {
+  private func linkedNode(_ title: String, kind: TreeNode.Kind = .group, branch: TreeNode.LinkedBranch, parent: TreeNode, item: CatalogItem? = nil, loaded: Bool = false) -> TreeNode {
+    let child=TreeNode(title,kind:kind,server:parent.server,database:"master",item:item)
+    child.linked=branch; child.loaded=loaded
+    return child
+  }
+  func loadLinked(_ node: TreeNode) {
+    guard !node.loading, !node.loaded, node.server.online || node.server.catalogFixture != nil else {return}
+    if node.linked == nil, node.objectFolder == .linkedServers, let item=node.item {
+      node.children=[linkedNode("Catalogs",branch:.catalogs(item.name),parent:node)]
+      node.loaded=true; outline.reloadItem(node,reloadChildren:true); return
+    }
+    guard let branch=node.linked else {return}
+    if case .relation(let relation)=branch {
+      node.children=[linkedNode("Columns",kind:.folder(.columns),branch:.columns(relation),parent:node)]
+      node.loaded=true; outline.reloadItem(node,reloadChildren:true); return
+    }
+    let sql:String
+    switch branch {
+    case .catalogs(let link): sql=LinkedCatalog.catalogsSQL(server:link)
+    case .catalog(let link,let catalog): sql=LinkedCatalog.relationsSQL(server:link,catalog:catalog)
+    case .columns(let relation): sql=LinkedCatalog.columnsSQL(relation)
+    default: return
+    }
+    node.loading=true; node.error=nil; outline.reloadItem(node)
+    let generation=node.server.generation
+    let metadata=node.server.metadata
+    Task { [weak self, weak node] in
+      guard let self,let node else {return}
+      defer {node.loading=false; outline.reloadItem(node,reloadChildren:true)}
+      do {
+        var limits=Limits(); limits.rows=5000; limits.totalBytes=8_000_000; limits.timeout=30
+        let result=try await node.server.catalog(sql,database:"master",limits:limits)
+        guard generation == node.server.generation, node.server.metadata === metadata,
+          node.server.online || node.server.catalogFixture != nil else {return}
+        switch branch {
+        case .catalogs(let link):
+          let catalogs=try LinkedCatalog.catalogs(result)
+          node.children=catalogs.map {linkedNode($0,branch:.catalog(link,$0),parent:node)}
+          if catalogs.isEmpty {
+            node.children=[linkedNode("Varsayılan katalog (sağlayıcı katalog adı döndürmedi)",branch:.catalog(link,nil),parent:node)]
+          }
+        case .catalog(let link,let catalog):
+          let relations=try LinkedCatalog.relations(result,server:link,catalog:catalog)
+          let groups=["Tables","Views","System Tables","System Views","Synonyms & Aliases","Temporary Tables","Other Objects"]
+          node.children=groups.compactMap { title in
+            let items=relations.filter {$0.group == title}
+            guard !items.isEmpty else {return nil}
+            let group=linkedNode(title,branch:.group,parent:node,loaded:true)
+            group.children=items.map { relation in
+              let kind:Folder=relation.type.uppercased().contains("VIEW") ? .views : .tables
+              let display=(catalog == nil ? relation.catalog.map {$0+" · "} ?? "" : "")+(relation.schema.map {$0+"."} ?? "")+relation.name
+              return linkedNode(display,kind:.object(kind),branch:.relation(relation),parent:group,item:CatalogItem(name:relation.name,schema:relation.schema ?? "",detail:relation.type + (relation.remarks.isEmpty ? "" : " · "+relation.remarks)))
+            }
+            return group
+          }
+        case .columns(let relation):
+          node.children=try LinkedCatalog.columns(result,relation:relation).map {
+            linkedNode($0.name + ($0.detail.isEmpty ? "" : " ("+$0.detail+")"),kind:.detail,branch:.detail,parent:node,item:$0,loaded:true)
+          }
+        default: break
+        }
+        if node.children.isEmpty {
+          node.children=[linkedNode("Görünür metadata yok; sağlayıcı desteği ve yetkileri kontrol edin.",kind:.detail,branch:.detail,parent:node,loaded:true)]
+        }
+        if result.partial {
+          node.children.append(linkedNode("Kısmi liste: satır, süre veya boyut sınırına ulaşıldı.",kind:.detail,branch:.detail,parent:node,loaded:true))
+        }
+        node.loaded=true
+      } catch {
+        guard generation == node.server.generation, node.server.metadata === metadata else {return}
+        node.error=error.localizedDescription; node.loaded=true
+        node.children=[linkedNode("Metadata alınamadı — Yenile ile tekrar deneyin",kind:.detail,branch:.detail,parent:node,loaded:true)]
+      }
+    }
+  }
+  func linkedMenu(for node: TreeNode) -> NSMenu {
+    let menu=NSMenu()
+    func add(_ title:String,_ action:Selector) {
+      let item=NSMenuItem(title:title,action:action,keyEquivalent:"");item.target=self;item.representedObject=node;menu.addItem(item)
+    }
+    add("Yenile",#selector(linkedRefresh(_:)))
+    if case .relation = node.linked {
+      add("Select Top 1000 Rows",#selector(linkedSelect(_:)))
+      add("SELECT SQL'ini Aç",#selector(linkedScript(_:)))
+      add("Tam Adı Kopyala",#selector(linkedCopy(_:)))
+    }
+    if node.objectFolder == .linkedServers, node.linked == nil {
+      add("Test Connection",#selector(linkedTest(_:)))
+      add("Properties…",#selector(linkedProperties(_:)))
+    }
+    return menu
+  }
+  @objc private func linkedRefresh(_ sender:NSMenuItem) {if let node=sender.representedObject as? TreeNode {refresh(node)}}
+  @objc private func linkedSelect(_ sender:NSMenuItem) {if let node=sender.representedObject as? TreeNode {openLinkedRelation(node,run:true)}}
+  @objc private func linkedScript(_ sender:NSMenuItem) {if let node=sender.representedObject as? TreeNode {openLinkedRelation(node,run:false)}}
+  func openLinkedRelation(_ node:TreeNode,run:Bool) {
+    guard case .relation(let relation)=node.linked else {return}
+    state.newQuery(server:node.server,database:"master",text:relation.selectSQL,title:relation.name,run:run)
+  }
+  @objc private func linkedCopy(_ sender:NSMenuItem) {
+    guard let node=sender.representedObject as? TreeNode,case .relation(let relation)=node.linked else {return}
+    NSPasteboard.general.clearContents();NSPasteboard.general.setString(relation.qualified,forType:.string)
+  }
+  @objc private func linkedTest(_ sender:NSMenuItem) {
+    guard let node=sender.representedObject as? TreeNode,let item=node.item else {return}
+    state.newQuery(server:node.server,database:"master",text:LinkedCatalog.testSQL(server:item.name),title:"Test Connection · "+item.name,run:true)
+  }
+  @objc private func linkedProperties(_ sender:NSMenuItem) {
+    guard let node=sender.representedObject as? TreeNode else {return}
+    contextNode=node;objectProperties()
+  }
+}
+
+
+extension WorkbenchController {
+  @objc private func toggleAgentAutoRefresh() {agentAutoRefresh.toggle()}
+  func refreshExpandedAgentJobs() async {
+    guard agentAutoRefresh, isViewLoaded, let window=view.window, window.isVisible, !window.isMiniaturized else {return}
+    for root in roots where root.server.online && !root.server.reconnecting && outline.isItemExpanded(root) {
+      for agent in root.children where agent.title == "SQL Server Agent" && outline.isItemExpanded(agent) {
+        for jobs in agent.children where jobs.objectFolder == nil {
+          guard case .folder(.jobs)=jobs.kind, jobs.loaded, !jobs.loading else {continue}
+          jobs.loading=true
+          let token=root.server.generation
+          let metadata=root.server.metadata
+          defer {jobs.loading=false;outline.reloadItem(jobs)}
+          do {
+            var limits=Limits();limits.rows=5000;limits.timeout=10
+            let result=try await root.server.catalog(Catalog.objects(.jobs),database:"msdb",limits:limits)
+            guard root.server.online,root.server.generation == token,root.server.metadata === metadata else {continue}
+            let items=Catalog.rows(result)
+            var existing=Dictionary(jobs.children.compactMap {child in child.item.map {($0.name,child)}},uniquingKeysWith: {a,_ in a})
+            jobs.children=items.map {item in
+              if let old=existing.removeValue(forKey:item.name) {old.item=item;return old}
+              return TreeNode(item.name,kind:.object(.jobs),server:root.server,database:"msdb",item:item)
+            }
+            jobs.loaded=true
+            jobs.error=result.partial ? "Kısmi job listesi; metadata sınırına ulaşıldı.":nil
+            let selected=outline.item(atRow:outline.selectedRow) as? TreeNode
+            let origin=outline.enclosingScrollView?.contentView.bounds.origin
+            outline.reloadItem(jobs,reloadChildren:true)
+            if let selected,outline.row(forItem:selected)>=0 {outline.selectRowIndexes(IndexSet(integer:outline.row(forItem:selected)),byExtendingSelection:false)}
+            if let origin,let scroll=outline.enclosingScrollView {scroll.contentView.scroll(to:origin);scroll.reflectScrolledClipView(scroll.contentView)}
+          } catch {
+            guard root.server.generation == token else {continue}
+            jobs.error=error.localizedDescription;outline.reloadItem(jobs)
+          }
+        }
+      }
     }
   }
 }

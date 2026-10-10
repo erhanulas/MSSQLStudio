@@ -119,7 +119,7 @@ import SwiftUI
     var requests:[String]=[];var scripts:[String]=[]
     server.catalogFixture={sql in requests.append(sql);return ObjectManagementUIFixture.catalog(sql)}
     let host=WorkbenchController(state:StudioState())
-    let history=host.present(AgentHistoryPanel(server:server,job:"Demo Nightly"),title:"Synthetic Agent History",width:1200,height:800)
+    let history=host.present(AgentHistoryPanel(server:server,job:"Demo Nightly",includeSteps:true),title:"Synthetic Agent History",width:1200,height:800)
     let properties=host.present(AgentPropertiesPanel(server:server,name:"Demo Nightly",open:{scripts.append($0)}),title:"Synthetic Agent Properties",width:1200,height:800)
     defer {history.close();properties.close()}
     for _ in 0..<100 {

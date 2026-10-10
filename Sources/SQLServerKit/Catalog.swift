@@ -270,3 +270,84 @@ public enum DatabaseSelection {
       ?? ""
   }
 }
+
+/// OLE DB metadata, queried through the current SQL Server rather than a remote login.
+public enum LinkedCatalog {
+  public struct Relation: Equatable, Hashable, Sendable {
+    public let server: String
+    public let catalog: String?
+    public let schema: String?
+    public let name: String
+    public let type: String
+    public let remarks: String
+    public init(server: String, catalog: String?, schema: String?, name: String, type: String, remarks: String = "") {
+      self.server=server; self.catalog=catalog; self.schema=schema; self.name=name; self.type=type; self.remarks=remarks
+    }
+    public var qualified: String {
+      [SQL.identifier(server), catalog.map(SQL.identifier) ?? "", schema.map(SQL.identifier) ?? "", SQL.identifier(name)].joined(separator: ".")
+    }
+    public var selectSQL: String { "SELECT TOP (1000) *\nFROM \(qualified);" }
+    public var group: String {
+      switch type.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
+      case "TABLE", "BASE TABLE": return "Tables"
+      case "VIEW": return "Views"
+      case "SYSTEM TABLE": return "System Tables"
+      case "SYSTEM VIEW": return "System Views"
+      case "SYNONYM", "ALIAS": return "Synonyms & Aliases"
+      case "GLOBAL TEMPORARY", "LOCAL TEMPORARY": return "Temporary Tables"
+      default: return "Other Objects"
+      }
+    }
+  }
+  public static func catalogsSQL(server: String) -> String {
+    "EXEC master.sys.sp_catalogs @server_name=\(SQL.literal(server));"
+  }
+  public static func relationsSQL(server: String, catalog: String?) -> String {
+    "EXEC master.sys.sp_tables_ex @table_server=\(SQL.literal(server)), @table_catalog=\(catalog.map(SQL.literal) ?? "NULL"), @fUsePattern=0;"
+  }
+  public static func columnsSQL(_ relation: Relation) -> String {
+    "EXEC master.sys.sp_columns_ex @table_server=\(SQL.literal(relation.server)), @table_name=\(SQL.literal(relation.name)), @table_schema=\(relation.schema.map(SQL.literal) ?? "NULL"), @table_catalog=\(relation.catalog.map(SQL.literal) ?? "NULL"), @ODBCVer=3;"
+  }
+  public static func testSQL(server: String) -> String {
+    "EXEC master.sys.sp_testlinkedserver @servername=\(SQL.literal(server));"
+  }
+  private static func value(_ row: [String?], _ fields: [Field], _ name: String) -> String? {
+    guard let i=fields.firstIndex(where: {$0.name.caseInsensitiveCompare(name) == .orderedSame}), i<row.count else {return nil}
+    return row[i]
+  }
+  private static func nonempty(_ value: String?) -> String? {value.flatMap {$0.isEmpty ? nil : $0}}
+  public static func catalogs(_ result: Execution) throws -> [String] {
+    guard let rows=result.results.first else {return []}
+    guard rows.fields.contains(where: {$0.name.caseInsensitiveCompare("CATALOG_NAME") == .orderedSame}) else {throw SQLFailure("Sağlayıcı katalog bilgilerini beklenen biçimde döndürmedi.")}
+    return Array(Set(rows.values.compactMap {nonempty(value($0,rows.fields,"CATALOG_NAME"))})).sorted {$0.localizedStandardCompare($1) == .orderedAscending}
+  }
+  public static func relations(_ result: Execution, server: String, catalog: String?) throws -> [Relation] {
+    guard let rows=result.results.first else {return []}
+    for name in ["TABLE_NAME", "TABLE_TYPE", "TABLE_CAT", "TABLE_SCHEM"] {
+      guard rows.fields.contains(where: {$0.name.caseInsensitiveCompare(name) == .orderedSame}) else {throw SQLFailure("Sağlayıcı nesne bilgilerini beklenen biçimde döndürmedi: \(name)")}
+    }
+    var seen=Set<Relation>()
+    return rows.values.compactMap { row -> Relation? in
+      guard let name=nonempty(value(row,rows.fields,"TABLE_NAME")) else {return nil}
+      let returnedCatalog=nonempty(value(row,rows.fields,"TABLE_CAT"))
+      // Some providers ignore restrictions. Never attribute another catalog's object to this one.
+      if let catalog, let returnedCatalog, catalog != returnedCatalog {return nil}
+      let item=Relation(server:server,catalog:returnedCatalog ?? catalog,schema:nonempty(value(row,rows.fields,"TABLE_SCHEM")),name:name,type:value(row,rows.fields,"TABLE_TYPE") ?? "UNKNOWN",remarks:value(row,rows.fields,"REMARKS") ?? "")
+      return seen.insert(item).inserted ? item : nil
+    }.sorted {($0.schema ?? "",$0.name,$0.type)<($1.schema ?? "",$1.name,$1.type)}
+  }
+  public static func columns(_ result: Execution, relation: Relation) throws -> [CatalogItem] {
+    guard let rows=result.results.first else {return []}
+    guard rows.fields.contains(where: {$0.name.caseInsensitiveCompare("COLUMN_NAME") == .orderedSame}) else {throw SQLFailure("Sağlayıcı sütun bilgilerini beklenen biçimde döndürmedi.")}
+    return rows.values.compactMap { row -> CatalogItem? in
+      // Column providers can ignore name restrictions; retain only this exact relation.
+      guard value(row,rows.fields,"TABLE_NAME") == relation.name,
+        nonempty(value(row,rows.fields,"TABLE_SCHEM")) == relation.schema,
+        relation.catalog == nil || nonempty(value(row,rows.fields,"TABLE_CAT")) == nil || nonempty(value(row,rows.fields,"TABLE_CAT")) == relation.catalog,
+        let name=nonempty(value(row,rows.fields,"COLUMN_NAME")) else {return nil}
+      let nullable=value(row,rows.fields,"IS_NULLABLE") ?? ""
+      let detail=(value(row,rows.fields,"TYPE_NAME") ?? "") + (nullable == "YES" ? " · NULL" : nullable == "NO" ? " · NOT NULL" : "")
+      return CatalogItem(id:value(row,rows.fields,"ORDINAL_POSITION").flatMap(Int.init) ?? 0,name:name,detail:detail)
+    }.sorted {$0.id<$1.id}
+  }
+}

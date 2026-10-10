@@ -10,6 +10,16 @@ import SQLServerKit
   var databases: [CatalogItem] = []
   var remembered = false
   var online = true
+  var reconnecting = false
+  func pauseIndexing() { indexPreparation?.cancel() }
+  func recordExplorerFailure(_ error: Error) {
+    startupError = error.localizedDescription
+    if let failure = error as? SQLFailure,
+      failure.diagnostics.contains(where: { $0.state.hasPrefix("08") }) {
+      online = false
+      pauseIndexing()
+    }
+  }
   var startupError: String?
   var catalogFixture: ((String) -> Execution)?
   var indexingDatabases = Set<String>()
@@ -40,7 +50,7 @@ import SQLServerKit
     self.profile = profile
     self.password = password
   }
-  func catalog(_ sql: String, database: String) async throws -> Execution {
+  func catalog(_ sql: String, database: String, limits: Limits = Limits()) async throws -> Execution {
     if let catalogFixture { return catalogFixture(sql) }
     guard online else { throw SQLFailure("Bağlantı çevrimdışı. Bağlantı ayarlarından yeniden bağlanın.") }
     var profile = self.profile
@@ -49,8 +59,14 @@ import SQLServerKit
     let password = self.password
     let connection = ODBCConnection()
     do {
-      try await connection.connect(profile, password: password)
-      let result = try await connection.execute(sql)
+      let result = try await withTaskCancellationHandler {
+        try Task.checkCancellation()
+        try await connection.connect(profile, password: password)
+        try Task.checkCancellation()
+        let result = try await connection.execute(sql, limits: limits)
+        try Task.checkCancellation()
+        return result
+      } onCancel: {connection.cancel()}
       await connection.disconnect()
       guard generation == token else { throw CancellationError() }
       return result
@@ -364,7 +380,7 @@ struct ObjectEditorKey: Codable, Equatable {
   func connect(_ profile: ServerProfile, password: String, save: Bool) async throws
     -> ConnectedServer
   {
-    if let old = servers.first(where: { $0.id == profile.id && $0.online }) {
+    if let old = servers.first(where: { $0.id == profile.id }) {
       let reconnect =
         !old.profile.hasSameConnectionSettings(as: profile) || old.password != password
       func checkSessions() throws {
@@ -415,8 +431,11 @@ struct ObjectEditorKey: Codable, Equatable {
             doc.connect()
           }
         } else {
-          await candidate.disconnect()
+          let previous = old.metadata
+          old.metadata = candidate
           old.profile = profile
+          old.password = password
+          await previous.disconnect()
         }
         old.databases = profile.visibleItems(from: items)
         old.online = true; old.startupError = nil
@@ -448,6 +467,29 @@ struct ObjectEditorKey: Codable, Equatable {
     if save { rememberExplorer(profile.id, selected: true) }
     changed?()
     return server
+  }
+  // Explorer metadata is independent of each query's session and transaction.
+  func disconnectExplorer(_ server: ConnectedServer) async {
+    guard !server.reconnecting else { return }
+    server.online = false
+    server.startupError = nil
+    server.pauseIndexing()
+    let previous = server.metadata
+    server.metadata = ODBCConnection()
+    changed?()
+    await previous.disconnect()
+  }
+  func reconnectExplorer(_ server: ConnectedServer) async {
+    guard !server.reconnecting else { return }
+    server.reconnecting = true
+    server.startupError = nil
+    changed?()
+    defer { server.reconnecting = false; changed?() }
+    do {
+      _ = try await connect(server.profile, password: server.password, save: false)
+    } catch {
+      server.startupError = error.localizedDescription
+    }
   }
   func rememberExplorer(_ id: UUID, selected: Bool) {
     var ids = UserDefaults.standard.stringArray(forKey: "explorerActiveServerIDs") ?? servers.filter(\.remembered).map { $0.id.uuidString }

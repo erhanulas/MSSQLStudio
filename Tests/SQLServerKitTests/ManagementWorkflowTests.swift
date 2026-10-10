@@ -46,6 +46,8 @@ import Testing
   @Test func historyIsBoundedFilteredAndDecodesDurationsMessages() throws {
     let sql=SQLAgent.history(name:"Job ' X",status:0,days:99999,includeSteps:false)
     #expect(sql.contains("TOP (500)") && sql.contains("N'Job '' X'") && sql.contains("h.run_status=0") && sql.contains("h.step_id=0") && sql.contains("-3650"))
+    #expect(!sql.contains("SELECT MAX(p.instance_id)"))
+    #expect(SQLAgent.history(includeSteps:true).contains("SELECT MAX(p.instance_id)"))
     #expect(!SQLAgent.history(includeSteps:true).contains("AND h.step_id=0"))
     var data=Execution();data.results=[Rows(values:[["123","Test","0","(Job outcome)","1","2026-10-09 21:00:00","127:04:03","İş tamamlandı"]])]
     let row=try #require(SQLAgent.decodeHistory(data).first)

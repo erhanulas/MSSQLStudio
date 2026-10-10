@@ -1,3 +1,34 @@
+# Agent otomatik yenileme ve yükleme davranışı — 10 Ekim 2026
+
+- Görünür Explorer'da Agent dalı açıkken yüklenmiş Jobs listesi 15 saniyede bir, önceki istek tamamlandıktan sonra yenilenir. Kapalı dal/bağlantı ve gizli/küçültülmüş pencerede yeni okuma yapılmaz. Menüden durdurulabilir. Satır nesneleri ad üzerinden korunur; seçim ve kaydırma konumu geri yüklenir. Job/trigger durum yazıları kaldırıldı; ikon, tooltip ve VoiceOver durumu korur.
+- Job History varsayılanı 7 gün ve özet sonuçlardır. Adım ayrıntıları isteğe bağlıdır. Özet SQL önceki outcome aramasını içermez; adım modu çalışma/adım eşleştirmesini korur. Decode/historyTree ve job özellik decode işlemleri detached worker task üzerinde yapılır. Yenilemede eski sonuçlar korunur, yükleme açıklaması gösterilir. Aynı job için görünür geçmiş/özellik penceresi yeniden kullanılır.
+- QueryController çalışan sorgunun UI bildirimlerini 50 ms birleştirir; sekme çubuğu render imzası değişmeden yeniden oluşturulmaz. Bağlanan/çalışan sekmede native spinner vardır. Metadata sorgularında Task iptali ODBC cancel'a iletilir; canlı driver iptali bu görevde test edilmedi.
+- Tam doğrulama: `/tmp/mssql-agent-responsive-all-verified.log` — 64 uygulama + 99 core = 163 test; 141 geçti, 22 koşullu atlandı. Build/test çıktıları `/tmp` altında üretildi.
+- Yeni native testler: Agent kapalıyken sorgu yok; açık Jobs yenilemesinde aynı satır/ikon güncellenir ve seçili satır korunur; bağlantı kapanınca sorgu yok. Çalışan sorgu sırasında gerçek sekme düğmesinin eylemiyle diğer sekmeye geçiş doğrulandı. Aynı job geçmişi iki kez açılınca tek görünür pencere ve tek özet metadata sorgusu oluştu. Eski adım-ağacı testi açık ayrıntı modunda çalıştırıldı.
+- Native testte NSButton.performClick ile test helper erken kapanıyordu; uygulamanın mouseDown yolunda kullandığı sendAction ile sekme eylemi gönderilince test tamamlandı. Tam test sonucu yalnız tamamlanan doğrulama çalışmasına dayanır.
+- Son Release derlemesi `/tmp/mssql-agent-responsive-final-build.log`: BUILD SUCCEEDED; imzasız yerel doğrulama.
+- Gerçek SQL Server/Agent üzerinde gecikme, otomatik yenileme ve iptal ölçülmedi; kullanıcı job'larına işlem yapılmadı. Genel arayüzdeki tüm olası performans sorunlarının çözüldüğü iddia edilmez. Henüz yayımlanmadı; sürüm 0.2.42.
+
+# Linked Server nesne gezintisi — 10 Ekim 2026
+
+- SSMS/OLE DB metadata yaklaşımı araştırıldı: Catalogs → katalog → sağlayıcının bildirdiği Tables, Views, sistem tabloları/view'ları, synonym/alias, geçici ve diğer nesne türleri. Nesne altında Columns gezintisi eklendi. Rutin klasörleri ve uzak DDL/düzenleme desteği oluşturulmadı.
+- Mevcut yerel SQL Server üzerinden sp_catalogs/sp_tables_ex/sp_columns_ex kullanılır; uzak sunucuya doğrudan oturum açılmaz. Katalogsuz/şemasız nesnelerin dört parçalı adı boş bileşenleri korur. Literal ve identifier helper'ları kullanılır; tablo listelemede pattern matching kapalıdır. Sağlayıcı kısıtları yok sayarsa başka katalog/şema/nesne satırları ayıklanır.
+- Native menü, uzak nesneler için yerel Design/Edit/ALTER/Delete seçeneklerini sunmaz. SELECT SQL'i önce editöre alınabilir veya açık Select Top 1000 Rows eylemiyle okunabilir; tam ad kopyalanabilir. Linked Server kökünde Test Connection ve salt okunur özellikler mevcut.
+- Metadata sınırları 5.000 satır / 8 MB / 30 saniye sorgu timeout'u. Kısmi liste, boş metadata ve sağlayıcı format hatası görünür; katalog adlarını döndürmeyen sağlayıcılarda varsayılan katalog dalı vardır. Bağlantı değiştikten sonra eski metadata sonuçları yayımlanmaz.
+- `/tmp/mssql-linked-verified-tests.log`: 62 uygulama + 99 core = 161 test; 139 geçti, 22 koşullu atlandı. Native NSOutlineView testi linked sunucu → katalog → tablo/view/sistem view → sütun akışını, güvenli menüleri ve dört parçalı SELECT metnini doğruladı. Ek native test boş/kısmi/hatalı sağlayıcı yanıtlarını doğruladı. Core testler ad escaping, null qualifier, metadata türleri ve tam nesne kimliği filtrelemesini kapsar.
+- Son Release derlemesi `/tmp/mssql-linked-build-final.log`: BUILD SUCCEEDED; imzasız yerel doğrulama.
+- Gerçek Linked Server sağlayıcısı/yetkileri ile canlı test yapılmadı. Sağlayıcı CATALOGS/TABLES/COLUMNS metadata desteği ve yerel Linked Server ayarları gerçek görünürlüğü belirler. Kullanıcı verisine veya bağlantı ayarlarına yazılmadı. Henüz yayımlanmadı; sürüm 0.2.42.
+- Aynı çalışma ağacındaki Job History açılış filtresi 30 günden 7 güne değiştirildi; farklı tarih aralığı seçenekleri korunuyor.
+
+# Explorer bağlantı yönetimi — 10 Ekim 2026
+
+- Kapalı sunucular ve yüklenmiş ağaç korunur. Explorer bağlantısını kesmek sorgu oturumlarını, metni veya transaction'ı kapatmaz. Yeniden bağlantı aynı ConnectedServer nesnesini kullanır; aynı bağlantı ayarlarında metadata bağlantısı yenilenir, sorgu oturumları değiştirilmez.
+- Satırdaki durum metni/simge, yeniden bağlanma menüsü, çevrimdışı Yenile ve çift tıklama akışı eklendi. Başarısız yeniden bağlantı hatası sunucu satırında kalır; SQL otomatik çalışmaz. Yetki hataları ile ODBC 08 sınıfı bağlantı hataları ayrılır.
+- Tam test çalışması: `/tmp/mssql-explorer-final-tests.log` — 60 uygulama + 96 core = 156 test; 134 geçti, 22 koşullu atlandı. Son düzenleme sonrası native Explorer smoke: `/tmp/mssql-explorer-smoke.log` — 2/2 geçti.
+- Native NSOutlineView testi, bağlantı kesildikten sonra aynı root/çocukların, açık sekme kimliğinin, SQL metninin, ready durumunun ve transaction sayısının korunmasını doğrular; bağlantı durum etiketleri ve ODBC hata sınıfları da kontrol edilir.
+- Son Release derlemesi: `/tmp/mssql-explorer-build-final.log` — BUILD SUCCEEDED, imzasız yerel doğrulama.
+- Canlı bağlantıyı kesip yeniden bağlama testi genişletildi ancak test parolası verilmediği için çalıştırılmadı. Gerçek sunuculara, Keychain kayıtlarına ve kullanıcı sorgularına müdahale edilmedi. Bu değişiklikler henüz GitHub'da yayımlanmadı; sürüm 0.2.42 kaldı.
+
 # v0.2.42 yayın doğrulaması — 10 Ekim 2026
 
 - Yayın: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.42

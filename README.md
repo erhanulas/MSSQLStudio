@@ -412,3 +412,28 @@ Activity Monitor iş adı/durum filtresi, son sonuç/sonraki çalışma/sahip bi
 Özellik tasarımından çıkan değişiklikler önce msdb sorgu sekmesine aktarılır; otomatik çalıştırılmaz. Üretilen batch açık transaction'ı reddeder, job ve paylaşılan zamanlamanın değişiklik tarihi/sürümünü kilit altında karşılaştırır, stored procedure dönüş kodlarını kontrol eder ve hata halinde kendi transaction'ını geri alır. Çalıştırdıktan sonra özellikler penceresinde Yenile kullanılır. Step taşıma/yeniden sıralama, T-SQL dışı subsystem/proxy düzenleme, uyarı oluşturma, multiserver dağıtımı ve Agent servis yönetimi henüz SSMS eşdeğeri değildir. Canlı sunucu yetkileri ve Database Mail yapılandırması gereklidir.
 
 Resmi kaynaklar: [Job History](https://learn.microsoft.com/sql/ssms/agent/view-the-job-history), [Steps](https://learn.microsoft.com/en-us/ssms/agent/job-properties-new-job-steps-page), [Advanced](https://learn.microsoft.com/en-us/ssms/agent/job-step-properties-new-job-step-advanced-page), [Notifications](https://learn.microsoft.com/en-us/ssms/agent/job-properties-new-job-notifications-page), [sp_update_schedule](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-update-schedule-transact-sql).
+
+
+### Explorer bağlantı yönetimi
+
+Explorer bağlantısı kesildiğinde kayıtlı sunucu ve son yüklenmiş ağaç görünür kalır; açık sorguların bağımsız oturumları ve transaction'ları kapatılmaz. Sunucu satırı Bağlı / Bağlanıyor / Bağlantı kapalı durumunu ve simgesini gösterir. Kapalı sunucuda Yenile veya çift tıklama yeniden bağlantıyı başlatır; Yenile bağlantı başarılıysa seçili dalı yeniler. Sağ tık menüsünden Yeniden Bağlan ve bağlantı ayarlarına erişilir. Yeniden bağlantı sorguları otomatik çalıştırmaz. Aynı bağlantı bilgileriyle metadata bağlantısı yenilenirken sunucu kimliği ve açık sekmeler korunur. Bağlantı sınıfındaki ODBC hataları çevrimdışı duruma geçirir; yetki hataları bağlantı kopması olarak sınıflandırılmaz.
+
+Yaklaşım kaynakları: [SSMS Explorer ve sorgu oturumlarının ayrılması](https://learn.microsoft.com/en-us/ssms/register-servers/disconnect-from-a-registered-server-sql-server-management-studio), [DataGrip veri kaynağı ve oturum modeli](https://www.jetbrains.com/help/datagrip/connecting-to-a-database.html). Tam ürün eşdeğerliği veya otomatik SQL yeniden çalıştırma hedeflenmez.
+
+
+### Linked Server nesne gezintisi
+
+Server Objects → Linked Servers → sunucu → Catalogs → katalog altında sağlayıcının döndürdüğü Tables, Views, System Tables, System Views, Synonyms & Aliases, Temporary Tables ve Other Objects grupları gösterilir; yalnızca dolu gruplar oluşur. Katalog adı bildirmeyen sağlayıcılarda varsayılan katalog dalından metadata istenir. Procedure/fonksiyon klasörleri oluşturulmaz; bu gezinti OLE DB katalog ve tablo rowset kapsamındadır.
+
+Uzak nesnenin altında Columns metadata'sı okunur. Sağ tık menüsünde dört parçalı tam adı kopyalama, SELECT SQL'ini editöre alma ve Select Top 1000 Rows bulunur. Linked Server kökünde Test Connection ve salt okunur Properties bulunur. Yerel Design/Edit/ALTER/DELETE işlemleri uzak nesnelere sunulmaz. Mevcut SQL Server bağlantısı üzerinden `master.sys.sp_catalogs`, `sp_tables_ex` ve `sp_columns_ex` kullanılır; uzak sunucu için ayrı parola veya doğrudan oturum açılmaz. Metadata sorguları 5.000 satır, 8 MB ve 30 saniye sorgu sınırıyla çalışır; kısmi sonuçlar işaretlenir. Sağlayıcının boş metadata döndürmesi nesnenin kesinlikle bulunmadığı anlamına gelmez; yetki/sağlayıcı desteği mesajı gösterilir. Gerçek sağlayıcılarla canlı doğrulama yapılmamıştır; uzak nesne tasarımı, rutin gezintisi ve uzak DDL üretimi kapsam dışıdır.
+
+Kaynaklar: [Microsoft Linked Server metadata türleri](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-tables-ex-transact-sql?view=sql-server-ver17), [katalog listesi](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-catalogs-transact-sql?view=sql-server-ver17), [sütun bilgileri](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-columns-ex-transact-sql?view=sql-server-ver17).
+
+
+### Agent durum yenilemesi ve yükleme davranışı
+
+Explorer'da SQL Server Agent dalı açık, Jobs listesi yüklenmiş ve çalışma penceresi görünürken job durumları 15 saniyede bir okunur. Dal kapatıldığında, pencere gizlendiğinde/küçültüldüğünde veya bağlantı kapandığında yeni otomatik okumalar yapılmaz. Agent/Jobs sağ tık menüsünden otomatik yenileme kapatılabilir. Yenilemede mevcut job satırı kimlikleri, seçim ve kaydırma konumu korunur. Job ve trigger durum metinleri satır adlarına eklenmez; ikon, araç ipucu ve erişilebilirlik açıklamaları durumu taşır.
+
+Job History ilk açılışta son 7 günün çalışma sonuçlarını getirir; Adım ayrıntıları istendiğinde adım/retry kayıtları ayrıca yüklenir. Özet sorgusunda önceki çalışma kimliğini her satır için arayan alt sorgu çalışmaz. Metadata çözümleme ve history ağacı hazırlama arayüz iş parçacığı dışında yapılır; yeni filtre yüklenirken önceki sonuçlar korunur. Aynı job'ın geçmişi/özellikleri zaten açıkken mevcut pencereye geçilir. Açık pencerede sunucudan yeni bilgi almak için Yenile kullanılır.
+
+Sorgu sonuçlarının arayüz güncellemeleri 50 ms aralıklarla birleştirilir; sekme içeriği/durumu değişmedikçe sekme çubuğu tekrar oluşturulmaz. Çalışan/bağlanan sekmelerde yükleme animasyonu görünür ve diğer sekmeler seçilebilir. Metadata isteği iptal edildiğinde ODBC sorgusuna iptal iletilir; iptal transaction rollback değildir. Canlı sunucuda hız ölçümü yapılmamıştır; sunucu/sağlayıcı gecikmesinin bütünüyle giderildiği iddia edilmez.

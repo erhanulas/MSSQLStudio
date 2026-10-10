@@ -156,13 +156,13 @@ private struct AgentSQLPreview:NSViewRepresentable {
 
 extension WorkbenchController {
   func showAgentHistory(_ node:TreeNode) {
-    presentAgent(AgentHistoryPanel(server:node.server,job:node.objectFolder == .jobs ? node.item?.name:nil),title:"SQL Server Agent · History",width:1380,height:820,minWidth:960,minHeight:640)
+    presentAgent(AgentHistoryPanel(server:node.server,job:node.objectFolder == .jobs ? node.item?.name:nil),title:"SQL Server Agent · History",width:1380,height:820,minWidth:960,minHeight:640,identity:"agent.history|\(node.server.id)|\(node.objectFolder == .jobs ? "job:"+(node.item?.name ?? "") : "all")")
   }
   func showAgentProperties(_ node:TreeNode) {
     guard let item=node.item else {return}
     presentAgent(AgentPropertiesPanel(server:node.server,name:item.name,open:{ [weak self] sql in
       self?.stageAgentSQL(sql,server:node.server,title:"Job Properties · "+item.name)
-    },history:{[weak self] in self?.showAgentHistory(node)}),title:"Job Properties · "+item.name,width:1220,height:800,minWidth:1000,minHeight:680)
+    },history:{[weak self] in self?.showAgentHistory(node)}),title:"Job Properties · "+item.name,width:1220,height:800,minWidth:1000,minHeight:680,identity:"agent.properties|\(node.server.id)|\(item.name)")
   }
   func showAgentAction(_ node:TreeNode,action:SQLAgent.Action) {
     guard let item=node.item else {return}
@@ -182,10 +182,10 @@ extension WorkbenchController {
     weak var panelWindow:NSWindow?
     panelWindow=presentAgent(AgentSchedulePanel(server:node.server,item:item,close:{panelWindow?.close()},open:{[weak self] sql in self?.stageAgentSQL(sql,server:node.server,title:"Schedule · "+item.name)}),title:"Schedule Properties · "+item.name,width:820,height:760)
   }
-  @discardableResult private func presentAgent<V:View>(_ root:V,title:String,width:CGFloat,height:CGFloat,minWidth:CGFloat=620,minHeight:CGFloat=480)->NSWindow {
+  @discardableResult private func presentAgent<V:View>(_ root:V,title:String,width:CGFloat,height:CGFloat,minWidth:CGFloat=620,minHeight:CGFloat=480,identity:String?=nil)->NSWindow {
     let frame=(view.window?.screen ?? NSScreen.main)?.visibleFrame ?? NSRect(x:0,y:0,width:width/0.94,height:height/0.94)
     let width=min(width,frame.width*0.94),height=min(height,frame.height*0.94)
-    return present(root,title:title,width:width,height:height,minWidth:min(minWidth,width),minHeight:min(minHeight,height))
+    return present(root,title:title,width:width,height:height,minWidth:min(minWidth,width),minHeight:min(minHeight,height),identity:identity)
   }
   private func stageAgentSQL(_ sql:String,server:ConnectedServer,title:String) {
     let doc=state.newQuery(server:server,database:"msdb",text:sql,title:title)
@@ -200,10 +200,14 @@ extension WorkbenchController {
 struct AgentHistoryPanel:View {
   let server:ConnectedServer
   let job:String?
+  init(server:ConnectedServer,job:String?,includeSteps:Bool=false) {
+    self.server=server;self.job=job;_steps=State(initialValue:includeSteps)
+  }
   @State private var rows:[SQLAgent.History]=[]
+  @State private var cachedTree:[SQLAgent.History]=[]
   @State private var status = -1
-  @State private var days=30
-  @State private var steps=true
+  @State private var days=7
+  @State private var steps=false
   @State private var search=""
   @State private var loading=false
   @State private var error=""
@@ -211,7 +215,7 @@ struct AgentHistoryPanel:View {
   @State private var generation=0
   @State private var requestID=UUID()
   private var tree:[SQLAgent.History] {
-    let tree=SQLAgent.historyTree(rows)
+    let tree=cachedTree
     guard !search.isEmpty else {return tree}
     return tree.filter {row in
       ([row]+(row.children ?? [])).contains {($0.job+" "+$0.stepName+" "+$0.message).localizedCaseInsensitiveContains(search)}
@@ -223,13 +227,13 @@ struct AgentHistoryPanel:View {
       HStack {
         Picker("Durum",selection:$status) {Text("Tümü").tag(-1);Text("Succeeded").tag(1);Text("Failed").tag(0);Text("Retry").tag(2);Text("Canceled").tag(3);Text("In Progress").tag(4)}.frame(width:210).accessibilityIdentifier("agentHistoryStatus")
         Picker("Son",selection:$days) {Text("1 gün").tag(1);Text("7 gün").tag(7);Text("30 gün").tag(30);Text("365 gün").tag(365);Text("10 yıl").tag(3650)}.frame(width:150)
-        Toggle("Adım ayrıntıları",isOn:$steps)
+        Toggle("Adım ayrıntıları",isOn:$steps).help("İlk açılışta çalışma sonuçları alınır. Adım ve yeniden deneme ayrıntıları için açın.")
         Spacer()
         Button {generation+=1} label:{Label("Yenile",systemImage:"arrow.clockwise")}.disabled(loading).accessibilityIdentifier("agentHistoryRefresh")
       }
       TextField("Yüklenen çalışmalarda iş, adım veya mesaj ara",text:$search).textFieldStyle(.roundedBorder).accessibilityIdentifier("agentHistorySearch")
       Text("Filtre: \(days) gün · \(status < 0 ? "Tüm sonuçlar":"Seçili iş sonucu") · \(tree.count) çalışma. Durum filtresi iş sonucuna uygulanır; alt adımlar kendi sonuçlarıyla gösterilir.").font(.caption).foregroundStyle(.secondary)
-      if loading {ProgressView().controlSize(.small)}
+      if loading {HStack {ProgressView().controlSize(.small);Text("Geçmiş yükleniyor… Önceki sonuçlar yükleme bitene kadar korunur.").font(.caption)}}
       if !error.isEmpty {Text(error).foregroundStyle(.red).textSelection(.enabled)}
       VSplitView {
         Table(tree,children:\.children,selection:$selected) {
@@ -255,7 +259,7 @@ struct AgentHistoryPanel:View {
               }.textSelection(.enabled).padding(12)
             }
           } else {
-            ScrollView {Text(rows.isEmpty && !loading ? "Bu filtreye uygun geçmiş kaydı yok.":"İşin yanındaki oku açarak adımları görün; mesajın tamamını okumak için bir kayıt seçin.").foregroundStyle(.secondary).frame(maxWidth:.infinity,minHeight:196,alignment:.center)}
+            ScrollView {Text(rows.isEmpty && !loading ? "Bu filtreye uygun geçmiş kaydı yok.":(steps ? "İşin yanındaki oku açarak adımları görün; mesajın tamamını okumak için bir kayıt seçin.":"Bir çalışma seçerek mesajı okuyun; adımlar için Adım ayrıntıları seçeneğini açın.")).foregroundStyle(.secondary).frame(maxWidth:.infinity,minHeight:196,alignment:.center)}
           }
         }.frame(minHeight:220,idealHeight:220,maxHeight:400).background(Color(nsColor:StudioTheme.canvas))
       }
@@ -266,9 +270,14 @@ struct AgentHistoryPanel:View {
       do {
         let result=try await server.catalog(SQLAgent.history(name:job,status:status<0 ? nil:status,days:days,includeSteps:steps),database:"msdb")
         try Task.checkCancellation();guard requestID == token else {return}
-        rows=try SQLAgent.decodeHistory(result)
+        let decoded=try await Task.detached(priority:.userInitiated) {
+          let rows=try SQLAgent.decodeHistory(result)
+          return (rows,SQLAgent.historyTree(rows))
+        }.value
+        try Task.checkCancellation();guard requestID == token else {return}
+        rows=decoded.0;cachedTree=decoded.1
         if !rows.contains(where:{$0.id == selected}) {selected=nil}
-      } catch is CancellationError {} catch {if requestID == token {rows=[];selected=nil;self.error=error.localizedDescription}}
+      } catch is CancellationError {} catch {if requestID == token {self.error=error.localizedDescription}}
     }
   }
   private func historyDetails(_ row:SQLAgent.History)->String {
@@ -525,7 +534,9 @@ struct AgentPropertiesPanel:View {
     loading=true;error="";defer {loading=false}
     do {
       let query=try job.map {try SQLAgent.details(id:$0.id)} ?? SQLAgent.details(name:name)
-      let result=try SQLAgent.decodeDetails(await server.catalog(query,database:"msdb"));try Task.checkCancellation()
+      let output=try await server.catalog(query,database:"msdb")
+      let result=try await Task.detached(priority:.userInitiated) {try SQLAgent.decodeDetails(output)}.value
+      try Task.checkCancellation()
       job=result.0;steps=result.1;schedules=result.2;title=result.0.name;description=result.0.description;enabled=result.0.enabled
       owner=result.0.owner;category=result.0.category;startStep=result.0.startStep;emailLevel=result.0.emailLevel;emailOperator=result.0.emailOperator;eventLogLevel=result.0.eventLogLevel;deleteLevel=result.0.deleteLevel
       selected=steps.first?.id;selectedSchedule=schedules.first?.id
