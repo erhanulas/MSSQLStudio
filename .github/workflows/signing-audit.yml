@@ -1,0 +1,33 @@
+name: Audit persistent signing and Keychain access
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  signing-audit:
+    runs-on: xcode-27
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Import existing persistent identity
+        env:
+          MSSQL_SIGNING_P12: ${{ secrets.MSSQL_SIGNING_P12 }}
+          MSSQL_SIGNING_PASSWORD: ${{ secrets.MSSQL_SIGNING_PASSWORD }}
+        run: python3 scripts/ci-signing.py import
+      - name: Test two builds, ACL renewal and unrelated-code rejection
+        run: python3 scripts/test-signing.py
+      - name: Verify two published versions against the pinned identity
+        run: |
+          set -euo pipefail
+          audit_dir="$(mktemp -d "$RUNNER_TEMP/published-signatures.XXXXXX")"
+          trap 'rm -rf "$audit_dir"' EXIT
+          for version in 0.2.42 0.2.43; do
+            curl --fail --location --silent --show-error "https://github.com/${{ github.repository }}/releases/download/v$version/MSSQLStudio-$version.zip" -o "$audit_dir/$version.zip"
+            ditto -x -k "$audit_dir/$version.zip" "$audit_dir/$version"
+            python3 scripts/signing.py verify "$audit_dir/$version/MSSQLStudio.app"
+          done
+      - name: Remove temporary signing identity
+        if: always()
+        run: python3 scripts/ci-signing.py cleanup

@@ -175,7 +175,7 @@ private struct SettingsPanel: View {
           defer {renewingKeychain=false}
           do {
             let count=try await Task.detached {try ServerVault().renewApplicationAccess()}.value
-            keychainMessage=count == 0 ? "Kayıtlı bağlantı bulunamadı." : "\(count) bağlantının erişim izni yenilendi. Sonraki aynı imzalı güncellemelerde bu izin korunur."
+            keychainMessage=count == 0 ? "Kayıtlı bağlantı bulunamadı." : "\(count) bağlantının erişim izni yenilendi. Aynı imzalı güncellemeler için erişim kuralı yenilendi; kilitli anahtar zinciri ayrıca macOS onayı isteyebilir."
           } catch {keychainMessage="İzinler tamamen yenilenemedi: "+error.localizedDescription}
         }
       }.disabled(renewingKeychain).accessibilityIdentifier("renewKeychainAccess")

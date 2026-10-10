@@ -77,9 +77,18 @@ with tempfile.TemporaryDirectory(prefix='StudioSigningRegression-', dir='/tmp') 
         assert status(installed, service, 'save') == 0, 'Cannot create isolated Keychain fixture'
         created = True
         assert status(installed, service, 'save') == 0, 'Vault update failed'
+        assert status(installed, service, 'renew') == 0, 'Signed ACL renewal failed'
+        assert status(installed, service, 'read') == 0, 'ACL renewal changed saved credentials'
         shutil.copy2(second,installed)
         read_status = status(installed, service, 'read')
         assert read_status == 0, 'Second signed build required Keychain authorization: '+str(read_status)
+        assert status(installed, service, 'save') == 0, 'Updated build could not save credentials'
+        moved = root/'moved-installation'
+        shutil.copy2(second,moved)
+        assert status(moved, service, 'read') == 0, 'Stable identity depended on installation path'
+        assert status(moved, service, 'renew') == 0, 'Updated build could not renew ACL'
+        shutil.copy2(first,installed)
+        assert status(installed, service, 'read') == 0, 'Renewed ACL did not preserve the stable identity'
         shutil.copy2(adhoc,installed)
         assert status(installed, service, 'read') != 0, 'Unrelated ad-hoc binary gained access'
         assert status(installed, service, 'renew') != 0, 'Unrelated ad-hoc binary renewed access'
@@ -90,4 +99,4 @@ with tempfile.TemporaryDirectory(prefix='StudioSigningRegression-', dir='/tmp') 
                 assert status(installed, service, 'delete') == 0, 'Synthetic Keychain cleanup failed'
         finally:
             subprocess.run(['security','delete-keychain',str(test_keychain)],check=True)
-print('PASS: distinct builds, stable certificate/requirement, real ServerVault create/update, prompt-free isolated-keychain read, ad-hoc rejection, synthetic item cleanup.')
+print('PASS: distinct builds, stable certificate/requirement, real ServerVault create/update/ACL renewal, credentials preserved, prompt-free cross-build and moved-path isolated-keychain read, ad-hoc rejection, synthetic item cleanup.')
