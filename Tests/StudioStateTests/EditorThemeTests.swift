@@ -361,7 +361,11 @@ import Testing
     window.isReleasedWhenClosed = false; window.contentView = controller.surface; window.makeFirstResponder(controller.editor)
     defer { window.close() }
     controller.editor.insertText("\nSELECT 2;",replacementRange:NSRange(location:(doc.sql as NSString).length,length:0))
-    try await Task.sleep(for:.milliseconds(400))
+    // Analysis runs asynchronously; wait for its result rather than a fixed CI delay.
+    for _ in 0..<250 {
+      if !controller.regions.isEmpty { break }
+      try await Task.sleep(for:.milliseconds(20))
+    }
     controller.toggleFold(try #require(controller.regions.first))
     controller.editor.undoManager?.undo()
     try await Task.sleep(for:.milliseconds(150))
