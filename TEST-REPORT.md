@@ -1,3 +1,9 @@
+# v0.2.59 yayın doğrulaması — 10 Ekim 2026
+
+- Public latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.59; build 60, kaynak 77b7afbca6f96f8c29898d64d28bad611446b39c. Actions 38080851487 tüm adımlarıyla başarılı; sabit imza, izole Keychain, paket üretimi ve gerçek yayın paketleriyle testler geçti.
+- İndirilen ZIP SHA-256 8167c0a759dc535ece34be10815a5837420f6f090156c7ecb46e1d68dac659be; PKG SHA-256 9e359d705bb1478d4d028c3b66d93b3e996ce69f92df515bfd513650685d19c0. update.json ve GitHub digest değerleriyle eşleşti.
+- prepare-release.py indirilen her iki paketteki uygulama için strict/deep imza, sabit sertifika/DR, bundle ID, sürüm, aynı binary/metadata ve sürüm notlarını doğruladı. Gerçek kullanıcı uygulaması/Keychain/veritabanı değiştirilmedi.
+
 # Sonuç araç çubuğu ve düzenleme modu — 10 Ekim 2026 (henüz yayımlanmadı)
 
 - Düzenleme ve doğrudan ekle/çoğalt/sil/geri al/NULL/SQL önizleme/vazgeç düğmeleri ana araç çubuğuna taşındı. İkinci sıra ve Satırlar açılır menüsü kaldırıldı. Ortak StudioToolbarButton semantik ikon/renk, hafif kenarlık/zemin, hover ve disabled görünümü kullanır. Düzenleme toggle ve Vazgeç değişiklik olmadan modu kapatır; değişiklik varsa onay korunur.
