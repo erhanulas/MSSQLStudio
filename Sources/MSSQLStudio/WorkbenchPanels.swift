@@ -648,6 +648,21 @@ extension View {
   }
 }
 
+@MainActor enum SQLSourceHighlighting {
+  static func foreground(_ token:Lexeme,unused:Bool) -> NSColor {
+    unused ? StudioTheme.unusedVariable : StudioTheme.syntax(TSQL.syntaxStyle(token))
+  }
+  static func attributed(_ source:String) -> NSAttributedString {
+    let result=NSMutableAttributedString(string:source,attributes:[.font:StudioTheme.codeFont,.foregroundColor:StudioTheme.editorText])
+    guard source.utf16.count <= 1_000_000 else {return result}
+    let unused=Set(TSQL.unusedDeclaredVariables(source).map(\.location))
+    for token in TSQL.lex(source) {
+      result.addAttribute(.foregroundColor,value:foreground(token,unused:unused.contains(token.range.location)),range:token.range)
+    }
+    return result
+  }
+}
+
 @MainActor enum StudioTheme {
   static let changed = Notification.Name("MSSQLStudio.themeChanged")
   static var dark: Bool { UserDefaults.standard.string(forKey: "ssmsTheme") == "dark" }
@@ -664,6 +679,7 @@ extension View {
   static var selection: NSColor { color(0xE1EBFF, 0x334766) }
   static var lineNumber: NSColor { color(0x008080, 0x858585) }
   static var editorCanvas: NSColor { color(0xFFFFFF,0x1E1E1E) }
+  static var unusedVariable: NSColor { color(0x929292,0x808080) }
   static var editorText: NSColor { color(0x000000,0xD4D4D4) }
   static var codeFont: NSFont {
     NSFont(name: "Consolas", size: 13) ?? .monospacedSystemFont(ofSize: 13, weight: .regular)
@@ -724,7 +740,7 @@ extension View {
       table.enumerateAvailableRowViews { row, _ in row.needsDisplay = true }
     } else if let scroll = view as? NSScrollView {
       scroll.backgroundColor = canvas
-    } else if let textView = view as? NSTextView, !(textView is SQLTextView) {
+    } else if let textView = view as? NSTextView, !(textView is SQLTextView), textView.identifier?.rawValue != "sqlSourcePreview" {
       textView.backgroundColor = canvas
       textView.textColor = text
       textView.font = codeFont

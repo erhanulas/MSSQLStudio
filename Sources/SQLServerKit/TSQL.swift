@@ -114,6 +114,61 @@ public enum TSQL {
     }
     return result
   }
+  /// Declaration names with no other lexical reference in their SQL Server batch.
+  /// Assignments count as references; this does not attempt dead-store/data-flow analysis.
+  public static func unusedDeclaredVariables(_ sql: String) -> [NSRange] {
+    guard sql.utf16.count <= 250_000 else { return [] }
+    let source = sql as NSString
+    let tokens = lex(sql).filter { $0.kind != .space && $0.kind != .comment }
+    var result: [NSRange] = [], batch: [Lexeme] = []
+    func inspect() {
+      var counts: [String:Int] = [:], declarations: [Lexeme] = []
+      for token in batch where token.kind == .variable {
+        counts[token.text.lowercased(),default:0] += 1
+      }
+      var i = 0
+      while i < batch.count {
+        guard batch[i].text.uppercased() == "DECLARE", i+2 < batch.count,
+          batch[i+1].kind == .variable else { i += 1; continue }
+        var j = i+1, depth = 0
+        var expectsName = true
+        while j < batch.count {
+          let token = batch[j], upper = token.text.uppercased()
+          if depth == 0 && (token.text == ";" ||
+            ["SELECT","SET","DECLARE","BEGIN","END","IF","WHILE","RETURN","PRINT","EXEC","EXECUTE","INSERT","UPDATE","DELETE","MERGE","CREATE","ALTER","DROP","FETCH","OPEN","CLOSE"].contains(upper)) { break }
+          if expectsName {
+            guard token.kind == .variable, !token.text.hasPrefix("@@"),
+              j+1 < batch.count else { break }
+            let typeIndex = batch[j+1].text.uppercased() == "AS" ? j+2 : j+1
+            guard typeIndex < batch.count,
+              batch[typeIndex].kind == .word || batch[typeIndex].text.uppercased() == "TABLE" else { break }
+            declarations.append(token); expectsName = false
+          }
+          if token.text == "(" { depth += 1 }
+          if token.text == ")" { depth = max(0,depth-1) }
+          if token.text == "," && depth == 0 { expectsName = true }
+          j += 1
+        }
+        i = max(i+1,j)
+      }
+      for declaration in declarations where counts[declaration.text.lowercased()] == 1 {
+        result.append(declaration.range)
+      }
+    }
+    for token in tokens {
+      // GO is a separator only on its own line, optionally followed by a count/comment.
+      if token.text.uppercased() == "GO", token.kind == .keyword {
+        let line = source.substring(with:source.lineRange(for:token.range))
+        if line.range(of:#"^\s*GO(?:[ \t]+[0-9]+)?[ \t]*(?:--[^\r\n]*)?[\r\n]*$"#,
+                      options:[.regularExpression,.caseInsensitive]) != nil {
+          inspect(); batch=[]; continue
+        }
+      }
+      batch.append(token)
+    }
+    inspect()
+    return result
+  }
   public static func batches(_ sql: String) throws -> [ScriptBatch] {
     let ns = sql as NSString
     let protected = lex(sql).filter {

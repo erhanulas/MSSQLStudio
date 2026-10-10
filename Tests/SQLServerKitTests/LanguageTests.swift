@@ -236,3 +236,32 @@ struct IntegrationToolsTests {
     #expect(try vault.list().isEmpty)
   }
 }
+
+struct UnusedDeclarationTests {
+  private func unused(_ sql:String) -> [String] {
+    TSQL.unusedDeclaredVariables(sql).map { (sql as NSString).substring(with:$0) }
+  }
+  @Test func commentsStringsCaseAndExactNames() {
+    let sql = "DECLARE @unused int, @used int = 0, @prefix int; SELECT @USED, @prefixLong; -- @unused\nPRINT N'@unused'; SELECT [@unused];"
+    #expect(unused(sql) == ["@unused","@prefix"])
+    #expect(unused("DECLARE @x int; SET @x=1;").isEmpty)
+    #expect(unused("DECLARE @x int; EXEC dbo.p @value=@x;").isEmpty)
+    #expect(unused("DECLARE @@bad int;").isEmpty)
+    #expect(unused("DECLARE @typing").isEmpty)
+    #expect(unused("DECLARE @typing SELECT 1;").isEmpty)
+    #expect(unused("DECLARE @x AS int;") == ["@x"])
+  }
+  @Test func multipleDeclarationsAndBatchIsolation() {
+    #expect(unused("DECLARE @a decimal(18,2)=COALESCE(1,2), @b int, @t TABLE (a int,b int); SELECT @b;") == ["@a","@t"])
+    #expect(unused("DECLARE @x int;\nGO -- next\nDECLARE @x int; SELECT @x;") == ["@x"])
+    #expect(unused("DECLARE @x int;\nGO 2\nSELECT @x;") == ["@x"])
+    #expect(unused("DECLARE @x int; SELECT 'GO', @x;").isEmpty)
+  }
+  @Test func routinesUnicodeAndHiddenReferences() {
+    let sql="CREATE PROCEDURE dbo.p @input int AS BEGIN DECLARE @boş int, @used int; IF @input=1 BEGIN SELECT @used; END END;\nGO\nCREATE FUNCTION dbo.f(@input int) RETURNS int AS BEGIN DECLARE @local int; RETURN @input; END;"
+    #expect(unused(sql) == ["@boş","@local"])
+    let source="-- 😀\nDECLARE @değişken int;"
+    #expect(unused(source) == ["@değişken"])
+    #expect(TSQL.unusedDeclaredVariables(String(repeating:" ",count:250001)).isEmpty)
+  }
+}

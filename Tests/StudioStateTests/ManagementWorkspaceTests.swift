@@ -4,6 +4,56 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct ManagementWorkspaceTests {
+  @Test func submitEligibilityTracksConnectionTransactionAndPendingChanges() {
+    let server=ConnectedServer(profile:ServerProfile(),password:"")
+    server.online=true
+    let doc=QueryDocument(server:server,database:"Demo",title:"P")
+    doc.state = .ready;doc.moduleObjectID=42
+    doc.objectEditorKey=ObjectEditorKey(serverID:server.id,database:"Demo",objectID:42)
+    doc.moduleOriginal="CREATE PROC dbo.P AS SELECT 1;"
+    doc.moduleInitialSQL="ALTER PROC dbo.P AS SELECT 1;";doc.sql=doc.moduleInitialSQL!
+    #expect(!doc.canSubmitModule)
+    doc.sql="ALTER PROC dbo.P AS SELECT 2;";#expect(doc.canSubmitModule)
+    doc.transactionCount=1;#expect(!doc.canSubmitModule);doc.transactionCount=0
+    doc.state = .running;#expect(!doc.canSubmitModule);doc.state = .ready
+    doc.database="Other";#expect(!doc.canSubmitModule);doc.database="Demo"
+    server.online=false;#expect(!doc.canSubmitModule)
+  }
+  @Test func reviewUsesSourceColorsAcrossAlignedMultilineRowsAndSubmitsOnlyOnClick() async throws {
+    let parent=NSWindow(contentRect:NSRect(x:0,y:0,width:1200,height:800),styleMask:[.titled],backing:.buffered,defer:false)
+    parent.isReleasedWhenClosed=false
+    var submitted=0
+    let old="ALTER PROC dbo.P AS\n/* first\nsecond */\nDECLARE @unused int;\nSELECT N'İstanbul 😀', 1;"
+    let edited=old.replacingOccurrences(of:"/* first",with:"-- inserted\n/* first").replacingOccurrences(of:", 1;",with:", 2;")
+    let review=ModuleReviewController(parent:parent,title:"Fixture / Demo / P",original:old,edited:edited,canApply:true,approved:{submitted+=1},finished:{})
+    defer {withExtendedLifetime(review) {};parent.close()}
+    for _ in 0..<100 {
+      if parent.attachedSheet?.contentView?.subviews.isEmpty == false {try await Task.sleep(for:.milliseconds(10))}
+    }
+    let sheet=try #require(parent.attachedSheet)
+    #expect(sheet.frame.width > 1080)
+    func descendants(_ view:NSView) -> [NSView] { [view]+view.subviews.flatMap(descendants) }
+    StudioTheme.decorate(try #require(sheet.contentView))
+    let children=descendants(try #require(sheet.contentView))
+    let texts=children.compactMap {$0 as? NSTextView}
+    #expect(texts.count == 3)
+    for text in texts {
+      let storage=try #require(text.textContentStorage?.textStorage)
+      let source=text.string as NSString
+      for (needle,color) in [("ALTER",StudioTheme.syntax(.keyword)),("second */",StudioTheme.syntax(.comment)),("@unused",StudioTheme.unusedVariable),("N'İstanbul 😀'",StudioTheme.syntax(.string))] {
+        let range=source.range(of:needle)
+        #expect(range.location != NSNotFound)
+        #expect(storage.attribute(.foregroundColor,at:range.location,effectiveRange:nil) as? NSColor == color)
+      }
+      #expect(text.textLayoutManager != nil && !text.isEditable)
+      #expect(text.enclosingScrollView?.contentView.bounds.minX == 0)
+    }
+    let submit=try #require(children.compactMap {$0 as? NSButton}.first {$0.title == "Veritabanına Gönder"})
+    #expect(submit.isEnabled && submitted == 0)
+    submit.performClick(nil)
+    #expect(submitted == 1 && parent.attachedSheet == nil)
+  }
+
   @Test func generatedSQLIsCleanTypingAndUndoDetermineCloseConfirmation() {
     let state=StudioState(),server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false
     let doc=state.newQuery(server:server,text:"SELECT 1;",title:"Generated")

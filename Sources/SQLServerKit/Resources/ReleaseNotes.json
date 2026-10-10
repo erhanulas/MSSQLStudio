@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.37",
+    "date": "2026-10-10",
+    "title": "SQL editörü ve veritabanına gönderme önizlemesi",
+    "changes": [
+      "DECLARE ile tanımlanıp kullanılmayan yerel değişken adları soluk renkte gösteriliyor; yorumlar kullanım sayılmıyor ve katlanmış kod hesaba katılıyor.",
+      "Katlanmış blokların + düğmesi belirgin renkte gösteriliyor; blok açılınca normal görünüme dönüyor ve kalıcı yan işaret kaldırılıyor.",
+      "Büyütülen fark penceresi ve çalıştırılacak SQL önizlemesi ana editörle aynı SQL renklerini kullanıyor; uzun satırların başlangıcı korunuyor.",
+      "Nesne editörüne Veritabanına Gönder ikonu eklendi. Değişiklikler önizlemeden onaylanıyor; sunucudaki tanım değişmişse gönderme duruyor."
+    ]
+  },
+  {
     "version": "0.2.36",
     "date": "2026-10-10",
     "title": "SQL editöründe kararlı katlama ve kelime vurgusu",

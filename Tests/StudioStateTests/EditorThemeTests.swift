@@ -10,6 +10,32 @@ import Testing
 }
 
 @MainActor @Suite(.serialized) struct EditorThemeTests {
+  @Test func unusedDeclarationColorsUpdateWithoutChangingSourceAndSurviveFolds() throws {
+    let doc=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Unused variables")
+    doc.server.online=false
+    let source="DECLARE @unused int, @used int;\nIF 1=1\nBEGIN\n SELECT @used;\nEND;"
+    doc.sql=source
+    let controller=EditorController(document:doc)
+    let storage=try #require(controller.editor.textContentStorage?.textStorage)
+    func color(_ name:String) -> NSColor? {
+      let range=(controller.editor.string as NSString).range(of:name)
+      return storage.attribute(.foregroundColor,at:range.location,effectiveRange:nil) as? NSColor
+    }
+    #expect(color("@unused") == StudioTheme.unusedVariable)
+    #expect(color("@used") == StudioTheme.editorText)
+    let region=try #require(controller.regions.first)
+    controller.toggleFold(region)
+    #expect(color("@used") == StudioTheme.editorText)
+    #expect(color("@unused") == StudioTheme.unusedVariable)
+    controller.expandAll()
+    #expect(doc.sql == source && controller.editor.string == source)
+    doc.sql=source+"\nSELECT @unused;";controller.setText()
+    #expect(color("@unused") == StudioTheme.editorText)
+    doc.sql=source;controller.setText()
+    #expect(color("@unused") == StudioTheme.unusedVariable)
+    #expect(controller.editor.textLayoutManager != nil)
+  }
+
   private func lineScreenY(_ controller:EditorController,offset:Int) throws -> CGFloat {
     let content=try #require(controller.editor.textContentStorage)
     let layout=try #require(controller.editor.textLayoutManager)

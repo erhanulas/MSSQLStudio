@@ -3,12 +3,12 @@ import SQLServerKit
 import SwiftUI
 
 @MainActor final class ModuleReviewController: NSObject, NSWindowDelegate {
-  private let panel=NSPanel(contentRect:NSRect(x:0,y:0,width:1080,height:660),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
+  private let panel=NSPanel(contentRect:NSRect(x:0,y:0,width:1400,height:840),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
   private let left=NSScrollView(),right=NSScrollView(),script=NSScrollView()
   private let body=NSView(),summary=NSTextField(labelWithString:"Farklar hazırlanıyor…")
   private let tabs=NSSegmentedControl(labels:["Yan yana farklar","Çalıştırılacak SQL"],trackingMode:.selectOne,target:nil,action:nil)
   private let split=NSSplitView()
-  private let apply=NSButton(title:"Değişiklikleri Uygula",target:nil,action:nil)
+  private let apply=NSButton(title:"Veritabanına Gönder",target:nil,action:nil)
   private var syncing=false
   private var task:Task<Void,Never>?
   private var approved: (() -> Void)?
@@ -17,7 +17,10 @@ import SwiftUI
   init(parent:NSWindow,title:String,original:String,edited:String,canApply:Bool,approved:@escaping () -> Void,finished:@escaping () -> Void) {
     super.init()
     self.approved=approved;self.finished=finished
-    panel.title="Nesne değişikliklerini incele";panel.minSize=NSSize(width:780,height:480);panel.delegate=self
+    panel.title="Nesne değişikliklerini incele";panel.minSize=NSSize(width:960,height:600);panel.delegate=self
+    if let visible=parent.screen?.visibleFrame {
+      panel.setContentSize(NSSize(width:min(1400,visible.width*0.94),height:min(840,visible.height*0.90)))
+    }
     let host=NSView();panel.contentView=host
     let heading=NSTextField(labelWithString:title);heading.font = .systemFont(ofSize:14,weight:.semibold)
     summary.font = .systemFont(ofSize:11);summary.textColor = .secondaryLabelColor
@@ -40,7 +43,7 @@ import SwiftUI
     script.isHidden=true
     let cancel=NSButton(title:canApply ? "Vazgeç":"Kapat",target:self,action:#selector(closeReview));cancel.bezelStyle = .rounded;cancel.keyEquivalent="\u{1b}"
     apply.target=self;apply.action=#selector(submit);apply.bezelStyle = .rounded;apply.isHidden = !canApply;apply.isEnabled=false
-    let note=NSTextField(labelWithString:canApply ? "SQL yalnızca Uygula’ya bastığınızda gönderilir.":"Bu ekran karşılaştırma içindir; SQL gönderilmez.");note.font = .systemFont(ofSize:11);note.textColor = .secondaryLabelColor
+    let note=NSTextField(labelWithString:canApply ? "SQL yalnızca Veritabanına Gönder’e bastığınızda gönderilir.":"Bu ekran karşılaştırma içindir; SQL gönderilmez.");note.font = .systemFont(ofSize:11);note.textColor = .secondaryLabelColor
     let footer=NSStackView(views:[note,NSView(),cancel,apply]);footer.edgeInsets=NSEdgeInsets(top:12,left:18,bottom:14,right:18)
     let stack=NSStackView(views:[top,body,footer]);stack.orientation = .vertical;stack.spacing=0
     embed(stack,in:host)
@@ -58,7 +61,7 @@ import SwiftUI
     task=Task { [weak self] in
       let comparison=await Task.detached(priority:.userInitiated) {SQLTextDiff.compare(previewOriginal,previewEdited)}.value
       guard let self,!Task.isCancelled else {return}
-      render(comparison,to:left,old:true);render(comparison,to:right,old:false)
+      render(comparison,to:left,old:true,source:previewOriginal);render(comparison,to:right,old:false,source:previewEdited)
       summary.stringValue="−\(comparison.removed) kaldırılan  ·  +\(comparison.added) eklenen satır"+(comparison.simplified ? "  ·  Büyük değişiklik için blok karşılaştırması":"")
       let truncated=oversized || comparison.lines.count>10_000
       if truncated {summary.stringValue="Büyük tanım: kısmi önizleme (en çok 10.000 satır). Buradan uygulanamaz; tam SQL sorgu sekmesindedir."}
@@ -71,8 +74,8 @@ import SwiftUI
     NSLayoutConstraint.activate([child.leadingAnchor.constraint(equalTo:parent.leadingAnchor),child.trailingAnchor.constraint(equalTo:parent.trailingAnchor),child.topAnchor.constraint(equalTo:parent.topAnchor),child.bottomAnchor.constraint(equalTo:parent.bottomAnchor)])
   }
   private func configure(_ scroll:NSScrollView,text:String) {
-    let view=NSTextView(usingTextLayoutManager:true);view.isEditable=false;view.isSelectable=true;view.font=StudioTheme.codeFont
-    view.backgroundColor=StudioTheme.canvas;view.textColor=StudioTheme.text;view.string=text;view.textContainerInset=NSSize(width:12,height:8)
+    let view=NSTextView(usingTextLayoutManager:true);view.identifier = .init("sqlSourcePreview");view.isEditable=false;view.isSelectable=true;view.font=StudioTheme.codeFont
+    view.backgroundColor=StudioTheme.editorCanvas;view.textColor=StudioTheme.editorText;view.textContentStorage?.textStorage?.setAttributedString(SQLSourceHighlighting.attributed(text));view.textContainerInset=NSSize(width:12,height:8)
     view.isVerticallyResizable=true;view.isHorizontallyResizable=true;view.autoresizingMask=[]
     view.textContainer?.widthTracksTextView=false;view.textContainer?.containerSize=NSSize(width:100_000,height:CGFloat.greatestFiniteMagnitude)
     scroll.documentView=view;scroll.hasVerticalScroller=true;scroll.hasHorizontalScroller=true;scroll.autohidesScrollers=true
@@ -80,23 +83,29 @@ import SwiftUI
   }
   private func size(_ view:NSTextView,in scroll:NSScrollView,text:String) {
     let lines=text.components(separatedBy:"\n")
-    let width=CGFloat(lines.map {$0.utf16.count}.max() ?? 0)*("0" as NSString).size(withAttributes:[.font:StudioTheme.codeFont]).width+32
+    let width=(lines.map {($0 as NSString).size(withAttributes:[.font:StudioTheme.codeFont]).width}.max() ?? 0)+32
     view.textContainer?.containerSize=NSSize(width:max(490,width),height:CGFloat.greatestFiniteMagnitude)
     view.setFrameSize(NSSize(width:max(490,width),height:max(450,CGFloat(lines.count)*20+32)))
-    let style=NSMutableParagraphStyle();style.minimumLineHeight=20;style.maximumLineHeight=20
+    let style=EditorController.codeParagraph()
     view.defaultParagraphStyle=style
     view.textContentStorage?.textStorage?.addAttribute(.paragraphStyle,value:style,range:NSRange(location:0,length:(view.string as NSString).length))
   }
-  private func render(_ comparison:SQLTextDiff.Comparison,to scroll:NSScrollView,old:Bool) {
+  private func render(_ comparison:SQLTextDiff.Comparison,to scroll:NSScrollView,old:Bool,source:String) {
     guard let view=scroll.documentView as? NSTextView else {return}
     let attributed=NSMutableAttributedString(string:"")
+    let colored=SQLSourceHighlighting.attributed(source)
+    var offsets:[Int]=[],offset=0
+    for line in source.components(separatedBy:"\n") {offsets.append(offset);offset += line.utf16.count+1}
     var firstChange:NSRange?
     for row in comparison.lines.prefix(10_000) {
       let number=old ? row.oldNumber:row.newNumber,value=old ? row.old:row.new
       let prefix=number.map {String(format:"%5d  ",$0)} ?? "       "
-      let line=NSAttributedString(string:prefix+(value ?? "")+"\n",attributes:[.font:StudioTheme.codeFont,.foregroundColor:StudioTheme.text])
+      let line=NSMutableAttributedString(string:prefix,attributes:[.font:StudioTheme.codeFont,.foregroundColor:StudioTheme.lineNumber])
+      if let value,let number,offsets.indices.contains(number-1) {
+        line.append(colored.attributedSubstring(from:NSRange(location:offsets[number-1],length:value.utf16.count)))
+      }
+      line.append(NSAttributedString(string:"\n",attributes:[.font:StudioTheme.codeFont,.foregroundColor:StudioTheme.editorText]))
       let start=attributed.length;attributed.append(line)
-      attributed.addAttribute(.foregroundColor,value:NSColor.secondaryLabelColor,range:NSRange(location:start,length:prefix.utf16.count))
       if row.changed {
         attributed.addAttribute(.backgroundColor,value:(value == nil ? StudioTheme.panel:old ? StudioTheme.color(0xFCE5E5,0x502D36):StudioTheme.color(0xE3F3EA,0x254B3A)),range:NSRange(location:start,length:line.length))
         if let value {
@@ -115,9 +124,13 @@ import SwiftUI
     }
     view.textContentStorage?.textStorage?.setAttributedString(attributed);size(view,in:scroll,text:attributed.string)
     if let firstChange {view.scrollRangeToVisible(firstChange)}
+    // Start at the line beginning: jumping to an inline change can otherwise hide
+    // the object name and the first half of a long SQL line.
+    scroll.contentView.scroll(to:NSPoint(x:0,y:scroll.contentView.bounds.minY))
+    scroll.reflectScrolledClipView(scroll.contentView)
   }
   @objc private func changeTab() {split.isHidden=tabs.selectedSegment != 0;script.isHidden=tabs.selectedSegment == 0}
-  @objc private func submit() {let action=approved;dismiss();action?()}
+  @objc private func submit() {guard apply.isEnabled else {return};let action=approved;dismiss();action?()}
   @objc private func closeReview() {dismiss()}
   private func dismiss() {
     task?.cancel();for observer in observers {NotificationCenter.default.removeObserver(observer)};observers=[]

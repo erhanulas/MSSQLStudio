@@ -1,3 +1,31 @@
+# Fark önizlemesi ve nesne gönderme — yerel geliştirme doğrulaması
+
+10 Ekim 2026. DataGrip resmi kaynak güncelleme akışı incelendi: https://www.jetbrains.com/help/datagrip/update-source-code-of-database-objects.html . Karşılıklı ok diff ikonu ve tray.and.arrow.up gönderme ikonu; ikisinden açılan önizlemede koşullar uygunsa Veritabanına Gönder. `QueryDocument.canSubmitModule` bağlantı, hazır/busy durumu, açık transaction, nesne ID'si, hedef DB ve bekleyen değişiklik koşullarını birleştirir. Mevcut ham sunucu tanımı çakışma kontrolü ve gönderilen snapshot baseline ilerletmesi korunur; kontrol sürerken tekrar gönderme engellenir. Kısmi büyük önizlemede gönderme kapalı kalır.
+
+SQLSourceHighlighting ana editör ve önizlemeye aynı syntax/unused renklerini sağlar. Diff satırları tam SQL kaynağının renklendirilmiş aralıklarından alınır; satır numaraları lexere karışmaz ve multiline yorum/string renkleri korunur. Genel pencere dekorasyonu sqlSourcePreview metninin foreground renklerini sıfırlamaz. Panel 1400×840 hedef, ekran görünür alanıyla sınırlı ve minimum 960×600. Satır genişliği gerçek font ölçüsüyle; ilk fark gösterilirken yatay başlangıç x=0 korunur.
+
+Son Release derlemesi başarılı. Tam testler 58 uygulama + 91 core = 149 raporlanan test: 127 geçti, 22 koşullu test atlandı. İki yeni test gönderme uygunluğunu ve gerçek NSPanel'de üç SQL görünümünün renklerini, multiline kaynak eşlemesini, genel tema dekorasyonu sonrası renklerin korunmasını, TextKit 2/read-only yapısını, x=0 başlangıcını ve yalnız düğmeye basınca callback çağrılmasını doğrular. Mevcut baseline, katlama, seçim ve SQL testleri geçti. Paket/imza veya canlı DB yazma testi bu görevde yapılmadı. Mevcut gutter accessibility/main actor uyarısı sürüyor.
+
+Native smoke ayrı local.mssqlstudio.uitest kimlikli çevrimdışı ObjectManagementUIFixture üzerinden yapıldı: Modify ALTER ile SalesByCity açıldı; her iki header ikonu erişilebilirlik ağacında görüldü, offline gönderme pasifti. Büyük panelde renkli yan yana diff, çok satırlı yorum, string ve unused isimler doğrulandı. Son derlemede Çalıştırılacak SQL sekmesinde renklerin kalıcı olduğu da görüldü. Yatay scrollbar başlangıcı 0 idi. Fixture düzenlemeleri undo ile geri alınıp test uygulaması kapatıldı. Gerçek kullanıcı sunucularına SQL gönderilmedi, kurulu uygulama değiştirilmedi. GitHub yayını henüz yapılmadı.
+
+Kanıtlar: `/tmp/mssql-review-build-final.log`, `/tmp/mssql-review-tests-final3.log`.
+
+# Katlama düğmesi görünümü — yerel doğrulama
+
+10 Ekim 2026. Son değiştirilen blokta kalan mavi yan çizgi ve buna ait durum takibi kaldırıldı. Kapalı blokta + düğmesi StudioTheme.accent dolgu ve kontrastlı simgeyle belirgin; açık blokta − düğmesi normal arka plan/gri çizgiye döner. Vurgu doğrudan mevcut katlama durumundan hesaplanır.
+
+Release derlemesi ve tam testler başarılı: 147 raporlanan test, 125 geçti, 22 koşullu test atlandı. Yalıtılmış çevrimdışı native uygulamada IF fareyle kapatıldı/açıldı: kapalı düğme mavi, açık düğme normal; yan çizgi yok, kaynak satırlar geri geldi. Test metni temizlenip uygulama kapatıldı. Yeni yayın yapılmadı. Kanıtlar: `/tmp/mssql-fold-button-build.log`, `/tmp/mssql-fold-button-tests.log`.
+
+# Kullanılmayan DECLARE değişkenleri — yerel geliştirme doğrulaması
+
+10 Ekim 2026, 0.2.36 üzerine. `TSQL.unusedDeclaredVariables` lexer ile batch içinde DECLARE adlarını ve diğer referanslarını karşılaştırır; yalnızca tanımda geçen adın foreground rengi soluklaştırılır. Yorum/string/quoted identifier kullanımları dışlanır. Harf büyüklüğü göz ardı edilir; farklı adlar tam eşleşir. GO yalnız bağımsız satırda ayırıcıdır; çoklu DECLARE, AS türü, decimal/fonksiyon argümanlarının virgülleri ve tablo değişkenleri desteklenir. Yarım kalan ad/tür beklenir. Atama da kullanım kabul edilir; veri akışı/dead-store analizi ve rutin başlık parametreleri kapsam dışıdır. 250.000 UTF-16 sınırı korunur. Katlama kaynak metin üzerinden hesaplanır; gizlenen referanslar korunur. Kaynak değişmedikçe sonuç önbellekte tutulur, seçim değişikliği yeniden boyama oluşturmaz.
+
+Release derlemesi başarılı. Tam test çalışması: 56 uygulama + 91 çekirdek = 147 test; 125 geçti, 22 koşullu test atlandı. Dört yeni test çoklu/Unicode DECLARE, yorum/string/benzer isimler, GO, procedure/fonksiyon gövdeleri, eksik tanım, değişen kullanım rengi ve katlamayı kapsar. Önceki seçim/viewport, TextKit 2, undo/redo, find ve completion testleri geçti. Mevcut gutter accessibility/main-actor uyarısı sürüyor.
+
+Native smoke ayrı `local.mssqlstudio.uitest` kimlikli ad-hoc kopyada ve çevrimdışı yapıldı. `@Unused` açık gri, `@Used` normal görünüyordu; IF katlanınca gizlenen @Used referansı korundu; SELECT @Unused eklenince tanım normal rengine döndü. Test metni temizlenip test uygulaması kapatıldı. Kurulu uygulama ve sunucu verileri değiştirilmedi. Koyu tema rengi tanımlı; bu çalışmada koyu temanın görsel kontrolü yapılmadı. Yeni GitHub yayını yapılmadı.
+
+Yerel kanıtlar: `/tmp/mssql-unused-tests-final.log`, `/tmp/mssql-unused-build-final.log`. Geçici derleme: `/tmp/MSSQLStudio-unused-build`.
+
 # MSSQL Studio 0.2.36 — yayın doğrulaması
 
 10 Ekim 2026. `dd0e99e` commit’i `v0.2.36` etiketiyle GitHub’da yayımlandı ve latest olarak doğrulandı. Actions çalışması https://github.com/erhanulas/MSSQLStudio/actions/runs/38008676383 başarıyla tamamlandı: kalıcı imza kontrolü, uygulama/PKG derlemesi, manifest doğrulaması ve yayın paketiyle testler geçti. 143 test raporlandı: 121 geçti, 22 koşullu test atlandı. Yayın varlıkları: `MSSQLStudio-0.2.36.pkg`, `MSSQLStudio-0.2.36.zip`, `update.json`. Kurulu uygulamaya bu görevde güncelleme uygulanmadı.

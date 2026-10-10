@@ -132,6 +132,11 @@ struct ObjectEditorKey: Codable, Equatable {
   var selectedRange = NSRange(location: 0, length: 0)
   var dirty: Bool { sql != savedText }
   var hasPendingDatabaseChanges: Bool { moduleInitialSQL.map {sql != $0} ?? false }
+  var canSubmitModule: Bool {
+    server.online && state == .ready && !busy && transactionCount == 0 &&
+      moduleObjectID != nil && objectEditorKey?.database == database &&
+      moduleOriginal != nil && hasPendingDatabaseChanges
+  }
   var needsCloseConfirmation: Bool { dirty || hasPendingDatabaseChanges }
   func acceptAppliedModule(sql executed: String, original: String) {
     moduleOriginal=original; moduleInitialSQL=executed

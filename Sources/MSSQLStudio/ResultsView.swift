@@ -813,6 +813,8 @@ private struct ColumnFilterPanel: View {
   private let connectionBadge = NSTextField(labelWithString: "")
   private var editorHeader: NSStackView?
   private let compareModuleButton = NSButton()
+  private let submitModuleButton = NSButton()
+  private var checkingModuleSubmission = false
   private let position = NSTextField(labelWithString: "Ln 1, Col 1")
   private let summary = NSTextField(labelWithString: "")
   private let actual = NSButton(checkboxWithTitle: "Gerçek plan", target: nil, action: nil)
@@ -871,7 +873,7 @@ private struct ColumnFilterPanel: View {
     toggle.toolTip = "Sonuçları Göster / Gizle (⌘R)"
     toggle.setAccessibilityIdentifier("toggleResults")
     actual.controlSize = .small
-    compareModuleButton.image = NSImage(systemSymbolName: "square.split.2x1", accessibilityDescription: "Farkları Gör")
+    compareModuleButton.image = NSImage(systemSymbolName: "arrow.left.arrow.right", accessibilityDescription: "Farkları Gör")
     compareModuleButton.imagePosition = .imageOnly
     compareModuleButton.target = self
     compareModuleButton.action = #selector(compareModule)
@@ -881,7 +883,16 @@ private struct ColumnFilterPanel: View {
     compareModuleButton.setAccessibilityLabel("Farkları Gör")
     compareModuleButton.setAccessibilityIdentifier("compareModule")
     compareModuleButton.isHidden = document.moduleOriginal == nil
-    let header = NSStackView(views: [connectionBadge, NSView(), compareModuleButton, actual, position, toggle])
+    submitModuleButton.image = NSImage(systemSymbolName:"tray.and.arrow.up",accessibilityDescription:"Veritabanına Gönder")
+    submitModuleButton.imagePosition = .imageOnly
+    submitModuleButton.target=self;submitModuleButton.action=#selector(applyModule)
+    submitModuleButton.bezelStyle = .inline;submitModuleButton.isBordered=false
+    submitModuleButton.toolTip="Değişiklikleri incele ve veritabanına gönder…"
+    submitModuleButton.setAccessibilityLabel("Veritabanına Gönder")
+    submitModuleButton.setAccessibilityIdentifier("submitModule")
+    submitModuleButton.isHidden=document.moduleOriginal == nil
+    submitModuleButton.isEnabled=document.canSubmitModule
+    let header = NSStackView(views: [connectionBadge, NSView(), compareModuleButton, submitModuleButton, actual, position, toggle])
     header.spacing = 10
     header.wantsLayer = true
     editorHeader = header
@@ -1153,6 +1164,8 @@ private struct ColumnFilterPanel: View {
   func update() {
     compareModuleButton.isHidden = document.moduleOriginal == nil
     compareModuleButton.isEnabled = !document.busy
+    submitModuleButton.isHidden = document.moduleOriginal == nil
+    submitModuleButton.isEnabled = document.canSubmitModule && !checkingModuleSubmission
     guard isViewLoaded else { return }
     updateConnectionAppearance()
     actual.state = document.actualPlan ? .on : .off
@@ -1239,31 +1252,33 @@ private struct ColumnFilterPanel: View {
       syncResultSelector()
     }
   }
-  private func modulePreview(applying:Bool) {
-    guard moduleReview == nil,let original=document.moduleOriginal,let parent=view.window else {return}
+  private func modulePreview() {
+    guard !checkingModuleSubmission,moduleReview == nil,let original=document.moduleOriginal,let parent=view.window else {return}
     let sql=document.sql,db=document.database,baseline=document.moduleInitialSQL ?? ModuleEditing.alter(original)
-    moduleReview=ModuleReviewController(parent:parent,title:"\(document.server.profile.name)  /  \(db)  /  \(document.title)",original:baseline,edited:sql,canApply:applying && document.hasPendingDatabaseChanges,approved:{ [weak self] in
+    moduleReview=ModuleReviewController(parent:parent,title:"\(document.server.profile.name)  /  \(db)  /  \(document.title)",original:baseline,edited:sql,canApply:document.canSubmitModule,approved:{ [weak self] in
       self?.submitModule(sql:sql,database:db,original:original)
     },finished:{ [weak self] in self?.moduleReview=nil })
   }
-  @objc private func compareModule() {modulePreview(applying:false)}
+  @objc private func compareModule() {modulePreview()}
   @objc private func applyModule() {
     guard document.transactionCount == 0 else {
       let alert=NSAlert();alert.messageText="Önce COMMIT veya ROLLBACK çalıştırın.";alert.runModal();return
     }
-    guard !document.busy,document.state == .ready,document.hasPendingDatabaseChanges else {return}
-    modulePreview(applying:true)
+    guard document.canSubmitModule else {return}
+    modulePreview()
   }
   private func submitModule(sql:String,database db:String,original:String) {
-    guard let object=document.moduleObjectID,document.objectEditorKey?.database == db,document.sql == sql,document.database == db,!document.busy,document.transactionCount == 0 else {return}
+    guard let object=document.moduleObjectID,document.objectEditorKey?.database == db,document.sql == sql,document.database == db,document.canSubmitModule,!checkingModuleSubmission else {return}
+    checkingModuleSubmission=true;update()
     Task { [weak self] in
       guard let self else {return}
+      defer {checkingModuleSubmission=false;update()}
       do {
         let output=try await document.server.catalog(Catalog.definition(object),database:db)
         guard !output.partial,let current=output.results.first?.values.first?.first,let current,current == original else {
           throw SQLFailure("Nesne sunucuda değişmiş veya kaldırılmış. Değişiklik gönderilmedi; sunucudaki güncel tanımı ayrı sekmede karşılaştırın.")
         }
-        guard document.sql == sql,document.database == db,!document.busy,document.transactionCount == 0,document.moduleOriginal == original else {return}
+        guard document.sql == sql,document.database == db,document.canSubmitModule,document.moduleOriginal == original else {return}
         let targetDocument=document
         document.moduleApplied={ [weak targetDocument] in
           guard let doc=targetDocument,doc.database == db else {return}

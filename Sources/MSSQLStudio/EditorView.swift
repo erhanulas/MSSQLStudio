@@ -262,7 +262,6 @@ import SQLServerKit
   var lineNumber: ((Int) -> Int)?
   var foldRegions: (() -> [SQLFolding.Region])?
   var collapsed: ((SQLFolding.Region) -> Bool)?
-  var lastToggled: ((SQLFolding.Region) -> Bool)?
   var toggle: ((SQLFolding.Region) -> Void)?
   var selectLine: ((NSRange) -> Void)?
   private var hits: [(CGFloat, NSRange, SQLFolding.Region?)] = []
@@ -361,19 +360,16 @@ import SQLServerKit
         let top = baseline-font.ascender
         hits.append((top,originalLine,region))
         if let region {
-          if lastToggled?(region) == true {
-            NSColor.controlAccentColor.setFill()
-            NSBezierPath(roundedRect:NSRect(x:ruleThickness-3,y:top,width:3,height:18),xRadius:1.5,yRadius:1.5).fill()
-          }
           addToolTip(NSRect(x:ruleThickness-20,y:top,width:20,height:18),owner:self,userData:nil)
           let isCollapsed=collapsed?(region) == true
           let box=NSRect(x:ruleThickness-18,y:top+2,width:13,height:13)
-          (isCollapsed ? NSColor.controlAccentColor.withAlphaComponent(0.14) : StudioTheme.editorCanvas).setFill()
+          (isCollapsed ? StudioTheme.accent : StudioTheme.editorCanvas).setFill()
           let path=NSBezierPath(roundedRect:box,xRadius:2,yRadius:2);path.fill()
-          (isCollapsed ? NSColor.controlAccentColor : NSColor.secondaryLabelColor).setStroke();path.lineWidth=1;path.stroke()
+          (isCollapsed ? StudioTheme.accent : NSColor.secondaryLabelColor).setStroke();path.lineWidth=1;path.stroke()
+          (isCollapsed ? StudioTheme.editorCanvas : NSColor.secondaryLabelColor).setStroke()
           let lines=NSBezierPath();lines.move(to:NSPoint(x:box.minX+3,y:box.midY));lines.line(to:NSPoint(x:box.maxX-3,y:box.midY))
           if isCollapsed {lines.move(to:NSPoint(x:box.midX,y:box.minY+3));lines.line(to:NSPoint(x:box.midX,y:box.maxY-3))}
-          lines.lineWidth=1;lines.stroke()
+          lines.lineWidth=isCollapsed ? 1.5 : 1;lines.stroke()
         }
         number! += 1
       }
@@ -412,6 +408,8 @@ import SQLServerKit
   private var analysisSource = ""
   private var cachedTokens: [Lexeme]?
   private var cachedTokenSource = ""
+  private var unusedVariableSource = ""
+  private var unusedVariableRanges: [NSRange] = []
   private var highlightedSource: String?
   private var highlightedDiagnostics: [SQLIntelligence.Diagnostic] = []
   private(set) var diagnostics: [SQLIntelligence.Diagnostic] = []
@@ -419,7 +417,6 @@ import SQLServerKit
   private var initializedText = false
   private(set) var regions: [SQLFolding.Region] = []
   private var folded: [SQLFolding.Region] = []
-  private var lastToggledFold: SQLFolding.Region?
   private var projection: SQLFolding.Projection?
   private var changingPresentation = false
   private var lineStarts = [0]
@@ -515,7 +512,6 @@ import SQLServerKit
     ruler.sourceOffset = { [weak self] in self?.projection?.sourceOffset($0) ?? $0 }
     ruler.foldRegions = { [weak self] in self?.regions ?? [] }
     ruler.collapsed = { [weak self] region in self?.folded.contains(region) == true }
-    ruler.lastToggled = { [weak self] in self?.lastToggledFold == $0 }
     ruler.toggle = { [weak self] in self?.toggleFold($0) }
     ruler.selectLine = { [weak self] in self?.selectSourceLine($0) }
     suggestionPopover.contentViewController = suggestionList
@@ -634,7 +630,7 @@ import SQLServerKit
     // A host refresh is not a request to unfold or replace an unchanged document.
     if initializedText && document.sql == (projection?.source ?? editor.string) { return }
     occurrenceTask?.cancel(); clearOccurrences(); highlightedSource=nil
-    folded.removeAll(); projection = nil;collapsedMarkers=[];lastToggledFold=nil
+    folded.removeAll(); projection = nil;collapsedMarkers=[]
     // Even an empty initial document must initialize NSTextView's text input/layout state.
     // Skipping the first assignment leaves a fresh blank TextKit 2 view without a click target.
     if editor.string != document.sql || !initializedText {
@@ -655,7 +651,6 @@ import SQLServerKit
     guard !changingPresentation else { return }
     clearOccurrences()
     document.sql = editor.string
-    lastToggledFold=nil
     updateOutline(refreshRegions:false)
     regions = []
     resizeToViewport()
@@ -742,7 +737,6 @@ import SQLServerKit
   }
   func toggleFold(_ region: SQLFolding.Region) {
     guard regions.contains(region) else {return}
-    lastToggledFold=region
     var selection = projection?.sourceRange(editor.selectedRange()) ?? editor.selectedRange()
     if projection != nil,let marker=collapsedMarkers.first(where:{$0.region == region}),NSIntersectionRange(editor.selectedRange(),marker.range).length > 0 {
       // Expanding an ellipsis must not turn its small visual selection into a whole block selection.
@@ -956,6 +950,18 @@ import SQLServerKit
     guard highlightedSource != source || highlightedDiagnostics != activeDiagnostics else {return}
     highlightedSource=source;highlightedDiagnostics=activeDiagnostics
     let tokens = cachedTokenSource == source ? cachedTokens ?? [] : source.utf16.count <= 250_000 ? TSQL.lex(source) : []
+    let completeSource = projection?.source ?? source
+    if unusedVariableSource != completeSource {
+      unusedVariableSource = completeSource
+      unusedVariableRanges = TSQL.unusedDeclaredVariables(completeSource)
+    }
+    let unused = Set(unusedVariableRanges.compactMap { range -> Int? in
+      if let projection {
+        guard !projection.regions.contains(where:{ NSIntersectionRange($0.hidden,range).length > 0 }) else { return nil }
+        return projection.displayOffset(range.location)
+      }
+      return range.location
+    })
     var changes: [(NSRange,NSColor)] = []
     func collect(_ range: NSRange, color: NSColor) {
       guard range.length > 0 else { return }
@@ -964,7 +970,7 @@ import SQLServerKit
       }
     }
     if tokens.isEmpty { collect(NSRange(location:0,length:storage.length),color:StudioTheme.editorText) }
-    else { for token in tokens { collect(token.range,color:StudioTheme.syntax(TSQL.syntaxStyle(token))) } }
+    else { for token in tokens { collect(token.range,color:SQLSourceHighlighting.foreground(token,unused:unused.contains(token.range.location))) } }
     let selection = editor.selectedRanges
     storage.beginEditing()
     for (range,color) in changes { storage.addAttribute(.foregroundColor,value:color,range:range) }
