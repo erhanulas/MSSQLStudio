@@ -1,3 +1,13 @@
+# Job adımı veritabanı seçimi ve sayfa tıklama alanı — 10 Ekim 2026
+
+- T-SQL adımında serbest metin yerine veritabanı Picker eklendi. Ayrı metadata bağlantısından Catalog.databases okunur; satır/byte/timeout sınırları 5000 / 8 MB / 15 sn. Mevcut seçim listede yoksa korunur. Boş/kısmi/hatalı sonuçlar görünür; yenileme sırasında önceki liste/seçim tutulur. Salt okunur diğer subsystem türleri metadata okumaz.
+- Job Properties sayfa düğmesinin Text/frame/padding alanına Rectangle contentShape eklendi. Seçili sayfa semibold, zemin rengi ve accessibility isSelected ile belirtilir.
+- `/tmp/mssql-agent-picker-verified.log`: ManagementWorkspaceTests 10/10 geçti. Yeni native test T-SQL adımının açılışta yalnız Catalog.databases okuduğunu ve CmdExec adımının ek sorgu göndermediğini doğruladı.
+- `/tmp/mssql-agent-picker-all-tests.log`: 65 uygulama + 99 core = 164 test; 142 geçti, 22 koşullu atlandı. Son Release derlemesi `/tmp/mssql-agent-picker-build.log`: BUILD SUCCEEDED; imzasız yerel doğrulama.
+- Gerçek kullanıcı uygulamasından ayrı, local.mssqlstudio.uitest kimliğiyle sentetik UI smoke çalıştırıldı. Veritabanı menüsünde DemoDB/master/Reporting görüldü; Reporting seçildi ve SQL önizlemesinde @database_name=N'Reporting' doğrulandı. Adımlar sayfasının seçili erişilebilirlik durumu doğrulandı. Sentetik uygulama kapatıldı; gerçek bağlantı ve job'lara işlem yapılmadı.
+- Sayfa metni dışındaki alan için iki koordinatlı UI denemesi sayfa değiştirmedi; koordinat eşlemesi kesinleştirilmediği için bunlar başarılı tıklama testi sayılmadı. Geniş tıklama alanı kaynakta düzeltildi; bu alanın fiziksel fareyle uçtan uca doğrulaması sınırlı kaldı.
+- İlk test denemeleri SwiftUI Picker'ı NSPopUpButton/yerel AX descendant olarak bulamadı; başarısız introspection doğrulaması başarı gibi raporlanmadı. Seçim ve SQL aktarımı harici UI erişilebilirlik kontrolüyle doğrulandı. Gerçek SQL Server üzerinde yeni canlı test yapılmadı. Henüz yeni release yayımlanmadı; sürüm 0.2.43.
+
 # Keychain ve kalıcı imza incelemesi — 10 Ekim 2026
 
 - Kurulu uygulama v0.2.43 ve GitHub'dan indirilen v0.2.42/v0.2.43 ZIP'leri aynı sertifika pinini ve aynı designated requirement'ı doğruladı: `identifier "local.mssqlstudio.app" and certificate leaf = H"adce16b1a3567d8c5fe2ed261e89493611cb7b9d"`. Bundle ID/service değiştirilmedi. Sertifika 9 Ekim 2026–6 Ekim 2036 UTC. Bu Mac'te kullanılabilir yayın özel anahtarı bulunmadı; CI'deki mevcut kimlik korundu.

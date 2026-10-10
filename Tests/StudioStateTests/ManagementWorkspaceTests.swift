@@ -142,6 +142,27 @@ import SwiftUI
     #expect(table.numberOfRows == 5)
     #expect(scripts.isEmpty && requests.count == 2)
   }
+  @Test func agentStepEditorOnlyReadsDatabaseMetadataOnOpen() async throws {
+    _=NSApplication.shared
+    let server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false
+    var requests:[String]=[]
+    server.catalogFixture={sql in requests.append(sql);return ObjectManagementUIFixture.catalog(sql)}
+    let step=SQLAgent.Step(id:1,name:"Read",subsystem:"TSQL",database:"ArchivedDB",command:"SELECT 1;")
+    let host=WorkbenchController(state:StudioState())
+    let window=host.present(AgentStepEditor(server:server,step:step,steps:[step],isNew:false,open:{_ in}),title:"Synthetic Step Picker",width:900,height:650)
+    defer {window.close()}
+    for _ in 0..<100 {
+      if !requests.isEmpty {break}
+      try await Task.sleep(for:.milliseconds(20))
+    }
+    #expect(requests == [Catalog.databases])
+    var external=step;external.subsystem="CmdExec"
+    let readOnly=host.present(AgentStepEditor(server:server,step:external,steps:[external],isNew:false,open:{_ in Issue.record("Read-only editor submitted changes")}),title:"Synthetic Read-only Step",width:900,height:650)
+    defer {readOnly.close()}
+    try await Task.sleep(for:.milliseconds(60))
+    #expect(requests == [Catalog.databases])
+  }
+
   @Test func agentMenusExposeStateAwareCommandsAndDistinctIcons() {
     let server=ConnectedServer(profile:ServerProfile(),password:""),host=WorkbenchController(state:StudioState())
     let disabled=TreeNode("DisabledJob",kind:.object(.jobs),server:server,item:CatalogItem(name:"DisabledJob",detail:"Disabled, Idle"))

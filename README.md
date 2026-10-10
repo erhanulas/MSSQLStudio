@@ -441,3 +441,9 @@ Explorer'da SQL Server Agent dalı açık, Jobs listesi yüklenmiş ve çalışm
 Job History ilk açılışta son 7 günün çalışma sonuçlarını getirir; Adım ayrıntıları istendiğinde adım/retry kayıtları ayrıca yüklenir. Özet sorgusunda önceki çalışma kimliğini her satır için arayan alt sorgu çalışmaz. Metadata çözümleme ve history ağacı hazırlama arayüz iş parçacığı dışında yapılır; yeni filtre yüklenirken önceki sonuçlar korunur. Aynı job'ın geçmişi/özellikleri zaten açıkken mevcut pencereye geçilir. Açık pencerede sunucudan yeni bilgi almak için Yenile kullanılır.
 
 Sorgu sonuçlarının arayüz güncellemeleri 50 ms aralıklarla birleştirilir; sekme içeriği/durumu değişmedikçe sekme çubuğu tekrar oluşturulmaz. Çalışan/bağlanan sekmelerde yükleme animasyonu görünür ve diğer sekmeler seçilebilir. Metadata isteği iptal edildiğinde ODBC sorgusuna iptal iletilir; iptal transaction rollback değildir. Canlı sunucuda hız ölçümü yapılmamıştır; sunucu/sağlayıcı gecikmesinin bütünüyle giderildiği iddia edilmez.
+
+## Job adımında veritabanı seçimi ve sayfa satırları
+
+T-SQL job adımının veritabanı, [SSMS Genel sayfasındaki](https://learn.microsoft.com/en-us/ssms/agent/create-a-transact-sql-job-step) gibi açılır listeden seçilir. Liste, ayrı metadata bağlantısıyla sunucunun HAS_DBACCESS ile görünür veritabanlarından okunur; Explorer'ın kişisel görünürlük filtresiyle sınırlanmaz. Yükleme göstergesi ve yenileme düğmesi vardır. Mevcut veritabanı görünmüyorsa adı korunur ve uyarı gösterilir; hata/kısmi sonuç başka bir veritabanı seçmez. T-SQL dışındaki salt okunur adımlar için liste sorgusu yapılmaz. Değişiklik hâlâ önce SQL önizlemesine gider.
+
+Job Properties sol sayfa düğmelerinde tüm genişliği kapsayan dikdörtgen tıklama alanı tanımlandı; seçili satır kalın yazı, zemin rengi ve erişilebilirlik seçili durumu ile belirtilir.

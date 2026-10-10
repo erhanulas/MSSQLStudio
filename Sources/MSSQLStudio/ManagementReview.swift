@@ -398,7 +398,7 @@ struct AgentPropertiesPanel:View {
         VStack(alignment:.leading) {
           Text("Sayfa seçin").font(.caption).foregroundStyle(.secondary).padding(.horizontal,10)
           ForEach(pages,id:\.self) {item in
-            Button {page=item} label:{Text(item).frame(maxWidth:.infinity,alignment:.leading).padding(8).background(page == item ? Color.accentColor.opacity(0.15):Color.clear,in:RoundedRectangle(cornerRadius:5))}.buttonStyle(.plain).accessibilityIdentifier("agentPage"+item)
+            Button {page=item} label:{Text(item).fontWeight(page == item ? .semibold:.regular).frame(maxWidth:.infinity,alignment:.leading).padding(8).background(page == item ? Color.accentColor.opacity(0.15):Color.clear,in:RoundedRectangle(cornerRadius:5)).contentShape(Rectangle())}.buttonStyle(.plain).accessibilityIdentifier("agentPage"+item).accessibilityAddTraits(page == item ? .isSelected:[])
           }
           Spacer()
           Text("\(server.profile.name)\nmsdb").font(.caption).foregroundStyle(.secondary).padding(10)
@@ -432,7 +432,7 @@ struct AgentPropertiesPanel:View {
         }
       }
       .sheet(item:$editingStep) {step in
-        AgentStepEditor(step:step,steps:steps,isNew:newStep) {edited in
+        AgentStepEditor(server:server,step:step,steps:steps,isNew:newStep) {edited in
           guard let job else {return}
           stage {try SQLAgent.stepScript(jobID:job.id,step:edited,existingIDs:Set(steps.map(\.id)),isNew:newStep)}
           editingStep=nil
@@ -552,7 +552,8 @@ struct AgentPropertiesPanel:View {
   }
 }
 
-private struct AgentStepEditor:View {
+struct AgentStepEditor:View {
+  let server:ConnectedServer
   @Environment(\.dismiss) private var dismiss
   @State var step:SQLAgent.Step
   let steps:[SQLAgent.Step]
@@ -560,6 +561,11 @@ private struct AgentStepEditor:View {
   let open:(SQLAgent.Step)->Void
   @State private var page="Genel"
   @State private var error=""
+  @State private var databases:[String]=[]
+  @State private var loadingDatabases=true
+  @State private var loadedDatabases=false
+  @State private var databaseError=""
+  @State private var databaseGeneration=0
   private var readOnly:Bool {step.subsystem != "TSQL"}
   var body:some View {
     VStack(alignment:.leading,spacing:12) {
@@ -568,7 +574,7 @@ private struct AgentStepEditor:View {
       if page == "Genel" {
         TextField("Adım adı",text:$step.name).disabled(readOnly).accessibilityIdentifier("agentStepName")
         LabeledContent("Tür") {Text(step.subsystem)}
-        TextField("Veritabanı",text:$step.database).disabled(readOnly)
+        databasePicker
         Text("Komut").font(.headline)
         if readOnly {AgentSQLPreview(sql:step.command).studioEditor()}
         else {AgentCommandEditor(text:$step.command).studioEditor().accessibilityIdentifier("agentStepCommand")}
@@ -602,7 +608,40 @@ private struct AgentStepEditor:View {
           } catch {self.error=error.localizedDescription}
         }.buttonStyle(StudioPrimaryButton()).disabled(readOnly).accessibilityIdentifier("agentStepScript")
       }
-    }.padding(20).frame(width:900,height:650).studioPanel().interactiveDismissDisabled()
+    }.padding(20).frame(width:900,height:650).studioPanel().interactiveDismissDisabled().task(id:databaseGeneration) {await loadDatabases()}
+  }
+  private var databasePicker:some View {
+    VStack(alignment:.leading,spacing:5) {
+      HStack {
+        Picker("Veritabanı",selection:$step.database) {
+          if !databases.contains(step.database) {
+            Text(step.database.isEmpty ? "Veritabanı seçin":step.database + (loadedDatabases ? " · mevcut, listede yok":" · mevcut")).tag(step.database)
+          }
+          ForEach(databases,id:\.self) {Text($0).tag($0)}
+        }.disabled(readOnly || loadingDatabases).accessibilityIdentifier("agentStepDatabase")
+        if loadingDatabases && !readOnly {ProgressView().controlSize(.small).accessibilityLabel("Veritabanları yükleniyor")}
+        Button {databaseGeneration+=1} label:{Image(systemName:"arrow.clockwise")}
+          .disabled(readOnly || loadingDatabases).help("Veritabanlarını yenile").accessibilityLabel("Veritabanlarını yenile").accessibilityIdentifier("agentStepDatabaseRefresh")
+      }
+      if !databaseError.isEmpty {Text(databaseError).font(.caption).foregroundStyle(.red).textSelection(.enabled).accessibilityIdentifier("agentStepDatabaseError")}
+      else if loadedDatabases && !databases.contains(step.database) {
+        Text("Mevcut veritabanı listede görünmüyor; seçim korunuyor. Sunucudaki görünürlük ve erişim yetkileri geçerlidir.").font(.caption).foregroundStyle(.secondary)
+      }
+    }
+  }
+  private func loadDatabases() async {
+    guard !readOnly else {loadingDatabases=false;return}
+    loadingDatabases=true;databaseError=""
+    defer {loadingDatabases=false}
+    do {
+      var limits=Limits();limits.rows=5000;limits.totalBytes=8*1024*1024;limits.timeout=15
+      let result=try await server.catalog(Catalog.databases,database:"master",limits:limits)
+      try Task.checkCancellation()
+      databases=Array(Set(Catalog.rows(result).map(\.name))).sorted {$0.localizedStandardCompare($1) == .orderedAscending}
+      loadedDatabases=true
+      if result.partial {databaseError="Veritabanı listesi kısmi; mevcut seçim korunuyor. Yeniden deneyin."}
+      else if databases.isEmpty {databaseError="Erişilebilir veritabanı bulunamadı; mevcut seçim korunuyor."}
+    } catch is CancellationError {} catch {databaseError="Veritabanları yüklenemedi: "+error.localizedDescription}
   }
   private func flowPicker(_ title:String,action:Binding<Int>,target:Binding<Int>)->some View {
     VStack(alignment:.leading) {

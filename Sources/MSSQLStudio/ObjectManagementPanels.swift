@@ -615,7 +615,9 @@ private struct ObjectPropertiesPanel:View {
 @MainActor enum ObjectManagementUIFixture {
   static func catalog(_ sql:String) -> Execution {
     var e=Execution()
-    if sql.contains("StudioAgent.history") {
+    if sql == Catalog.databases {
+      e.results=[Rows(values:[["1","master","","ONLINE"],["5","DemoDB","","ONLINE"],["6","Reporting","","ONLINE"]])]
+    } else if sql.contains("StudioAgent.history") {
       let id="00000000-0000-0000-0000-000000000027"
       var values:[[String?]]=[
         ["30","Demo Nightly","0","(Job outcome)","0","2026-10-10 21:00:00","0:02:05","Synthetic job failed. Expand the run to inspect every step.",id,"30","0","0","0","Test Server"],

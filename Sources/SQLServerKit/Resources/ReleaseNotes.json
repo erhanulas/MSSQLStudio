@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.44",
+    "date": "2026-10-10",
+    "title": "Job adımlarında veritabanı seçimi ve sayfa geçişleri",
+    "changes": [
+      "T-SQL job adımlarında veritabanı, sunucudan yüklenen açılır listeden seçilebiliyor; listeyi yenileme ve yükleme göstergesi eklendi.",
+      "Mevcut veritabanı listede görünmediğinde seçim korunuyor; boş, kısmi veya hatalı liste için açıklama gösteriliyor.",
+      "Job Properties sayfa düğmelerinin tıklama alanı tüm satıra genişletildi; seçili sayfa kalın yazı, zemin rengi ve erişilebilirlik durumuyla belirginleştirildi.",
+      "Keychain izin yenileme açıklamaları, macOS onay gereksinimini ve eski izin girdilerinin korunmasını daha açık anlatıyor. Kalıcı yayın imzası korunuyor."
+    ]
+  },
+  {
     "version": "0.2.43",
     "date": "2026-10-10",
     "title": "Explorer ve SQL Server Agent iyileştirmeleri",
