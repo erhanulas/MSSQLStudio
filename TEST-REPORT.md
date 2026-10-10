@@ -1,3 +1,10 @@
+# v0.2.51 yayın doğrulaması — 10 Ekim 2026
+
+- Public latest https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.51; build 52, kaynak 07a268c2fc6180d134b76c31563e1cbae94cc98f. Actions 38046699005 tüm adımları geçti; ZIP, PKG, update.json mevcut.
+- İndirilen ZIP SHA256 89916829f01c33b61ca4dd3ce8b5c767dd5c0a1ca1d59444e1092ddfa1620877 manifest/GitHub digest ile eşleşti. PKG GitHub digest c9f745a20d67e55a5551c86bf5296303b874562ae615082797537854ba95106c.
+- Çıkarılan uygulama codesign --verify --deep --strict kontrolünü geçti. local.mssqlstudio.app / adce16b1a3567d8c5fe2ed261e89493611cb7b9d sabit designated requirement korundu.
+- CI imzalı derleme, izole Keychain kontrolü, manifest ve yayın paketi testleri başarılı. Kullanıcının uygulaması/Keychain/veritabanı değiştirilmedi. Önceki rapordaki canlı bilgi penceresi kontrol sınırı geçerlidir; henüz yayımlanmadı ifadesi o anki tarihsel durumu anlatır.
+
 # Explorer bağlantı ve bilgi kartları — 10 Ekim 2026 (yerel, yayımlanmadı)
 
 - Yeni bağlantıda kayıtlı bağlantı seçimi/otomatik doldurma ve ServerVault liste okuması kaldırıldı. Düzenleme seçili profil bilgilerini korur.
