@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.58",
+    "date": "2026-10-10",
+    "title": "Sayısal sonuçlarda doğru sıfır gösterimi",
+    "changes": [
+      "TDBFLOAT ve diğer desteklenen sayısal alanlarda .00000000 gibi değerler 0.00000000 olarak gösterilir; negatif kesirlerin baştaki sıfırı da tamamlanır.",
+      "Sayısal hassasiyet, ondalık basamaklar, bilimsel gösterim ve NULL korunur; değerler yeniden yuvarlanmaz.",
+      "Sonuç tablosu, kopyalama, dışa aktarma ve hücre düzenleme aynı sayısal metni kullanır; TDBBYTE ve metin alanlarının değerleri korunur."
+    ]
+  },
+  {
     "version": "0.2.57",
     "date": "2026-10-10",
     "title": "Hızlı düzenleme hazırlığı ve yenilenen sonuç görünümü",

@@ -111,6 +111,20 @@ public struct Field: Sendable, Equatable {
     return name
   }
   public var numeric: Bool { [Int16(-7), -6, -5, 2, 3, 4, 5, 6, 7, 8].contains(type) }
+
+  /// ODBC numeric-to-text conversion may omit the zero before the decimal point.
+  /// Use the ODBC base type, not the declared alias name (e.g. TDBFLOAT).
+  /// Insert only that zero: parsing/reformatting could lose precision or scale.
+  func normalizedResultValue(_ text: String?) -> String? {
+    guard [Int16(2), 3, 6, 7, 8].contains(type), let text,
+      text.hasPrefix(".") || text.hasPrefix("-.") || text.hasPrefix("+."),
+      text.range(of: #"\A[+-]?\.[0-9]+(?:[eE][+-]?[0-9]+)?\z"#, options: .regularExpression) != nil
+    else { return text }
+    var result = text
+    let position = text.first == "." ? text.startIndex : text.index(after: text.startIndex)
+    result.insert("0", at: position)
+    return result
+  }
 }
 public struct Rows: Sendable {
   public var fields: [Field]

@@ -239,10 +239,13 @@ public final class ODBCConnection: @unchecked Sendable {
               }
               var row: [String?] = []
               for (i, field) in rows.fields.enumerated() {
-                let value = try read(
+                let rawValue = try read(
                   handle, column: i + 1,
                   binary: [Int16(SQL_BINARY), Int16(SQL_VARBINARY), Int16(SQL_LONGVARBINARY)]
                     .contains(field.type), cap: max(1024, limits.cellBytes))
+                // Normalize once, before streaming/spooling, so display, copy, export
+                // and edit conflict predicates share the same lossless numeric text.
+                let value = field.normalizedResultValue(rawValue)
                 totalBytes += value?.utf8.count ?? 0
                 guard totalBytes <= max(1024, limits.totalBytes) else {
                   throw SQLFailure(

@@ -1,10 +1,67 @@
 import AppKit
 import SwiftUI
-import SQLServerKit
+@testable import SQLServerKit
 import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct ResultEditingTests {
+  @Test func numericAliasGridCopyAndNativeEditorPreserveExactValues() async throws {
+    _ = NSApplication.shared
+    let grid = ResultController()
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 450), styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false; window.contentViewController = grid
+    defer { window.close() }
+    let amount = Field("Amount", type: 3, size: 28, scale: 8, declaredType: "TDBFLOAT")
+    let fields = [Field("Id", type: 4), amount, Field("Kind", type: -6, declaredType: "TDBBYTE")]
+    let values: [[String?]] = [["1", amount.normalizedResultValue(".00000000"), "0"],
+      ["2", amount.normalizedResultValue("-.25000000"), "255"],
+      ["3", "99999999999999999999.12345678", "10"], ["4", nil, nil]]
+    grid.update(Rows(fields: fields, values: values), generation: 1)
+    for row in 0..<4 {
+      #expect(grid.tableView(grid.table, objectValueFor: grid.table.tableColumns[2], row: row) as? String == (values[row][1] ?? "NULL"))
+    }
+    #expect(grid.table.tableColumns[2].headerToolTip == "Amount · TDBFLOAT(28,8)")
+    #expect((grid.table.tableColumns[2].dataCell as? NSCell)?.alignment == .right)
+    grid.view.layoutSubtreeIfNeeded()
+    let rect = grid.table.frameOfCell(atColumn: 2, row: 0)
+    let point = grid.table.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
+    let click = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+    grid.table.mouseDown(with: click)
+    grid.table.selectRowIndexes(IndexSet(integersIn: 0..<4), byExtendingSelection: false)
+    grid.copySelectionData()
+    #expect(NSPasteboard.general.string(forType: .string) == "0.00000000\n-0.25000000\n99999999999999999999.12345678\nNULL")
+    grid.editDefinition = TableDefinition(schema: "dbo", name: "T", columns: [
+      .init(id: 1, name: "Id", type: "int"),
+      .init(id: 2, name: "Amount", type: "[dbo].[TDBFLOAT]", baseType: "decimal(28,8)"),
+      .init(id: 3, name: "Kind", type: "[dbo].[TDBBYTE]", baseType: "tinyint")], primaryKey: ["Id"])
+    grid.editingAllowed = { true }
+    window.orderFront(nil); grid.view.layoutSubtreeIfNeeded(); grid.table.reloadData()
+    try await Task.sleep(for: .milliseconds(50))
+    grid.table.editColumn(2, row: 0, with: nil, select: true)
+    let editor = try #require(window.firstResponder as? NSTextView)
+    #expect(editor.string == "0.00000000")
+    window.makeFirstResponder(grid.table)
+    #expect(grid.pendingEdits.isEmpty)
+    grid.tableView(grid.table, setObjectValue: "NULL", for: grid.table.tableColumns[2], row: 3)
+    #expect(grid.pendingEdits.isEmpty)
+    grid.setEditValue("-0.00000001", row: 0, column: 1)
+    grid.setEditValue("255", row: 0, column: 2)
+    let sql = try grid.pendingSQL()
+    #expect(sql.contains("[Amount] = CONVERT(decimal(28,8), N'-0.00000001')"))
+    #expect(sql.contains("[Amount] = CONVERT(decimal(28,8), N'0.00000000')"))
+    #expect(sql.contains("[Kind] = CONVERT(tinyint, N'255')"))
+    #expect(sql.contains("[Kind] = CONVERT(tinyint, N'0')"))
+    grid.table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+    grid.copySelectionData()
+    #expect(NSPasteboard.general.string(forType: .string) == "-0.00000001")
+    #expect(grid.result.values[0] == values[0])
+    grid.setEditValue(nil, row: 0, column: 1)
+    #expect(try grid.pendingSQL().contains("[Amount] = NULL"))
+    grid.setEditValue("0.00000000", row: 0, column: 1)
+    grid.setEditValue("0", row: 0, column: 2)
+    #expect(grid.pendingEdits.isEmpty)
+  }
+
   @Test func editsStageOriginalValuesProtectKeysAndInvalidateOnRefresh() throws {
     _ = NSApplication.shared
     let grid = ResultController()
