@@ -1,3 +1,10 @@
+# v0.2.50 yayın doğrulaması — 10 Ekim 2026
+
+- Public latest https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.50, build 51, kaynak bb0a6193daffcf1cd0995efc923346f0871b8fab. Actions 38044468276 tüm adımları geçti; ZIP/PKG/update.json mevcut.
+- Yerel `/tmp/mssql-v50-tests.log`: 69 app + 100 core = 169 test; 147 geçti, 22 dış koşullu test atlandı. Yeni helper testi dört ayrı shell senaryosunu sınar. CI yayın paketi testleri de geçti.
+- İndirilen ZIP SHA256 12e3aebee3d71c3dcc0ee42293aad5927a94ace035e96fb3e69c82156747aa9c manifest ve GitHub digest ile eşleşti. PKG GitHub digest c47fec788689d405e59b33e75ceb16b58aaafa8b7703a803c6dadcf8cad2ba2c.
+- Çıkarılan app codesign --verify --deep --strict kontrolünü geçti; local.mssqlstudio.app / adce16b1a3567d8c5fe2ed261e89493611cb7b9d sabit kimliği korundu. Kullanıcının uygulaması değiştirilmedi; gerçek yerinde upgrade çalıştırılmadı.
+
 # Güncelleme yedeği — 10 Ekim 2026
 
 - Updater eski uygulamayı hedef.app.previous yerine gizli, özel staging/previous yoluna taşır. Taşıma/imza/open başarı zinciri sonunda yedek temizlenir; hata halinde eski uygulama geri getirilir. İmza/manifest kontrolleri korunur.
