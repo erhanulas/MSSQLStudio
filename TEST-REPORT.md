@@ -1,3 +1,18 @@
+# Genel form hizalaması — 10 Ekim 2026
+
+- Ortak StudioFormField 150 pt etiket sütunu/12 pt aralık ve sarılabilen etiketler kullanır. Job genel/bildirim/adım alanları, zamanlama türü/göreli gün/gün içi tekrar/tarih/saat alanları; tablo/view/index/constraint/synonym tasarımları, yeniden adlandırma/izinler; indeks ve Job şablonları; SQL Assistant adres/model/anahtar; Ayarlar tema/yayın deposu bu düzene alındı. Job Gelişmiş sayfası uzun etiketler için 180 pt sütunu korur ve aynı bileşeni kullanır.
+- View şema/ad/kaynak alanları tek sıkışık HStack yerine açık etiketli satırlara taşındı; tablo ve synonym adları da ayrı satırlarda gösterilir. Bağlantı Grid'i korunup etiket sütunu 150 pt ile sabitlendi. Tablo kolon gridleri ve sonuç tablolarının mevcut sütun düzenleri değiştirilmedi. Binding, SQL, seçim, disabled ve kimlik doğrulama davranışları korunur.
+- `/tmp/mssql-form-final-tests.log`: 67 uygulama + 99 core = 166 test; 144 geçti, 22 dış koşullu test atlandı. `/tmp/mssql-form-build.log`: Release BUILD SUCCEEDED (CODE_SIGNING_ALLOWED=NO). git diff --check temiz. İlk geliştirme derlemesindeki closure/stepper biçimlendirmesi final derlemeden önce düzeltildi.
+- CUA envanteri okunabildi; ancak izole `/tmp/MSSQLStudio-actions-ui/MSSQLStudio.app` penceresine bağlanma halen `Sky Computer Use native pipe closed before response` hatası veriyor. Yeni formların kapsamlı ekran görüntüsü/koordinat doğrulaması yapılamadı; otomatik testler bu görsel kontrolün yerine geçmiş sayılmıyor. Gerçek kullanıcı uygulaması, DB ve Keychain değiştirilmedi. Değişiklikler henüz yayımlanmadı.
+
+# Form hizalaması ve işlem ikonları — 10 Ekim 2026
+
+- AgentStepEditor Gelişmiş sayfasında sabit 180 pt etiket sütunu ve ortak 12 pt aralık kullanılır. Başarı/başarısızlık hedefleri, tekrar sayısı, dakika, çıktı dosyası ve veritabanı kullanıcısı aynı alan başlangıcına hizalanır; çıktı toggle'ları da bu sütuna oturur. Akış ve çıktı/çalışma bağlamı GroupBox gruplarına ayrıldı; taşan içerik scroll alanında kalır. SQL oluşturma, flags ve binding davranışı korunur.
+- Ortak StudioActionButton native SwiftUI Button + Label kullanır. İkonlar görünür metinle birlikte sunulur; native klavye, disabled ve mevcut primary button style davranışları korunur. Job Properties, adım/zamanlama, activity/context menüleri, nesne tasarımları, Ayarlar, geçmiş/şablon/assistant ve Hakkında işlem düğmeleri güncellendi. Başlat yeşil, durdur/ayır turuncu, sil kırmızı; diğer ikincil işlemler accent ikon kullanır. ModuleReview AppKit gönder/vazgeç düğmelerine de ikon eklendi.
+- `/tmp/mssql-actions-final-tests.log`: 67 uygulama + 99 core = 166 test; 144 geçti, 22 dış koşullu test atlandı. `/tmp/mssql-actions-build.log`: Release BUILD SUCCEEDED (CODE_SIGNING_ALLOWED=NO). git diff --check temiz.
+- Ayrı `/tmp/MSSQLStudio-actions-ui/MSSQLStudio.app` çevrimdışı fixture ile açıldı. Job Properties → Adımlar → Düzenle geçişi, işlem düğmelerinin erişilebilir adları ve düzenleme penceresinin açılması doğrulandı. Gelişmiş sekmesine tıklarken CUA aracı `Sky Computer Use native pipe closed before response` hatası verdi; yeniden bağlanma ve araç reset'i de aynı hatayı verdi. Bu nedenle Gelişmiş sekmesinin son görsel yerleşimi ve ikon renkleri canlı ekran görüntüsüyle doğrulanmış sayılmıyor. Test kopyası araç bağlantısı nedeniyle kapatılamadı; gerçek kullanıcı uygulamasına müdahale edilmedi.
+- Gerçek DB/Keychain işlemi yapılmadı; değişiklikler henüz yayımlanmadı.
+
 # v0.2.46 yayın doğrulaması — 10 Ekim 2026
 
 - https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.46 en son yayın; draft değil. ZIP, PKG ve update.json mevcut. Kaynak commit: 0af18584d6c700d435ad8fb7b5e04196de7213b5; sürüm 0.2.46, build 47.

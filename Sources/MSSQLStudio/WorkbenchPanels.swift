@@ -127,10 +127,10 @@ private struct SettingsPanel: View {
       StudioPanelHeading(title: "Ayarlar", icon: "slider.horizontal.3", subtitle: "Çalışma alanını kendine göre düzenle")
       TabView(selection: $selectedTab) {
         settingsPage(title: "Görünüm", subtitle: "Sana uygun çalışma ortamı", icon: "paintpalette") {
-      Picker("Renk teması", selection: $theme) {
+      StudioFormField("Renk teması") {Picker("Renk teması", selection: $theme) {
         Text("Studio Açık").tag("light")
         Text("Studio Koyu").tag("dark")
-      }.pickerStyle(.segmented)
+      }.labelsHidden()}.pickerStyle(.segmented)
       Text(
         "Editör: \(StudioTheme.codeFont.familyName ?? "Monospace") · 13 pt  |  Arayüz: Sistem · 12 pt"
       )
@@ -146,7 +146,7 @@ private struct SettingsPanel: View {
         Text("Öneri gecikmesi")
         Slider(value:$completionDelay,in:50...1000,step:10).accessibilityLabel("Otomatik tamamlama gecikmesi")
         Text("\(Int(completionDelay)) ms").monospacedDigit().frame(width:65,alignment:.trailing)
-        Button("Varsayılan") {completionDelay=Double(SQLEditorPreferences.defaultCompletionDelay)}
+        StudioActionButton("Varsayılan", icon:"arrow.counterclockwise", tint:.accentColor) {completionDelay=Double(SQLEditorPreferences.defaultCompletionDelay)}
       }
       Text("Kısa süre daha hızlı öneri gösterir; uzun süre yazmayı bitirmenizi bekler. Ctrl+Space her zaman beklemeden açar. Uygula ile kaydedilir.").font(.caption).foregroundStyle(.secondary)
       Toggle("Eksik tablo ve kolonları kırmızı vurgula", isOn:$validation)
@@ -161,7 +161,7 @@ private struct SettingsPanel: View {
           Text(action == .headers ? "Grid · Başlıklarla kopyala" : "Yeni sorgu")
           Spacer()
           ShortcutCapture(action: action) { message = $0; shortcutRevision += 1 }.frame(width:220,height:28)
-          Button("Sıfırla") { GridShortcuts.reset(action); shortcutRevision += 1 }
+          StudioActionButton("Sıfırla", icon:"arrow.counterclockwise", tint:.accentColor) { GridShortcuts.reset(action); shortcutRevision += 1 }
         }
       }
       .id(shortcutRevision)
@@ -176,7 +176,7 @@ private struct SettingsPanel: View {
         "Sorgu metinleri değerler içerebilir. Kayıtlar yalnızca bu Mac'te Application Support/MSSQLStudio altında tutulur. Bağlantı parolaları bu dosyalara yazılmaz."
       ).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
       Divider()
-        Button("Yerel Kayıtları Sil") {
+        StudioActionButton("Yerel Kayıtları Sil", icon:"trash", tint:.red) {
           do {
             for name in ["history.json", "tabs.json"] {
               let url = state.folder.appendingPathComponent(name)
@@ -190,12 +190,12 @@ private struct SettingsPanel: View {
         }
         }.tabItem { Label("Çalışma Alanı", systemImage: "square.stack") }.tag("workspace")
         settingsPage(title: "Güncellemeler", subtitle: "Yeni sürümlerin kaynağı", icon: "arrow.down.circle") {
-      TextField("kullanıcı/depo veya GitHub depo adresi",text:$updateRepository).accessibilityIdentifier("githubUpdateRepository")
+      StudioFormField("Yayın deposu") {TextField("kullanıcı/depo veya GitHub depo adresi",text:$updateRepository)}.accessibilityIdentifier("githubUpdateRepository")
       Text("Herkese açık Releases kullanılır. Depoyu girip Uygula’ya basın; ardından MSSQL Studio → Güncellemeleri Kontrol Et. Bağlantı parolaları ve sorgular GitHub’a gönderilmez. Boş bırakırsanız uygulamanın yayın adresi kullanılır.").font(.caption).foregroundStyle(.secondary)
         }.tabItem { Label("Güncellemeler", systemImage: "arrow.down.circle") }.tag("updates")
         settingsPage(title: "Güvenlik", subtitle: "Bağlantı parolaları ve uygulama erişimi", icon: "lock.shield") {
       Text("Güncellemelerden sonra tekrarlayan Keychain izni için eski kayıtların uygulama erişimini bir kez yenileyin. macOS bu işlemde parola isteyebilir. Kalıcı imzalı MSSQL Studio'nun erişimi yenilenir; parolalar silinmez veya dışarı aktarılmaz. Önceki izin girdileri otomatik temizlenmez.").font(.caption).foregroundStyle(.secondary)
-      Button(renewingKeychain ? "İzinler yenileniyor…" : "Keychain izinlerini yenile") {
+      StudioActionButton(renewingKeychain ? "İzinler yenileniyor…" : "Keychain izinlerini yenile",icon:"key",tint:.accentColor) {
         renewingKeychain=true;keychainMessage=""
         Task {
           defer {renewingKeychain=false}
@@ -213,7 +213,7 @@ private struct SettingsPanel: View {
           .font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
           .accessibilityIdentifier("settingsMessage")
         Spacer(minLength: 12)
-        Button("Uygula", action: applySettings).buttonStyle(StudioPrimaryButton())
+        StudioActionButton("Uygula", icon:"checkmark", action: applySettings).buttonStyle(StudioPrimaryButton())
           .accessibilityIdentifier("settingsApply")
       }
     }.padding(24).studioPanel().onAppear {
@@ -299,7 +299,7 @@ private struct HistoryPanel: View {
           ).frame(
             maxWidth: .infinity, alignment: .leading)
         }.frame(maxHeight: 230)
-        Button("Yeni Sorgu Sekmesinde Aç") { open(record) }
+        StudioActionButton("Yeni Sorgu Sekmesinde Aç", icon:"plus.square", tint:.accentColor) { open(record) }
       } else {
         Text("İncelemek için bir sorgu seçin.").foregroundStyle(.secondary)
       }
@@ -321,7 +321,7 @@ private struct IndexPanel: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       StudioPanelHeading(title: "Index Designer", icon: "list.number", subtitle: table)
-      TextField("İndeks adı", text: $name)
+      StudioFormField("İndeks adı") {TextField("İndeks adı", text: $name)}
       Toggle("UNIQUE", isOn: $unique)
       ScrollView {
         VStack {
@@ -334,9 +334,9 @@ private struct IndexPanel: View {
           }
         }
       }.frame(height: 160)
-      TextField("Filtre (isteğe bağlı WHERE koşulu)", text: $filter)
+      StudioFormField("Filtre") {TextField("Filtre (isteğe bağlı WHERE koşulu)", text: $filter)}
       HStack {
-        Button("SQL Oluştur") {
+        StudioActionButton("SQL Oluştur", icon:"doc.badge.gearshape", tint:.accentColor) {
           do {
             preview = try Scripts.index(
               table: table, name: name, keys: columns.filter { keys.contains($0.name) }.map(\.name),
@@ -345,7 +345,7 @@ private struct IndexPanel: View {
             error = ""
           } catch let failure { error = failure.localizedDescription }
         }
-        Button("Sorgu Sekmesine Aktar") { open(preview) }.disabled(preview.isEmpty)
+        StudioActionButton("Sorgu Sekmesine Aktar", icon:"arrow.up.forward.square", tint:.accentColor) { open(preview) }.disabled(preview.isEmpty)
       }
       Text("SQL'i inceleyip sorgu sekmesinden çalıştırın.").foregroundStyle(.secondary).font(
         .caption)
@@ -376,10 +376,10 @@ private struct JobPanel: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       StudioPanelHeading(title: "SQL Server Agent", icon: "clock.badge.checkmark", subtitle: "Yeni iş ve zamanlama SQL’i hazırla")
-      TextField("Job adı", text: $name)
-      Picker("Veritabanı", selection: $database) {
+      StudioFormField("Job adı") {TextField("Job adı", text: $name)}
+      StudioFormField("Veritabanı") {Picker("Veritabanı", selection: $database) {
         ForEach(databases, id: \.self) { Text($0).tag($0) }
-      }
+      }.labelsHidden()}
       Text("T-SQL Step").font(.headline)
       TextEditor(text: $command).font(.custom(StudioTheme.codeFont.fontName, size: 13)).studioEditor().frame(
         height: 120)
@@ -388,7 +388,7 @@ private struct JobPanel: View {
         TextField("HHMMSS", text: $time).frame(width: 120).disabled(!daily)
       }
       HStack {
-        Button("SQL Oluştur") {
+        StudioActionButton("SQL Oluştur", icon:"doc.badge.gearshape", tint:.accentColor) {
           do {
             if daily && Int(time) == nil { throw SQLFailure("Saat HHMMSS olmalı.") }
             preview = try Scripts.job(
@@ -396,7 +396,7 @@ private struct JobPanel: View {
             error = ""
           } catch let failure { error = failure.localizedDescription }
         }
-        Button("Sorgu Sekmesine Aktar") { open(preview) }.disabled(preview.isEmpty)
+        StudioActionButton("Sorgu Sekmesine Aktar", icon:"arrow.up.forward.square", tint:.accentColor) { open(preview) }.disabled(preview.isEmpty)
       }
       Text(
         "Job oluşturma SQL'i ayrı sekmede incelenip çalıştırılır. Zamanlama için SQL Server Agent çalışıyor olmalı."
@@ -418,7 +418,7 @@ private struct TemplatesPanel: View {
       Text("JSON şablonları içe aktarın. Şablonlar SQL sekmesi açar; otomatik çalıştırılmaz.")
         .foregroundStyle(.secondary)
       HStack {
-        Button("JSON İçe Aktar…") {
+        StudioActionButton("JSON İçe Aktar…", icon:"square.and.arrow.down", tint:.accentColor) {
           let panel = NSOpenPanel()
           panel.allowedContentTypes = [.json]
           guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -429,7 +429,7 @@ private struct TemplatesPanel: View {
             selected = item.id
           } catch let failure { error = failure.localizedDescription }
         }
-        Button("Örnek JSON Kaydet…") {
+        StudioActionButton("Örnek JSON Kaydet…", icon:"square.and.arrow.up", tint:.accentColor) {
           let panel = NSSavePanel()
           panel.nameFieldStringValue = "template.json"
           guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -454,7 +454,7 @@ private struct TemplatesPanel: View {
           ).frame(
             maxWidth: .infinity, alignment: .leading)
         }
-        Button("Sorgu Sekmesinde Aç") { open(item) }
+        StudioActionButton("Sorgu Sekmesinde Aç", icon:"arrow.up.forward.square", tint:.accentColor) { open(item) }
       }
       Text(error).font(.caption).foregroundStyle(.red)
     }.padding(20).studioPanel()
@@ -473,11 +473,9 @@ private struct AssistantPanel: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       StudioPanelHeading(title: "SQL Assistant", icon: "sparkles", subtitle: "Önerileri incele, ardından sorgu sekmesine taşı")
-      TextField("Chat/completions adresi", text: $endpoint)
-      HStack {
-        TextField("Model", text: $model)
-        SecureField("API anahtarı (yalnızca bu pencere)", text: $key)
-      }
+      StudioFormField("API adresi") {TextField("Chat/completions adresi", text: $endpoint)}
+      StudioFormField("Model") {TextField("Model", text: $model)}
+      StudioFormField("API anahtarı") {SecureField("Yalnızca bu pencere", text: $key)}
       Text(
         "Aşağıdaki metin belirttiğiniz adrese gönderilir. Sonuçlar, şema ve bağlantı bilgileri eklenmez."
       ).font(.caption).foregroundStyle(.secondary)
@@ -485,9 +483,9 @@ private struct AssistantPanel: View {
       TextEditor(text: $prompt).font(.custom(StudioTheme.codeFont.fontName, size: 13)).studioEditor().frame(
         height: 150)
       HStack {
-        Button("Editördeki SQL'i İsteğe Ekle") { prompt += "\n\n```sql\n\(sql)\n```" }.disabled(
+        StudioActionButton("Editördeki SQL'i İsteğe Ekle", icon:"text.badge.plus", tint:.accentColor) { prompt += "\n\n```sql\n\(sql)\n```" }.disabled(
           task != nil)
-        Button("Gönder") {
+        StudioActionButton("Gönder", icon:"paperplane.fill", tint:.accentColor) {
           error = ""
           let address = endpoint
           let token = key
@@ -501,7 +499,7 @@ private struct AssistantPanel: View {
             task = nil
           }
         }.disabled(task != nil || prompt.isEmpty || model.isEmpty)
-        Button("Durdur") { task?.cancel() }.disabled(task == nil)
+        StudioActionButton("Durdur", icon:"stop.fill", tint:.orange) { task?.cancel() }.disabled(task == nil)
       }
       Text("Yanıt").font(.headline)
       if response.isEmpty {
@@ -517,7 +515,7 @@ private struct AssistantPanel: View {
         }.studioEditor()
       }
       if let sql = AssistantClient.sql(from: response) {
-        Button("Önerilen SQL'i Yeni Sekmede İncele") { open(sql) }
+        StudioActionButton("Önerilen SQL'i Yeni Sekmede İncele", icon:"doc.text.magnifyingglass", tint:.accentColor) { open(sql) }
       }
       Text(error).font(.caption).foregroundStyle(.red)
     }.padding(20).studioPanel().onDisappear { task?.cancel() }
@@ -601,7 +599,7 @@ struct ConnectionAppearanceFields: View {
             })
         )
         .frame(width: 80).help("Altı haneli RGB renk kodu; örneğin D92D20.")
-        Button("Varsayılan") { appearance.colorHex = nil }
+        StudioActionButton("Varsayılan", icon:"arrow.counterclockwise", tint:.accentColor) { appearance.colorHex = nil }
       }
       if appearance.environment == .custom {
         TextField("Özel ortam etiketi", text: $appearance.customLabel)
@@ -633,6 +631,42 @@ struct ConnectionAppearanceFields: View {
   }
 }
 
+/// One label column for form controls; long labels wrap instead of shifting fields.
+struct StudioFormField<Content: View>: View {
+  let title: String
+  let labelWidth: CGFloat
+  @ViewBuilder let content: () -> Content
+  init(_ title: String, labelWidth: CGFloat = 150, @ViewBuilder content: @escaping () -> Content) {
+    self.title = title; self.labelWidth = labelWidth; self.content = content
+  }
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 12) {
+      Text(title).foregroundStyle(.secondary).frame(width: labelWidth, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+      content().frame(maxWidth: .infinity, alignment: .leading)
+    }.frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+struct StudioActionButton: View {
+  let title: String
+  let icon: String
+  let tint: Color?
+  let action: () -> Void
+  @Environment(\.isEnabled) private var enabled
+  init(_ title: String, icon: String, tint: Color? = nil, action: @escaping () -> Void) {
+    self.title = title; self.icon = icon; self.tint = tint; self.action = action
+  }
+  var body: some View {
+    Button(action: action) {
+      Label {
+        Text(title)
+      } icon: {
+        if let tint { Image(systemName: icon).foregroundStyle(enabled ? tint : Color.secondary) }
+        else { Image(systemName: icon) }
+      }.contentShape(Rectangle())
+    }.accessibilityLabel(title)
+  }
+}
 struct StudioPrimaryButton: ButtonStyle {
   @Environment(\.isEnabled) private var enabled
   func makeBody(configuration: Configuration) -> some View {

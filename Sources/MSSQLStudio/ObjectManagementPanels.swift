@@ -228,7 +228,7 @@ private struct TableDesignerPanel: View {
   var body:some View {
     VStack(alignment:.leading,spacing:12) {
       StudioPanelHeading(title:load == nil ? "New Table" : "Table Designer",icon:"tablecells",subtitle:server+" · "+database)
-      HStack { TextField("Şema",text:$schema).frame(width:140).disabled(load != nil); TextField("Tablo adı",text:$name).disabled(load != nil); Spacer(); Text("\(columns.count) kolon").foregroundStyle(.secondary) }
+      VStack(alignment:.leading,spacing:10) { StudioFormField("Şema") {TextField("Şema",text:$schema).disabled(load != nil)}; StudioFormField("Tablo adı") {TextField("Tablo adı",text:$name).disabled(load != nil)}; Text("\(columns.count) kolon").foregroundStyle(.secondary) }
       if !ready { ProgressView("Metadata yükleniyor…") }
       TabView(selection:$tab) {
         columnEditor.tag("columns").tabItem { Label("Columns",systemImage:"tablecells") }
@@ -238,8 +238,8 @@ private struct TableDesignerPanel: View {
       }
       if !error.isEmpty { Text(error).foregroundStyle(.red).textSelection(.enabled) }
       HStack {
-        Button("Değişiklik Scripti Oluştur") { generate() }.disabled(!ready)
-        Button("SQL Editöründe İncele") { generate(); if !preview.isEmpty { open(preview) } }.disabled(!ready)
+        StudioActionButton("Değişiklik Scripti Oluştur", icon:"doc.badge.gearshape", tint:.accentColor) { generate() }.disabled(!ready)
+        StudioActionButton("SQL Editöründe İncele", icon:"doc.text.magnifyingglass", tint:.accentColor) { generate(); if !preview.isEmpty { open(preview) } }.disabled(!ready)
         Spacer()
         Text("Bağımlı nesneler varsa SQL Server değişikliği reddedebilir; otomatik tablo rebuild yapılmaz.").font(.caption).foregroundStyle(.secondary)
       }
@@ -330,8 +330,8 @@ private struct StructureObjectsPanel:View {
        ScrollView {
         VStack(alignment:.leading,spacing:12) {
           Text("Yeni nesne").font(.headline)
-          Picker("Tür",selection:$kind) { Text("Index").tag("INDEX"); Text("Unique Key").tag("UQ"); Text("Foreign Key / Relationship").tag("FK"); Text("Check Constraint").tag("CHECK") }
-          TextField("Ad",text:$name)
+          StudioFormField("Tür") {Picker("Tür",selection:$kind) { Text("Index").tag("INDEX"); Text("Unique Key").tag("UQ"); Text("Foreign Key / Relationship").tag("FK"); Text("Check Constraint").tag("CHECK") }.labelsHidden()}
+          StudioFormField("Ad") {TextField("Ad",text:$name)}
           if kind != "CHECK" {
             Text("Anahtar kolonları (tablo sırası)").font(.caption)
             ForEach(table.columns) { c in HStack {
@@ -339,18 +339,18 @@ private struct StructureObjectsPanel:View {
               if kind == "INDEX" { Toggle("Include",isOn:membership(c.name,in:$includes)) }
             } }
           }
-          if kind == "INDEX" { Toggle("UNIQUE",isOn:$unique); TextField("Filtre: isteğe bağlı WHERE",text:$expression) }
-          if kind == "CHECK" { TextField("Koşul: [Amount] >= 0",text:$expression) }
+          if kind == "INDEX" { Toggle("UNIQUE",isOn:$unique); StudioFormField("Filtre") {TextField("Filtre: isteğe bağlı WHERE",text:$expression)} }
+          if kind == "CHECK" { StudioFormField("CHECK koşulu") {TextField("Koşul: [Amount] >= 0",text:$expression)} }
           if kind == "FK" {
-            TextField("Hedef şema",text:$targetSchema); TextField("Hedef tablo",text:$targetTable); TextField("Hedef kolonlar: Id, Code",text:$targetColumns)
-            Picker("ON DELETE",selection:$deleteAction) { ForEach(["NO ACTION","CASCADE","SET NULL","SET DEFAULT"],id:\.self) { Text($0) } }
-            Picker("ON UPDATE",selection:$updateAction) { ForEach(["NO ACTION","CASCADE","SET NULL","SET DEFAULT"],id:\.self) { Text($0) } }
+            StudioFormField("Hedef şema") {TextField("Hedef şema",text:$targetSchema)}; StudioFormField("Hedef tablo") {TextField("Hedef tablo",text:$targetTable)}; StudioFormField("Hedef kolonlar") {TextField("Hedef kolonlar: Id, Code",text:$targetColumns)}
+            StudioFormField("ON DELETE") {Picker("ON DELETE",selection:$deleteAction) { ForEach(["NO ACTION","CASCADE","SET NULL","SET DEFAULT"],id:\.self) { Text($0) } }.labelsHidden()}
+            StudioFormField("ON UPDATE") {Picker("ON UPDATE",selection:$updateAction) { ForEach(["NO ACTION","CASCADE","SET NULL","SET DEFAULT"],id:\.self) { Text($0) } }.labelsHidden()}
           }
         }.padding(12)
        }
        Divider()
        Text(error).foregroundStyle(.red)
-       Button("SQL Editöründe İncele") {generate()}.padding(.horizontal,12)
+       StudioActionButton("SQL Editöründe İncele", icon:"doc.text.magnifyingglass", tint:.accentColor) {generate()}.padding(.horizontal,12)
        Text("SQL hazırlanır; bu pencereden veritabanına yazılmaz.").font(.caption).foregroundStyle(.secondary).padding(.horizontal,12)
       }.frame(minWidth:350)
     }.padding(8).onAppear { if !initialKind.isEmpty { kind=initialKind }; name=kind == "FK" ? "FK_NewRelationship" : kind == "CHECK" ? "CK_NewConstraint" : "IX_NewIndex" }
@@ -402,7 +402,7 @@ private struct ViewDesignerPanel:View {
     VStack(alignment:.leading,spacing:12) {
       StudioPanelHeading(title:load == nil ? "New View" : "View Designer",icon:"rectangle.on.rectangle",subtitle:document.server.profile.name+" · "+document.database)
       if load == nil {
-        HStack { TextField("View şeması",text:$schema); TextField("View adı",text:$name); TextField("Kaynak şema",text:$sourceSchema); TextField("Kaynak tablo / view",text:$sourceTable); Button("Kolonları Getir") { Task { await loadColumns() } } }
+        VStack(alignment:.leading,spacing:10) { StudioFormField("View şeması") {TextField("View şeması",text:$schema)}; StudioFormField("View adı") {TextField("View adı",text:$name)}; StudioFormField("Kaynak şema") {TextField("Kaynak şema",text:$sourceSchema)}; StudioFormField("Kaynak tablo / view") {TextField("Kaynak tablo / view",text:$sourceTable)}; HStack {Spacer();StudioActionButton("Kolonları Getir", icon:"arrow.down.square", tint:.accentColor) { Task { await loadColumns() } }} }
         if !columns.isEmpty {
           ScrollView(.horizontal) { HStack { ForEach(columns,id:\.self) { column in Toggle(column,isOn:Binding(get:{selected.contains(column)},set:{ if $0 {selected.insert(column)} else {selected.remove(column)} })) } } }.frame(height:35)
           HStack { TextField("WHERE koşulu (isteğe bağlı SQL)",text:$filter); Button("Seçimden View SQL'i Oluştur") { build() } }
@@ -413,8 +413,8 @@ private struct ViewDesignerPanel:View {
       ManagedSQLEditor(document:document,source:document.sql).disabled(!ready)
       Text(error).foregroundStyle(.red).textSelection(.enabled)
       HStack {
-        if load != nil { Button("Farkları Göster") { error=ModuleEditing.difference(original:document.savedText,edited:document.sql) } }
-        Spacer(); Button("SQL Editöründe İncele") { open(document.sql) }.disabled(!ready)
+        if load != nil { StudioActionButton("Farkları Göster", icon:"rectangle.split.2x1", tint:.accentColor) { error=ModuleEditing.difference(original:document.savedText,edited:document.sql) } }
+        Spacer(); StudioActionButton("SQL Editöründe İncele", icon:"doc.text.magnifyingglass", tint:.accentColor) { open(document.sql) }.disabled(!ready)
       }
     }.padding(18).studioPanel().task {
       do { if let load { document.sql=try await load() }; document.savedText=document.sql; ready=true }
@@ -506,9 +506,9 @@ private struct DataEditorPanel:View {
         Button { guard let table=model.table, model.rows.filter({$0.original==nil}).count < 200 else {return}; model.rows.append(.init(original:nil,values:Array(repeating:nil,count:table.columns.count))); model.revision += 1 } label:{ Label("Satır Ekle",systemImage:"plus") }.disabled(!ready)
         Button("Satırı Sil / Geri Al") { let i=model.selectedRow; guard model.rows.indices.contains(i) else {return}; model.rows[i].deleted.toggle(); model.revision += 1 }.disabled(!ready)
         Picker("NULL kolonu",selection:$nullColumn) { if let table=model.table { ForEach(table.columns.indices,id:\.self) { Text(table.columns[$0].name).tag($0) } } }.frame(width:250)
-        Button("NULL Yap") { model.set(nil,row:model.selectedRow,column:nullColumn); model.revision += 1 }.disabled(!ready)
+        StudioActionButton("NULL Yap", icon:"nosign", tint:.orange) { model.set(nil,row:model.selectedRow,column:nullColumn); model.revision += 1 }.disabled(!ready)
         Spacer()
-        Button("Yenile / Düzenlemeleri Sıfırla") { Task { await reload() } }.disabled(!ready)
+        StudioActionButton("Yenile / Düzenlemeleri Sıfırla", icon:"arrow.clockwise", tint:.orange) { Task { await reload() } }.disabled(!ready)
       }
       if !ready { ProgressView() }
       EditableDataGrid(model:model)
@@ -516,7 +516,7 @@ private struct DataEditorPanel:View {
       HStack {
         Text("Güncellemeler PK + rowversion veya orijinal kolonlarla denetlenir; eşzamanlı değişiklikte transaction geri alınır.").font(.caption).foregroundStyle(.secondary)
         Spacer()
-        Button("Değişiklikleri SQL Editöründe İncele") {
+        StudioActionButton("Değişiklikleri SQL Editöründe İncele", icon:"doc.text.magnifyingglass", tint:.accentColor) {
           NSApp.keyWindow?.makeFirstResponder(nil)
           do { guard let table=model.table else {return}; open(try DataEditScripts.changes(table:table,rows:model.rows)); error="" }
           catch { self.error=error.localizedDescription }
@@ -557,7 +557,7 @@ private struct DeleteObjectPanel:View {
       Text("Dinamik SQL bağımlılıkları metadata içinde görünmeyebilir.").font(.caption).foregroundStyle(.secondary)
       TextField("Onay için nesnenin tam adını yazın: "+qualified,text:$confirm)
       Text(error).foregroundStyle(.red)
-      HStack { Spacer(); Button("DROP Scriptini SQL Editöründe Aç") { open() }.disabled(!loaded || confirm != qualified) }
+      HStack { Spacer(); StudioActionButton("DROP Scriptini SQL Editöründe Aç", icon:"trash", tint:.red) { open() }.disabled(!loaded || confirm != qualified) }
     }.padding(20).studioPanel().task {
       do { let result=try await load(); guard !result.partial else {throw SQLFailure("Bağımlılık listesi kısmi geldi.")}; rows=result.results.first?.values.map {$0} ?? []; loaded=true }
       catch { self.error=error.localizedDescription }
@@ -572,10 +572,10 @@ private struct RenameObjectPanel:View {
   var body:some View {
     VStack(alignment:.leading,spacing:16) {
       StudioPanelHeading(title:"Rename Object",icon:"character.cursor.ibeam",subtitle:qualified)
-      TextField("Yeni ad (şema hariç)",text:$name)
+      StudioFormField("Yeni ad") {TextField("Yeni ad (şema hariç)",text:$name)}
       Text("sp_rename metin başvurularını ve sys.sql_modules içindeki eski adı güncellemez. Procedure/fonksiyon/trigger için bağımlılıkları inceleyin; CREATE/DROP ile taşıma SQL editöründe yapılabilir.").foregroundStyle(.secondary)
       Text(error).foregroundStyle(.red)
-      Spacer(); HStack { Spacer(); Button("SQL Editöründe İncele") { do { open(try ObjectScripts.rename(qualified:qualified,name:name)) } catch { self.error=error.localizedDescription } } }
+      Spacer(); HStack { Spacer(); StudioActionButton("SQL Editöründe İncele", icon:"doc.text.magnifyingglass", tint:.accentColor) { do { open(try ObjectScripts.rename(qualified:qualified,name:name)) } catch { self.error=error.localizedDescription } } }
     }.padding(20).studioPanel()
   }
 }
@@ -599,11 +599,11 @@ private struct ObjectPropertiesPanel:View {
         if permissions { VStack(alignment:.leading,spacing:12) {
           List { if result.results.count > 1 { ForEach(Array(result.results[1].values.enumerated()),id:\.offset) { _,row in Text(row.map {$0 ?? ""}.joined(separator:" · ")) } } }
           HStack {
-            TextField("Kullanıcı / rol",text:$principal)
-            Picker("İzin",selection:$permission) { ForEach(["SELECT","EXECUTE","INSERT","UPDATE","DELETE","ALTER","REFERENCES","VIEW DEFINITION"],id:\.self) { Text($0) } }
-            Picker("İşlem",selection:$operation) { ForEach(["GRANT","DENY","REVOKE"],id:\.self) { Text($0) } }
+            StudioFormField("Kullanıcı / rol") {TextField("Kullanıcı / rol",text:$principal)}
+            StudioFormField("İzin") {Picker("İzin",selection:$permission) { ForEach(["SELECT","EXECUTE","INSERT","UPDATE","DELETE","ALTER","REFERENCES","VIEW DEFINITION"],id:\.self) { Text($0) } }.labelsHidden()}
+            StudioFormField("İşlem") {Picker("İşlem",selection:$operation) { ForEach(["GRANT","DENY","REVOKE"],id:\.self) { Text($0) } }.labelsHidden()}
           }
-          Button("İzin Scriptini SQL Editöründe Aç") { guard !principal.isEmpty else {error="Kullanıcı / rol gerekli.";return}; open("\(operation) \(permission) ON OBJECT::\(qualified) \(operation == "REVOKE" ? "FROM" : "TO") \(SQL.identifier(principal));") }
+          StudioActionButton("İzin Scriptini SQL Editöründe Aç", icon:"lock.shield", tint:.accentColor) { guard !principal.isEmpty else {error="Kullanıcı / rol gerekli.";return}; open("\(operation) \(permission) ON OBJECT::\(qualified) \(operation == "REVOKE" ? "FROM" : "TO") \(SQL.identifier(principal));") }
         }.padding(12).tabItem {Text("Permissions")} }
       }
       Text(error).foregroundStyle(.red)
@@ -704,7 +704,7 @@ private struct RoutineInvocationPanel:View {
         }.padding(8)
       }
       Text(error).foregroundStyle(.red).textSelection(.enabled)
-      HStack {Spacer();Button("SQL Editöründe İncele") {do {open(try RoutineScripts.invocation(qualified:qualified,function:function,tableValued:tableValued,parameters:parameters,arguments:arguments));error=""} catch {self.error=error.localizedDescription}}.disabled(!ready)}
+      HStack {Spacer();StudioActionButton("SQL Editöründe İncele", icon:"doc.text.magnifyingglass", tint:.accentColor) {do {open(try RoutineScripts.invocation(qualified:qualified,function:function,tableValued:tableValued,parameters:parameters,arguments:arguments));error=""} catch {self.error=error.localizedDescription}}.disabled(!ready)}
     }.padding(18).studioPanel().task {do {parameters=try await load();for p in parameters {arguments[p.id]=RoutineArgument()};ready=true} catch {self.error=error.localizedDescription}}
   }
 }
@@ -720,11 +720,11 @@ private struct SynonymDesignerPanel:View {
   var body:some View {
     VStack(alignment:.leading,spacing:14) {
       StudioPanelHeading(title:existing ? "Modify Synonym" : "New Synonym",icon:"link",subtitle:"Synonym hedefi")
-      HStack {TextField("Şema",text:$schema);TextField("Ad",text:$name)}.disabled(existing)
-      TextField("Hedef: [server].[database].[schema].[object]",text:$target)
+      VStack(spacing:12) {StudioFormField("Şema") {TextField("Şema",text:$schema)};StudioFormField("Ad") {TextField("Ad",text:$name)}}.disabled(existing)
+      StudioFormField("Hedef nesne") {TextField("Hedef: [server].[database].[schema].[object]",text:$target)}
       Text(existing ? "SQL Server ALTER SYNONYM desteklemez. DROP + CREATE transaction scripti hazırlanır; nesne izinlerini ayrıca kontrol edin." : "1–4 parçalı hedef nesne adı girin.").foregroundStyle(.secondary)
       Text(error).foregroundStyle(.red);Spacer()
-      HStack {Spacer();Button("SQL Editöründe İncele") {do {guard !schema.isEmpty,!name.isEmpty else {throw SQLFailure("Şema ve ad gerekli.")};let q=SQL.identifier(schema)+"."+SQL.identifier(name);let create=try ExplorerScripts.synonym(qualified:q,target:target);open(existing ? ObjectScripts.transaction("DROP SYNONYM \(q);\n"+create) : create)} catch {self.error=error.localizedDescription}}.disabled(!ready)}
+      HStack {Spacer();StudioActionButton("SQL Editöründe İncele", icon:"doc.text.magnifyingglass", tint:.accentColor) {do {guard !schema.isEmpty,!name.isEmpty else {throw SQLFailure("Şema ve ad gerekli.")};let q=SQL.identifier(schema)+"."+SQL.identifier(name);let create=try ExplorerScripts.synonym(qualified:q,target:target);open(existing ? ObjectScripts.transaction("DROP SYNONYM \(q);\n"+create) : create)} catch {self.error=error.localizedDescription}}.disabled(!ready)}
     }.padding(18).studioPanel().task {do {if let load {target=try await load()};ready=true} catch {self.error=error.localizedDescription}}
   }
 }

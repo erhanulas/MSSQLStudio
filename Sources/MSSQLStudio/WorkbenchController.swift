@@ -2107,11 +2107,11 @@ private struct ConnectionForm: View {
           }
           Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
             GridRow {
-              Text("Görünen ad")
+              Text("Görünen ad").frame(width:150,alignment:.leading).foregroundStyle(.secondary)
               TextField("Bağlantı adı", text: $profile.name)
             }
             GridRow {
-              Text("Sunucu / port")
+              Text("Sunucu / port").frame(width:150,alignment:.leading).foregroundStyle(.secondary)
               HStack(spacing: 6) {
                 TextField("Sunucu", text: $profile.host)
                 TextField("Port", value: $profile.port, format: .number.grouping(.never)).frame(
@@ -2119,7 +2119,7 @@ private struct ConnectionForm: View {
               }
             }
             GridRow {
-              Text("Kimlik")
+              Text("Kimlik").frame(width:150,alignment:.leading).foregroundStyle(.secondary)
               Picker("Kimlik doğrulama", selection: $profile.kerberos) {
                 Text("SQL Server Authentication").tag(false)
                 Text("Windows / Kerberos").tag(true)
@@ -2127,16 +2127,16 @@ private struct ConnectionForm: View {
             }
             if !profile.kerberos {
               GridRow {
-                Text("Kullanıcı")
+                Text("Kullanıcı").frame(width:150,alignment:.leading).foregroundStyle(.secondary)
                 TextField("Login", text: $profile.login)
               }
               GridRow {
-                Text("Parola")
+                Text("Parola").frame(width:150,alignment:.leading).foregroundStyle(.secondary)
                 SecureField("Password", text: $password)
               }
             }
             GridRow {
-              Text("Test veritabanı")
+              Text("Test veritabanı").frame(width:150,alignment:.leading).foregroundStyle(.secondary)
               TextField("master", text: $profile.database)
                 .help(
                   "Bağlantı testi ve listeleme için kullanılır. Yeni sorguların veritabanını sağdaki yıldızla seçin."

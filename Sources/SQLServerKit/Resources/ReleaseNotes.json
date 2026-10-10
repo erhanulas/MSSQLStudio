@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.47",
+    "date": "2026-10-10",
+    "title": "Form hizalaması ve işlem ikonları",
+    "changes": [
+      "Job adımının Gelişmiş sayfasında akış, tekrar ve çıktı alanları hizalandı; ayarlar iki gruba ayrıldı.",
+      "Job genel bilgileri, bildirimler, zamanlamalar, nesne tasarımları, bağlantı ve yardımcı formlarda ortak etiket/alan hizalaması uygulandı.",
+      "View tasarımındaki sıkışık şema, ad ve kaynak alanları ayrı satırlara taşındı.",
+      "İşlem düğmelerine ikonlar eklendi; başlatma yeşil, durdurma ve ayırma turuncu, silme kırmızı ikonlarla belirginleştirildi."
+    ]
+  },
+  {
     "version": "0.2.46",
     "date": "2026-10-10",
     "title": "Yeni Ayarlar düzeni ve editör iyileştirmeleri",

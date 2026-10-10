@@ -85,7 +85,7 @@ struct AboutPanel: View {
       HStack {
         Link("GitHub Yayınları ↗", destination: repositoryURL).help("Tüm yayımlanmış sürümleri GitHub'da aç")
         Spacer()
-        Button("Güncellemeleri Kontrol Et", action: checkUpdates)
+        StudioActionButton("Güncellemeleri Kontrol Et", icon:"arrow.down.circle", tint:.accentColor, action: checkUpdates)
       }.padding(.horizontal, 24).padding(.vertical, 16)
       Text("Değişiklik notları uygulamayla birlikte gelir; çevrimdışı okunabilir.")
         .font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 24).padding(.bottom, 16)
