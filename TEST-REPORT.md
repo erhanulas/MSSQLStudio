@@ -1,3 +1,14 @@
+# v0.2.42 yayın doğrulaması — 10 Ekim 2026
+
+- Yayın: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.42
+- Kaynak commit: `e6fe811b5abf3ae6853332fd109a3ee7f4c871de`; uygulama sürümü 0.2.42, build 43.
+- GitHub Actions: https://github.com/erhanulas/MSSQLStudio/actions/runs/38014101474 — yeniden çalıştırma başarılı. Kalıcı imza, izole Keychain testi, imzalı uygulama ve kurulum paketi, paket doğrulaması ve paketle test aşamaları geçti.
+- İlk denemede `indexedDiagnosticsAreDebouncedAndStaleEditsDoNotPublish` zamanlamaya duyarlı beklentileri başarısız oldu. Aynı kaynakla ikinci deneme geçti; test kararsızlığı ayrıca izlenmeli.
+- İlk v0.2.41 etiketi sürüm hazırlama hatası nedeniyle yayın oluşturmadı. Etiket değiştirilmeden düzeltilmiş v0.2.42 yayımlandı.
+- Public latest release taslak değil; ZIP, PKG ve update.json mevcut. Public güncelleme bildirimi 0.2.42 sürümünü gösteriyor ve ZIP özeti GitHub asset özetiyle eşleşiyor.
+- ZIP SHA-256: `fcbfe139c56a04ee760d91842218e86db26be1281a29fd1f7af7ca6c6051418e`.
+- Aşağıdaki geliştirme doğrulamasındaki henüz yayımlanmadı ifadeleri yerel doğrulama aşamasının tarihsel kaydıdır; bu yayınla değişiklikler dağıtıma çıktı.
+
 # SQL Server Agent — SSMS akışı geliştirme doğrulaması
 
 10 Ekim 2026. 59 uygulama + 96 core = 155 raporlanan test: 133 geçti, 22 koşullu test atlandı (`/tmp/mssql-agent-tests-complete.log`). Yeni testler: iş sonucu filtresinde alt adımların bağlamını koruma, farklı job/run kayıtlarının karışmaması, tekrar/severity/uzun süre çözümü, Unicode ve tırnak kaçışı, geçersiz hedef/tekrar aralığı, değişmeyen sahiplik ve eski pager/net send ayarlarını koruma, stored procedure dönüş kodları/transaction ve version_number koruması, takvim/saat/haftalık bitmask doğrulaması, ortak zamanlamayı bağlama/ayırma. Native test, geçmiş ve özellikleri açmanın yalnız iki metadata okuması yaptığını ve hiçbir SQL üretme/çalıştırma callback'i çağırmadığını; gerçek NSOutlineView'da iki sonucun açıldığında beş satıra genişlediğini doğrular.
