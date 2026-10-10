@@ -1,6 +1,8 @@
 import AppKit
 import SQLServerKit
 import SwiftUI
+
+@MainActor private final class DatabaseIndexButton:NSButton { weak var node:TreeNode? }
 import UniformTypeIdentifiers
 
 @MainActor final class TreeNode: NSObject {
@@ -213,7 +215,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private let searchScopePicker = NSPopUpButton()
   private let searchType = NSPopUpButton()
   private var searchScopes: [TreeNode] = []
-  private let indexStatus = NSTextField(labelWithString:"DDL indeksi · Bağlantı seçin")
+  private let indexStatus = NSButton(title:"İndeks",target:nil,action:nil)
+  private var indexDetailsByDatabase:[String:String]=[:]
+  private var indexPopover:NSPopover?
   private var indexStatusTask: Task<Void,Never>?
   private var lastIndexStatusCheck = Date.distantPast
   private var lastIndexStatusScope = ""
@@ -301,11 +305,15 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     explorer.view = background
     let label = NSTextField(labelWithString: "Object Explorer")
     label.font = .systemFont(ofSize: 12, weight: .semibold)
-    let refresh = symbolButton("arrow.clockwise", tip: "Yenile", action: #selector(refreshExplorer))
+    let refresh = symbolButton("arrow.clockwise", tip: "Seçili dalın nesnelerini sunucudan yenile", action: #selector(refreshExplorer))
     let connect = symbolButton("plus", tip: "Sunucuya bağlan", action: #selector(showConnect))
     let collapse = symbolButton("sidebar.left", tip: "Object Explorer’ı gizle", action: #selector(toggleExplorer))
-    let rebuild = symbolButton("externaldrive.badge.checkmark", tip: "Yerel nesne indeksini sunucudan yenile", action: #selector(rebuildCatalogIndex))
-    let header = NSStackView(views: [label, NSView(), connect, rebuild, refresh, collapse])
+    indexStatus.target=self; indexStatus.action=#selector(showIndexStatus(_:))
+    indexStatus.image=NSImage(systemSymbolName:"externaldrive",accessibilityDescription:nil)
+    indexStatus.imagePosition = .imageOnly; indexStatus.bezelStyle = .inline
+    indexStatus.setAccessibilityIdentifier("ddlIndexStatus")
+    indexStatus.setAccessibilityLabel("Yerel indeks durumu ve işlemleri")
+    let header = NSStackView(views: [label, NSView(), connect, indexStatus, refresh, collapse])
     header.orientation = .horizontal
     header.spacing = 2
     header.heightAnchor.constraint(equalToConstant: 28).isActive = true
@@ -362,10 +370,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     explorerTabs.selectedSegment = 0
     explorerTabs.target = self; explorerTabs.action = #selector(changeExplorerTab)
     explorerTabs.setAccessibilityLabel("Explorer sekmeleri")
-    indexStatus.maximumNumberOfLines = 3
-    indexStatus.font = .systemFont(ofSize:10); indexStatus.textColor = StudioTheme.muted
-    indexStatus.lineBreakMode = .byWordWrapping; indexStatus.setAccessibilityIdentifier("ddlIndexStatus")
-    let stack = NSStackView(views: [header, indexStatus, explorerTabs, searchScopePicker, explorerSearch, searchOptions, searchStatus, scroll])
+    let stack = NSStackView(views: [header, explorerTabs, searchScopePicker, explorerSearch, searchOptions, searchStatus, scroll])
     stack.orientation = .vertical
     stack.distribution = .fill
     stack.alignment = .leading
@@ -378,7 +383,6 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       stack.topAnchor.constraint(equalTo: background.topAnchor, constant: 6),
       stack.bottomAnchor.constraint(equalTo: background.bottomAnchor, constant: -4),
       header.widthAnchor.constraint(equalTo: stack.widthAnchor),
-      indexStatus.widthAnchor.constraint(equalTo: stack.widthAnchor),
       explorerTabs.widthAnchor.constraint(equalTo: stack.widthAnchor),
       explorerSearch.widthAnchor.constraint(equalTo: stack.widthAnchor),
       searchScopePicker.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -854,9 +858,13 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private func presentConnection(editing server: ConnectedServer? = nil) {
     guard sheet == nil, let window = view.window else { return }
     let saved: [SavedServer]
-    do { saved = try ServerVault().list() } catch {
-      state.showError(error.localizedDescription)
-      return
+    if server != nil || Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" || ProcessInfo.processInfo.arguments.contains("--ui-smoke") {
+      saved=[]
+    } else {
+      do { saved = try ServerVault().list() } catch {
+        state.showError(error.localizedDescription)
+        return
+      }
     }
     let form = ConnectionForm(
       saved: server == nil ? saved : [], initial: server,
@@ -893,7 +901,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     guard let node=notification.object as? TreeNode else {return}
     if case .folder = node.kind {refresh(node)} else {refresh(node.parent ?? node)}
   }
-  private func refresh(_ node: TreeNode) {
+  func refresh(_ node: TreeNode) {
     if case .object = node.kind, !node.expandable,let parent=node.parent {refresh(parent);return}
     if case .folder(.databases) = node.kind,
       let root = roots.first(where: { $0.server === node.server })
@@ -942,10 +950,15 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
           updateControls()
         }
       }
-    } else if case .database = node.kind, let item = node.item {
-      node.children = databaseTree(item, server: node.server).children
-      node.loaded = true
-      outline.reloadItem(node, reloadChildren: true)
+    } else if case .database = node.kind {
+      func refreshBranches(_ branch:TreeNode) {
+        if case .folder = branch.kind, branch.loaded {
+          branch.loaded=false; branch.error=nil; load(branch)
+        } else if case .group = branch.kind {
+          for child in branch.children {refreshBranches(child)}
+        }
+      }
+      for branch in node.children {refreshBranches(branch)}
     } else {
       node.loaded = false
       node.error = nil
@@ -954,7 +967,6 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   @objc private func refreshExplorer() {
     if let node = selected ?? roots.first { refresh(node) }
-    if let doc = state.active, doc.server.online { Task { await doc.loadSymbols(force:true) } }
   }
   @objc func reconnectQuery() {
     guard let doc = state.active, !doc.busy else { return }
@@ -1025,6 +1037,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   @objc private func catalogIndexUpdated(_ notification: Notification) {
     lastIndexStatusCheck = .distantPast; updateIndexStatus()
+    for row in 0..<outline.numberOfRows {
+      if let node=outline.item(atRow:row) as? TreeNode,case .database=node.kind {outline.reloadItem(node)}
+    }
     if let server = notification.object as? ConnectedServer, let db = notification.userInfo?["database"] as? String, notification.userInfo?["error"] == nil {
       for doc in state.documents where doc.server === server && doc.database == db { Task { await doc.loadSymbols() } }
     }
@@ -1038,7 +1053,16 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     } else { filterExplorer() }
   }
   private func refreshIndexInBackground(server: ConnectedServer, database: String, force: Bool = false) {
+    guard server.online, !server.indexingDatabases.contains(database) else {return}
+    server.indexingDatabases.insert(database)
+    NotificationCenter.default.post(name:.init("catalogIndexUpdated"),object:server,userInfo:["database":database])
+    lastIndexStatusCheck = .distantPast; updateIndexStatus()
     Task {
+      defer {
+        server.indexingDatabases.remove(database)
+        NotificationCenter.default.post(name:.init("catalogIndexUpdated"),object:server,userInfo:["database":database])
+        lastIndexStatusCheck = .distantPast; updateIndexStatus()
+      }
       do {
         let key = CatalogDiskIndex.scope(profile: server.profile, database: database)
         let before = try await CatalogDiskIndex.shared.status(scope: key)
@@ -1047,16 +1071,18 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         if force && (searchScope ?? selected ?? roots.first)?.server === server {
           searchStatus.stringValue = "\(database) · Disk indeksi hazır · \(after.count) nesne"
         }
+        server.indexErrors.removeValue(forKey:database)
         if !force && before?.synchronizedAt == after.synchronizedAt { return }
         NotificationCenter.default.post(name: .init("catalogIndexUpdated"), object: server, userInfo: ["database": database])
       } catch {
+        server.indexErrors[database]=error.localizedDescription
         if force { searchStatus.stringValue = "Disk indeksi eşitlenemedi"; searchStatus.toolTip = error.localizedDescription }
         NotificationCenter.default.post(name: .init("catalogIndexUpdated"), object: server, userInfo: ["database": database, "error": error.localizedDescription])
       }
     }
   }
   private func updateIndexStatus() {
-    guard let scope = (showingSearch ? searchScope : selected) ?? searchScope ?? roots.first else { indexStatus.stringValue = "DDL indeksi · Bağlantı seçin"; return }
+    guard let scope = (showingSearch ? searchScope : selected) ?? searchScope ?? roots.first else { indexStatus.toolTip = "İndeks durumu için bağlantı seçin"; return }
     let databases = searchDatabases(scope), key = scope.server.id.uuidString + databases.joined(separator:"|")
     guard key != lastIndexStatusScope || Date().timeIntervalSince(lastIndexStatusCheck) > 2 else { return }
     lastIndexStatusScope = key; lastIndexStatusCheck = Date(); indexStatusTask?.cancel()
@@ -1082,11 +1108,15 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         else if server.indexingDatabases.contains(db) { lines.append("\(db): indeks hazırlanıyor…") }
       }
       if let doc = state.active, doc.server === server, let error = doc.catalogError { lines.append("Editör doğrulaması kapalı: \(error)") }
-      indexStatus.stringValue = databases.count == 1 ? lines.first?.replacingOccurrences(of:"\n",with:" · ") ?? "DDL indeksi yok" : "DDL disk indeksi · \(ready)/\(databases.count) veritabanı hazır"
-      if !server.indexingDatabases.isDisjoint(with:databases) { indexStatus.stringValue += " · Eşitleniyor…" }
-      if databases.contains(where:{ server.indexErrors[$0] != nil }) { indexStatus.stringValue += " · Hata (ayrıntılar üzerine gelince)" }
+      let failed = databases.contains(where:{server.indexErrors[$0] != nil})
+      let building = !server.indexingDatabases.isDisjoint(with:databases)
+      indexStatus.image=NSImage(systemSymbolName:failed ? "exclamationmark.triangle" : building ? "arrow.triangle.2.circlepath" : ready == databases.count && ready > 0 ? "externaldrive.badge.checkmark":"externaldrive",accessibilityDescription:nil)
+      indexStatus.contentTintColor=failed ? .systemOrange : building ? StudioTheme.accent : ready > 0 ? .systemGreen:.secondaryLabelColor
+      for db in databases {
+        indexDetailsByDatabase[server.id.uuidString+"|"+db] = lines.filter {$0.hasPrefix(db+":")}.joined(separator:"\n")
+      }
       indexStatus.toolTip = lines.joined(separator:"\n\n")
-      indexStatus.setAccessibilityLabel(indexStatus.toolTip ?? indexStatus.stringValue)
+      indexStatus.setAccessibilityLabel(indexStatus.toolTip ?? "Yerel indeks")
     }
   }
   private func openEditorDefinition(_ symbol: CatalogSymbol, document: QueryDocument) {
@@ -1107,6 +1137,33 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         }
       } catch { state.showError(error.localizedDescription) }
     }
+  }
+  @objc private func showDatabaseIndex(_ sender:DatabaseIndexButton) {showIndexDetails(sender.node,relativeTo:sender)}
+  @objc private func showIndexStatus(_ sender:NSButton) {
+    let scope=(showingSearch ? searchScope:selected) ?? searchScope ?? roots.first
+    showIndexDetails(scope,relativeTo:sender)
+  }
+  @objc private func showContextIndex() {showIndexDetails(contextNode,relativeTo:indexStatus)}
+  @objc private func rebuildContextIndex() {
+    guard let node=contextNode,node.server.online else {return}
+    refreshIndexInBackground(server:node.server,database:node.database,force:true)
+  }
+  private func showIndexDetails(_ scope:TreeNode?,relativeTo button:NSButton) {
+    guard let scope else {return}
+    let details=searchDatabases(scope).map {db in indexDetailsByDatabase[scope.server.id.uuidString+"|"+db] ?? "\(db): durum henüz okunmadı"}.joined(separator:"\n\n")
+    let popover=NSPopover();popover.behavior = .transient
+    popover.contentViewController=NSHostingController(rootView:VStack(alignment:.leading,spacing:12) {
+      Label("Yerel İndeks",systemImage:"externaldrive").font(.headline)
+      Text("\(scope.server.profile.name) · \(scope.database)").foregroundStyle(.secondary)
+      ScrollView {Text(details).font(.callout).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)}.frame(maxHeight:220)
+      Text("Explorer araması ve SQL önerileri için bu Mac'te tutulan metadata önbelleği. Nesneleri Yenile, bu önbellekten ayrı bir işlemdir.").font(.caption).foregroundStyle(.secondary)
+      StudioActionButton("Yerel İndeksi Yenile",icon:"arrow.clockwise",tint:.accentColor) { [weak self, weak popover] in
+        if case .server = scope.kind {scope.server.prepareCatalogIndexes(force:true)}
+        else {self?.refreshIndexInBackground(server:scope.server,database:scope.database,force:true)}
+        popover?.performClose(nil)
+      }.disabled(!scope.server.online)
+    }.padding(16).frame(width:360).studioPanel())
+    indexPopover=popover;popover.show(relativeTo:button.bounds,of:button,preferredEdge:.maxX)
   }
   @objc private func rebuildCatalogIndex() {
     guard let scope = searchScope ?? selected ?? roots.first else { return }
@@ -1275,9 +1332,20 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       image.widthAnchor.constraint(equalToConstant: 16),
       image.heightAnchor.constraint(equalToConstant: 16),
       label.leadingAnchor.constraint(equalTo: image.trailingAnchor, constant: 6),
-      label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -3),
+      {if case .database = node.kind {return label.trailingAnchor.constraint(lessThanOrEqualTo:cell.trailingAnchor,constant:-32)};return label.trailingAnchor.constraint(equalTo:cell.trailingAnchor,constant:-3)}(),
       label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
     ])
+    if case .database = node.kind {
+      let badge=DatabaseIndexButton();badge.node=node;badge.target=self;badge.action=#selector(showDatabaseIndex(_:))
+      let ready=indexDetailsByDatabase[node.server.id.uuidString+"|"+node.database]?.contains("nesne indeksi") == true
+      badge.image=NSImage(systemSymbolName:node.server.indexErrors[node.database] != nil ? "exclamationmark.triangle" : node.server.indexingDatabases.contains(node.database) ? "arrow.triangle.2.circlepath":ready ? "externaldrive.badge.checkmark":"externaldrive",accessibilityDescription:nil)
+      badge.contentTintColor=node.server.indexErrors[node.database] != nil ? .systemOrange:ready ? .systemGreen:StudioTheme.accent
+      badge.bezelStyle = .inline;badge.imagePosition = .imageOnly
+      badge.toolTip="\(node.database) · Yerel indeks durumu ve yenileme";badge.setAccessibilityLabel(badge.toolTip)
+      badge.setAccessibilityIdentifier("databaseIndex_"+node.database)
+      cell.addSubview(badge);badge.translatesAutoresizingMaskIntoConstraints=false
+      NSLayoutConstraint.activate([badge.leadingAnchor.constraint(equalTo:label.trailingAnchor,constant:6),badge.centerYAnchor.constraint(equalTo:cell.centerYAnchor),badge.widthAnchor.constraint(equalToConstant:24),badge.heightAnchor.constraint(equalToConstant:24)])
+    }
     cell.textField = label
     cell.imageView = image
     cell.toolTip = node.error ?? (!node.server.online ? "Explorer bağlantısı kapalı. Son yüklenen nesneler gösteriliyor. Yenile veya çift tıklama ile yeniden bağlanın; açık sorgu oturumları korunur." : nil) ?? node.item?.detail ?? "\(node.server.profile.name) · \(node.server.profile.host),\(node.server.profile.port) · \(node.database)"
@@ -1449,6 +1517,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     func command(_ title: String, _ selector: Selector) {
       let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
       item.target = self
+      let symbol = title.contains("Yenile") ? "arrow.clockwise" : title.contains("Sorgu") ? "plus.square" : title.contains("İndeks") ? "externaldrive" : title.contains("Özellikler") ? "slider.horizontal.3" : title.contains("Kopyala") ? "doc.on.doc" : "gearshape"
+      item.image=NSImage(systemSymbolName:symbol,accessibilityDescription:nil)
       menu.addItem(item)
     }
     func scriptMenu(_ title:String,modes:[String]) {
@@ -1463,9 +1533,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       let item=NSMenuItem(title:title,action:nil,keyEquivalent:"");item.submenu=scripts;menu.addItem(item)
     }
     guard let node = contextNode else { return }
-    if case .server = node.kind {
-      command("Bağlantı ayarları", #selector(editConnection))
-    }
+
     if !node.server.online || node.server.startupError != nil {
       command(node.server.reconnecting ? "Bağlanıyor…" : "Yeniden Bağlan", #selector(reconnectServer))
       menu.items.last?.isEnabled = !node.server.reconnecting
@@ -1480,10 +1548,12 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       return
     }
     if case .server = node.kind {
+      command("Bağlantı ayarları…",#selector(editConnection))
       command("Explorer Bağlantısını Kes", #selector(disconnectServer))
     }
     command("Yeni Sorgu", #selector(newQueryAtNode))
-    command("Yenile", #selector(refreshContextNode))
+    command("Nesneleri Yenile", #selector(refreshContextNode))
+    menu.items.last?.toolTip="Bu dalın nesne listesini sunucudan yeniden okur; açık SQL sekmelerini çalıştırmaz ve yerel disk indeksini yeniden oluşturmaz."
     menu.addItem(.separator())
     if case .object(let folder) = node.kind {
       if [.tables, .views].contains(folder) {
@@ -1536,9 +1606,15 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       if folder == .jobs { command("New SQL Agent Job…", #selector(jobDesigner)) }
     }
     if case .database = node.kind {
-      command("Database Properties", #selector(databaseProperties))
-      command("New Table…", #selector(newManagedTable))
-      command("New View…", #selector(newManagedView))
+      let create=NSMenu(title:"Yeni Nesne")
+      for (title,selector,icon) in [("Tablo…",#selector(newManagedTable),"tablecells"),("View…",#selector(newManagedView),"eye"),("Stored Procedure…",#selector(newManagedProcedure),"function"),("Scalar Function…",#selector(newManagedScalarFunction),"function")] {
+        let item=NSMenuItem(title:title,action:selector,keyEquivalent:"");item.target=self;item.image=NSImage(systemSymbolName:icon,accessibilityDescription:nil);create.addItem(item)
+      }
+      let item=NSMenuItem(title:"Yeni Nesne",action:nil,keyEquivalent:"");item.submenu=create;menu.addItem(item)
+      command("Yerel İndeks Durumu…",#selector(showContextIndex))
+      command("Yerel İndeksi Yenile",#selector(rebuildContextIndex))
+      menu.addItem(.separator())
+      command("Özellikler · SQL Önizlemesi", #selector(databaseProperties))
     }
     if case .folder(.jobs) = node.kind { command("New SQL Agent Job…", #selector(jobDesigner)) }
     let agentCommands=agentMenu(for:node)
@@ -2073,20 +2149,21 @@ private struct ConnectionForm: View {
     Binding(get: { profile.appearance ?? ServerAppearance() }, set: { profile.appearance = $0 })
   }
   @State private var didAutoTest = false
+  @State private var connectionPage = "Genel"
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
         Label(editing ? "Bağlantı ayarları" : "Connect to Server", systemImage: "server.rack")
           .font(.title2.weight(.semibold))
         Spacer()
-        Text("1 · Bağlantı   →   2 · Veritabanları   →   3 · Bağlan")
+        Text(editing ? "Bağlantı ve görünür veritabanlarını düzenle" : "Sunucuya bağlan, veritabanlarını seç")
           .font(.caption).foregroundStyle(.secondary)
       }
       Divider()
       HStack(alignment: .top, spacing: 18) {
         VStack(alignment: .leading, spacing: 12) {
           Text("Sunucu bilgileri").font(.headline)
-          if !saved.isEmpty {
+          if !editing && !saved.isEmpty {
             Picker("Kayıtlı bağlantı", selection: $selected) {
               Text("Yeni bağlantı").tag(Optional<UUID>.none)
               ForEach(saved, id: \.profile.id) {
@@ -2105,6 +2182,10 @@ private struct ConnectionForm: View {
               invalidate()
             }
           }
+          Picker("Bağlantı seçenekleri",selection:$connectionPage) {Text("Genel").tag("Genel");Text("Gelişmiş").tag("Gelişmiş")}.pickerStyle(.segmented)
+          ScrollView {
+          VStack(alignment:.leading,spacing:14) {
+          if connectionPage == "Genel" {
           Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
             GridRow {
               Text("Görünen ad").frame(width:150,alignment:.leading).foregroundStyle(.secondary)
@@ -2148,6 +2229,9 @@ private struct ConnectionForm: View {
               .foregroundStyle(.secondary)
           }
           Toggle("Bağlantıyı Keychain’de sakla", isOn: $remember).toggleStyle(.checkbox)
+          } else {
+          Text("Güvenlik").font(.headline)
+          Label("Bağlantı şifrelemesi zorunlu",systemImage:"lock.shield").font(.caption).foregroundStyle(.secondary)
           Toggle("Trust server certificate", isOn: $profile.trustCertificate).toggleStyle(.checkbox)
             .help("Şifreleme açık kalır; sunucu sertifikası doğrulanmaz.")
           if profile.trustCertificate {
@@ -2157,35 +2241,18 @@ private struct ConnectionForm: View {
           Divider()
           Text("Ortam ve renk").font(.headline)
           ConnectionAppearanceFields(appearance: appearance)
-          Spacer(minLength: 0)
-          if editing {
-            Text(
-              "Sunucu veya kimlik değişirse sorgu metinleri korunur; oturumlar yeniden bağlanır. SQL otomatik çalışmaz."
-            )
-            .font(.caption).foregroundStyle(.secondary)
           }
-          if !error.isEmpty {
-            ScrollView {
-              Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled).frame(
-                maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxHeight: 65)
+          }.padding(2)
           }
-          if !status.isEmpty {
-            Label(status, systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(
-              .green)
-          }
-          Button("Bağlantıyı Test Et ve Listele", action: test)
-            .buttonStyle(StudioPrimaryButton()).disabled(loading)
-            .help(
-              "Önce bağlantı doğrulanır; başarılı olursa erişebildiğiniz veritabanları yüklenir.")
-        }.padding(14).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: StudioTheme.border))).frame(width: 390).disabled(loading)
+                }.padding(14).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: StudioTheme.border))).frame(width: 420).disabled(loading)
         Divider()
         VStack(alignment: .leading, spacing: 12) {
           HStack {
             Text("Object Explorer veritabanları").font(.headline)
             Spacer()
-            Button("Listeyi Yenile", action: list).disabled(loading || !tested)
+            if listed {
+              StudioActionButton("Listeyi Yenile",icon:"arrow.clockwise",tint:.accentColor,action:list).disabled(loading)
+            }
           }
           if listed {
             DatabaseChoices(items: items, chosen: $chosen, defaultDatabase: $defaultDatabase)
@@ -2196,10 +2263,10 @@ private struct ConnectionForm: View {
                 .foregroundStyle(.secondary)
               Text("Görmek istediğin veritabanlarını seç").font(.headline)
               Text(
-                "Soldaki bilgileri girip bağlantıyı test et. Başarılı testten sonra liste burada açılır."
+                "Bağlantı bilgilerini girip Veritabanlarını Yükle’ye basın. Ardından görünür veritabanlarını ve varsayılanı seçin."
               )
               .foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 320)
-              if loading { ProgressView(phase).controlSize(.small) }
+
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
           }
         }.padding(14).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: StudioTheme.border))).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -2210,16 +2277,21 @@ private struct ConnectionForm: View {
           ProgressView().controlSize(.small)
           Text(phase).font(.caption)
         } else {
-          Text("Encryption: Mandatory").font(.caption).foregroundStyle(.secondary)
+          if !error.isEmpty {Label(error,systemImage:"exclamationmark.triangle.fill").font(.caption).foregroundStyle(.red).lineLimit(3).textSelection(.enabled)}
+          else if !status.isEmpty {Label(status,systemImage:"checkmark.circle.fill").font(.caption).foregroundStyle(.green)}
+          else {Text("Bilgileri girip veritabanlarını yükleyin.").font(.caption).foregroundStyle(.secondary)}
         }
         Spacer()
-        Text("\(chosen.count) veritabanı seçili").font(.caption).foregroundStyle(.secondary)
-        Button("Vazgeç", action: cancel).disabled(loading)
-        Button(editing ? "Uygula" : "Bağlan", action: submit)
-          .buttonStyle(StudioPrimaryButton())
-          .disabled(loading || !tested || !listed || chosen.isEmpty)
+        StudioActionButton("Vazgeç",icon:"xmark",action:cancel).disabled(loading)
+        if tested && listed {
+          StudioActionButton(editing ? "Uygula" : "Bağlan",icon:editing ? "checkmark":"bolt.horizontal",action:submit)
+            .buttonStyle(StudioPrimaryButton()).disabled(loading || chosen.isEmpty)
+        } else {
+          StudioActionButton("Veritabanlarını Yükle",icon:"arrow.right",action:test)
+            .buttonStyle(StudioPrimaryButton()).disabled(loading)
+        }
       }
-    }.padding(22).studioPanel().frame(width: 940, height: 680)
+    }.padding(22).studioPanel().frame(width: 980, height: 700)
       .task {
         if editing && !didAutoTest {
           didAutoTest = true

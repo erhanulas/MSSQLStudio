@@ -1,3 +1,17 @@
+# Bağlantı formu ve Explorer — 10 Ekim 2026 (yerel, henüz yayımlanmadı)
+
+- Yeni/düzenlenen bağlantı formu Genel/Gelişmiş sayfalarına ayrıldı; tekrar eden test/durum alanları kaldırıldı, tek alt ana işlem ve ayrı veritabanı paneli kullanıldı. Düzenleme sırasında gereksiz tüm Keychain kayıtlarını listeleme kaldırıldı; güvenlik seçenekleri korundu.
+- DB yanına kompakt yerel indeks durum düğmesi eklendi; ayrıntı/yenileme kapsamı popup içinde. Dar satırda düğme görünürlüğü düzeltildi. DB sağ tık menüsü yeni nesne alt menüsü ve açık işlem adlarıyla düzenlendi.
+- Nesneleri Yenile artık DB'nin yüklenmiş klasörlerini katalogdan yeniden okur; klasör kimliklerini korur, açılmamış dalları lazy bırakır. Açık SQL'i çalıştırmaz; yerel indeks yenilemesi ayrı işlemdir.
+- `/tmp/mssql-explorer-final-build.log`: Release BUILD SUCCEEDED (CODE_SIGNING_ALLOWED=NO). `/tmp/mssql-explorer-final-tests.log`: 69 uygulama + 99 core = 168 test; 146 geçti, 22 dış koşullu test atlandı. İki yeni native regresyon: DB yenilemesinde katalog çağrıları/klasör kimliği/SQL'in çalışmaması ve 210 pt satırda indeks düğmesinin yerleşimi.
+- İlk dar satır testinde test penceresinin kapanırken otomatik serbest bırakılması test sürecini düşürdü; test harness isReleasedWhenClosed=false ile düzeltildi. Odaklı test ve ardından tüm testler geçti.
+- İzole `local.mssqlstudio.uitest` uygulamasında bağlantı formu görünümü, Genel/Gelişmiş geçişinde adın korunması, dar Explorer'da DB düğmesinin görünmesi ve DemoDB kapsamlı popup açılması görsel olarak doğrulandı. Çevrimdışı fixture kullanıldı; canlı bağlantı, gerçek sunucuda sağ tık işlemleri ve canlı indeks yeniden oluşturma test edilmedi. Kullanıcı uygulaması, gerçek Keychain kayıtları ve veritabanları değiştirilmedi.
+- Önceki belge birleştirmesi korunur. Yayın sürümü hâlâ v0.2.47'dir; bu değişiklikler henüz GitHub'da yayımlanmadı.
+
+# Belge düzeni notu — 10 Ekim 2026
+
+Mimari, tasarım ve kişisel imza belgeleri AGENTS.md içinde birleştirildi; README kısa kullanıcı/derleme rehberine dönüştürüldü. Aşağıdaki kayıtlar tarihsel kanıttır. Önceki dosya yollarına atıflar ilgili tarihin durumunu anlatır; güncel rehber AGENTS.md'dir. Bu düzenleme uygulama kodunu veya yayımlanmış v0.2.47 paketlerini değiştirmez.
+
 # v0.2.47 yayın doğrulaması — 10 Ekim 2026
 
 - https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.47 en son yayın; draft değil. ZIP, PKG, update.json mevcut. Kaynak d877e41e542b2c0434b0abe884d45317c26a2958; sürüm 0.2.47/build 48.

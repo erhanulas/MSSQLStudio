@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.48",
+    "date": "2026-10-10",
+    "title": "Bağlantı ekranı ve Object Explorer düzeni",
+    "changes": [
+      "Bağlantı ekleme ve düzenleme ekranı Genel/Gelişmiş sayfaları, tek ana işlem ve ayrı veritabanı paneliyle sadeleştirildi.",
+      "Yerel indeks durumu veritabanı adının yanındaki kompakt düğmeye taşındı; ayrıntılar ve yenileme ayrı panelde gösteriliyor.",
+      "Veritabanı sağ tık menüsü gruplandı; Nesneleri Yenile yüklenmiş nesne listelerini sunucudan yeniden okuyor.",
+      "Proje mimarisi, geliştirme ve görünüm kuralları AGENTS.md içinde birleştirildi."
+    ]
+  },
+  {
     "version": "0.2.47",
     "date": "2026-10-10",
     "title": "Form hizalaması ve işlem ikonları",

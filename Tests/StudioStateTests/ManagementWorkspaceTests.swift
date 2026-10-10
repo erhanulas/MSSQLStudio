@@ -142,6 +142,54 @@ import SwiftUI
     #expect(table.numberOfRows == 5)
     #expect(scripts.isEmpty && requests.count == 2)
   }
+  @Test func databaseIndexControlFitsNextToNameInNarrowRow() throws {
+    _ = NSApplication.shared
+    let state=StudioState();state.recoveryEnabled=false
+    let host=WorkbenchController(state:state);host.loadViewIfNeeded()
+    let server=ConnectedServer(profile:ServerProfile(name:"Badge fixture"),password:"")
+    let node=TreeNode("DemoDB",kind:.database,server:server,database:"DemoDB")
+    let cell=try #require(host.outlineView(NSOutlineView(),viewFor:nil,item:node) as? NSTableCellView)
+    let window=NSWindow(contentRect:NSRect(x:0,y:0,width:210,height:25),styleMask:[],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false
+    window.contentView=cell;cell.layoutSubtreeIfNeeded()
+    defer {window.close()}
+    let badge=try #require(cell.subviews.compactMap {$0 as? NSButton}.first)
+    let label=try #require(cell.textField)
+    #expect(badge.frame.minX >= label.frame.maxX)
+    #expect(badge.frame.maxX <= cell.bounds.width)
+    #expect(badge.frame.width == 24 && badge.frame.height == 24)
+    #expect(badge.accessibilityLabel()?.contains("DemoDB") == true)
+  }
+  @Test func databaseRefreshReadsLoadedBranchesAndPreservesFolderIdentity() async throws {
+    _ = NSApplication.shared
+    let state=StudioState();state.recoveryEnabled=false
+    let host=WorkbenchController(state:state);host.loadViewIfNeeded()
+    let server=ConnectedServer(profile:ServerProfile(name:"Refresh fixture"),password:"")
+    server.online=true
+    var requests:[String]=[]
+    server.catalogFixture={sql in requests.append(sql);return ObjectManagementUIFixture.catalog(sql)}
+    let database=TreeNode("DemoDB",kind:.database,server:server,database:"DemoDB",item:CatalogItem(id:5,name:"DemoDB"))
+    let tables=TreeNode("Tables",kind:.folder(.tables),server:server,database:"DemoDB")
+    tables.loaded=true
+    let views=TreeNode("Views",kind:.folder(.views),server:server,database:"DemoDB")
+    let group=TreeNode("Programmability",kind:.group,server:server,database:"DemoDB")
+    let procedures=TreeNode("Procedures",kind:.folder(.procedures),server:server,database:"DemoDB")
+    procedures.loaded=true;group.children=[procedures]
+    database.children=[tables,views,group]
+    let document=QueryDocument(server:server,database:"DemoDB",title:"Keep SQL")
+    document.sql="SELECT 1;";state.documents=[document];state.active=document
+    host.refresh(database)
+    for _ in 0..<100 {
+      if requests.count == 2 && !tables.loading && !procedures.loading {break}
+      try await Task.sleep(for:.milliseconds(20))
+    }
+    #expect(requests.count == 2)
+    #expect(database.children[0] === tables && database.children[1] === views && database.children[2] === group)
+    #expect(group.children[0] === procedures)
+    #expect(tables.loaded && procedures.loaded && !views.loaded)
+    #expect(requests.contains(Catalog.objects(.tables)) && requests.contains(Catalog.objects(.procedures)))
+    #expect(document.sql == "SELECT 1;" && document.lastExecutedSQL == nil)
+  }
   @Test func agentStepEditorOnlyReadsDatabaseMetadataOnOpen() async throws {
     _=NSApplication.shared
     let server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false
