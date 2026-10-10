@@ -4,7 +4,7 @@ SQL Server için native macOS çalışma alanı. Solda Object Explorer, ortada S
 
 ## Kurulum ve başlangıç
 
-[Son GitHub yayınından](https://github.com/erhanulas/MSSQLStudio/releases/latest) PKG'yi indirip uygulama kapalıyken kurun. Hedef `/Applications/MSSQLStudio.app` konumudur. Son doğrulanmış sürüm **0.2.51 / build 52**.
+[Son GitHub yayınından](https://github.com/erhanulas/MSSQLStudio/releases/latest) PKG'yi indirip uygulama kapalıyken kurun. Hedef `/Applications/MSSQLStudio.app` konumudur. Son doğrulanmış sürüm **0.2.52 / build 53**.
 
 Microsoft ODBC Driver 18, unixODBC ve OpenSSL 3 ayrı kurulur; sürücüler app paketinde dağıtılmaz. [Microsoft macOS kurulum yönergesi](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos) kullanılabilir. Apple Silicon bağımlılık yolları `/opt/homebrew` altındadır.
 

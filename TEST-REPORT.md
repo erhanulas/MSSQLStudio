@@ -1,3 +1,11 @@
+# v0.2.52 yayın doğrulaması — 10 Ekim 2026
+
+- Public latest https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.52; build 53, kaynak a0366b4432f224a143c1dd19a79cadf3e9f83e3f. Actions 38048473313 tüm adımları geçti; ZIP/PKG/update.json mevcut. Yeni manifest installerURL/installerSHA256 alanlarını içeriyor.
+- İndirilen ZIP SHA256 534800503e3b51853c7e9ef3503932d97a9ef31a662d9d61538bbbc365b5408c; PKG e5103c97126ef2bea7d6b3b99df62ebe211938757369279e0afcaaa5c3336134. Her ikisi manifest ve GitHub digest ile eşleşti.
+- Çıkarılan app codesign --verify --deep --strict kontrolünü geçti; local.mssqlstudio.app / adce16b1a3567d8c5fe2ed261e89493611cb7b9d sabit designated requirement korundu. CI testleri gerçek yayın ZIP ve PKG'siyle başarılı.
+- Public indirilen PKG ile `/tmp/mssql-v52-public-pkg-test.log` odaklı doğrulama geçti: payload sabit imzası/sürümü kabul edildi, yanlış sürüm reddedildi; kurulum çalıştırılmadı.
+- İlk geçiş doğrudan PKG kurulumu gerektirir; eski kurulu updater kendi kendini düzeltemez. Kullanıcı uygulaması/Keychain/veritabanı değiştirilmedi; macOS Installer içinde gerçek kullanıcı yükseltmesi yapılmadı. Aşağıdaki henüz yayımlanmadı ifadesi yerel kontrolün tarihsel durumudur.
+
 # PKG tabanlı güncelleme — 10 Ekim 2026 (yerel, yayımlanmadı)
 
 - Salt okunur yerel incelemede /Applications/MSSQLStudio.app sürümü 0.2.50; iki .MSSQLStudio-update-* klasöründe v0.2.51 uygulaması/helper.sh bulundu. Helper süreçleri çalışmıyordu; kurulum uygulanmamıştı. Bunlar değiştirilmedi/silinmedi. Yardımcının neden sona erdiği kesin olarak kanıtlanmadı; uygulama kapanışına bağlı özel taşıma yolu kaldırıldı.

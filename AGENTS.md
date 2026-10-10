@@ -12,7 +12,7 @@ Bu dosya mimari, geliştirme durumu ve görünüm kurallarının ana kaynağıd�
 
 ## Güncel durum — 10 Ekim 2026
 
-Son doğrulanmış yayın **v0.2.51, build 52**; kaynak `07a268c2fc6180d134b76c31563e1cbae94cc98f`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38046699005` başarılı; indirilen ZIP SHA-256 ve sabit imzası doğrulandı.
+Son doğrulanmış yayın **v0.2.52, build 53**; kaynak `a0366b4432f224a143c1dd19a79cadf3e9f83e3f`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38048473313` başarılı; indirilen ZIP SHA-256 ve sabit imzası doğrulandı.
 
 - Native SQL Server çalışma alanı: bağlantı/Explorer, bağımsız sorgu sekmeleri, TextKit 2 SQL editörü, disk destekli sonuç grid'i, mesajlar, XML plan ağacı, ayrılabilir sorgu pencereleri.
 - Editör: T-SQL renklendirme/biçimlendirme, GO batch'leri, seçim çalıştırma, DDL indeksli tamamlama/doğrulama, alias ve isteğe bağlı NOLOCK, blok katlama, kelime eşleşmeleri, tanıma geçiş, lexical kullanılmayan DECLARE vurgusu.
