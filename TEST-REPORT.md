@@ -1,3 +1,13 @@
+# v0.2.45 yayın doğrulaması — 10 Ekim 2026
+
+- Yayın: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.45 — draft değil; ZIP, PKG ve update.json mevcut.
+- Kaynak commit: `ab5e74a072d45876dbb53daba91301a2ce210e4b`; uygulama sürümü 0.2.45, build 46.
+- CI https://github.com/erhanulas/MSSQLStudio/actions/runs/38038044424 ilk çalışmada başarıyla tamamlandı. Kalıcı imza/izole Keychain regresyonu, imzalı uygulama ve installer, metadata kontrolü ve yayın paketiyle tüm testler geçti.
+- ZIP SHA256: `441b39b63c26c5ef19ae3a423b72460a0612a1c321c85d6ce451fc72b436a64a`.
+- PKG SHA256: `f8ecc1b8268bf504d6c9335e97435247ef6af60ac051260610971ebc2a3ce1ce`.
+- Public latest update.json sürüm/adres/hash değerleri doğrulandı. Gerçek public ZIP indirilip SHA256 karşılaştırıldı; çıkarılan uygulama scripts/signing.py verify ile aynı pinlenen sertifika ve DR politikasından geçti. Kurulu kullanıcı uygulaması değiştirilmedi.
+- Job adımı veritabanı seçimi, sayfa satırı tıklama alanı ve Keychain açıklamaları yayımlandı. Aşağıdaki “henüz yayımlanmadı” ifadeleri tarihsel yerel aşamayı anlatır. Fiziksel boş-alan tıklama ve gerçek kullanıcı oturumunda tam Keychain güncellemesi için önceki doğrulama sınırları geçerlidir. v0.2.44 yalnız başarısız yayın adayı etiketi olarak kaldı; yeniden yazılmadı.
+
 # Yayın testi zamanlama düzeltmesi — 10 Ekim 2026
 
 - v0.2.44 etiketi için CI 38037609105 iki denemede farklı mevcut editör testlerinde başarısız oldu: typingShortScriptKeepsViewportAndMetrics renklendirmeyi, indexedDiagnosticsAreDebouncedAndStaleEditsDoNotPublish diagnostics sonucunu sabit 450 ms sonunda hazır varsayıyordu. Paketler/imza ve yeni Agent testi geçti ancak yayın açılmadı. Etiket yeniden yazılmadı.
