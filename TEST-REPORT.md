@@ -1,3 +1,9 @@
+# v0.2.60 yayın doğrulaması — 10 Ekim 2026
+
+- Public latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.60; build 61, kaynak c2ebc5f495404fa63b73d2b1eaf7aa765cf6e69f. Actions 38082255408 başarılı; sabit imza/izole Keychain, paket üretimi, manifest ve gerçek paketlerle testler geçti.
+- İndirilen ZIP SHA-256 0c0046a451950e9fe916e6ebeedfc7cf4cb56d9a7c119eaa031de6875476397a; PKG SHA-256 2a98dbcf54ee478d842279096e105d1a94ca7eb9fa0112874614c21795baabb3. Public GitHub digest ve update.json ile eşleşti.
+- prepare-release.py indirilen ZIP ve PKG içindeki uygulamaların strict/deep imza, sabit sertifika/DR, bundle ID/sürüm ve aynı binary/metadata/sürüm notu kontrollerini geçti. Kullanıcının kurulu uygulaması değiştirilmedi.
+
 # İkon açıklamaları, sadeleştirme ve hızlı paneller — 10 Ekim 2026
 
 - Son tam doğrulama `/tmp/mssql-060-tests-verified.log`: 89 uygulama + 114 core = 203 test; **179 geçti, 24 dış koşullu test atlandı**. Önceki iki tur başarılı sayılmadı: ilkinde eski export konumu beklentisi ve sabit 900 ms arama beklemesi, ikincide paralel pencere testlerinin paylaştığı hover alanı etkilendi. Yerleşim beklentisi güncellendi, async arama sınırlı completion bekleyişi kullanır, hover testi ayrı helper örneğiyle izoledir.
