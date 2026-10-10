@@ -12,7 +12,7 @@ Bu dosya mimari, geliştirme durumu ve görünüm kurallarının ana kaynağıd�
 
 ## Güncel durum — 10 Ekim 2026
 
-Son doğrulanmış yayın **v0.2.47, build 48**; kaynak `d877e41e542b2c0434b0abe884d45317c26a2958`, yayın raporu `b6fe38e`. Depo: https://github.com/erhanulas/MSSQLStudio. Sürüm değiştiğinde bu paragrafı, sürüm notlarını ve test raporunu birlikte güncelleyin.
+Son doğrulanmış yayın **v0.2.49, build 50**; kaynak `8f203c56e3b16e6b0c314b44364b3d850d83c9f6`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38042594566` başarılı; indirilen ZIP SHA-256 ve sabit imzası doğrulandı.
 
 - Native SQL Server çalışma alanı: bağlantı/Explorer, bağımsız sorgu sekmeleri, TextKit 2 SQL editörü, disk destekli sonuç grid'i, mesajlar, XML plan ağacı, ayrılabilir sorgu pencereleri.
 - Editör: T-SQL renklendirme/biçimlendirme, GO batch'leri, seçim çalıştırma, DDL indeksli tamamlama/doğrulama, alias ve isteğe bağlı NOLOCK, blok katlama, kelime eşleşmeleri, tanıma geçiş, lexical kullanılmayan DECLARE vurgusu.
@@ -22,7 +22,7 @@ Son doğrulanmış yayın **v0.2.47, build 48**; kaynak `d877e41e542b2c0434b0abe
 - v0.2.47: genel form hizalaması, Gelişmiş adım grupları ve işlem ikon/renkleri yayımlandı. Son yerel doğrulama: 67 uygulama + 99 core = 166 test; 144 geçti, 22 dış koşullu test atlandı. Yayın işi `38040358461` başarılı; indirilen ZIP'in SHA-256 ve sabit imzası doğrulandı.
 - Son hizalama turunda CUA `Sky Computer Use native pipe closed before response` hatası verdi. Tüm formların son görsel kontrolü tamamlanmadı; build/test başarısı bu kontrolün yerine geçmez. Yeni arayüz işinde bu kontrolü yeniden deneyin.
 
-Yerel Explorer/bağlantı revizyonu henüz yayımlanmadı: 168 testten 146 geçti, 22 dış koşullu test atlandı; Release derlemesi başarılı. İzole bağlantı formu ve DB indeks düğmesi görsel kontrolden geçti; canlı DB davranışı doğrulanmış değildir. Ayrıntılar TEST-REPORT.md içindedir.
+Explorer/bağlantı revizyonu v0.2.49 içinde yayımlandı: 168 testten 146 geçti, 22 dış koşullu test atlandı; Release derlemesi başarılı. İzole bağlantı formu ve DB indeks düğmesi görsel kontrolden geçti; canlı DB davranışı doğrulanmış değildir. Ayrıntılar TEST-REPORT.md içindedir.
 
 ## Platform ve kaynak haritası
 

@@ -1,3 +1,11 @@
+# v0.2.49 yayın doğrulaması — 10 Ekim 2026
+
+- Public latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.49; sürüm 0.2.49/build 50, kaynak 8f203c56e3b16e6b0c314b44364b3d850d83c9f6. ZIP, PKG ve update.json mevcut.
+- Actions 38042594566 başarılı: sabit kimlik/izole Keychain, imzalı derleme, manifest, yayın paketi testleri ve yayın adımları geçti.
+- İndirilen ZIP SHA256 3c26fa22ee1e85294bbb1e5cf69227c80f43a1b7d98a4977d69e350e8bebadf3; manifest ve GitHub digest eşleşti. PKG GitHub digest d521ec54dcbcbefc194ac3b7b24acd46fd4727701ce3d64763c46820e96dccc0.
+- Çıkarılan app codesign --verify --deep --strict kontrolünü geçti; local.mssqlstudio.app ve sertifika adce16b1a3567d8c5fe2ed261e89493611cb7b9d designated requirement korundu. Gerçek kullanıcı uygulaması değiştirilmedi.
+- v0.2.48 Actions 38042378822 mevcut katlama testinin sabit 400 ms analiz bekleme süresinde başarısız oldu; yayın açılmadı. Test artık sonucu sınırlı süre boyunca bekliyor; odaklı yerel test ve v0.2.49 CI geçti. Eski etiket değiştirilmedi. Aşağıdaki henüz yayımlanmadı ifadesi o anki yerel kontrolün tarihsel durumudur.
+
 # Bağlantı formu ve Explorer — 10 Ekim 2026 (yerel, henüz yayımlanmadı)
 
 - Yeni/düzenlenen bağlantı formu Genel/Gelişmiş sayfalarına ayrıldı; tekrar eden test/durum alanları kaldırıldı, tek alt ana işlem ve ayrı veritabanı paneli kullanıldı. Düzenleme sırasında gereksiz tüm Keychain kayıtlarını listeleme kaldırıldı; güvenlik seçenekleri korundu.
