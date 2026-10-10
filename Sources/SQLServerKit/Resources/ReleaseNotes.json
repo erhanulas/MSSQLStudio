@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.2.42",
+    "date": "2026-10-10",
+    "title": "SQL Server Agent iş yönetimi ve geçmiş ekranları",
+    "changes": [
+      "Job History ekranına açılabilir iş ve adım satırları, durum ve tarih filtreleri, yeniden deneme bilgileri ve ayrıntılı hata mesajları eklendi.",
+      "Job özellikleri SSMS düzeninde sayfalara ayrıldı; T-SQL adımları, başarı ve hata akışı, yeniden denemeler ve çıktı seçenekleri geliştirildi.",
+      "Zamanlama düzenleyicisine tekrar, tarih ve saat seçenekleri, paylaşılan zamanlama uyarısı ve mevcut zamanlamayı bağlama işlemi eklendi.",
+      "Activity Monitor durum filtreleri, otomatik yenileme ve belirli adımdan başlatma seçenekleriyle geliştirildi.",
+      "Bildirim seçenekleri genişletildi. Değişiklikler önce incelenebilir SQL olarak hazırlanıyor; eşzamanlı değişiklik ve işlem hatası kontrolleri eklendi.",
+      "Harici adım türleri, uyarılar ve hedefler salt okunur görüntüleniyor."
+    ]
+  },
+  {
     "version": "0.2.40",
     "date": "2026-10-10",
     "title": "Keychain erişim izinlerini yenileme",
