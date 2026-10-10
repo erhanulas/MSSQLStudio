@@ -1,3 +1,10 @@
+# v0.2.54 yayın doğrulaması — 10 Ekim 2026
+
+- Public latest https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.54; build 55, kaynak 7b673e7f5eeb5fe704713cefe8a0bfe9b02cab98. Actions 38050647736 başarılı; sabit imza/izole Keychain, paket üretimi, manifest ve gerçek ZIP/PKG ile testler geçti.
+- Public ZIP SHA-256 f840a7bce067fbe095b0faa735bc7c687f0d116e81dd5ea6ba3e42e7bd897369; PKG SHA-256 ec938172845de80dc5348ff3b943f3b7254612555a41ce03c1ec3262d389caa5. Manifest ve GitHub digest değerleriyle eşleşti.
+- Çıkarılan uygulama strict/deep codesign kontrolünü geçti; sürüm 0.2.54/55, sabit local.mssqlstudio.app / adce16b1a3567d8c5fe2ed261e89493611cb7b9d designated requirement doğrulandı.
+- Gerçek kullanıcı app'i/Keychain/veritabanı değiştirilmedi. Canlı SQL Server yazma/çatışma senaryoları bu tur çalıştırılmadı; yerel test ayrıntıları aşağıdadır.
+
 # Rowversion zorunluluğunun kaldırılması ve satır işlemleri — 10 Ekim 2026
 
 - Rowversion artık zorunlu değil. Mevcutsa PK + rowversion kontrolü korunur; yoksa PK ve karşılaştırılabilen özgün değerler kullanılır. XML/text/ntext/image açık dönüşümlerle karşılaştırılır; legacy değer yazmaları varchar(max)/nvarchar(max)/varbinary(max) üzerinden üretilir. Spatial/UDT/sql_variant düzenlenmez ve predicate dışında kalır; bu özel alanların eşzamanlı değişikliğini yakalama güvencesi yoktur.
