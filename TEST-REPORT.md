@@ -1,3 +1,10 @@
+# v0.2.53 yayın doğrulaması — 10 Ekim 2026
+
+- Public latest https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.53; build 54, kaynak 4adb1294db157c931e3d2c938d136b4e3d0c338c. Actions 38049760449 başarılı; kalıcı imza, sentetik Keychain, paket üretimi ve gerçek ZIP/PKG ile testler geçti.
+- Public ZIP SHA-256 41a715e699112de17c883ce97e85ea00127e1437e30296228c73b6ef6b17b358; PKG SHA-256 c11de0f25d332c4fde06282e30f24d2d8a126541442e4d3958ef3a8fef4543fb. Manifest ve GitHub digest değerleriyle eşleşti.
+- Çıkarılan uygulama strict/deep codesign doğrulamasını geçti; bundle sürümü 0.2.53/54, sabit local.mssqlstudio.app / adce16b1a3567d8c5fe2ed261e89493611cb7b9d designated requirement doğrulandı.
+- Kullanıcı uygulaması ve veritabanı değiştirilmedi. Canlı SQL Server UPDATE/çatışma testi bu tur çalıştırılmadı; yerel test ayrıntıları aşağıdadır. Aşağıdaki henüz yayımlanmadı başlığı geliştirme kontrolünün tarihsel durumudur.
+
 # Timeline ve sonuçlarda önizlemeli UPDATE — 10 Ekim 2026 (henüz yayımlanmadı)
 
 - Timeline: sunucu/DB/durum/tarih + metin filtreleri, süreye göre sıralama, sorgu özeti, renkli tam SQL önizlemesi, hata/satır sayısı ve kopyalama. Yeni sekme kendi server UUID'sinde açılır; eski kayıt yalnız tek isim eşleşmesinde açılır. Geçmiş değişiklikleri açık panele yansır.
