@@ -71,6 +71,11 @@ import SwiftUI
       studio.documents.append(document)
       studio.active = document
       studio.changed?()
+      if Bundle.main.object(forInfoDictionaryKey:"StudioAgentSmoke") as? Bool == true {
+        let node=TreeNode("Demo Nightly",kind:.object(.jobs),server:server,item:CatalogItem(name:"Demo Nightly"))
+        workbench.showAgentProperties(node)
+        workbench.showAgentHistory(node)
+      }
       return
     }
     #if DEBUG

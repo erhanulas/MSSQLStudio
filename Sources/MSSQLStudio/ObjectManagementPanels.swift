@@ -616,10 +616,25 @@ private struct ObjectPropertiesPanel:View {
   static func catalog(_ sql:String) -> Execution {
     var e=Execution()
     if sql.contains("StudioAgent.history") {
-      e.results=[Rows(values:[["1","Demo Nightly","0","(Job outcome)","1","2026-10-09 21:00:00","0:00:02","Synthetic test completed successfully."],["2","Demo Nightly","1","Read sample","0","2026-10-08 21:00:00","0:00:01","Synthetic example error."]])]
+      let id="00000000-0000-0000-0000-000000000027"
+      var values:[[String?]]=[
+        ["30","Demo Nightly","0","(Job outcome)","0","2026-10-10 21:00:00","0:02:05","Synthetic job failed. Expand the run to inspect every step.",id,"30","0","0","0","Test Server"],
+        ["29","Demo Nightly","2","Import sample","0","2026-10-10 21:01:00","0:01:05","Synthetic error 50000. Import could not complete.\nThis is a multiline message for the details pane.",id,"30","16","50000","2","Test Server"],
+        ["28","Demo Nightly","2","Import sample","2","2026-10-10 21:00:40","0:00:05","Retrying synthetic operation.",id,"30","16","50000","1","Test Server"],
+        ["27","Demo Nightly","1","Read sample","1","2026-10-10 21:00:00","0:00:02","Synthetic read completed successfully.",id,"30","0","0","0","Test Server"],
+        ["20","Demo Nightly","0","(Job outcome)","1","2026-10-09 21:00:00","0:00:02","Synthetic test completed successfully.",id,"20","0","0","0","Test Server"]]
+      if !sql.contains("OR (h.step_id>0") {values=values.filter {$0[2] == "0"}}
+      if sql.contains("h.run_status=0") {values=values.filter {$0[9] == "30"}}
+      if sql.contains("h.run_status=1") {values=values.filter {$0[9] == "20"}}
+      e.results=[Rows(values:values)]
     } else if sql.contains("StudioAgent.jobs") {
-      e.results=[Rows(values:[["00000000-0000-0000-0000-000000000027","Demo Nightly","0","Synthetic UI test job","test-owner","Idle","2026-10-09T20:00:00"]])]
-      if sql.contains("StudioAgent.details") {e.results += [Rows(values:[["1","Read sample","TSQL","master","SELECT 1;"]]),Rows(values:[["27","Daily test","0","4","210000"]])]}
+      e.results=[Rows(values:[["00000000-0000-0000-0000-000000000027","Demo Nightly","0","Synthetic UI test job","test-owner","Idle","2026-10-09T20:00:00.000","[Uncategorized (Local)]","2026-10-01T12:00:00.000","1","2","Test Operator","2","0","2026-10-10 21:00:00","0","2026-10-11 21:00:00","5"]])]
+      if sql.contains("StudioAgent.details") {e.results += [Rows(values:[
+        ["1","Read sample","TSQL","master","SELECT N'İstanbul';","3","0","2","0","0","0","","0",""],
+        ["2","Import sample","TSQL","DemoDB","SELECT 2;","1","0","2","0","2","1","","4",""]]),
+        Rows(values:[["27","Daily test","0","8","210000","10","1","0","1","1","20261001","99991231","235959","3","2026-10-09T20:00:00.000","2"]])]}
+    } else if sql.contains("StudioAgent.schedule") {
+      e.results=[Rows(values:[["27","Daily test","0","8","210000","10","1","0","1","1","20261001","99991231","235959","3","2026-10-09T20:00:00.000","2"],["28","Existing shared","1","4","090000","1","1","0","1","1","20261001","99991231","235959","1","2026-10-09T20:00:00.000","1"]])]
     } else if sql.contains("FROM msdb.dbo.sysjobs j ORDER BY j.name") {e.results=[Rows(values:[["0","Demo Nightly","","Disabled, Idle"]])]}
     else if sql.contains("FROM msdb.dbo.sysschedules ORDER BY") {e.results=[Rows(values:[["27","Daily test","","Disabled"]])]}
     else if sql.contains("sys.dm_server_services") {e.results=[Rows(values:[["SQL Server Agent (Synthetic)","Stopped","Disabled","2026-10-09"]])]}

@@ -144,38 +144,48 @@ private struct AgentSQLPreview:NSViewRepresentable {
   func makeNSView(context:Context) -> NSScrollView {
     let scroll=NSScrollView();scroll.hasVerticalScroller=true
     let text=NSTextView(usingTextLayoutManager:true);text.isEditable=false;text.isSelectable=true;text.font=StudioTheme.codeFont
-    text.isVerticallyResizable=true;text.autoresizingMask=[.width];text.textContainerInset=NSSize(width:10,height:10)
+    text.identifier = .init("sqlSourcePreview");text.isVerticallyResizable=true;text.autoresizingMask=[.width];text.textContainerInset=NSSize(width:10,height:10)
     scroll.documentView=text;return scroll
   }
   func updateNSView(_ scroll:NSScrollView,context:Context) {
     guard let text=scroll.documentView as? NSTextView else {return}
-    if text.string != sql {text.string=sql}
-    text.backgroundColor=StudioTheme.canvas;text.textColor=StudioTheme.text
+    if text.string != sql {text.textContentStorage?.textStorage?.setAttributedString(SQLSourceHighlighting.attributed(sql))}
+    text.backgroundColor=StudioTheme.canvas
   }
 }
 
 extension WorkbenchController {
   func showAgentHistory(_ node:TreeNode) {
-    present(AgentHistoryPanel(server:node.server,job:node.objectFolder == .jobs ? node.item?.name:nil),title:"SQL Server Agent · History",width:1080,height:700)
+    presentAgent(AgentHistoryPanel(server:node.server,job:node.objectFolder == .jobs ? node.item?.name:nil),title:"SQL Server Agent · History",width:1380,height:820,minWidth:960,minHeight:640)
   }
   func showAgentProperties(_ node:TreeNode) {
     guard let item=node.item else {return}
-    present(AgentPropertiesPanel(server:node.server,name:item.name,open:{ [weak self] sql in
+    presentAgent(AgentPropertiesPanel(server:node.server,name:item.name,open:{ [weak self] sql in
       self?.stageAgentSQL(sql,server:node.server,title:"Job Properties · "+item.name)
-    }),title:"Job Properties · "+item.name,width:1000,height:720)
+    },history:{[weak self] in self?.showAgentHistory(node)}),title:"Job Properties · "+item.name,width:1220,height:800,minWidth:1000,minHeight:680)
   }
   func showAgentAction(_ node:TreeNode,action:SQLAgent.Action) {
     guard let item=node.item else {return}
-    present(AgentActionPanel(server:node.server,name:item.name,action:action,open:{ [weak self] sql in
+    presentAgent(AgentActionPanel(server:node.server,name:item.name,action:action,open:{ [weak self] sql in
       self?.stageAgentSQL(sql,server:node.server,title:"Agent · "+action.rawValue+" · "+item.name)
     }),title:"SQL Server Agent · "+action.rawValue,width:740,height:520)
   }
   func showAgentActivity(_ node:TreeNode) {
-    present(AgentActivityPanel(server:node.server,history:{[weak self] in self?.showAgentHistory(node)}),title:"SQL Server Agent · Job Activity",width:1040,height:680)
+    let server=node.server
+    func jobNode(_ job:SQLAgent.Job)->TreeNode {TreeNode(job.name,kind:.object(.jobs),server:server,item:CatalogItem(name:job.name))}
+    presentAgent(AgentActivityPanel(server:server,history:{[weak self] name in
+      if let name {self?.showAgentHistory(TreeNode(name,kind:.object(.jobs),server:server,item:CatalogItem(name:name)))} else {self?.showAgentHistory(node)}
+    },properties:{[weak self] job in self?.showAgentProperties(jobNode(job))},action:{[weak self] job,action in self?.showAgentAction(jobNode(job),action:action)}),title:"SQL Server Agent · Job Activity",width:1400,height:800,minWidth:1060,minHeight:640)
   }
   func showAgentSchedule(_ node:TreeNode) {
     guard let item=node.item else {return}
-    present(AgentSchedulePanel(item:item,open:{[weak self] sql in self?.stageAgentSQL(sql,server:node.server,title:"Schedule · "+item.name)}),title:"Schedule Properties · "+item.name,width:740,height:480)
+    weak var panelWindow:NSWindow?
+    panelWindow=presentAgent(AgentSchedulePanel(server:node.server,item:item,close:{panelWindow?.close()},open:{[weak self] sql in self?.stageAgentSQL(sql,server:node.server,title:"Schedule · "+item.name)}),title:"Schedule Properties · "+item.name,width:820,height:760)
+  }
+  @discardableResult private func presentAgent<V:View>(_ root:V,title:String,width:CGFloat,height:CGFloat,minWidth:CGFloat=620,minHeight:CGFloat=480)->NSWindow {
+    let frame=(view.window?.screen ?? NSScreen.main)?.visibleFrame ?? NSRect(x:0,y:0,width:width/0.94,height:height/0.94)
+    let width=min(width,frame.width*0.94),height=min(height,frame.height*0.94)
+    return present(root,title:title,width:width,height:height,minWidth:min(minWidth,width),minHeight:min(minHeight,height))
   }
   private func stageAgentSQL(_ sql:String,server:ConnectedServer,title:String) {
     let doc=state.newQuery(server:server,database:"msdb",text:sql,title:title)
@@ -187,46 +197,94 @@ extension WorkbenchController {
   }
 }
 
-private struct AgentHistoryPanel:View {
+struct AgentHistoryPanel:View {
   let server:ConnectedServer
   let job:String?
   @State private var rows:[SQLAgent.History]=[]
   @State private var status = -1
   @State private var days=30
-  @State private var steps=false
+  @State private var steps=true
+  @State private var search=""
   @State private var loading=false
   @State private var error=""
   @State private var selected:Int?
   @State private var generation=0
-  var body:some View {
-    VStack(alignment:.leading,spacing:12) {
-      StudioPanelHeading(title:"Job History",icon:"clock.arrow.circlepath",subtitle:server.profile.name+" · "+(job ?? "Tüm işler"))
-      HStack {
-        Picker("Durum",selection:$status) {Text("Tümü").tag(-1);Text("Succeeded").tag(1);Text("Failed").tag(0);Text("Retry").tag(2);Text("Canceled").tag(3);Text("In Progress").tag(4)}.frame(width:210)
-        Picker("Son",selection:$days) {Text("1 gün").tag(1);Text("7 gün").tag(7);Text("30 gün").tag(30);Text("365 gün").tag(365)}.frame(width:150)
-        Toggle("Adımları göster",isOn:$steps)
-        Spacer()
-        Button {generation+=1} label:{Label("Yenile",systemImage:"arrow.clockwise")}.disabled(loading)
-      }
-      if loading {ProgressView().controlSize(.small)}
-      if !error.isEmpty {Text(error).foregroundStyle(.red).textSelection(.enabled)}
-      Table(rows,selection:$selected) {
-        TableColumn("Durum") {Text($0.statusLabel).foregroundStyle($0.status == 0 ? .red:$0.status == 1 ? .green:.secondary)}.width(100)
-        TableColumn("İş",value:\.job)
-        TableColumn("Adım") {Text($0.step == 0 ? "Job outcome":"\($0.step) · \($0.stepName)")}
-        TableColumn("Başlangıç",value:\.started).width(160)
-        TableColumn("Süre",value:\.duration).width(80)
-      }
-      if let row=rows.first(where:{$0.id == selected}) {
-        ScrollView {Text(row.message).font(.system(size:12,design:.monospaced)).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading).padding(12)}.frame(minHeight:48,maxHeight:140).background(Color(nsColor:StudioTheme.canvas),in:RoundedRectangle(cornerRadius:6))
-      }
-      Text("\(rows.count) kayıt · En yeni 500 kayıt · Sunucunun yerel tarih/saat bilgisi. Kaydı seçerek ayrıntısını okuyun.").font(.caption).foregroundStyle(.secondary)
-    }.padding(20).studioPanel().task(id:"\(generation)|\(status)|\(days)|\(steps)") {
-      loading=true;error="";defer {loading=false}
-      do {let result=try await server.catalog(SQLAgent.history(name:job,status:status<0 ? nil:status,days:days,includeSteps:steps),database:"msdb");try Task.checkCancellation();rows=try SQLAgent.decodeHistory(result);selected=nil}
-      catch is CancellationError {} catch {rows=[];self.error=error.localizedDescription}
+  @State private var requestID=UUID()
+  private var tree:[SQLAgent.History] {
+    let tree=SQLAgent.historyTree(rows)
+    guard !search.isEmpty else {return tree}
+    return tree.filter {row in
+      ([row]+(row.children ?? [])).contains {($0.job+" "+$0.stepName+" "+$0.message).localizedCaseInsensitiveContains(search)}
     }
   }
+  var body:some View {
+    VStack(alignment:.leading,spacing:10) {
+      StudioPanelHeading(title:"Log File Viewer · Job History",icon:"clock.arrow.circlepath",subtitle:server.profile.name+" · "+(job ?? "Tüm işler"))
+      HStack {
+        Picker("Durum",selection:$status) {Text("Tümü").tag(-1);Text("Succeeded").tag(1);Text("Failed").tag(0);Text("Retry").tag(2);Text("Canceled").tag(3);Text("In Progress").tag(4)}.frame(width:210).accessibilityIdentifier("agentHistoryStatus")
+        Picker("Son",selection:$days) {Text("1 gün").tag(1);Text("7 gün").tag(7);Text("30 gün").tag(30);Text("365 gün").tag(365);Text("10 yıl").tag(3650)}.frame(width:150)
+        Toggle("Adım ayrıntıları",isOn:$steps)
+        Spacer()
+        Button {generation+=1} label:{Label("Yenile",systemImage:"arrow.clockwise")}.disabled(loading).accessibilityIdentifier("agentHistoryRefresh")
+      }
+      TextField("Yüklenen çalışmalarda iş, adım veya mesaj ara",text:$search).textFieldStyle(.roundedBorder).accessibilityIdentifier("agentHistorySearch")
+      Text("Filtre: \(days) gün · \(status < 0 ? "Tüm sonuçlar":"Seçili iş sonucu") · \(tree.count) çalışma. Durum filtresi iş sonucuna uygulanır; alt adımlar kendi sonuçlarıyla gösterilir.").font(.caption).foregroundStyle(.secondary)
+      if loading {ProgressView().controlSize(.small)}
+      if !error.isEmpty {Text(error).foregroundStyle(.red).textSelection(.enabled)}
+      VSplitView {
+        Table(tree,children:\.children,selection:$selected) {
+          TableColumn("Çalışma / Adım") {row in
+            Label(row.step == 0 ? row.job:"\(row.step) · \(row.stepName)",systemImage:row.step == 0 ? "clock":"list.number")
+          }.width(min:180,ideal:290)
+          TableColumn("Durum") {AgentStatus(status:$0.status)}.width(110)
+          TableColumn("Başlangıç",value:\.started).width(165)
+          TableColumn("Süre",value:\.duration).width(85)
+          TableColumn("Tekrar") {Text("\($0.retries)")}.width(55)
+          TableColumn("Mesaj",value:\.message).width(min:180,ideal:320)
+        }.frame(minHeight:180,idealHeight:350).accessibilityIdentifier("agentHistoryTable")
+        Group {
+          if let row=rows.first(where:{$0.id == selected}) {
+            ScrollView {
+              VStack(alignment:.leading,spacing:8) {
+                HStack {Text("Seçili kayıt ayrıntıları").font(.headline);Spacer();Button("Kopyala") {NSPasteboard.general.clearContents();NSPasteboard.general.setString(historyDetails(row),forType:.string)}}
+                Text("\(row.job) · \(row.step == 0 ? "İş sonucu":row.stepName) · \(row.statusLabel)")
+                Text("Sunucu: \(row.server)    Başlangıç: \(row.started)    Süre: \(row.duration)")
+                Text("SQL mesajı: \(String(row.messageID))    Önem derecesi: \(row.severity)    Yeniden deneme: \(row.retries)").foregroundStyle(.secondary)
+                Divider()
+                Text(row.message).font(.system(size:12,design:.monospaced)).frame(maxWidth:.infinity,alignment:.leading).accessibilityIdentifier("agentHistoryMessage")
+              }.textSelection(.enabled).padding(12)
+            }
+          } else {
+            ScrollView {Text(rows.isEmpty && !loading ? "Bu filtreye uygun geçmiş kaydı yok.":"İşin yanındaki oku açarak adımları görün; mesajın tamamını okumak için bir kayıt seçin.").foregroundStyle(.secondary).frame(maxWidth:.infinity,minHeight:196,alignment:.center)}
+          }
+        }.frame(minHeight:220,idealHeight:220,maxHeight:400).background(Color(nsColor:StudioTheme.canvas))
+      }
+      Text(rows.count >= 5001 ? "5.000 kayıt sınırına ulaşıldı; en eski çalışmanın adımları eksik olabilir. Tarih filtresini daraltın.":"En yeni 500 tamamlanmış çalışma · Sunucunun yerel saati. Devam eden işleri Job Activity Monitor’den izleyin; geçmiş, adımlar tamamlandıkça oluşur.").font(.caption).foregroundStyle(.secondary)
+    }.padding(20).studioPanel().task(id:"\(generation)|\(status)|\(days)|\(steps)") {
+      let token=UUID();requestID=token;loading=true;error=""
+      defer {if requestID == token {loading=false}}
+      do {
+        let result=try await server.catalog(SQLAgent.history(name:job,status:status<0 ? nil:status,days:days,includeSteps:steps),database:"msdb")
+        try Task.checkCancellation();guard requestID == token else {return}
+        rows=try SQLAgent.decodeHistory(result)
+        if !rows.contains(where:{$0.id == selected}) {selected=nil}
+      } catch is CancellationError {} catch {if requestID == token {rows=[];selected=nil;self.error=error.localizedDescription}}
+    }
+  }
+  private func historyDetails(_ row:SQLAgent.History)->String {
+    "\(row.job) · \(row.stepName)\n\(row.statusLabel) · \(row.started) · \(row.duration)\nSQL \(row.messageID), Severity \(row.severity), Retries \(row.retries)\n\(row.message)"
+  }
+}
+private struct AgentStatus:View {
+  let status:Int
+  var body:some View {
+    HStack(spacing:5) {
+      Image(systemName:status == 1 ? "checkmark.circle.fill":status == 0 ? "xmark.circle.fill":status == 4 ? "arrow.triangle.2.circlepath":status == 2 ? "arrow.clockwise":"minus.circle")
+        .foregroundStyle(status == 1 ? Color.green:status == 0 ? .red:status == 4 ? .blue:.secondary)
+      Text(label)
+    }.accessibilityElement(children:.ignore).accessibilityLabel(label)
+  }
+  private var label:String {switch status {case 0:"Failed";case 1:"Succeeded";case 2:"Retry";case 3:"Canceled";case 4:"Running";default:"—"}}
 }
 
 private struct AgentActionPanel:View {
@@ -239,11 +297,16 @@ private struct AgentActionPanel:View {
   @State private var busy=false
   @State private var error=""
   @State private var done=false
+  @State private var startAt=""
+  @State private var steps:[SQLAgent.Step]=[]
   var body:some View {
     VStack(alignment:.leading,spacing:14) {
       StudioPanelHeading(title:action.rawValue.capitalized+" Job",icon:action == .delete ? "trash":"clock.badge.checkmark",subtitle:server.profile.name+" · "+name)
       if let job {Text("\(job.enabled ? "Enabled":"Disabled") · \(job.state) · Owner: \(job.owner)").foregroundStyle(.secondary)}
       Text(action == .start ? "İşin adımları çalıştırılır; komut kabul edilmesi işin başarıyla tamamlandığı anlamına gelmez. Sonucu History’den izleyin.":action == .stop ? "Çalışan iş durdurulur. Önceden tamamlanan adımların etkileri geri alınmaz.":action == .delete ? "İş ve iş geçmişi silinir. Paylaşılan zamanlamalar korunur.":"İşin etkinlik ayarı değiştirilir; devam eden çalışma durdurulmaz.").font(.callout)
+      if action == .start {
+        Picker("Başlatılacak adım",selection:$startAt) {Text("İşin tanımlı başlangıç adımı").tag("");ForEach(steps) {Text("\($0.id) · \($0.name)").tag($0.name)}}.disabled(busy || done)
+      }
       AgentSQLPreview(sql:sql).studioEditor()
       if !error.isEmpty {Text(error).foregroundStyle(done ? .green:.red).textSelection(.enabled)}
       HStack {
@@ -255,7 +318,14 @@ private struct AgentActionPanel:View {
       }
     }.padding(20).studioPanel().task {
       busy=true;defer {busy=false}
-      do {let output=try await server.catalog(SQLAgent.jobs(name:name),database:"msdb");job=try SQLAgent.decodeJobs(output).first;guard let job else {throw SQLFailure("İş bulunamadı.")};sql=try SQLAgent.command(action,id:job.id)}catch {self.error=error.localizedDescription}
+      do {
+        let output=try await server.catalog(action == .start ? SQLAgent.details(name:name):SQLAgent.jobs(name:name),database:"msdb")
+        if action == .start {let details=try SQLAgent.decodeDetails(output);job=details.0;steps=details.1} else {job=try SQLAgent.decodeJobs(output).first}
+        guard let job else {throw SQLFailure("İş bulunamadı.")};sql=try SQLAgent.command(action,id:job.id)
+      } catch {self.error=error.localizedDescription}
+    }.onChange(of:startAt) {_,value in
+      guard let job else {return}
+      do {sql=try SQLAgent.command(action,id:job.id,stepName:value.isEmpty ? nil:value)} catch {sql="";self.error=error.localizedDescription}
     }
   }
   private func apply() {
@@ -272,98 +342,525 @@ private struct AgentActionPanel:View {
   }
 }
 
-private struct AgentPropertiesPanel:View {
+struct AgentPropertiesPanel:View {
   let server:ConnectedServer
   let name:String
   let open:(String)->Void
+  var history:()->Void = {}
   @State private var job:SQLAgent.Job?
   @State private var title=""
   @State private var description=""
+  @State private var owner=""
+  @State private var category=""
+  @State private var startStep=1
   @State private var enabled=false
   @State private var steps:[SQLAgent.Step]=[]
   @State private var schedules:[SQLAgent.Schedule]=[]
   @State private var selected:Int?
-  @State private var stepName=""
-  @State private var database=""
-  @State private var command=""
+  @State private var selectedSchedule:Int?
+  @State private var editingStep:SQLAgent.Step?
+  @State private var editingSchedule:SQLAgent.Schedule?
+  @State private var newStep=false
+  @State private var newSchedule=false
+  @State private var page="Genel"
+  @State private var emailLevel=0
+  @State private var emailOperator=""
+  @State private var eventLogLevel=0
+  @State private var deleteLevel=0
+  @State private var error=""
+  @State private var loading=true
+  @State private var generation=0
+  @State private var confirmRefresh=false
+  @State private var confirmDeleteStep=false
+  @State private var confirmDetach=false
+  @State private var pickSchedule=false
+  private let pages=["Genel","Adımlar","Zamanlamalar","Uyarılar","Bildirimler","Hedefler"]
+  var body:some View {
+    VStack(alignment:.leading,spacing:12) {
+      HStack {
+        StudioPanelHeading(title:"Job Properties",icon:"gearshape.2",subtitle:server.profile.name+" · "+name)
+        Spacer()
+        Button("Geçmiş",action:history).accessibilityIdentifier("agentPropertiesHistory")
+        Button("Yenile") {confirmRefresh=true}.disabled(loading)
+      }
+      if loading {ProgressView().controlSize(.small)}
+      if !error.isEmpty {Text(error).foregroundStyle(.red).textSelection(.enabled)}
+      HSplitView {
+        VStack(alignment:.leading) {
+          Text("Sayfa seçin").font(.caption).foregroundStyle(.secondary).padding(.horizontal,10)
+          ForEach(pages,id:\.self) {item in
+            Button {page=item} label:{Text(item).frame(maxWidth:.infinity,alignment:.leading).padding(8).background(page == item ? Color.accentColor.opacity(0.15):Color.clear,in:RoundedRectangle(cornerRadius:5))}.buttonStyle(.plain).accessibilityIdentifier("agentPage"+item)
+          }
+          Spacer()
+          Text("\(server.profile.name)\nmsdb").font(.caption).foregroundStyle(.secondary).padding(10)
+        }.frame(minWidth:145,idealWidth:160,maxWidth:210)
+        Group {
+          switch page {
+          case "Genel":generalPage
+          case "Adımlar":stepsPage
+          case "Zamanlamalar":schedulesPage
+          case "Bildirimler":notificationsPage
+          case "Uyarılar":AgentRelatedPage(server:server,name:job?.name ?? name,targets:false)
+          default:AgentRelatedPage(server:server,name:job?.name ?? name,targets:true)
+          }
+        }.frame(maxWidth:.infinity,maxHeight:.infinity).padding(12).disabled(job == nil || loading)
+      }
+      Divider()
+      HStack {
+        Text("Değişiklikler önce SQL olarak açılır. Çalıştırdıktan sonra Yenile ile sunucudaki durumu okuyun.").font(.caption).foregroundStyle(.secondary)
+        Spacer()
+        if page == "Genel" || page == "Bildirimler" {
+          Button("Değişiklik SQL’ini Aç") {preparePage()}.buttonStyle(StudioPrimaryButton()).disabled(job == nil || loading).accessibilityIdentifier("agentPropertiesScript")
+        }
+      }
+    }.padding(20).studioPanel().task(id:generation) {await load()}
+      .confirmationDialog("Kaydedilmemiş alanlar sunucudaki değerlerle değiştirilsin mi?",isPresented:$confirmRefresh) {Button("Sunucudan Yenile",role:.destructive) {generation+=1}}
+      .confirmationDialog("Adım silinirse adım numaraları ve akış hedefleri değişebilir; adımın çıktı günlüğü de silinir.",isPresented:$confirmDeleteStep) {Button("Silme SQL’ini Aç",role:.destructive) {if let job,let selected {stage {try SQLAgent.deleteStep(jobID:job.id,stepID:selected)}}}}
+      .confirmationDialog("Zamanlamanın yalnız bu işle bağlantısı kaldırılacak. Paylaşılan zamanlama silinmez.",isPresented:$confirmDetach) {Button("Bağlantı Kaldırma SQL’ini Aç") {if let job,let selectedSchedule {stage {try SQLAgent.detachSchedule(jobID:job.id,scheduleID:selectedSchedule)}}}}
+      .sheet(isPresented:$pickSchedule) {
+        AgentPickSchedule(server:server,attached:Set(schedules.map(\.id))) {schedule in
+          guard let job else {return};stage {try SQLAgent.attachSchedule(jobID:job.id,scheduleID:schedule.id)};pickSchedule=false
+        }
+      }
+      .sheet(item:$editingStep) {step in
+        AgentStepEditor(step:step,steps:steps,isNew:newStep) {edited in
+          guard let job else {return}
+          stage {try SQLAgent.stepScript(jobID:job.id,step:edited,existingIDs:Set(steps.map(\.id)),isNew:newStep)}
+          editingStep=nil
+        }
+      }
+      .sheet(item:$editingSchedule) {schedule in
+        AgentScheduleEditor(schedule:schedule,isNew:newSchedule) {edited in
+          guard let job else {return}
+          stage {try SQLAgent.scheduleScript(edited,jobID:newSchedule ? job.id:nil)}
+          editingSchedule=nil
+        }
+      }
+  }
+  private var generalPage:some View {
+    ScrollView {
+      VStack(alignment:.leading,spacing:14) {
+        Text("Genel").font(.title2)
+        LabeledContent("Ad") {TextField("İş adı",text:$title).accessibilityIdentifier("agentJobName")}
+        LabeledContent("Sahip") {TextField("Login adı",text:$owner)}
+        LabeledContent("Kategori") {TextField("Kategori",text:$category)}
+        Toggle("Enabled · İş etkin",isOn:$enabled)
+        Text("Açıklama").font(.headline)
+        TextEditor(text:$description).frame(minHeight:140).studioEditor()
+        Grid(alignment:.leading,horizontalSpacing:20,verticalSpacing:8) {
+          GridRow {Text("Oluşturulma");Text(job?.created ?? "")}
+          GridRow {Text("Son değişiklik");Text(job?.modified ?? "")}
+          GridRow {Text("Son çalışma");Text(job?.lastRun ?? "")}
+          GridRow {Text("Son sonuç");AgentStatus(status:job?.lastStatus ?? -1)}
+          GridRow {Text("Durum");Text(job?.state ?? "")}
+        }.foregroundStyle(.secondary).textSelection(.enabled)
+        Text("Sahip değişikliği için sysadmin yetkisi gerekir. Etkinliği kapatmak çalışan işi durdurmaz.").font(.caption).foregroundStyle(.secondary)
+      }.padding(4)
+    }
+  }
+  private var stepsPage:some View {
+    VStack(alignment:.leading,spacing:12) {
+      Text("Adımlar").font(.title2)
+      Table(steps,selection:$selected) {
+        TableColumn("#") {Text("\($0.id)")}.width(32)
+        TableColumn("Ad",value:\.name)
+        TableColumn("Tür",value:\.subsystem).width(80)
+        TableColumn("Başarıda") {Text(SQLAgent.flowLabel($0.successAction,step:$0.successStep))}
+        TableColumn("Hatada") {Text(SQLAgent.flowLabel($0.failAction,step:$0.failStep))}
+        TableColumn("Tekrar") {Text("\($0.retryAttempts) / \($0.retryInterval) dk")}.width(85)
+      }.accessibilityIdentifier("agentStepsTable").contextMenu(forSelectionType:Int.self,menu:{ids in
+        Button("Düzenle…") {newStep=false;editingStep=steps.first {ids.contains($0.id)}}.disabled(ids.isEmpty)
+        Button("Sil…") {selected=ids.first;confirmDeleteStep=true}.disabled(ids.isEmpty)
+      },primaryAction:{ids in newStep=false;editingStep=steps.first {ids.contains($0.id)}})
+      HStack {
+        Button("Yeni…") {newStep=true;editingStep=SQLAgent.Step(id:(steps.map(\.id).max() ?? 0)+1,name:"Yeni adım",subsystem:"TSQL",database:"master",command:"")}.accessibilityIdentifier("agentNewStep")
+        Button("Düzenle…") {newStep=false;editingStep=steps.first {$0.id == selected}}.disabled(selected == nil).accessibilityIdentifier("agentEditStep")
+        Button("Sil…") {confirmDeleteStep=true}.disabled(selected == nil)
+        Spacer()
+      }
+      Picker("Başlangıç adımı",selection:$startStep) {ForEach(steps) {Text("\($0.id) · \($0.name)").tag($0.id)}}.accessibilityIdentifier("agentStartStep")
+      Button("Başlangıç Adımı SQL’ini Aç") {guard let job else {return};stage {try SQLAgent.generalScript(job,name:job.name,description:job.description,enabled:job.enabled,owner:job.owner,category:job.category,startStep:startStep,stepIDs:Set(steps.map(\.id)))}}.disabled(steps.isEmpty || startStep == job?.startStep)
+      Text("T-SQL adımları Genel/Gelişmiş sayfalarından düzenlenir. Diğer adım türlerinin komutları salt okunur görüntülenir.").font(.caption).foregroundStyle(.secondary)
+    }
+  }
+  private var schedulesPage:some View {
+    VStack(alignment:.leading,spacing:12) {
+      Text("Zamanlamalar").font(.title2)
+      Table(schedules,selection:$selectedSchedule) {
+        TableColumn("Ad",value:\.name)
+        TableColumn("Etkin") {Text($0.enabled ? "Evet":"Hayır")}.width(55)
+        TableColumn("Tekrar",value:\.summary)
+        TableColumn("Bağlı iş") {Text("\($0.jobCount)")}.width(65)
+      }.accessibilityIdentifier("agentSchedulesTable").contextMenu(forSelectionType:Int.self,menu:{ids in
+        Button("Düzenle…") {newSchedule=false;editingSchedule=schedules.first {ids.contains($0.id)}}.disabled(ids.isEmpty)
+      },primaryAction:{ids in newSchedule=false;editingSchedule=schedules.first {ids.contains($0.id)}})
+      HStack {
+        Button("Yeni…") {newSchedule=true;var s=SQLAgent.Schedule(id:0,name:"Yeni zamanlama",enabled:true,frequency:"4",time:"090000");let f=DateFormatter();f.dateFormat="yyyyMMdd";s.startDate=Int(f.string(from:Date())) ?? 19900101;editingSchedule=s}
+        Button("Düzenle…") {newSchedule=false;editingSchedule=schedules.first {$0.id == selectedSchedule}}.disabled(selectedSchedule == nil).accessibilityIdentifier("agentEditSchedule")
+        Button("Mevcut Zamanlamayı Seç…") {pickSchedule=true}
+        Button("İşten Ayır…") {confirmDetach=true}.disabled(selectedSchedule == nil)
+        Spacer()
+      }
+      Text("Paylaşılan zamanlamayı düzenlemek bağlı bütün işleri etkiler. İşten Ayır, zamanlamayı silmeden yalnız bu işle bağlantısını kaldırır.").font(.caption).foregroundStyle(.secondary)
+    }
+  }
+  private var notificationsPage:some View {
+    VStack(alignment:.leading,spacing:16) {
+      Text("Bildirimler").font(.title2)
+      conditionPicker("E-posta",value:$emailLevel)
+      TextField("SQL Server Agent operatör adı",text:$emailOperator).disabled(emailLevel == 0)
+      Text("E-posta için sunucuda Database Mail ve Agent mail ayarları yapılandırılmış olmalı. Bu ekran operatörün adını kullanır.").font(.caption).foregroundStyle(.secondary)
+      conditionPicker("Uygulama olay günlüğü",value:$eventLogLevel)
+      Divider()
+      conditionPicker("İşi otomatik sil",value:$deleteLevel)
+      if deleteLevel != 0 {Label("Seçilen koşulda iş ve geçmişi otomatik silinir.",systemImage:"exclamationmark.triangle").foregroundStyle(.orange)}
+      Text("Mevcut pager/net send ayarları değiştirilmez. Bildirim gönderimi sunucuda gerçekleşir.").font(.caption).foregroundStyle(.secondary)
+      Spacer()
+    }
+  }
+  private func conditionPicker(_ title:String,value:Binding<Int>)->some View {
+    Picker(title,selection:value) {Text("Hiçbir zaman").tag(0);Text("Başarılı olduğunda").tag(1);Text("Başarısız olduğunda").tag(2);Text("Tamamlandığında").tag(3)}
+  }
+  private func load() async {
+    loading=true;error="";defer {loading=false}
+    do {
+      let query=try job.map {try SQLAgent.details(id:$0.id)} ?? SQLAgent.details(name:name)
+      let result=try SQLAgent.decodeDetails(await server.catalog(query,database:"msdb"));try Task.checkCancellation()
+      job=result.0;steps=result.1;schedules=result.2;title=result.0.name;description=result.0.description;enabled=result.0.enabled
+      owner=result.0.owner;category=result.0.category;startStep=result.0.startStep;emailLevel=result.0.emailLevel;emailOperator=result.0.emailOperator;eventLogLevel=result.0.eventLogLevel;deleteLevel=result.0.deleteLevel
+      selected=steps.first?.id;selectedSchedule=schedules.first?.id
+    } catch is CancellationError {} catch {job=nil;self.error=error.localizedDescription}
+  }
+  private func stage(_ generate:()throws->String) {
+    do {let sql=try SQLAgent.checkedScript([generate()],job:job);error="";open(sql)} catch {self.error=error.localizedDescription}
+  }
+  private func preparePage() {
+    guard let job else {return}
+    if page == "Genel" {stage {try SQLAgent.generalScript(job,name:title,description:description,enabled:enabled,owner:owner,category:category,startStep:startStep,stepIDs:Set(steps.map(\.id)))}}
+    else {stage {try SQLAgent.notifications(jobID:job.id,emailLevel:emailLevel,operatorName:emailOperator,eventLogLevel:eventLogLevel,deleteLevel:deleteLevel)}}
+  }
+}
+
+private struct AgentStepEditor:View {
+  @Environment(\.dismiss) private var dismiss
+  @State var step:SQLAgent.Step
+  let steps:[SQLAgent.Step]
+  let isNew:Bool
+  let open:(SQLAgent.Step)->Void
+  @State private var page="Genel"
+  @State private var error=""
+  private var readOnly:Bool {step.subsystem != "TSQL"}
+  var body:some View {
+    VStack(alignment:.leading,spacing:12) {
+      StudioPanelHeading(title:isNew ? "New Job Step":"Job Step Properties",icon:"list.number",subtitle:"\(step.id) · \(step.name) · \(step.subsystem)")
+      Picker("Sayfa",selection:$page) {Text("Genel").tag("Genel");Text("Gelişmiş").tag("Gelişmiş")}.pickerStyle(.segmented)
+      if page == "Genel" {
+        TextField("Adım adı",text:$step.name).disabled(readOnly).accessibilityIdentifier("agentStepName")
+        LabeledContent("Tür") {Text(step.subsystem)}
+        TextField("Veritabanı",text:$step.database).disabled(readOnly)
+        Text("Komut").font(.headline)
+        if readOnly {AgentSQLPreview(sql:step.command).studioEditor()}
+        else {AgentCommandEditor(text:$step.command).studioEditor().accessibilityIdentifier("agentStepCommand")}
+      } else {
+        ScrollView {
+          VStack(alignment:.leading,spacing:14) {
+            flowPicker("Başarıda",action:$step.successAction,target:$step.successStep)
+            HStack {Text("Yeniden deneme");TextField("0–9999",value:$step.retryAttempts,format:.number.grouping(.never)).frame(width:90);Stepper("",value:$step.retryAttempts,in:0...9999).labelsHidden()}
+            HStack {Text("Denemeler arası (dakika)");TextField("0–9999",value:$step.retryInterval,format:.number.grouping(.never)).frame(width:90);Stepper("",value:$step.retryInterval,in:0...9999).labelsHidden()}
+            flowPicker("Başarısızlıkta",action:$step.failAction,target:$step.failStep)
+            Divider()
+            TextField("Sunucudaki çıktı dosyası yolu",text:$step.outputFile)
+            flagToggle("Dosyaya ekle",mask:2)
+            flagToggle("Çıktıyı adım geçmişine ekle",mask:4)
+            Toggle("Çıktıyı msdb tablosuna yaz",isOn:Binding(get:{step.flags & 24 != 0},set:{value in step.flags = value ? (step.flags & ~24) | 8:step.flags & ~24}))
+            if step.flags & 24 != 0 {Toggle("Tablodaki mevcut çıktıya ekle",isOn:Binding(get:{step.flags & 16 != 0},set:{value in step.flags=(step.flags & ~24) | (value ? 16:8)}))}
+            TextField("Veritabanı kullanıcısı (boş: varsayılan bağlam)",text:$step.databaseUser)
+            Text("Dosya yolu SQL Server üzerindedir. Çıktı dosyası ve kullanıcı bağlamı için sunucu yetkileri geçerlidir; bu ekran yerel dosya açmaz.").font(.caption).foregroundStyle(.secondary)
+          }.padding(4).disabled(readOnly)
+        }
+      }
+      if readOnly {Text("Bu adım türü salt okunur. T-SQL adımları düzenlenebilir.").foregroundStyle(.secondary)}
+      if !error.isEmpty {Text(error).foregroundStyle(.red)}
+      HStack {
+        Button("Vazgeç") {dismiss()}.keyboardShortcut(.cancelAction)
+        Spacer()
+        Button("Değişiklik SQL’ini Aç") {
+          do {
+            _=try SQLAgent.stepScript(jobID:UUID().uuidString,step:step,existingIDs:Set(steps.map(\.id)),isNew:isNew)
+            open(step)
+          } catch {self.error=error.localizedDescription}
+        }.buttonStyle(StudioPrimaryButton()).disabled(readOnly).accessibilityIdentifier("agentStepScript")
+      }
+    }.padding(20).frame(width:900,height:650).studioPanel().interactiveDismissDisabled()
+  }
+  private func flowPicker(_ title:String,action:Binding<Int>,target:Binding<Int>)->some View {
+    VStack(alignment:.leading) {
+      Picker(title,selection:action) {Text("Başarıyla bitir").tag(1);Text("Başarısız bitir").tag(2);Text("Sonraki adıma git").tag(3);Text("Belirli adıma git").tag(4)}
+      if action.wrappedValue == 4 {Picker("Hedef adım",selection:target) {Text("Adım seçin").tag(0);ForEach(steps) {Text("\($0.id) · \($0.name)").tag($0.id)}}}
+    }
+  }
+  private func flagToggle(_ title:String,mask:Int)->some View {
+    Toggle(title,isOn:Binding(get:{step.flags & mask != 0},set:{value in step.flags=value ? step.flags | mask:step.flags & ~mask}))
+  }
+}
+private struct AgentCommandEditor:NSViewRepresentable {
+  @Binding var text:String
+  final class Coordinator:NSObject,NSTextViewDelegate {
+    var parent:AgentCommandEditor
+    init(_ parent:AgentCommandEditor) {self.parent=parent}
+    func textDidChange(_ notification:Notification) {
+      guard let view=notification.object as? NSTextView else {return}
+      parent.text=view.string
+    }
+  }
+  func makeCoordinator()->Coordinator {Coordinator(self)}
+  func makeNSView(context:Context)->NSScrollView {
+    let scroll=NSScrollView();scroll.hasVerticalScroller=true;scroll.hasHorizontalScroller=true
+    let view=NSTextView(usingTextLayoutManager:true);view.isRichText=false;view.isAutomaticQuoteSubstitutionEnabled=false;view.isAutomaticDashSubstitutionEnabled=false;view.isAutomaticTextReplacementEnabled=false;view.isAutomaticSpellingCorrectionEnabled=false;view.allowsUndo=true
+    view.font=StudioTheme.codeFont;view.textContainerInset=NSSize(width:10,height:10);view.isVerticallyResizable=true;view.autoresizingMask=[.width];view.delegate=context.coordinator;view.setAccessibilityIdentifier("agentCommandEditor")
+    scroll.documentView=view;return scroll
+  }
+  func updateNSView(_ scroll:NSScrollView,context:Context) {
+    context.coordinator.parent=self
+    guard let view=scroll.documentView as? NSTextView else {return}
+    if view.string != text {view.string=text}
+    view.font=StudioTheme.codeFont;view.backgroundColor=StudioTheme.canvas;view.textColor=StudioTheme.text
+  }
+}
+private struct AgentScheduleEditor:View {
+  @Environment(\.dismiss) private var dismiss
+  @State var schedule:SQLAgent.Schedule
+  let isNew:Bool
+  var cancel:(()->Void)? = nil
+  let open:(SQLAgent.Schedule)->Void
+  @State private var error=""
+  private var frequency:Int {Int(schedule.frequency) ?? 4}
+  var body:some View {
+    VStack(alignment:.leading,spacing:12) {
+      StudioPanelHeading(title:isNew ? "New Job Schedule":"Schedule Properties",icon:"calendar",subtitle:schedule.name)
+      if !isNew && schedule.jobCount>1 {Label("Paylaşılan zamanlama · \(schedule.jobCount) işin tamamı etkilenir.",systemImage:"exclamationmark.triangle").foregroundStyle(.orange)}
+      ScrollView {
+        VStack(alignment:.leading,spacing:14) {
+          TextField("Zamanlama adı",text:$schedule.name)
+          Toggle("Etkin",isOn:$schedule.enabled)
+          Picker("Zamanlama türü",selection:$schedule.frequency) {Text("Bir kez").tag("1");Text("Günlük").tag("4");Text("Haftalık").tag("8");Text("Aylık · Gün").tag("16");Text("Aylık · Göreli gün").tag("32");Text("Agent başladığında").tag("64");Text("İşlemci boşta olduğunda").tag("128")}
+          if frequency == 4 {Stepper("Her \(schedule.interval) gün",value:$schedule.interval,in:1...999)}
+          if frequency == 8 {
+            Stepper("Her \(schedule.recurrence) hafta",value:$schedule.recurrence,in:1...999)
+            HStack {ForEach(Array(["Paz","Pzt","Sal","Çar","Per","Cum","Cmt"].enumerated()),id:\.offset) {item in
+              Toggle(item.element,isOn:Binding(get:{schedule.interval & (1 << item.offset) != 0},set:{value in let bit=1 << item.offset;schedule.interval=value ? schedule.interval | bit:schedule.interval & ~bit})).toggleStyle(.button)
+            }}
+          }
+          if frequency == 16 {Stepper("Ayın \(schedule.interval). günü",value:$schedule.interval,in:1...31)}
+          if frequency == 16 || frequency == 32 {Stepper("Her \(schedule.recurrence) ay",value:$schedule.recurrence,in:1...999)}
+          if frequency == 32 {
+            Picker("Sıra",selection:$schedule.relativeInterval) {Text("İlk").tag(1);Text("İkinci").tag(2);Text("Üçüncü").tag(4);Text("Dördüncü").tag(8);Text("Son").tag(16)}
+            Picker("Gün",selection:$schedule.interval) {Text("Pazar").tag(1);Text("Pazartesi").tag(2);Text("Salı").tag(3);Text("Çarşamba").tag(4);Text("Perşembe").tag(5);Text("Cuma").tag(6);Text("Cumartesi").tag(7);Text("Gün").tag(8);Text("Hafta içi").tag(9);Text("Hafta sonu").tag(10)}
+          }
+          if frequency != 64 && frequency != 128 {
+            Divider()
+            Picker("Gün içi tekrar",selection:$schedule.subdayType) {Text("Belirtilen saatte").tag(1);Text("Saniye").tag(2);Text("Dakika").tag(4);Text("Saat").tag(8)}.disabled(frequency == 1)
+            if schedule.subdayType != 1 {TextField("Tekrar aralığı",value:$schedule.subdayInterval,format:.number)}
+            DatePicker("Başlangıç saati",selection:timeBinding(end:false),displayedComponents:.hourAndMinute)
+            Stepper("Başlangıç saniyesi: \(Int(schedule.time).map {$0 % 100} ?? 0)",value:Binding(get:{Int(schedule.time).map {$0 % 100} ?? 0},set:{value in let n=Int(schedule.time) ?? 0;schedule.time=String(format:"%06d",n/100*100+value)}),in:0...59)
+            if schedule.subdayType != 1 {DatePicker("Bitiş saati",selection:timeBinding(end:true),displayedComponents:.hourAndMinute)}
+          }
+          DatePicker("Başlangıç tarihi",selection:dateBinding(end:false),displayedComponents:.date)
+          Toggle("Bitiş tarihi yok",isOn:Binding(get:{schedule.endDate == 99991231},set:{value in schedule.endDate=value ? 99991231:schedule.startDate}))
+          if schedule.endDate != 99991231 {DatePicker("Bitiş tarihi",selection:dateBinding(end:true),displayedComponents:.date)}
+          Text(schedule.summary).font(.callout).foregroundStyle(.secondary)
+          Text("Saat ve tarihler SQL Server'ın yerel saatine göredir.").font(.caption).foregroundStyle(.secondary)
+        }.padding(4)
+      }
+      if !error.isEmpty {Text(error).foregroundStyle(.red)}
+      HStack {Button("Vazgeç") {if let cancel {cancel()} else {dismiss()}}.keyboardShortcut(.cancelAction);Spacer();Button("Değişiklik SQL’ini Aç") {
+        do {_=try SQLAgent.scheduleScript(schedule,jobID:isNew ? UUID().uuidString:nil);open(schedule)} catch {self.error=error.localizedDescription}
+      }.buttonStyle(StudioPrimaryButton()).accessibilityIdentifier("agentScheduleScript")}
+    }.padding(20).frame(width:760,height:670).studioPanel().interactiveDismissDisabled()
+      .onChange(of:schedule.frequency) {_,newValue in
+        if newValue == "1" {schedule.subdayType=1}
+        if newValue == "32" && !(1...10).contains(schedule.interval) {schedule.interval=1}
+        if newValue == "16" && !(1...31).contains(schedule.interval) {schedule.interval=1}
+      }
+  }
+  private func dateBinding(end:Bool)->Binding<Date> {
+    Binding(get:{
+      let n=end ? schedule.endDate:schedule.startDate
+      return Calendar.current.date(from:DateComponents(year:n/10000,month:(n/100)%100,day:n%100)) ?? Date()
+    },set:{date in
+      let c=Calendar.current.dateComponents([.year,.month,.day],from:date)
+      let n=(c.year ?? 1990)*10000+(c.month ?? 1)*100+(c.day ?? 1)
+      if end {schedule.endDate=n} else {schedule.startDate=n}
+    })
+  }
+  private func timeBinding(end:Bool)->Binding<Date> {
+    Binding(get:{
+      let n=end ? schedule.endTime:(Int(schedule.time) ?? 0)
+      return Calendar.current.date(from:DateComponents(year:2000,month:1,day:1,hour:n/10000,minute:(n/100)%100,second:n%100)) ?? Date()
+    },set:{date in
+      let c=Calendar.current.dateComponents([.hour,.minute],from:date)
+      let seconds=(end ? schedule.endTime:(Int(schedule.time) ?? 0))%100
+      let n=(c.hour ?? 0)*10000+(c.minute ?? 0)*100+seconds
+      if end {schedule.endTime=n} else {schedule.time=String(format:"%06d",n)}
+    })
+  }
+
+}
+private struct AgentRelatedPage:View {
+  let server:ConnectedServer
+  let name:String
+  let targets:Bool
+  @State private var rows:[[String?]]=[]
   @State private var error=""
   @State private var loading=true
   var body:some View {
     VStack(alignment:.leading,spacing:12) {
-      StudioPanelHeading(title:"Job Properties",icon:"gearshape.2",subtitle:server.profile.name+" · "+name)
+      Text(targets ? "Hedef sunucular":"İşi tetikleyen uyarılar").font(.title2)
       if loading {ProgressView()}
       if !error.isEmpty {Text(error).foregroundStyle(.red).textSelection(.enabled)}
-      TabView {
-        VStack(alignment:.leading,spacing:14) {
-          TextField("Ad",text:$title)
-          Toggle("Enabled",isOn:$enabled)
-          Text("Owner: \(job?.owner ?? "") · Durum: \(job?.state ?? "") · Son değişiklik: \(job?.modified ?? "")").foregroundStyle(.secondary)
-          Text("Açıklama").font(.headline)
-          TextEditor(text:$description).studioEditor()
-          Button("Değişiklik SQL’ini İncele") {prepareGeneral()}.disabled(job == nil)
-        }.padding(14).tabItem {Label("Genel",systemImage:"info.circle")}
-        VStack(alignment:.leading,spacing:10) {
-          Table(steps,selection:$selected) {TableColumn("#") {Text("\($0.id)")}.width(35);TableColumn("Ad",value:\.name);TableColumn("Tür",value:\.subsystem);TableColumn("Veritabanı",value:\.database)}.frame(minHeight:120,maxHeight:170)
-          TextField("Adım adı",text:$stepName);TextField("Veritabanı",text:$database)
-          TextEditor(text:$command).font(.custom(StudioTheme.codeFont.fontName,size:13)).studioEditor()
-          HStack {
-            Text("Mevcut T-SQL adımlarını düzenleyebilirsiniz; diğer subsystem’ler salt okunurdur.").font(.caption).foregroundStyle(.secondary)
-            Spacer()
-            Button("Adım SQL’ini İncele") {prepareStep()}.disabled(steps.first(where:{$0.id == selected})?.subsystem != "TSQL")
-          }
-        }.padding(14).tabItem {Label("Adımlar",systemImage:"list.number")}
-        VStack(alignment:.leading,spacing:12) {
-          Table(schedules) {TableColumn("Ad",value:\.name);TableColumn("Etkin") {Text($0.enabled ? "Enabled":"Disabled")};TableColumn("Frequency type",value:\.frequency);TableColumn("Başlangıç (HHMMSS)",value:\.time)}
-          Text("Paylaşılan zamanlamaları Object Explorer → SQL Server Agent → Schedules üzerinden yönetin. Yeni iş oluşturma ekranı günlük zamanlama ekleyebilir.").font(.caption).foregroundStyle(.secondary)
-        }.padding(14).tabItem {Label("Zamanlamalar",systemImage:"calendar")}
-      }.disabled(job == nil)
-      Text("Özellik değişiklikleri önce sorgu sekmesine aktarılır; siz çalıştırana kadar sunucu değişmez.").font(.caption).foregroundStyle(.secondary)
-    }.padding(20).studioPanel().task {
-      defer {loading=false}
-      do {let result=try SQLAgent.decodeDetails(await server.catalog(SQLAgent.details(name:name),database:"msdb"));job=result.0;steps=result.1;schedules=result.2;title=result.0.name;description=result.0.description;enabled=result.0.enabled}
-      catch {self.error=error.localizedDescription}
-    }.onChange(of:selected) {_,value in
-      if let step=steps.first(where:{$0.id == value}) {stepName=step.name;database=step.database;command=step.command}
+      List(Array(rows.enumerated()),id:\.offset) {item in Text(item.element.compactMap {$0}.joined(separator:" · ")).textSelection(.enabled)}
+      Text(targets ? "Bu sayfa hedef sunucuları salt okunur gösterir; çoklu sunucu dağıtımı yönetilmez.":"Bu sayfa mevcut uyarıları salt okunur gösterir. E-posta koşulları Bildirimler sayfasından düzenlenir.").font(.caption).foregroundStyle(.secondary)
+      if rows.isEmpty && !loading && error.isEmpty {Text("Kayıt bulunamadı.").foregroundStyle(.secondary)}
+    }.task(id:"\(targets)|\(name)") {
+      loading=true;error="";defer {loading=false}
+      let sql=targets ? "SELECT COALESCE(s.name,CONVERT(nvarchar(20),t.server_id)),t.last_run_outcome,t.last_run_date,t.last_run_time FROM msdb.dbo.sysjobservers t JOIN msdb.dbo.sysjobs j ON j.job_id=t.job_id LEFT JOIN master.sys.servers s ON s.server_id=t.server_id WHERE j.name=\(SQL.literal(name));":"SELECT a.name,a.enabled,a.message_id,a.severity FROM msdb.dbo.sysalerts a JOIN msdb.dbo.sysjobs j ON j.job_id=a.job_id WHERE j.name=\(SQL.literal(name));"
+      do {let result=try await server.catalog(sql,database:"msdb");try Task.checkCancellation();guard !result.partial else {throw SQLFailure("Sonuç kısmi; yenileyin.")};rows=result.results.first.map {Array($0.values)} ?? []} catch is CancellationError {} catch {rows=[];self.error=error.localizedDescription}
     }
   }
-  private func prepareGeneral() {guard let job else {return};do {open(try SQLAgent.update(job,name:title,description:description,enabled:enabled))}catch {self.error=error.localizedDescription}}
-  private func prepareStep() {guard let job,let step=steps.first(where:{$0.id == selected}) else {return};do {open(try SQLAgent.updateStep(jobID:job.id,step:step,name:stepName,database:database,command:command))}catch {self.error=error.localizedDescription}}
 }
 
-private struct AgentActivityPanel:View {
+struct AgentActivityPanel:View {
   let server:ConnectedServer
-  let history:()->Void
+  let history:(String?)->Void
+  let properties:(SQLAgent.Job)->Void
+  let action:(SQLAgent.Job,SQLAgent.Action)->Void
   @State private var jobs:[SQLAgent.Job]=[]
   @State private var error=""
   @State private var service="Agent servisi sorgulanıyor…"
   @State private var generation=0
+  @State private var search=""
+  @State private var filter=0
+  @State private var refresh=0
+  @State private var selected:String?
+  @State private var loading=false
+  @State private var refreshed=""
+  @State private var sortOrder=[KeyPathComparator(\SQLAgent.Job.name)]
+  private var visible:[SQLAgent.Job] {jobs.filter {job in
+    (search.isEmpty || job.name.localizedCaseInsensitiveContains(search)) &&
+    (filter == 0 || (filter == 1 && job.state == "Running") || (filter == 2 && !job.enabled) || (filter == 3 && job.lastStatus == 0))
+  }.sorted(using:sortOrder)}
+  private var chosen:SQLAgent.Job? {visible.first {$0.id == selected}}
   var body:some View {
     VStack(alignment:.leading,spacing:12) {
       StudioPanelHeading(title:"Job Activity Monitor",icon:"waveform.path.ecg",subtitle:server.profile.name)
-      HStack {Text(service).foregroundStyle(.secondary);Spacer();Button("History",action:history);Button("Yenile") {generation+=1}}
+      HStack {
+        TextField("İş adı ara",text:$search).textFieldStyle(.roundedBorder)
+        Picker("Göster",selection:$filter) {Text("Tüm işler").tag(0);Text("Çalışanlar").tag(1);Text("Devre dışı").tag(2);Text("Son çalışması hatalı").tag(3)}.frame(width:220)
+        Picker("Otomatik yenile",selection:$refresh) {Text("Kapalı").tag(0);Text("15 saniye").tag(15);Text("30 saniye").tag(30);Text("60 saniye").tag(60)}.frame(width:190)
+        Button("Yenile") {generation+=1}.disabled(loading)
+      }
+      Text(service).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+      if loading {ProgressView().controlSize(.small)}
       if !error.isEmpty {Text(error).foregroundStyle(.red).textSelection(.enabled)}
-      Table(jobs) {TableColumn("İş",value:\.name);TableColumn("Enabled") {Text($0.enabled ? "Enabled":"Disabled")};TableColumn("Durum",value:\.state);TableColumn("Owner",value:\.owner);TableColumn("Son değişiklik",value:\.modified)}
-      Text("En çok 1.000 iş · Anlık yenileme. Job işlemlerini Explorer sağ menüsünden yapın. Agent servisini başlatma/durdurma sunucu işletim sisteminden yönetilir.").font(.caption).foregroundStyle(.secondary)
-    }.padding(20).studioPanel().task(id:generation) {
-      do {let result=try await server.catalog(SQLAgent.jobs(),database:"msdb");try Task.checkCancellation();jobs=try SQLAgent.decodeJobs(result);error=""}catch is CancellationError {} catch {self.error=error.localizedDescription}
-      do {let result=try await server.catalog(SQLAgent.serviceStatus,database:"master");try Task.checkCancellation();service=result.results.first?.values.map {$0.compactMap {$0}.joined(separator:" · ")}.joined(separator:"\n") ?? "";if service.isEmpty {service="Agent servisi bu instance için raporlanmadı."}}catch is CancellationError {} catch {service="Servis durumu okunamadı: "+error.localizedDescription}
+      Table(visible,selection:$selected,sortOrder:$sortOrder) {
+        TableColumn("İş",value:\.name).width(min:150,ideal:250)
+        TableColumn("Etkin") {Text($0.enabled ? "Evet":"Hayır")}.width(55)
+        TableColumn("Durum") {Label($0.state,systemImage:$0.state == "Running" ? "arrow.triangle.2.circlepath":"pause.circle")}.width(100)
+        TableColumn("Son sonuç") {AgentStatus(status:$0.lastStatus)}.width(110)
+        TableColumn("Son çalışma",value:\.lastRun).width(165)
+        TableColumn("Sonraki çalışma",value:\.nextRun).width(165)
+        TableColumn("Sahip",value:\.owner)
+      }.accessibilityIdentifier("agentActivityTable").contextMenu(forSelectionType:String.self,menu:{ids in
+        if let job=jobs.first(where:{ids.contains($0.id)}) {
+          Button("View History…") {history(job.name)}
+          Button("Properties…") {properties(job)}
+          Button("Start Job…") {action(job,.start)}.disabled(job.state == "Running")
+          Button("Stop Job…") {action(job,.stop)}.disabled(job.state != "Running")
+          Button(job.enabled ? "Disable…":"Enable…") {action(job,job.enabled ? .disable:.enable)}
+        }
+      },primaryAction:{ids in if let job=jobs.first(where:{ids.contains($0.id)}) {properties(job)}})
+      HStack {
+        Button("Geçmiş") {history(chosen?.name)}.accessibilityIdentifier("agentActivityHistory")
+        Button("Özellikler…") {if let chosen {properties(chosen)}}.disabled(chosen == nil)
+        Divider().frame(height:18)
+        Button("Başlat…") {if let chosen {action(chosen,.start)}}.disabled(chosen == nil || chosen?.state == "Running")
+        Button("Durdur…") {if let chosen {action(chosen,.stop)}}.disabled(chosen?.state != "Running")
+        Button(chosen?.enabled == false ? "Etkinleştir…":"Devre Dışı Bırak…") {if let chosen {action(chosen,chosen.enabled ? .disable:.enable)}}.disabled(chosen == nil)
+        Spacer()
+        Text("\(visible.count) / \(jobs.count) iş · \(refreshed)").font(.caption).foregroundStyle(.secondary)
+      }
+      Text("En çok 1.000 iş. Sonraki çalışma bilgisi Agent önbelleği nedeniyle gecikmeli olabilir. Agent servisi sunucu işletim sisteminden yönetilir.").font(.caption).foregroundStyle(.secondary)
+    }.padding(20).studioPanel().task(id:"\(generation)|\(refresh)") {
+      repeat {
+        await load()
+        guard refresh>0,!Task.isCancelled else {return}
+        do {try await Task.sleep(for:.seconds(refresh))} catch {return}
+      } while !Task.isCancelled
+    }.onReceive(NotificationCenter.default.publisher(for:.init("studioAgentChanged"))) {notification in
+      if let changed=notification.object as? ConnectedServer,changed === server {generation+=1}
     }
+  }
+  private func load() async {
+    loading=true;error="";defer {loading=false}
+    do {
+      let result=try await server.catalog(SQLAgent.jobs(),database:"msdb");try Task.checkCancellation()
+      jobs=try SQLAgent.decodeJobs(result);refreshed=Date().formatted(date:.omitted,time:.standard)
+      if !jobs.contains(where:{$0.id == selected}) {selected=nil}
+    } catch is CancellationError {return} catch {jobs=[];selected=nil;self.error=error.localizedDescription}
+    do {
+      let result=try await server.catalog(SQLAgent.serviceStatus,database:"master");try Task.checkCancellation()
+      service=result.results.first?.values.map {$0.compactMap {$0}.joined(separator:" · ")}.joined(separator:"\n") ?? ""
+      if service.isEmpty {service="Agent servisi bu instance için raporlanmadı."}
+    } catch is CancellationError {} catch {service="Servis durumu okunamadı: "+error.localizedDescription}
   }
 }
 
+private struct AgentPickSchedule:View {
+  @Environment(\.dismiss) private var dismiss
+  let server:ConnectedServer
+  let attached:Set<Int>
+  let open:(SQLAgent.Schedule)->Void
+  @State private var schedules:[SQLAgent.Schedule]=[]
+  @State private var selected:Int?
+  @State private var error=""
+  @State private var loading=true
+  var body:some View {
+    VStack(alignment:.leading,spacing:12) {
+      StudioPanelHeading(title:"Pick Schedule",icon:"calendar",subtitle:"Mevcut bir zamanlamayı bu işe bağlayın")
+      if loading {ProgressView()}
+      if !error.isEmpty {Text(error).foregroundStyle(.red)}
+      Table(schedules,selection:$selected) {TableColumn("Ad",value:\.name);TableColumn("Tekrar",value:\.summary);TableColumn("Etkin") {Text($0.enabled ? "Evet":"Hayır")}}
+      Text("Zamanlama paylaşılır; ileride yapılan düzenlemeler bu işi de etkiler. Zaten bağlı zamanlamalar listede gösterilmez.").font(.caption).foregroundStyle(.secondary)
+      HStack {Button("Vazgeç") {dismiss()};Spacer();Button("Bağlama SQL’ini Aç") {if let schedule=schedules.first(where:{$0.id == selected}) {open(schedule)}}.disabled(selected == nil)}
+    }.padding(20).frame(width:850,height:520).studioPanel().task {
+      defer {loading=false}
+      do {let result=try await server.catalog(SQLAgent.availableSchedules(),database:"msdb");try Task.checkCancellation();guard !result.partial else {throw SQLFailure("Zamanlama listesi kısmi.")};schedules=try SQLAgent.decodeSchedules(result.results.first.map {Array($0.values)} ?? []).filter {!attached.contains($0.id)}} catch is CancellationError {} catch {self.error=error.localizedDescription}
+    }
+  }
+}
 private struct AgentSchedulePanel:View {
+  let server:ConnectedServer
   let item:CatalogItem
+  let close:()->Void
   let open:(String)->Void
-  @State private var enabled=false
+  @State private var schedule:SQLAgent.Schedule?
   @State private var error=""
   var body:some View {
-    VStack(alignment:.leading,spacing:16) {
-      StudioPanelHeading(title:"Schedule Properties",icon:"calendar",subtitle:item.name)
-      Toggle("Enabled",isOn:$enabled)
-      Text("Bu zamanlama birden çok işe bağlı olabilir. Değişiklik bağlı tüm işleri etkiler. SQL’i inceleyerek çalıştırın.").foregroundStyle(.secondary)
-      Spacer()
-      if !error.isEmpty {Text(error).foregroundStyle(.red)}
-      Button("Değişiklik SQL’ini İncele") {do {open(try SQLAgent.scheduleState(id:item.id,enabled:enabled))}catch {self.error=error.localizedDescription}}
-    }.padding(20).studioPanel().onAppear {enabled = !item.detail.contains("Disabled")}
+    Group {
+      if let schedule {AgentScheduleEditor(schedule:schedule,isNew:false,cancel:close) {edited in
+        do {open(try SQLAgent.checkedScript([SQLAgent.scheduleScript(edited)]))} catch {self.error=error.localizedDescription}
+      }} else {
+        VStack(spacing:16) {
+          if error.isEmpty {ProgressView("Zamanlama yükleniyor…")} else {Text(error).foregroundStyle(.red).textSelection(.enabled)}
+        }.frame(maxWidth:.infinity,maxHeight:.infinity).padding(20)
+      }
+    }.task {
+      do {
+        let result=try await server.catalog(SQLAgent.scheduleDetails(id:item.id),database:"msdb");try Task.checkCancellation()
+        guard !result.partial else {throw SQLFailure("Zamanlama bilgisi kısmi.")}
+        schedule=try SQLAgent.decodeSchedules(result.results.first.map {Array($0.values)} ?? []).first
+        if schedule == nil {throw SQLFailure("Zamanlama bulunamadı.")}
+      } catch is CancellationError {} catch {self.error=error.localizedDescription}
+    }
   }
 }

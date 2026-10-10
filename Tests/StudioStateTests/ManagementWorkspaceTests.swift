@@ -1,6 +1,7 @@
 import AppKit
 import SQLServerKit
 import Testing
+import SwiftUI
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct ManagementWorkspaceTests {
@@ -111,6 +112,35 @@ import Testing
     let item=try #require(host.tabMenu(for:b).items.first {$0.title == "Close All Tabs"})
     #expect(NSApp.sendAction(try #require(item.action),to:item.target,from:item))
     #expect(state.documents.isEmpty)
+  }
+  @Test func agentPanelsOnlyReadOnOpenAndHistoryUsesNativeExpandableRows() async throws {
+    _=NSApplication.shared
+    let server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false
+    var requests:[String]=[];var scripts:[String]=[]
+    server.catalogFixture={sql in requests.append(sql);return ObjectManagementUIFixture.catalog(sql)}
+    let host=WorkbenchController(state:StudioState())
+    let history=host.present(AgentHistoryPanel(server:server,job:"Demo Nightly"),title:"Synthetic Agent History",width:1200,height:800)
+    let properties=host.present(AgentPropertiesPanel(server:server,name:"Demo Nightly",open:{scripts.append($0)}),title:"Synthetic Agent Properties",width:1200,height:800)
+    defer {history.close();properties.close()}
+    for _ in 0..<100 {
+      if requests.contains(where:{$0.contains("StudioAgent.history")}) && requests.contains(where:{$0.contains("StudioAgent.details")}) {break}
+      try await Task.sleep(for:.milliseconds(20))
+    }
+    #expect(requests.count == 2 && scripts.isEmpty)
+    #expect(requests.allSatisfy {!$0.contains("EXEC msdb.dbo.sp_")})
+    func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+    var outline:NSOutlineView?
+    for _ in 0..<50 {
+      history.contentView?.layoutSubtreeIfNeeded()
+      outline=descendants(try #require(history.contentView)).compactMap {$0 as? NSOutlineView}.first
+      if outline?.numberOfRows == 2 {break}
+      try await Task.sleep(for:.milliseconds(20))
+    }
+    let table=try #require(outline)
+    #expect(table.numberOfRows == 2)
+    table.expandItem(table.item(atRow:0))
+    #expect(table.numberOfRows == 5)
+    #expect(scripts.isEmpty && requests.count == 2)
   }
   @Test func agentMenusExposeStateAwareCommandsAndDistinctIcons() {
     let server=ConnectedServer(profile:ServerProfile(),password:""),host=WorkbenchController(state:StudioState())

@@ -24,6 +24,8 @@ import Testing
     #expect(try SQLAgent.command(.enable,id:id).contains("@enabled=1"))
     #expect(try SQLAgent.command(.disable,id:id).contains("@enabled=0"))
     #expect(try SQLAgent.command(.start,id:id).contains("sp_start_job"))
+    #expect(try SQLAgent.command(.start,id:id,stepName:"Step ' X").contains("@step_name=N'Step '' X'"))
+    #expect(throws:SQLFailure.self) {try SQLAgent.command(.start,id:id,stepName:" ")}
     #expect(try SQLAgent.command(.stop,id:id).contains("sp_stop_job"))
     #expect(try SQLAgent.command(.delete,id:id).contains("@delete_unused_schedule=0"))
     #expect(throws:SQLFailure.self) {try SQLAgent.command(.delete,id:"'; DROP DATABASE msdb;--")}
@@ -48,6 +50,89 @@ import Testing
     var data=Execution();data.results=[Rows(values:[["123","Test","0","(Job outcome)","1","2026-10-09 21:00:00","127:04:03","İş tamamlandı"]])]
     let row=try #require(SQLAgent.decodeHistory(data).first)
     #expect(row.duration == "127:04:03" && row.statusLabel == "Succeeded" && row.message == "İş tamamlandı")
+  }
+  @Test func historyFilteringRetainsStepContextAndGroupsByRunAndJob() throws {
+    let query=SQLAgent.history(status:0,includeSteps:true)
+    #expect(query.contains("WITH runs AS") && query.contains("h.run_status=0"))
+    #expect(query.contains("h.instance_id>r.previous_id") && query.contains("h.instance_id<r.instance_id"))
+    #expect(query.components(separatedBy:"h.run_status=0").count == 2)
+    let a=UUID().uuidString,b=UUID().uuidString
+    var data=Execution()
+    data.results=[Rows(values:[
+      ["30","A","0","Outcome","0","2026-10-10 01:00:00","27:02:01","Failed",a,"30","16","50000","0","test"],
+      ["29","A","2","Failing step","0","2026-10-10 01:00:00","0:01:00","Failure",a,"30","16","50000","2","test"],
+      ["28","A","1","Successful step","1","2026-10-10 00:00:00","0:00:01","OK",a,"30","0","0","0","test"],
+      ["27","B","1","Other job","1","","","",b,"30","0","0","0","test"],
+      ["20","A","0","Outcome","1","","","OK",a,"20","0","0","0","test"]])]
+    let rows=try SQLAgent.decodeHistory(data),tree=SQLAgent.historyTree(rows)
+    #expect(tree.map(\.id) == [30,20])
+    #expect(tree[0].children?.map(\.id) == [28,29] && tree[1].children == nil)
+    #expect(rows[0].duration == "27:02:01" && rows[1].retries == 2 && rows[0].messageID == 50000)
+    data.partial=true;#expect(throws:SQLFailure.self) {try SQLAgent.decodeHistory(data)}
+  }
+  @Test func stepFlowScriptsValidateReferencesAndPreserveOutputFlags() throws {
+    let id=UUID().uuidString
+    var step=SQLAgent.Step(id:2,name:"It's İstanbul",subsystem:"TSQL",database:"master",command:"SELECT N'😀';")
+    step.successAction=4;step.successStep=1;step.retryAttempts=7;step.retryInterval=3;step.flags=22;step.databaseUser="some'user"
+    let sql=try SQLAgent.stepScript(jobID:id,step:step,existingIDs:[1,2])
+    #expect(sql.contains("@on_success_step_id=1") && sql.contains("@retry_attempts=7") && sql.contains("@flags=22"))
+    #expect(sql.contains("N'It''s İstanbul'") && sql.contains("N'some''user'"))
+    step.successStep=9;#expect(throws:SQLFailure.self) {try SQLAgent.stepScript(jobID:id,step:step,existingIDs:[1,2])}
+    step.successStep=1;step.retryInterval=10000;#expect(throws:SQLFailure.self) {try SQLAgent.stepScript(jobID:id,step:step,existingIDs:[1,2])}
+    step.retryInterval=3;step.id=3
+    #expect(try SQLAgent.stepScript(jobID:id,step:step,existingIDs:[1,2],isNew:true).contains("sp_add_jobstep"))
+    #expect(throws:SQLFailure.self) {try SQLAgent.stepScript(jobID:id,step:step,existingIDs:[1,2])}
+    #expect(try SQLAgent.deleteStep(jobID:id,stepID:1).contains("sp_delete_jobstep"))
+  }
+  @Test func jobGeneralAndNotificationScriptsPreserveUnchangedSecuritySettings() throws {
+    let id=UUID().uuidString
+    var job=SQLAgent.Job(id:id,name:"A",enabled:true,description:"",owner:"owner",state:"Idle",modified:"2026-10-10T01:02:03.000")
+    job.category="Category";job.version=9
+    let sql=try SQLAgent.generalScript(job,name:"B",description:"",enabled:true,owner:"owner",category:"Category",startStep:1,stepIDs:[1])
+    #expect(!sql.contains("@owner_login_name") && !sql.contains("@category_name"))
+    #expect(try SQLAgent.generalScript(job,name:"Empty job rename",description:"",enabled:false,owner:"owner",category:"Category",startStep:1,stepIDs:[]).contains("@new_name"))
+    #expect(throws:SQLFailure.self) {try SQLAgent.generalScript(job,name:"B",description:"",enabled:true,owner:"owner",category:"Category",startStep:7,stepIDs:[1])}
+    let notify=try SQLAgent.notifications(jobID:id,emailLevel:0,operatorName:"",eventLogLevel:2,deleteLevel:0)
+    #expect(!notify.contains("@notify_email_operator_name") && !notify.contains("@notify_level_page"))
+    #expect(throws:SQLFailure.self) {try SQLAgent.notifications(jobID:id,emailLevel:2,operatorName:"",eventLogLevel:0,deleteLevel:0)}
+    let guarded=try SQLAgent.checkedScript([sql,notify],job:job)
+    #expect(guarded.contains("UPDLOCK,HOLDLOCK") && guarded.contains("date_modified=CONVERT(datetime") && guarded.contains("version_number=9"))
+    #expect(guarded.contains("IF @@TRANCOUNT <> 0") && guarded.contains("ROLLBACK TRANSACTION"))
+    #expect(guarded.components(separatedBy:"IF @studio_agent_rc <> 0").count == 3)
+    #expect(guarded.contains("EXEC @studio_agent_rc = msdb.dbo.sp_update_job"))
+    #expect(!guarded.contains("sp_start_job"))
+    #expect(try SQLAgent.details(id:id).contains("j.job_id=N'"))
+  }
+  @Test func schedulesDescribeWeekdaysAndValidateCalendarAndTime() throws {
+    var s=SQLAgent.Schedule(id:5,name:"Week ' X",enabled:true,frequency:"8",time:"093000")
+    s.interval=10;s.recurrence=2
+    #expect(s.summary.contains("Pzt, Çar") && s.summary.contains("09:30:00"))
+    let sql=try SQLAgent.scheduleScript(s)
+    #expect(sql.contains("sp_update_schedule") && sql.contains("@freq_interval=10") && sql.contains("N'Week '' X'"))
+    #expect(try SQLAgent.scheduleScript(s,jobID:UUID().uuidString).contains("sp_add_jobschedule"))
+    s.startDate=20260230;#expect(throws:SQLFailure.self) {try SQLAgent.scheduleScript(s)}
+    s.startDate=20260228;s.time="246000";#expect(throws:SQLFailure.self) {try SQLAgent.scheduleScript(s)}
+    s.time="093000";s.interval=0;#expect(throws:SQLFailure.self) {try SQLAgent.scheduleScript(s)}
+    s.interval=10;s.subdayType=2;s.subdayInterval=9;#expect(throws:SQLFailure.self) {try SQLAgent.scheduleScript(s)}
+    s.subdayInterval=10;#expect(try SQLAgent.scheduleScript(s).contains("@freq_subday_interval=10"))
+    #expect(try SQLAgent.detachSchedule(jobID:UUID().uuidString,scheduleID:5).contains("@delete_unused_schedule=0"))
+    #expect(try SQLAgent.attachSchedule(jobID:UUID().uuidString,scheduleID:5).contains("sp_attach_schedule"))
+    #expect(!(try SQLAgent.availableSchedules()).contains("WHERE s.schedule_id=1"))
+    s.modified="2026-10-10T00:00:00.000"
+    #expect(try SQLAgent.scheduleScript(s).contains("date_modified=CONVERT(datetime"))
+    #expect(!(try SQLAgent.scheduleScript(s,jobID:UUID().uuidString)).contains("UPDLOCK"))
+  }
+  @Test func detailedAgentMetadataRetainsAdvancedAndSharedScheduleValues() throws {
+    let id=UUID().uuidString
+    var data=Execution()
+    data.results=[Rows(values:[[id,"Test","1","Description","Owner","Running","2026-10-10T00:00:00.000","Category","2026-10-01","2","2","Operator","3","0","2026-10-10 00:00:00","0","2026-10-11 00:00:00"]]),
+      Rows(values:[["2","Step","TSQL","master","SELECT 1;","4","1","2","0","5","10","C:\\out.txt","22","dbo"]]),
+      Rows(values:[["5","Shared","1","32","093000","9","4","10","16","2","20261001","99991231","173000","4","2026-10-10T00:00:00.000"]])]
+    let (job,steps,schedules)=try SQLAgent.decodeDetails(data)
+    #expect(job.startStep == 2 && job.emailLevel == 2 && job.emailOperator == "Operator" && job.lastStatus == 0)
+    #expect(steps[0].successStep == 1 && steps[0].retryAttempts == 5 && steps[0].flags == 22 && steps[0].databaseUser == "dbo")
+    #expect(schedules[0].jobCount == 4 && !schedules[0].modified.isEmpty)
+    #expect(schedules[0].summary.contains("son hafta içi günü"))
   }
   @Test(.enabled(if:ProcessInfo.processInfo.environment["MSSQL_AGENT_TEST_PASSWORD"] != nil))
   func liveAgentJobPropertiesEnableDisableStepAndHistoryRollback() async throws {
