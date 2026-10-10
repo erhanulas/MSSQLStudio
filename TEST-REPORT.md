@@ -889,3 +889,13 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Release build başarılı: `/tmp/mssql-premium-release-ready-build.log`. `git diff --check` temiz. `/tmp/mssql-data-preview-ui.png`, `/tmp/mssql-grid-direct-ui.png`, `/tmp/mssql-premium-loading.png`, `/tmp/mssql-premium-columns.png` görsel olarak incelendi; renk, satır numarası, hizalama ve kompakt panel yerleşimi uygun.
 - Ara testte eski İngilizce menü başlığı beklentisi Türkçe yeni etikete uyarlandı. Bir tam test çalışması NSTextFinderIndicatorManager._delayedUpdate içinde SIGSEGV ile kesildi; eski find testi pencereyi gecikmiş native gösterge güncellemesi bitmeden serbest bırakıyordu. Test artık find arayüzünü kapatıp client’ı 400 ms tutuyor. Son tam çalışma başarılı; çökme olan ara çalışma başarı sayılmadı. Ara Release kontrolünde eşzamanlı kaynak/API derlemesi tutarsızlığı son kaynakla yeniden derlenerek giderildi.
 - Canlı SQL yazımı ve uzak sunucu süre karşılaştırması yapılmadı; hız kazanımı fixture’da ağ çağrılarının sıfırlanmasıyla doğrulandı. Gerçek kullanıcı uygulaması/Keychain/DB değiştirilmedi. Henüz yayımlanmadı.
+
+
+## 10 Ekim 2026 — v0.2.57 yayın doğrulaması
+
+- Kaynak `fd860d7014dcae01e0f6c630478803c598137884`; v0.2.57 / build 58. Actions `38054420471` başarılı: sabit kimlik/izole Keychain, imzalı build, manifest ve yayın paketi testleri geçti.
+- Public latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.57 ; ZIP, PKG ve update.json erişilebilir. İndirilen ZIP/PKG SHA-256 değerleri manifest ve GitHub asset digest ile eşleşti.
+- ZIP SHA-256: `737b1da707d738601f9ce7d538042b4681eb0d84216021a733054d5e40288093`.
+- PKG SHA-256: `1f16d40178de19eb79e3973b29f43d43cbddfbb3586239c7a2fd697354795b28`.
+- `/tmp/mssql-v57-verify/extracted/MSSQLStudio.app` strict/deep codesign doğrulamasından geçti. Sürüm/build 0.2.57/58; sabit DR `identifier "local.mssqlstudio.app" and certificate leaf = H"adce16b1a3567d8c5fe2ed261e89493611cb7b9d"` doğrulandı.
+- Gerçek kullanıcı uygulaması/Keychain değiştirilmedi; canlı DB yazımı ve uzak sunucu hız karşılaştırması yapılmadı. Yerel sertifika Developer ID/notarization eşdeğeri değildir.
