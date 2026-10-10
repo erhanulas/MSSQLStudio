@@ -418,7 +418,11 @@ import Testing
     #expect(controller.editor.isSelectable)
     #expect(window.makeFirstResponder(controller.editor))
     controller.editor.insertText("SELECT\n\tGETDATE(), N'İstanbul';",replacementRange:NSRange(location:0,length:0))
-    try await Task.sleep(for:.milliseconds(450))
+    // Wait for asynchronous analysis instead of assuming CI scheduling latency.
+    for _ in 0..<100 {
+      if controller.editor.textContentStorage?.textStorage?.attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor == StudioTheme.syntax(.keyword) {break}
+      try await Task.sleep(for:.milliseconds(50))
+    }
     #expect(abs(controller.scroll.contentView.bounds.minX) < 1)
     let storage = try #require(controller.editor.textContentStorage?.textStorage)
     #expect(storage.attribute(.font,at:0,effectiveRange:nil) as? NSFont == StudioTheme.codeFont)
@@ -473,7 +477,10 @@ import Testing
     controller.replaceText("SELECT c.Missing FROM dbo.Customers c; ")
     controller.editor.setSelectedRange(NSRange(location:(controller.editor.string as NSString).length,length:0))
     controller.scheduleIntelligence(allowPopup:false)
-    try await Task.sleep(for:.milliseconds(450))
+    for _ in 0..<100 {
+      if controller.diagnostics.count == 1 {break}
+      try await Task.sleep(for:.milliseconds(50))
+    }
     #expect(controller.diagnostics.count == 1)
     let range = try #require(controller.diagnostics.first?.range)
     #expect(controller.editor.textContentStorage?.textStorage?.attribute(.foregroundColor,at:range.location,effectiveRange:nil) as? NSColor == .systemRed)
@@ -481,7 +488,10 @@ import Testing
     controller.replaceText("SELECT c.Name FROM dbo.Customers c; ")
     controller.editor.setSelectedRange(NSRange(location:(controller.editor.string as NSString).length,length:0))
     controller.scheduleIntelligence(allowPopup:false)
-    try await Task.sleep(for:.milliseconds(450))
+    for _ in 0..<100 {
+      if controller.diagnostics.isEmpty {break}
+      try await Task.sleep(for:.milliseconds(50))
+    }
     #expect(controller.diagnostics.isEmpty)
     #expect(controller.editor.string == doc.sql)
     #expect(controller.editor.textLayoutManager != nil)

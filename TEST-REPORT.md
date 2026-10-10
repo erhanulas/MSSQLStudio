@@ -1,3 +1,9 @@
+# Yayın testi zamanlama düzeltmesi — 10 Ekim 2026
+
+- v0.2.44 etiketi için CI 38037609105 iki denemede farklı mevcut editör testlerinde başarısız oldu: typingShortScriptKeepsViewportAndMetrics renklendirmeyi, indexedDiagnosticsAreDebouncedAndStaleEditsDoNotPublish diagnostics sonucunu sabit 450 ms sonunda hazır varsayıyordu. Paketler/imza ve yeni Agent testi geçti ancak yayın açılmadı. Etiket yeniden yazılmadı.
+- İki test artık beklenen sonucu 50 ms aralıkla en fazla 5 saniye bekler; gerçek sonuç beklentileri korunur. Uygulama kodu bu düzeltmede değişmedi. Yerel tam test `/tmp/mssql-v45-tests.log`: 65 uygulama + 99 core, 142 geçti, 22 koşullu atlandı.
+- Yeni yayın adayı v0.2.45 / build 46; v0.2.44 yayınlanmış sürüm olarak sunulmaz.
+
 # Job adımı veritabanı seçimi ve sayfa tıklama alanı — 10 Ekim 2026
 
 - T-SQL adımında serbest metin yerine veritabanı Picker eklendi. Ayrı metadata bağlantısından Catalog.databases okunur; satır/byte/timeout sınırları 5000 / 8 MB / 15 sn. Mevcut seçim listede yoksa korunur. Boş/kısmi/hatalı sonuçlar görünür; yenileme sırasında önceki liste/seçim tutulur. Salt okunur diğer subsystem türleri metadata okumaz.
