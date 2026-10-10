@@ -31,7 +31,11 @@ struct ObjectManagementTests {
     let sql=try DataEditScripts.changes(table:table,rows:[row])
     #expect(sql.contains("N'O''Hara'")); #expect(sql.contains("[Text] IS NULL")); #expect(sql.contains("@@ROWCOUNT <> 1"))
     var changedKey=row; changedKey.values[0]="2"
-    #expect(throws:SQLFailure.self) { try DataEditScripts.changes(table:table,rows:[changedKey]) }
+    let keySQL = try DataEditScripts.changes(table:table,rows:[changedKey])
+    #expect(keySQL.contains("SET [Id] = CONVERT(int, N'2')"))
+    #expect(keySQL.contains("WHERE [Id] = CONVERT(int, N'1')"))
+    var identityTable = table; identityTable.columns[0].identity = true
+    #expect(throws:SQLFailure.self) { try DataEditScripts.changes(table:identityTable,rows:[changedKey]) }
     var noKey=table; noKey.primaryKey=[]
     #expect(throws:SQLFailure.self) { try DataEditScripts.changes(table:noKey,rows:[row]) }
     let insert=DataEditRow(original:nil,values:["2",nil],touched:[0])

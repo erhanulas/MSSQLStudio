@@ -232,7 +232,7 @@ public enum DataEditScripts {
       guard let original=row.original, original.count == row.values.count else { throw SQLFailure("Orijinal satır eksik.") }
       let changed=table.columns.indices.filter { row.values[$0] != original[$0] }
       if changed.isEmpty && !row.deleted { continue }
-      guard changed.allSatisfy({ !table.columns[$0].generated && !keyIndices.contains($0) }) else { throw SQLFailure("Mevcut primary key/üretilen kolon değiştirilemez.") }
+      guard changed.allSatisfy({ !table.columns[$0].generated && table.columns[$0].editableValue }) else { throw SQLFailure("Üretilen veya desteklenmeyen türdeki kolon değiştirilemez.") }
       let compared:[Int]
       if let version { compared=Array(Set(keyIndices+[version])).sorted() }
       else {

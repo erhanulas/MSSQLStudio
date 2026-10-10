@@ -836,3 +836,24 @@ Native Release UI: ayrı bundle ID ile Keychain'siz, ağsız boş belge; senteti
 Release ARM64 build başarılı. Uygulama ad-hoc imzalı; ZIP ve PKG payload'ında strict imza kontrolü yapıldı. PKG kişisel Applications konumunu günceller, relocation kapalıdır. Installer paketi Developer ID ile imzalı/notarized değildir ve bu tur gerçek Installer kurulumu çalıştırılmadı. İki mevcut Swift uyarısı (gutter accessibility actor callback ve DDL panelindeki weak capture), ayrıca AppIntents kullanılmadığı için metadata extraction uyarısı vardır; build hatası yoktur. Tam parser/collation/schema eşdeğerliği, bütün canlı regresyonlar, Keychain erişim izinleri ve interaktif büyük-belge FPS testi bu tur doğrulanmış değildir.
 
 Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görüldü. Popup konumu TextKit 2 selection segment geometrisine ve pencere content-view koordinatlarına geçirildi; sıfır genişlikli caret rect en az 1 puntoya genişletildi; imleç için yerel rect doğrulayan regresyon testi eklendi. Son paketin görsel kontrolü bu düzeltmeyle tekrarlandı.
+
+
+## 10 Ekim 2026 — sonuç grid’i doğrudan düzenleme ve bekleyen SQL akışı
+
+- DataGrip resmi Cells ve Submit changes dokümanları incelendi: hücrede yerel değişiklik, Enter/Escape, bekleyen DML önizlemesi ve ayrı gönderme. Kaynaklar: https://www.jetbrains.com/help/datagrip/cells.html ve https://www.jetbrains.com/help/datagrip/submitting-and-reverting-changes.html .
+- Gereksiz normal PK kilidi kaldırıldı; UPDATE SET yeni anahtar, WHERE eski anahtar + mevcut optimistic kontroller kullanır. IDENTITY/computed/rowversion ve desteklenmeyen türler kilit simgesi/tooltip/açıklamayla salt okunur kalır.
+- Çift tıklama / Enter kaynak doğrulamasından sonra native hücreyi açar; salt okunur sonuçların tam değer görüntülemesi korunur. Async cevapta kaynak hücre kimliği yeniden denetlenir.
+- Field editor textDidChange yalnız taslak durumunu bildirir; spool/satır sözlüğünü değiştirmeden SQL Önizle ve Gönder düğmesi etkinleşir. Önizleme önce native edit’i commit eder, SQL’i gösterir ve açık onayla gönderir. Escape abortEditing yoluyla iptal edilir; değişmeyen NULL/DEFAULT görüntüsü veri haline getirilmez.
+- Son doğrulama: 77 uygulama + 106 core = 183 test; 160 geçti, 23 dış koşullu test atlandı. Log `/tmp/mssql-grid-final-verified.log`. Native testlerde doğrudan edit başlangıcı, anlık taslak bildirimi, uzun değer, Escape iptali, PK eski/yeni predicate, generated engeli, kaynak satır/kolon taşıma ve iki toolbar’ın 830 pt pencereye sığması kontrol edildi.
+- İzole fixture görüntüsü `/tmp/mssql-grid-direct-ui.png` incelendi; kilit ikonu ve önizleme çubuğu görünür, taşma yok. Release derlemesi başarılı: `/tmp/mssql-grid-final-release.log`. `git diff --check` temiz.
+- Ara kontrolde testin doğrudan NSTextView cancelOperation çağrısı geçersiz selector üretti; gerçek Escape tuş olayı kullanıldı. Bu yol taslak durumunun açık kaldığını ortaya çıkardı; native komut/abortEditing düzeltmesi sonrası son tam test geçti.
+- Canlı SQL yazma testi yapılmadı; kullanıcı uygulaması/Keychain/veritabanına dokunulmadı. Bu çalışma henüz yayımlanmadı.
+
+
+## 10 Ekim 2026 — v0.2.55 yayın öncesi kolon/checkbox doğrulaması
+
+- Kolon başlıkları gerçek native font ölçümü + 80 pt ikon/kenar payıyla boyutlandırılır. Örnek değer ölçümü başlık genişliğini azaltmaz; uzun başlık sabit 420/600 pt sınıra takılmaz. Manuel daraltma ve tam ad tooltip’i korunur.
+- Filtre hit alanı sağ dış 12 pt native resize alanından ayrıldı; filtre alanında sürükleme popup açmaz. False bit boş kontur, true native işaretli checkbox olarak çizilir.
+- Son tam test: 78 uygulama + 106 core = 184 test; 161 geçti, 23 dış koşullu test atlandı. Log `/tmp/mssql-v55-final-tests.log`; uzun başlık genişliği, resize kenarının filtre hit alanı dışında kalması, önceki native düzenleme/iptal/SQL kontrolleri geçti.
+- Release build başarılı (`/tmp/mssql-v55-build.log`), diff kontrolü temiz. `/tmp/mssql-v55-header-checkbox.png` ve düzenleme toolbar fixture’ı görsel olarak incelendi. Canlı SQL yazma yapılmadı; gerçek kullanıcı app’i/Keychain korunuyor.
+- Sürüm 0.2.55 / build 56; yayın doğrulaması aşağıya eklenecek.

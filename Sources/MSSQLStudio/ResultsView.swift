@@ -89,12 +89,37 @@ import SwiftUI
   }
   override func drawInterior(withFrame frame: NSRect, in view: NSView) {
     if isBit && ["0","1"].contains(stringValue) {
-      checkbox.state = stringValue == "1" ? .on : .off
-      checkbox.draw(withFrame:NSRect(x:frame.midX-8,y:frame.midY-8,width:16,height:16),in:view)
+      let box = NSRect(x:frame.midX-6,y:frame.midY-6,width:12,height:12)
+      if stringValue == "0" {
+        let outline = NSBezierPath(roundedRect:box.insetBy(dx:0.5,dy:0.5),xRadius:2,yRadius:2)
+        NSColor.secondaryLabelColor.setStroke(); outline.lineWidth = 1; outline.stroke()
+      } else {
+        checkbox.state = .on
+        checkbox.draw(withFrame:NSRect(x:frame.midX-8,y:frame.midY-8,width:16,height:16),in:view)
+      }
     } else { super.drawInterior(withFrame:frame.insetBy(dx:6,dy:2),in:view) }
   }
 }
 @MainActor final class CopyTable: NSTableView {
+  var editCell: ((Int, Int) -> Void)?
+  var draftChanged: (() -> Void)?
+  override func textDidChange(_ notification: Notification) {
+    super.textDidChange(notification)
+    draftChanged?()
+  }
+  override func textDidEndEditing(_ notification: Notification) {
+    super.textDidEndEditing(notification)
+    draftChanged?()
+  }
+  override func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+    if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+      _ = abortEditing()
+      window?.makeFirstResponder(self)
+      draftChanged?()
+      return true
+    }
+    return super.textView(textView, doCommandBy: commandSelector)
+  }
   var rowActions: (() -> [NSMenuItem])?
   var copyRows: (() -> Void)?
   var copyHeaders: (() -> Void)?
@@ -126,7 +151,7 @@ import SwiftUI
       cellColumns = c == 0 ? IndexSet() : IndexSet(integer: c)
     }
     needsDisplay = true
-    if event.clickCount == 2 { super.mouseDown(with: event) }
+    if event.clickCount == 2 { editCell?(r, c) }
   }
   override func mouseDragged(with event: NSEvent) {
     guard let anchor else { return }
@@ -159,6 +184,9 @@ import SwiftUI
   @objc func copySelection() { copyRows?() }
   @objc func copy(_ sender: Any?) { copyRows?() }
   override func keyDown(with event: NSEvent) {
+    if event.keyCode == 36 || event.keyCode == 76 {
+      if let c = cellColumns.first, selectedRow >= 0 { editCell?(selectedRow, c); return }
+    }
     if GridShortcuts.matchesHeaders(event) { copyHeaders?(); return }
     if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "c" { copyRows?(); return }
     if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "a" {
@@ -193,17 +221,17 @@ import SwiftUI
     stringValue.draw(
       in: NSRect(
         x: cellFrame.minX + 24, y: cellFrame.midY - font.pointSize / 2 - 2,
-        width: max(0, cellFrame.width - 62), height: font.pointSize + 5),
+        width: max(0, cellFrame.width - 76), height: font.pointSize + 5),
       withAttributes: [.font: font, .foregroundColor: StudioTheme.text, .paragraphStyle: label])
     if let type = NSImage(systemSymbolName: typeSymbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(paletteColors: [StudioTheme.accent])) {
       StudioTheme.accent.set()
       type.draw(in: NSRect(x: cellFrame.minX + 6, y: cellFrame.midY - 6, width: 12, height: 12))
     }
     if let ascending, let sort = NSImage(systemSymbolName: ascending ? "chevron.up" : "chevron.down", accessibilityDescription: nil)?.withSymbolConfiguration(.init(paletteColors: [StudioTheme.accent])) {
-      sort.draw(in: NSRect(x: cellFrame.maxX - 34, y: cellFrame.midY - 4, width: 8, height: 8))
+      sort.draw(in: NSRect(x: cellFrame.maxX - 44, y: cellFrame.midY - 4, width: 8, height: 8))
     }
     if showsFilter, let filter = NSImage(systemSymbolName: active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease", accessibilityDescription: nil)?.withSymbolConfiguration(.init(paletteColors: [active ? StudioTheme.accent : StudioTheme.muted])) {
-      filter.draw(in: NSRect(x: cellFrame.maxX - 19, y: cellFrame.midY - 6, width: 12, height: 12))
+      filter.draw(in: NSRect(x: cellFrame.maxX - 28, y: cellFrame.midY - 6, width: 12, height: 12))
     }
 
   }
@@ -215,7 +243,18 @@ import SwiftUI
       priority: priority)
   }
 }
-@MainActor private final class FilterHeader: NSTableHeaderView {
+@MainActor enum GridColumnSizing {
+  static func headerWidth(_ name: String) -> CGFloat {
+    ceil(name.size(withAttributes: [.font: NSFont.systemFont(ofSize:11,weight:.medium)]).width) + 80
+  }
+}
+@MainActor final class FilterHeader: NSTableHeaderView {
+  func filterHitRect(column: Int) -> NSRect {
+    guard column >= 0, let tableView, tableView.tableColumns.indices.contains(column),
+      (tableView.tableColumns[column].headerCell as? FilterHeaderCell)?.showsFilter == true else { return .zero }
+    let rect = headerRect(ofColumn: column)
+    return NSRect(x:rect.maxX-32,y:rect.minY+3,width:20,height:max(0,rect.height-6))
+  }
   var openFilter: ((Int) -> Void)?
   var openMenu: ((Int, NSEvent) -> Void)?
   override func rightMouseDown(with event: NSEvent) {
@@ -224,8 +263,17 @@ import SwiftUI
   override func mouseDown(with event: NSEvent) {
     let p = convert(event.locationInWindow, from: nil)
     let c = column(at: p)
-    if c >= 0 && p.x >= headerRect(ofColumn: c).maxX - 24 {
-      openFilter?(c)
+    if c >= 0 && filterHitRect(column:c).contains(p) {
+      // The outer 12 pt belong exclusively to native column resizing.
+      var dragged = false
+      while let next = window?.nextEvent(matching:[.leftMouseDragged,.leftMouseUp]) {
+        let location = convert(next.locationInWindow,from:nil)
+        if hypot(location.x-p.x,location.y-p.y) > 3 { dragged = true }
+        if next.type == .leftMouseUp {
+          if !dragged && filterHitRect(column:c).contains(location) { openFilter?(c) }
+          break
+        }
+      }
     } else {
       super.mouseDown(with: event)
     }
@@ -235,7 +283,37 @@ import SwiftUI
 final class ResultController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
   let table = CopyTable()
   private var generation = -1
-  var editDefinition: TableDefinition?
+  var requestEditing: ((Int, Int) -> Bool)?
+  var editDefinition: TableDefinition? {
+    didSet {
+      for column in table.tableColumns {
+        guard let ordinal = Int(column.identifier.rawValue), result.fields.indices.contains(ordinal),
+          let header = column.headerCell as? FilterHeaderCell else { continue }
+        let field = result.fields[ordinal]
+        let reason = readOnlyReason(column: ordinal)
+        header.typeSymbol = reason != nil ? "lock.fill" : field.type == -7 ? "checkmark.square" : field.numeric ? "number" : ([91, 92, 93, -9_101, -9_102].contains(Int(field.type)) ? "calendar" : "textformat")
+        column.headerToolTip = "\(field.name) · \(field.dataType)" + (reason.map { " · " + $0 } ?? "")
+      }
+      table.headerView?.needsDisplay = true
+    }
+  }
+  var hasDraftChanges: Bool {
+    let row = table.editedRow, position = table.editedColumn
+    guard row >= 0, row < pageCount, table.tableColumns.indices.contains(position),
+      let ordinal = Int(table.tableColumns[position].identifier.rawValue),
+      let editor = table.currentEditor() as? NSTextView else { return false }
+    let current = values(at: sourceIndex(row))
+    return current.indices.contains(ordinal) && editor.string != (current[ordinal] ?? "NULL")
+  }
+  func readOnlyReason(column: Int) -> String? {
+    guard let definition = editDefinition, definition.columns.indices.contains(column) else { return nil }
+    let c = definition.columns[column]
+    if c.identity { return "IDENTITY alanını SQL Server üretir; değeri elle değiştirilemez." }
+    if !c.computed.isEmpty { return "Hesaplanan kolonun değeri SQL Server tarafından hesaplanır." }
+    if c.generated { return "Rowversion / timestamp değerini SQL Server üretir." }
+    if !c.editableValue { return "Bu kolonun türü (\(c.type)) için güvenli hücre düzenleme henüz desteklenmiyor." }
+    return nil
+  }
   var editObjectID: Int?
   private(set) var pendingEdits: [Int: DataEditRow] = [:]
   private var newRowOrder: [Int] = []
@@ -312,7 +390,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     guard editingAllowed?() == true, let definition = editDefinition, row >= 0, row < pageCount, definition.columns.indices.contains(column) else { return false }
     let c = definition.columns[column]
     let staged = pendingEdits[sourceIndex(row)]
-    return staged?.deleted != true && c.editableValue && !c.generated && (staged?.original == nil && sourceIndex(row) < 0 || !definition.primaryKey.contains(c.name))
+    return staged?.deleted != true && c.editableValue && !c.generated
   }
   func setSelectedNull() {
     guard let column = table.cellColumns.first, table.tableColumns.indices.contains(column), let ordinal = Int(table.tableColumns[column].identifier.rawValue) else { return }
@@ -355,7 +433,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     table.usesAlternatingRowBackgroundColors = true
     scroll.horizontalScrollElasticity = .none
     scroll.verticalScrollElasticity = .none
-    table.toolTip = "Tam değeri görmek için çift tıklayın"
+    table.toolTip = "Düzenlemek için çift tıklayın veya Enter’a basın. Değişiklikler yalnız SQL önizlemesinden onayla gönderilir."
     table.backgroundColor = StudioTheme.canvas
     table.gridColor = StudioTheme.border
     table.rowHeight = 24
@@ -369,7 +447,8 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     table.target = self
     table.focusRingType = .none; scroll.focusRingType = .none
     table.rowActions = { [weak self] in self?.editingMenu() ?? [] }
-    table.doubleAction = #selector(inspectCell)
+    table.editCell = { [weak self] row, column in self?.inspectCell(row: row, position: column) }
+    table.draftChanged = { [weak self] in self?.editsChanged?() }
     table.copyRows = { [weak self] in self?.copySelectionData() }
     table.copyHeaders = { [weak self] in self?.copySelectionData(includeHeaders: true) }
     let head = FilterHeader()
@@ -492,7 +571,8 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
         c.isEditable = true
         c.title = f.name
         c.headerToolTip = "\(f.name) · \(f.dataType)"
-        c.width = max(150, min(360, CGFloat(f.name.count * 9 + 45)))
+        c.maxWidth = max(10_000, GridColumnSizing.headerWidth(f.name))
+        c.width = max(150, GridColumnSizing.headerWidth(f.name))
         c.minWidth = 70
         c.sortDescriptorPrototype = NSSortDescriptor(key: String(i), ascending: true)
         table.addTableColumn(c)
@@ -647,12 +727,12 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     guard count > 0 else { return }
     let sampleCount = min(32, result.values.count, max(1,4096 / count))
     let attributes: [NSAttributedString.Key:Any] = [.font: StudioTheme.uiFont]
-    var widths = result.fields.map { min(420,max(70,CGFloat($0.name.size(withAttributes: attributes).width + 58))) }
+    var widths = result.fields.map { max(80,GridColumnSizing.headerWidth($0.name)) }
     for row in 0..<sampleCount {
       let values = result.values[row]
       for c in result.fields.indices where values.indices.contains(c) {
         let text = String((values[c] ?? "NULL").prefix(160)).replacingOccurrences(of: "\n", with: " ↵ ")
-        widths[c] = min(420,max(widths[c],CGFloat(text.size(withAttributes: attributes).width + 18)))
+        widths[c] = max(widths[c],min(420,CGFloat(text.size(withAttributes: attributes).width + 18)))
       }
     }
     for column in table.tableColumns {
@@ -664,13 +744,14 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       let column = table.tableColumns.first(where: { $0.identifier.rawValue == String(sender.tag) })
     else { return }
     let attributes: [NSAttributedString.Key: Any] = [.font: StudioTheme.uiFont]
-    var width = CGFloat(column.title.size(withAttributes: attributes).width + 45)
+    let headerWidth = GridColumnSizing.headerWidth(column.title)
+    var width = headerWidth
     for i in 0..<min(200, pageCount) {
-      let row = result.values[sourceIndex(i)]
+      let row = values(at: sourceIndex(i))
       let value = row.indices.contains(sender.tag) ? row[sender.tag] ?? "NULL" : "NULL"
       width = max(width, String(value.prefix(1000)).size(withAttributes: attributes).width + 16)
     }
-    column.width = min(600, max(80, width))
+    column.width = max(headerWidth,min(600, max(80, width)))
   }
   private func openColumn(_ position: Int) {
     guard table.tableColumns.indices.contains(position),
@@ -711,6 +792,9 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   }
   func tableView(_ tableView: NSTableView, setObjectValue value: Any?, for column: NSTableColumn?, row: Int) {
     guard let ordinal = column.flatMap({ Int($0.identifier.rawValue) }) else { return }
+    // Merely entering/leaving NULL or DEFAULT must not turn its display text into data.
+    if let text = value as? String,
+      text == self.tableView(tableView, objectValueFor: column, row: row) as? String { return }
     setEditValue(value as? String ?? "", row: row, column: ordinal)
   }
   func tableView(_ tableView: NSTableView, objectValueFor column: NSTableColumn?, row: Int) -> Any? {
@@ -779,17 +863,21 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
   }
-  @objc private func inspectCell() {
-    let r = table.clickedRow
-    let c = table.clickedColumn
+  func cellIdentity(row: Int, position: Int) -> String? {
+    guard row >= 0, row < pageCount, table.tableColumns.indices.contains(position) else { return nil }
+    return "\(sourceIndex(row)):\(table.tableColumns[position].identifier.rawValue)"
+  }
+  private func inspectCell(row r: Int, position c: Int) {
     guard r >= 0, r < pageCount, table.tableColumns.indices.contains(c),
       let i = Int(table.tableColumns[c].identifier.rawValue)
     else { return }
+    if editDefinition == nil, requestEditing?(r, c) == true { return }
     if canEdit(row: r, column: i) { table.editColumn(c, row: r, with: nil, select: true); return }
     let values = values(at: sourceIndex(r))
     guard values.indices.contains(i) else { return }
     let alert = NSAlert()
     alert.messageText = result.fields[i].name
+    alert.informativeText = readOnlyReason(column: i) ?? "Bu hücre salt okunur."
     let text = NSTextView()
     text.string = values[i] ?? "NULL"
     text.isEditable = false
@@ -1264,11 +1352,14 @@ private struct ColumnFilterPanel: View {
     dataActionsHeight?.constant = grid?.editDefinition == nil ? 0 : 34
     rowActionsButton.isHidden = grid?.editDefinition == nil
     let safe = document.canRefresh && !preparingData && !submittingData
-    editDataButton.title = grid?.editDefinition == nil ? "Düzenle" : "Düzenleme Açık"
+    editDataButton.title = preparingData ? "Doğrulanıyor…" : grid?.editDefinition == nil ? "Düzenle" : "Düzenleme Açık"
     editDataButton.isEnabled = safe && grid != nil && grid?.editDefinition == nil && document.results.count == 1 && !document.partial
-    previewDataButton.isEnabled = safe && !(grid?.pendingEdits.isEmpty ?? true)
-    previewDataButton.title = "Önizle (\(grid?.pendingEdits.count ?? 0))"
-    revertDataButton.isEnabled = grid?.editDefinition != nil && !submittingData
+    let pending = !(grid?.pendingEdits.isEmpty ?? true) || grid?.hasDraftChanges == true
+    previewDataButton.isEnabled = safe && pending
+    previewDataButton.title = "SQL Önizle ve Gönder"
+    previewDataButton.toolTip = pending ? "Bekleyen değişikliklerin SQL komutlarını incele; yalnız onaylarsanız veritabanına gönderilir." : "Bekleyen değişiklik yok. Bir hücreyi değiştirdiğinizde etkinleşir."
+    previewDataButton.setAccessibilityLabel("Bekleyen değişikliklerin SQL önizlemesi")
+    revertDataButton.isEnabled = pending && !submittingData
     rowActionsButton.isEnabled = safe && grid?.editDefinition != nil
     nullDataButton.isEnabled = safe && grid?.editDefinition != nil
   }
@@ -1276,10 +1367,13 @@ private struct ColumnFilterPanel: View {
     let alert = NSAlert(); alert.messageText = "Veri düzenleme"; alert.informativeText = error.localizedDescription
     if let window = view.window { alert.beginSheetModal(for: window) } else { alert.runModal() }
   }
-  @objc private func beginDataEditing() {
+  @objc private func beginDataEditing() { prepareDataEditing() }
+  private func prepareDataEditing(cell: (Int, Int)? = nil) {
+    guard !preparingData, !submittingData else { return }
     guard let grid = selectedGrid, document.canRefresh, !document.partial, document.results.count == 1, let sql = document.lastExecutedSQL else { return }
     let generation = document.resultGeneration, db = document.database, server = document.server
     let serverGeneration = server.generation
+    let cellIdentity = cell.flatMap { grid.cellIdentity(row: $0.0, position: $0.1) }
     preparingData = true; syncDataActions()
     // Unattended refresh would discard the staged copy.
     refreshTask?.cancel(); refreshTask = nil; refreshInterval.selectItem(at: 0)
@@ -1297,6 +1391,9 @@ private struct ColumnFilterPanel: View {
         grid.editingAllowed = { [weak self] in self?.document.server === server && server.generation == serverGeneration && self?.document.resultGeneration == generation && self?.document.canRefresh == true && self?.submittingData == false }
         grid.editsChanged = { [weak self] in self?.syncDataActions() }
         grid.table.reloadData()
+        if let cell, cellIdentity != nil, grid.cellIdentity(row: cell.0, position: cell.1) == cellIdentity, selectedGrid === grid {
+          grid.table.editCell?(cell.0, cell.1)
+        }
       } catch { dataError(error) }
     }
   }
@@ -1469,6 +1566,12 @@ private struct ColumnFilterPanel: View {
           controller = existing
         } else {
           controller = ResultController()
+          controller.requestEditing = { [weak self, weak controller] row, column in
+            guard let self, selectedGrid === controller, document.canRefresh,
+              !document.partial, document.results.count == 1 else { return false }
+            prepareDataEditing(cell: (row, column))
+            return true
+          }
           controller.toolbarHosted = true
           controller.setPageSize(selectedPageSize)
           controller.clearSearch = { [weak self] in

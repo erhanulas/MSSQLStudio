@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.55",
+    "date": "2026-10-10",
+    "title": "Doğrudan hücre düzenleme ve daha anlaşılır sonuç tablosu",
+    "changes": [
+      "Hücreye çift tıklama veya Enter ile düzenleme başlatılır; yazarken SQL Önizle ve Gönder etkinleşir, Escape taslağı iptal eder.",
+      "Normal anahtar kolonları düzenlenebilir; üretilen veya desteklenmeyen alanlar kilit ve açıklama gösterir.",
+      "Kolon genişliği başlığın tamamını ve başlık ikonlarını dikkate alır; boyutlandırma kenarı filtre düğmesinden ayrıldı.",
+      "False bit değerleri dolgusu olmayan boş checkbox ile gösterilir."
+    ]
+  },
+  {
     "version": "0.2.54",
     "date": "2026-10-10",
     "title": "Rowversion olmadan düzenleme ve satır işlemleri",
