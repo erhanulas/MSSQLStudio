@@ -36,6 +36,8 @@ import Testing
     controller.surface.layoutSubtreeIfNeeded();controller.resizeToViewport()
     try await Task.sleep(for:.milliseconds(400))
     controller.scroll.contentView.scroll(to:NSPoint(x:0,y:800))
+    // Let the clip-view bounds notification synchronize the overlay before observing.
+    try await Task.sleep(for:.milliseconds(350))
     let origin=controller.scroll.contentView.bounds.origin
     let storage=try #require(controller.editor.textContentStorage?.textStorage)
     let counter=EditorStorageChanges()
@@ -46,7 +48,8 @@ import Testing
     for word in ["Customer_Name","Customer_","Customer_ID"] {
       controller.editor.setSelectedRange(source.range(of:word,options:[],range:NSRange(location:2100,length:source.length-2100)))
       controller.updateOccurrences()
-      try await Task.sleep(for:.milliseconds(350))
+      // Keep storage observation synchronous: other suites can change the global
+      // editor theme while this async test yields, legitimately restyling this view.
       #expect(controller.occurrenceRanges.count == (word == "Customer_" ? 240 : 120))
       #expect(controller.scroll.contentView.bounds.origin == origin)
       #expect(!controller.occurrenceHighlights.highlightRects(in:controller.occurrenceHighlights.bounds).isEmpty)

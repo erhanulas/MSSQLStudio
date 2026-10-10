@@ -1,6 +1,8 @@
-# MSSQL Studio 0.2.35 — editörde katlama ve kelime vurgusu
+0.2.35 etiketi için CI derleme/imzalama başarılı oldu; yayın, vurgu testinin paralel tema değişimlerini de sayması nedeniyle durdu. Vurgu işleminin storage gözlemi eşzamanlı bölüme alındı; tema değişikliğiyle karışmadan sıfır düzenleme koşulu korunuyor. 0.2.35 yayını oluşturulmadı; yeniden yayın 0.2.36 olarak hazırlanıyor.
 
-10 Ekim 2026. `v0.2.34` üzerine hazırlanan 0.2.35 / derleme 36. Aşağıdaki sonuçlar yerel geliştirme doğrulamasıdır; kişisel imzalı yayın paketinin derleme ve testleri GitHub Actions tarafından ayrıca yürütülür.
+# MSSQL Studio 0.2.36 — editörde katlama ve kelime vurgusu
+
+10 Ekim 2026. `v0.2.34` üzerine hazırlanan 0.2.36 / derleme 37. Aşağıdaki sonuçlar yerel geliştirme doğrulamasıdır; kişisel imzalı yayın paketinin derleme ve testleri GitHub Actions tarafından ayrıca yürütülür.
 
 Katlama artık bütün `NSTextView.string` değerini yeniden atamak yerine değişen UTF-16 aralığını güncelliyor. Gizlenen kod, kaynak SQL'de korunuyor. Tam yerleşim hesabı katlamanın desteklendiği 250.000 UTF-16 sınırı içindeki metinlerde tamamlanıyor; başlığın gerçek ekran konumu geri yükleniyor. TextKit'in tahmini kullanım yüksekliğinin sonradan kaydırmayı değiştirmemesi için editör boyutu açıkça yönetiliyor. Satırların gerçek yüksekliği font leading nedeniyle 18 punto paragraf ayarından farklı olabildiğinden konum hesabında satır sayısı çarpımı kullanılmıyor. Dosya sonunda bir görünüm yüksekliği kadar kaydırma payı bulunuyor. Yatay kaydırma, iç içe katlama ve tümünü açarken görünür kaynak satırı korunuyor. Gizlenen alanın içindeki imleç blok başlığına taşınıyor; son değiştirilen başlık gutter'da ince renkli çizgiyle işaretleniyor.
 
