@@ -1,3 +1,10 @@
+# v0.2.47 yayın doğrulaması — 10 Ekim 2026
+
+- https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.47 en son yayın; draft değil. ZIP, PKG, update.json mevcut. Kaynak d877e41e542b2c0434b0abe884d45317c26a2958; sürüm 0.2.47/build 48.
+- Actions 38040358461 tüm adımları başarıyla tamamladı: kalıcı imza/izole Keychain testi, uygulama ve installer derlemesi, manifest doğrulaması, yayın paketiyle testler ve yayın.
+- Public ZIP indirildi: SHA256 c1123556bec86f9cfb4ca200daa5bf2a3777610f136d18cc0c078115208d389c manifest ve GitHub digest ile aynı. PKG GitHub digest 98357c2f265bcfc7cb5d4295f186359c6a404a892ce209dbc69beaabd3f82126.
+- Çıkarılan uygulama codesign --verify --deep --strict kontrolünü geçti. Sabit designated requirement local.mssqlstudio.app / sertifika adce16b1a3567d8c5fe2ed261e89493611cb7b9d korundu. Gerçek kullanıcı uygulaması değiştirilmedi; kapsamlı görsel kontrolün CUA bağlantısı nedeniyle tamamlanamadığı sınırı aşağıda korunmaktadır.
+
 # Genel form hizalaması — 10 Ekim 2026
 
 - Ortak StudioFormField 150 pt etiket sütunu/12 pt aralık ve sarılabilen etiketler kullanır. Job genel/bildirim/adım alanları, zamanlama türü/göreli gün/gün içi tekrar/tarih/saat alanları; tablo/view/index/constraint/synonym tasarımları, yeniden adlandırma/izinler; indeks ve Job şablonları; SQL Assistant adres/model/anahtar; Ayarlar tema/yayın deposu bu düzene alındı. Job Gelişmiş sayfası uzun etiketler için 180 pt sütunu korur ve aynı bileşeni kullanır.
