@@ -1,3 +1,13 @@
+# v0.2.43 yayın doğrulaması — 10 Ekim 2026
+
+- Yayın: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.43
+- Kaynak commit: `c884a4dd3cf076d77fb9e92c04124f8e9913ab12`; uygulama sürümü 0.2.43, build 44.
+- GitHub Actions https://github.com/erhanulas/MSSQLStudio/actions/runs/38036179236 ilk çalışmada başarıyla tamamlandı. Kalıcı imza/izole Keychain fixture, imzalı uygulama ve installer, yayın metadata doğrulaması ve yayın paketiyle testler geçti.
+- ZIP SHA256: `26e836db9896d2935f27f253a2a6ffdc3ccb1d88f8811522809d310d6e7cebc4`.
+- PKG SHA256: `3d68111a38aff784e57b6d6570f8407b7f53b942b39eb25a334c58cd9fffe1c2`.
+- Public latest update.json indirildi: sürüm 0.2.43, ZIP adresi doğru ve SHA256 GitHub asset digest ile eşleşiyor. Yayın draft değil; ZIP, PKG ve update.json mevcut.
+- Aşağıdaki “henüz yayımlanmadı” ifadeleri yerel geliştirme aşamasının tarihsel kayıtlarıdır; Explorer, Linked Server, 7 günlük geçmiş ve Agent/sekme iyileştirmeleri bu sürümde yayımlandı. Canlı SQL Server/Linked Server doğrulama sınırları geçerliliğini korur.
+
 # Agent otomatik yenileme ve yükleme davranışı — 10 Ekim 2026
 
 - Görünür Explorer'da Agent dalı açıkken yüklenmiş Jobs listesi 15 saniyede bir, önceki istek tamamlandıktan sonra yenilenir. Kapalı dal/bağlantı ve gizli/küçültülmüş pencerede yeni okuma yapılmaz. Menüden durdurulabilir. Satır nesneleri ad üzerinden korunur; seçim ve kaydırma konumu geri yüklenir. Job/trigger durum yazıları kaldırıldı; ikon, tooltip ve VoiceOver durumu korur.
