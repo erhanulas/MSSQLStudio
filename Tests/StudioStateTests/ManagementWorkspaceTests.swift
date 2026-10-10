@@ -31,7 +31,8 @@ import Testing
       if parent.attachedSheet?.contentView?.subviews.isEmpty == false {try await Task.sleep(for:.milliseconds(10))}
     }
     let sheet=try #require(parent.attachedSheet)
-    #expect(sheet.frame.width > 1080)
+    let expectedWidth=max(960,min(1400,(parent.screen?.visibleFrame.width ?? (1400/0.94))*0.94))
+    #expect(abs((sheet.contentView?.bounds.width ?? 0)-expectedWidth) < 2)
     func descendants(_ view:NSView) -> [NSView] { [view]+view.subviews.flatMap(descendants) }
     StudioTheme.decorate(try #require(sheet.contentView))
     let children=descendants(try #require(sheet.contentView))

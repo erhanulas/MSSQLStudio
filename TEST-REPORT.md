@@ -1,3 +1,5 @@
+0.2.37 yayın denemesinde derleme/imzalama başarılı, testte sabit >1080 pencere genişliği beklentisi CI küçük ekranında başarısız oldu (gerçek genişlik 963). Ekrana uyarlama davranışı doğruydu. Test görünür ekran alanı ve minimum genişliğe göre beklenen boyutu hesaplayacak şekilde düzeltildi. Yeniden yayın 0.2.38 / build 39; 0.2.37 Release oluşturulmadı.
+
 # Fark önizlemesi ve nesne gönderme — yerel geliştirme doğrulaması
 
 10 Ekim 2026. DataGrip resmi kaynak güncelleme akışı incelendi: https://www.jetbrains.com/help/datagrip/update-source-code-of-database-objects.html . Karşılıklı ok diff ikonu ve tray.and.arrow.up gönderme ikonu; ikisinden açılan önizlemede koşullar uygunsa Veritabanına Gönder. `QueryDocument.canSubmitModule` bağlantı, hazır/busy durumu, açık transaction, nesne ID'si, hedef DB ve bekleyen değişiklik koşullarını birleştirir. Mevcut ham sunucu tanımı çakışma kontrolü ve gönderilen snapshot baseline ilerletmesi korunur; kontrol sürerken tekrar gönderme engellenir. Kısmi büyük önizlemede gönderme kapalı kalır.
