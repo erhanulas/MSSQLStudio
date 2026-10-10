@@ -4,6 +4,8 @@ public struct TableColumn: Identifiable, Equatable, Sendable {
   public var id: Int
   public var name: String
   public var type: String
+  public var baseType: String?
+  public var valueType: String { (type.hasPrefix("[") || type.lowercased() == "sysname") ? (baseType ?? type) : type }
   public var nullable: Bool
   public var identity: Bool
   public var seed: String
@@ -15,12 +17,12 @@ public struct TableColumn: Identifiable, Equatable, Sendable {
   public var collation: String
   public var sparse: Bool
   public var rowGUID: Bool
-  public init(id: Int, name: String, type: String = "nvarchar(100)", nullable: Bool = true, identity: Bool = false, seed: String = "1", increment: String = "1", computed: String = "", persisted: Bool = false, defaultName: String = "", defaultSQL: String = "", collation: String = "", sparse: Bool = false, rowGUID: Bool = false) {
-    self.id=id; self.name=name; self.type=type; self.nullable=nullable; self.identity=identity; self.seed=seed; self.increment=increment; self.computed=computed; self.persisted=persisted; self.defaultName=defaultName; self.defaultSQL=defaultSQL; self.collation=collation; self.sparse=sparse; self.rowGUID=rowGUID
+  public init(id: Int, name: String, type: String = "nvarchar(100)", nullable: Bool = true, identity: Bool = false, seed: String = "1", increment: String = "1", computed: String = "", persisted: Bool = false, defaultName: String = "", defaultSQL: String = "", collation: String = "", sparse: Bool = false, rowGUID: Bool = false, baseType: String? = nil) {
+    self.id=id; self.name=name; self.type=type; self.baseType=baseType; self.nullable=nullable; self.identity=identity; self.seed=seed; self.increment=increment; self.computed=computed; self.persisted=persisted; self.defaultName=defaultName; self.defaultSQL=defaultSQL; self.collation=collation; self.sparse=sparse; self.rowGUID=rowGUID
   }
-  public var generated: Bool { identity || !computed.isEmpty || ["timestamp","rowversion"].contains(type.lowercased()) }
-  public var editableValue: Bool { comparable || ["text", "ntext", "image", "xml"].contains(type.lowercased()) }
-  public var comparable: Bool { !["text","ntext","image","xml","geography","geometry","hierarchyid","sql_variant"].contains(type.lowercased()) && !type.hasPrefix("[") }
+  public var generated: Bool { identity || !computed.isEmpty || ["timestamp","rowversion"].contains(valueType.lowercased()) }
+  public var editableValue: Bool { comparable || ["text", "ntext", "image", "xml"].contains(valueType.lowercased()) }
+  public var comparable: Bool { !["text","ntext","image","xml","geography","geometry","hierarchyid","sql_variant"].contains(valueType.lowercased()) && !valueType.hasPrefix("[") }
 }
 public struct ManagedDefinition: Identifiable, Sendable {
   public var id: String { name }
@@ -138,8 +140,14 @@ public enum ObjectMetadata {
       WHEN t.name IN ('numeric','decimal') THEN '('+CONVERT(varchar(10),c.precision)+','+CONVERT(varchar(10),c.scale)+')'
       WHEN t.name IN ('time','datetime2','datetimeoffset') THEN '('+CONVERT(varchar(10),c.scale)+')' ELSE '' END,
       c.is_nullable,c.is_identity,CONVERT(nvarchar(40),ic.seed_value),CONVERT(nvarchar(40),ic.increment_value),cc.definition,cc.is_persisted,dc.name,dc.definition,c.collation_name,c.is_sparse,c.is_rowguidcol,
-      CASE WHEN c.is_filestream=1 OR c.generated_always_type<>0 OR c.encryption_type IS NOT NULL OR c.is_hidden=1 THEN 1 ELSE 0 END
+      CASE WHEN c.is_filestream=1 OR c.generated_always_type<>0 OR c.encryption_type IS NOT NULL OR c.is_hidden=1 THEN 1 ELSE 0 END,
+      CASE WHEN t.is_assembly_type=0 AND t.is_table_type=0 THEN st.name+
+        CASE WHEN st.name IN ('varchar','char','binary','varbinary') THEN '('+CASE WHEN c.max_length=-1 THEN 'max' ELSE CONVERT(varchar(10),c.max_length) END+')'
+        WHEN st.name IN ('nvarchar','nchar') THEN '('+CASE WHEN c.max_length=-1 THEN 'max' ELSE CONVERT(varchar(10),c.max_length/2) END+')'
+        WHEN st.name IN ('numeric','decimal') THEN '('+CONVERT(varchar(10),c.precision)+','+CONVERT(varchar(10),c.scale)+')'
+        WHEN st.name IN ('time','datetime2','datetimeoffset') THEN '('+CONVERT(varchar(10),c.scale)+')' ELSE '' END END
     FROM sys.columns c JOIN sys.types t ON t.user_type_id=c.user_type_id
+    LEFT JOIN sys.types st ON st.user_type_id=t.system_type_id AND st.user_type_id=st.system_type_id
     LEFT JOIN sys.identity_columns ic ON ic.object_id=c.object_id AND ic.column_id=c.column_id
     LEFT JOIN sys.computed_columns cc ON cc.object_id=c.object_id AND cc.column_id=c.column_id
     LEFT JOIN sys.default_constraints dc ON dc.object_id=c.default_object_id WHERE c.object_id=\(id) ORDER BY c.column_id;
@@ -175,7 +183,7 @@ public enum ObjectMetadata {
     var columns:[TableColumn]=[]
     for row in result.results[0].values {
       guard let id=Int(value(row,0)), row.count >= 15, value(row,14) != "1" else { throw SQLFailure("Şifreli/FILESTREAM/generated kolon desteklenmiyor; eksik CREATE üretilmedi.") }
-      columns.append(TableColumn(id:id,name:value(row,1),type:value(row,2),nullable:value(row,3)=="1",identity:value(row,4)=="1",seed:value(row,5).isEmpty ? "1" : value(row,5),increment:value(row,6).isEmpty ? "1" : value(row,6),computed:value(row,7),persisted:value(row,8)=="1",defaultName:value(row,9),defaultSQL:value(row,10),collation:value(row,11),sparse:value(row,12)=="1",rowGUID:value(row,13)=="1"))
+      columns.append(TableColumn(id:id,name:value(row,1),type:value(row,2),nullable:value(row,3)=="1",identity:value(row,4)=="1",seed:value(row,5).isEmpty ? "1" : value(row,5),increment:value(row,6).isEmpty ? "1" : value(row,6),computed:value(row,7),persisted:value(row,8)=="1",defaultName:value(row,9),defaultSQL:value(row,10),collation:value(row,11),sparse:value(row,12)=="1",rowGUID:value(row,13)=="1",baseType:value(row,15).isEmpty ? nil : value(row,15)))
     }
     var definitions:[ManagedDefinition]=[]
     for group in result.results[2...5] { for row in group.values {
@@ -202,6 +210,7 @@ public enum DataEditScripts {
   public static func value(_ value:String?,column:TableColumn) throws -> String {
     guard let value else { return "NULL" }
     var column = column
+    column.type = column.valueType
     if let type = ["text":"varchar(max)", "ntext":"nvarchar(max)", "image":"varbinary(max)"][column.type.lowercased()] { column.type = type }
     let type=column.type.lowercased()
     if type.hasPrefix("varbinary") || type.hasPrefix("binary") || ["timestamp","rowversion"].contains(type) {
@@ -216,7 +225,7 @@ public enum DataEditScripts {
     guard rows.count <= 400 else { throw SQLFailure("En fazla 200 mevcut + 200 yeni satır düzenlenebilir.") }
     let keyIndices=table.primaryKey.compactMap { key in table.columns.firstIndex { $0.name == key } }
     guard keyIndices.count == table.primaryKey.count else { throw SQLFailure("Primary key metadata eksik.") }
-    let version=table.columns.firstIndex { ["timestamp","rowversion"].contains($0.type.lowercased()) }
+    let version=table.columns.firstIndex { ["timestamp","rowversion"].contains($0.valueType.lowercased()) }
     var statements:[String]=[]
     for row in rows {
       guard row.values.count == table.columns.count else { throw SQLFailure("Veri kolonları metadata ile eşleşmiyor.") }
@@ -242,12 +251,12 @@ public enum DataEditScripts {
         let c=table.columns[i], name=SQL.identifier(c.name)
         guard original[i] != nil else { return name+" IS NULL" }
         let literal=try value(original[i],column:c)
-        if ["text", "ntext", "xml"].contains(c.type.lowercased()) {
-          let cast = c.type.lowercased() == "text" ? "varchar(max)" : "nvarchar(max)"
+        if ["text", "ntext", "xml"].contains(c.valueType.lowercased()) {
+          let cast = c.valueType.lowercased() == "text" ? "varchar(max)" : "nvarchar(max)"
           return "CONVERT(varbinary(max),CONVERT(\(cast),\(name))) = CONVERT(varbinary(max),CONVERT(\(cast),\(literal)))"
         }
-        if c.type.lowercased() == "image" { return "CONVERT(varbinary(max),\(name)) = \(literal)" }
-        if ["varchar","nvarchar","char","nchar"].contains(where:{ c.type.lowercased().hasPrefix($0+"(") }) {
+        if c.valueType.lowercased() == "image" { return "CONVERT(varbinary(max),\(name)) = \(literal)" }
+        if ["varchar","nvarchar","char","nchar"].contains(where:{ c.valueType.lowercased().hasPrefix($0+"(") }) {
           return "CONVERT(varbinary(max),\(name)) = CONVERT(varbinary(max),\(literal))"
         }
         return name+" = "+literal

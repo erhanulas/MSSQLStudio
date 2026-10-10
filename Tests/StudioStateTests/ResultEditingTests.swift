@@ -84,6 +84,18 @@ import Testing
     #expect(grid.pendingEdits.isEmpty)
     #expect(grid.result.values[0][1] == "Original")
   }
+  @Test func aliasTypeCellsAreEditableWithoutChangingDeclaredType() throws {
+    _ = NSApplication.shared
+    let grid = ResultController()
+    grid.update(Rows(fields:[Field("Id",type:4),Field("Code")],values:[["1","A"]]),generation:1)
+    grid.editDefinition = TableDefinition(schema:"dbo",name:"T",columns:[.init(id:1,name:"Id",type:"int"),.init(id:2,name:"Code",type:"[dbo].[TDBGRUPKOD]",baseType:"varchar(12)")],primaryKey:["Id"])
+    grid.editingAllowed = { true }
+    #expect(grid.readOnlyReason(column:1) == nil)
+    grid.setEditValue("B",row:0,column:1)
+    #expect(grid.pendingEdits[0]?.values[1] == "B")
+    #expect(try grid.pendingSQL().contains("SET [Code] = CONVERT(varchar(12), N'B')"))
+    #expect(grid.editDefinition?.columns[1].type == "[dbo].[TDBGRUPKOD]")
+  }
   @Test func filtersAndReorderedColumnsKeepSourceRowIdentity() async throws {
     _ = NSApplication.shared
     let grid = ResultController()

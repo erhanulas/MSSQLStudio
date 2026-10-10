@@ -92,3 +92,40 @@ struct RowversionOptionalTests {
     #expect(try DataEditScripts.changes(table:table,rows:[deleted]).contains("DELETE FROM [dbo].[T]"))
   }
 }
+
+struct AliasDataTypeEditingTests {
+  @Test func metadataPreservesAliasAndResolvesStorageType() throws {
+    let alias = "[dbo].[TDBGRUPKOD]"
+    var metadata = Execution()
+    metadata.results = [Rows(values:[["1","Code",alias,"1","0",nil,nil,nil,"0",nil,nil,"Latin1_General_100_CI_AS","0","0","0","varchar(12)"]]),Rows(values:[["Code","PK_T"]]),Rows(),Rows(),Rows(),Rows(),Rows(values:[["0",nil]])]
+    let table = try ObjectMetadata.decode(metadata,schema:"dbo",name:"T")
+    let column = try #require(table.columns.first)
+    #expect(column.type == alias)
+    #expect(column.baseType == "varchar(12)")
+    #expect(column.editableValue && column.comparable)
+    #expect(try table.createScript().contains(alias))
+    let sql = try DataEditScripts.changes(table:table,rows:[DataEditRow(original:["OLD"],values:["NEW"])])
+    #expect(sql.contains("SET [Code] = CONVERT(varchar(12), N'NEW'"))
+    #expect(sql.contains("CONVERT(varbinary(max),[Code])"))
+    #expect(sql.contains("N'OLD'"))
+    #expect(!sql.contains("CONVERT([dbo]"))
+    #expect(ObjectMetadata.table(1).contains("t.is_assembly_type=0 AND t.is_table_type=0"))
+    // Missing base metadata must keep unknown/CLR types read-only.
+    metadata.results[0] = Rows(values:[["1","Code",alias,"1","0",nil,nil,nil,"0",nil,nil,nil,"0","0","0",nil]])
+    #expect(try !ObjectMetadata.decode(metadata,schema:"dbo",name:"T").columns[0].editableValue)
+  }
+  @Test func aliasesUseExactNumericBinaryNullAndInsertConversions() throws {
+    let decimal = TableColumn(id:1,name:"Amount",type:"[dbo].[AmountType]",baseType:"decimal(28,8)")
+    let binary = TableColumn(id:2,name:"Token",type:"[dbo].[TokenType]",baseType:"varbinary(16)")
+    #expect(try DataEditScripts.value("12345678901234567890.12345678",column:decimal) == "CONVERT(decimal(28,8), N'12345678901234567890.12345678')")
+    #expect(try DataEditScripts.value("0x00FF",column:binary) == "0x00FF")
+    #expect(throws:SQLFailure.self) { try DataEditScripts.value("bad",column:binary) }
+    #expect(try DataEditScripts.value(nil,column:decimal) == "NULL")
+    let table = TableDefinition(schema:"dbo",name:"T",columns:[decimal,binary],primaryKey:["Amount"])
+    let sql = try DataEditScripts.changes(table:table,rows:[DataEditRow(original:nil,values:["1.25","0xAA"],touched:[0,1])])
+    #expect(sql.contains("VALUES (CONVERT(decimal(28,8), N'1.25'), 0xAA)"))
+    #expect(!TableColumn(id:3,name:"Unknown",type:"[dbo].[CLRType]").editableValue)
+    #expect(!TableColumn(id:4,name:"Spatial",type:"[dbo].[SpatialType]",baseType:"geometry").editableValue)
+    #expect(TableColumn(id:5,name:"Name",type:"sysname",baseType:"nvarchar(128)").valueType == "nvarchar(128)")
+  }
+}

@@ -859,3 +859,12 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Sürüm 0.2.55 / build 56 yayımlandı: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.55 . Kaynak `8b501d882a9a03689f253a09185a3f8afd5fe8d1`; Actions `38051856183` başarıyla tamamlandı (sabit imza, izole Keychain fixture, paket doğrulaması ve yayın paketi testleri dahil).
 - Public latest v0.2.55; ZIP/PKG/update.json erişilebilir. İndirilen ZIP SHA-256 `0617bf453026aff44300dad504e356b7434f9b0e0dabc6cfb5224268ccec25b1`, PKG `a10259c1eb48e962f19511d06262c90598755fa048acd9b6a9b16215f045d91a`; manifest ve GitHub digest ile eşleşiyor.
 - `/tmp/mssql-v55-verify/extracted/MSSQLStudio.app` strict/deep codesign doğrulamasından geçti; version/build 0.2.55/56, sabit DR `identifier "local.mssqlstudio.app" and certificate leaf = H"adce16b1a3567d8c5fe2ed261e89493611cb7b9d"` doğrulandı. Gerçek kullanıcı uygulaması yüklenmedi/değiştirilmedi.
+
+
+## 10 Ekim 2026 — SQL alias veri tiplerinde hücre düzenleme
+
+- `[dbo].[TDBGRUPKOD]` gibi alias tipler artık genel UDT engeline takılmaz. sys.types.system_type_id üzerinden temel tip, kolon uzunluğu (Unicode için bayt/2), precision/scale çözülür. CLR/table türleri ve çözülemeyen metadata salt okunur kalır.
+- TableColumn özgün `type` adını ve ayrı `baseType` metadata’sını korur; CREATE/DDL özel tipi değiştirmez. Değer SQL’i alias adıyla CONVERT üretmez; temel tip kullanır. String conflict kontrolünün binary karşılaştırması korunur; numeric/binary/null ve INSERT dönüşümleri aynı çözümlemeyi kullanır. Gönderim öncesi kolon eşitlik kontrolü baseType değişikliğini de reddeder.
+- Microsoft kaynakları: https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-types-transact-sql ve https://learn.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql (alias tip CONVERT hedefi olamaz).
+- Son test: 79 uygulama + 108 core = 187 test, 164 geçti, 23 dış koşullu test atlandı. `/tmp/mssql-alias-final-tests.log`. Metadata decode/orijinal DDL tipi, alias anahtar UPDATE/eski değer, decimal(28,8), binary hex doğrulama, NULL/INSERT ve grid hücre düzenlenebilirliği sınandı. Bilinmeyen CLR/spatial türlerin salt okunur kalması doğrulandı.
+- Release derlemesi başarılı: `/tmp/mssql-alias-build.log`; `git diff --check` temiz. Kullanıcının gerçek tipi veya canlı DB yazımı test edilmedi; kullanıcı uygulamasına/Keychain’e dokunulmadı. Henüz yayımlanmadı.

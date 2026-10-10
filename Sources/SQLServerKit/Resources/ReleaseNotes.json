@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.56",
+    "date": "2026-10-10",
+    "title": "Özel SQL veri tiplerinde hücre düzenleme",
+    "changes": [
+      "TDBGRUPKOD gibi özel alias veri tiplerinin temel SQL tipi otomatik okunur; desteklenen alanlar hücre içinde düzenlenebilir.",
+      "Özel tipin adı ve tanımı korunur; SQL önizlemesindeki değer dönüşümleri temel tipin uzunluk ve hassasiyetine göre üretilir.",
+      "Eski değer ve metadata değişikliği kontrolleri korunur; çözülemeyen ve CLR tipler salt okunur kalır."
+    ]
+  },
+  {
     "version": "0.2.55",
     "date": "2026-10-10",
     "title": "Doğrudan hücre düzenleme ve daha anlaşılır sonuç tablosu",
