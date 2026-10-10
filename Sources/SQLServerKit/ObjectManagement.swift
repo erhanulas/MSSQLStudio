@@ -208,7 +208,7 @@ public enum DataEditScripts {
     _ = try ObjectScripts.validatedType(column.type)
     return "CONVERT(\(column.type), \(SQL.literal(value))\(column.collation.isEmpty ? "" : " COLLATE "+(try ObjectScripts.collation(column.collation))))"
   }
-  public static func changes(table:TableDefinition,rows:[DataEditRow]) throws -> String {
+  public static func changes(table:TableDefinition,rows:[DataEditRow],expectedObjectID:Int? = nil) throws -> String {
     guard !table.primaryKey.isEmpty else { throw SQLFailure("Veri düzenlemesi için primary key gerekli; anahtarsız satırlar yazılmaz.") }
     guard rows.count <= 400 else { throw SQLFailure("En fazla 200 mevcut + 200 yeni satır düzenlenebilir.") }
     let keyIndices=table.primaryKey.compactMap { key in table.columns.firstIndex { $0.name == key } }
@@ -249,6 +249,11 @@ public enum DataEditScripts {
       statements.append(action+" WHERE "+predicate+";\nIF @@ROWCOUNT <> 1 THROW 51001, N'Satır değişmiş veya bulunamadı; tüm düzenleme geri alındı. Yenileyip tekrar deneyin.', 1;")
     }
     guard !statements.isEmpty else { throw SQLFailure("Değişiklik yok.") }
+    if let expectedObjectID {
+      guard expectedObjectID > 0 else { throw SQLFailure("Geçersiz kaynak kimliği.") }
+      let object = "OBJECT_ID(\(SQL.literal(table.qualified)), N'U')"
+      statements.insert("IF \(object) IS NULL OR \(object) <> \(expectedObjectID) THROW 51002, N'Kaynak tablo değişmiş; güncel sonucu yeniden yükleyin.', 1;", at: 0)
+    }
     return ObjectScripts.transaction(statements.joined(separator:"\n"))
   }
 }
@@ -363,5 +368,49 @@ public enum ExplorerScripts {
       guard !raw.isEmpty else {throw SQLFailure("Hedef nesne adı boş olamaz.")};parts.append(SQL.identifier(raw))
     }
     return "CREATE SYNONYM \(qualified) FOR \(parts.joined(separator:"."));"
+  }
+}
+
+/// Server-supplied provenance, never a table name guessed from SELECT text.
+public struct ResultEditSource: Sendable {
+  public let database: String
+  public let schema: String
+  public let table: String
+  public let columns: [String]
+  public static func metadata(_ sql: String) throws -> String {
+    let tokens = TSQL.lex(sql).filter { $0.kind != .space && $0.kind != .comment }
+    guard TSQL.canRepeatRead(sql), tokens.filter({ $0.text.uppercased() == "SELECT" }).count == 1,
+      !tokens.contains(where: { $0.kind != .string && ["JOIN", "APPLY", "UNION", "EXCEPT", "INTERSECT", "GROUP", "DISTINCT", "OVER"].contains($0.text.uppercased()) })
+    else { throw SQLFailure("Düzenleme yalnızca tek tabloyu okuyan bir SELECT için desteklenir; JOIN, toplama ve çoklu sorgular salt okunur.") }
+    return "SELECT name,source_server,source_database,source_schema,source_table,source_column,error_number,error_message,column_ordinal FROM sys.dm_exec_describe_first_result_set(\(SQL.literal(sql)),NULL,1) WHERE is_hidden=0 OR error_number IS NOT NULL ORDER BY column_ordinal;"
+  }
+  public static func decode(_ execution: Execution, fields: [Field], database: String) throws -> ResultEditSource {
+    guard !execution.partial, let rows = execution.results.first, !fields.isEmpty, rows.values.count == fields.count else { throw SQLFailure("Sonuç kolonlarının kaynağı doğrulanamadı.") }
+    var schema: String?, table: String?, columns: [String] = []
+    for (i, row) in rows.values.enumerated() {
+      guard row.count == 9, row[0] == fields[i].name, row[1] == nil, row[2] == database,
+        let s = row[3], let t = row[4], let c = row[5], row[6] == nil, row[8] == String(i+1),
+        schema == nil || schema == s, table == nil || table == t else {
+        throw SQLFailure("Kolonlar tek yerel tabloya ait değil veya kaynak metadata eksik. Sonuç salt okunur.")
+      }
+      schema = s; table = t; columns.append(c)
+    }
+    guard let schema, let table, Set(columns).count == columns.count else { throw SQLFailure("Tekrarlanan/eksik kaynak kolonları düzenlenemez.") }
+    return .init(database: database, schema: schema, table: table, columns: columns)
+  }
+  public func projected(_ definition: TableDefinition) throws -> TableDefinition {
+    guard definition.schema == schema, definition.name == table, !definition.primaryKey.isEmpty,
+      Set(columns) == Set(definition.columns.map(\.name)), columns.count == definition.columns.count else {
+      throw SQLFailure("Güvenli düzenleme için tablonun tüm kolonları ve primary key sonuçta bulunmalı. SELECT * ile tekrar deneyin.")
+    }
+    var result = definition
+    result.columns = try columns.map { name in
+      guard let column = definition.columns.first(where: { $0.name == name }) else { throw SQLFailure("Kaynak kolon bulunamadı.") }
+      return column
+    }
+    guard result.columns.contains(where: { ["timestamp", "rowversion"].contains($0.type.lowercased()) }) || result.columns.allSatisfy(\.comparable) else {
+      throw SQLFailure("Karşılaştırılamayan kolonlar için rowversion gerekli.")
+    }
+    return result
   }
 }

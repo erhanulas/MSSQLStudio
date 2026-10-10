@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.53",
+    "date": "2026-10-10",
+    "title": "Gelişmiş Timeline ve önizlemeli veri güncelleme",
+    "changes": [
+      "Timeline sorgu geçmişine sunucu, veritabanı, tarih ve durum filtreleri, süre sıralaması ve renkli SQL önizlemesi eklendi.",
+      "Sorgu geçmişi saklama süresi Ayarlar → Çalışma Alanı üzerinden gün olarak belirlenebilir; varsayılan 30 gündür.",
+      "Tek tablo, tüm kolonlar ve primary key içeren uygun sonuçlarda hücreler yerelde düzenlenebilir; UPDATE komutları önizlemeden onayla veritabanına gönderilir.",
+      "Bekleyen değişiklikler korunur, eşzamanlı satır değişikliklerinde işlem geri alınır. Native hücre düzenleme sırasında oluşabilen kopyalama çökmesi giderildi."
+    ]
+  },
+  {
     "version": "0.2.52",
     "date": "2026-10-10",
     "title": "macOS Kurulum ile güvenilir güncelleme",

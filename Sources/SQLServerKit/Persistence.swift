@@ -120,16 +120,38 @@ public struct QueryRecord: Codable, Sendable, Identifiable {
   public var server: String
   public var database: String
   public var text: String
+  public var serverID: UUID?
+  public var errorMessage: String?
+  public var rowCount: Int?
   public var seconds: Double
   public var status: String
-  public init(server: String, database: String, text: String, seconds: Double, status: String) {
+  public init(server: String, database: String, text: String, serverID: UUID? = nil, errorMessage: String? = nil, rowCount: Int? = nil, seconds: Double, status: String) {
     self.server = server
+    self.serverID = serverID; self.errorMessage = errorMessage; self.rowCount = rowCount
     self.database = database
     self.text = text
     self.seconds = seconds
     self.status = status
   }
 }
+public enum QueryHistoryPolicy {
+  public static let defaultDays = 30
+  public static func days(_ value: Int) -> Int { min(3650, max(1, value)) }
+  public static func retained(_ records: [QueryRecord], days: Int, now: Date = Date()) -> [QueryRecord] {
+    let cutoff = now.addingTimeInterval(-Double(self.days(days)) * 86400)
+    // A byte budget keeps unusually large statements from making the history file unreadable.
+    var bytes = 0
+    var count = 0
+    return records.sorted { $0.time > $1.time }.filter {
+      guard $0.time >= cutoff else { return false }
+      let size = (try? JSONEncoder().encode($0).count) ?? 16_000_001
+      guard bytes + size <= 16_000_000, count < 20000 else { return false }
+      bytes += size; count += 1
+      return true
+    }
+  }
+}
+
 public enum Export {
   public static func csv(_ rows: Rows, safe: Bool = true) -> String {
     func quote(_ text: String) -> String {

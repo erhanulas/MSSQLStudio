@@ -142,6 +142,7 @@ struct ObjectEditorKey: Codable, Equatable {
   var task: Task<Void, Never>?
   var changed: (() -> Void)?
   var completed: ((String, Execution?, String?) -> Void)?
+  var confirmDiscardResultEdits: (() -> Bool)?
   private var acceptingEvents = false
   private var executionID = UUID()
   var runAfterConnect = false
@@ -238,7 +239,7 @@ struct ObjectEditorKey: Codable, Equatable {
     }
   }
   func execute(override: String? = nil, estimated: Bool = false, repeatRead: Bool = false) {
-    guard state == .ready else { return }
+    guard state == .ready, confirmDiscardResultEdits?() != false else { return }
     let source = sql as NSString
     let query =
       override
@@ -373,6 +374,7 @@ struct ObjectEditorKey: Codable, Equatable {
   var history: [QueryRecord] = []
   private var nextQueryNumber = 1
   var historyEnabled = UserDefaults.standard.bool(forKey: "historyEnabled")
+  var historyRetentionDays = QueryHistoryPolicy.days(UserDefaults.standard.object(forKey: "historyRetentionDays") as? Int ?? QueryHistoryPolicy.defaultDays)
   private var snapshotTask: Task<Void, Never>?
   var recoveryEnabled = UserDefaults.standard.bool(forKey: "recoveryEnabled")
   let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -547,10 +549,11 @@ struct ObjectEditorKey: Codable, Equatable {
       guard let self, let doc, self.historyEnabled else { return }
       self.history.insert(
         QueryRecord(
-          server: server.profile.name, database: doc.database, text: sql,
+          server: doc.server.profile.name, database: doc.lastExecutedDatabase ?? doc.database, text: sql,
+          serverID: doc.server.id, errorMessage: error, rowCount: result?.results.reduce(0) { $0 + $1.values.count },
           seconds: result?.elapsed ?? 0,
           status: error == nil ? (result?.partial == true ? "Kısmi" : "Başarılı") : "Hata"), at: 0)
-      self.history = Array(self.history.prefix(300))
+      self.history = QueryHistoryPolicy.retained(self.history, days: self.historyRetentionDays)
       self.saveHistory()
     }
     documents.append(doc)
@@ -620,15 +623,21 @@ struct ObjectEditorKey: Codable, Equatable {
       }
     } catch { showError(error.localizedDescription) }
   }
+  func historyServer(_ record: QueryRecord) -> ConnectedServer? {
+    if let id = record.serverID { return servers.first { $0.id == id } }
+    let matching = servers.filter { $0.profile.name == record.server }
+    return matching.count == 1 ? matching.first : nil
+  }
   func saveHistory() {
-    do { try write(history, name: "history.json") } catch { showError(error.localizedDescription) }
+    history = QueryHistoryPolicy.retained(history, days: historyRetentionDays)
+    do { try write(history, name: "history.json"); NotificationCenter.default.post(name: .init("queryHistoryChanged"), object: self) } catch { showError(error.localizedDescription) }
   }
   func loadHistory() {
-    guard historyEnabled else { return }
     do {
       let data = try Data(contentsOf: folder.appendingPathComponent("history.json"))
       if data.count < 20_000_000 {
-        history = try JSONDecoder().decode([QueryRecord].self, from: data)
+        history = QueryHistoryPolicy.retained(try JSONDecoder().decode([QueryRecord].self, from: data), days: historyRetentionDays)
+        saveHistory()
       }
     } catch {
       if FileManager.default.fileExists(atPath: folder.appendingPathComponent("history.json").path)
@@ -670,6 +679,7 @@ struct ObjectEditorKey: Codable, Equatable {
     return true
   }
   func confirmSave(_ doc: QueryDocument) -> Bool {
+    guard doc.confirmDiscardResultEdits?() != false else { return false }
     guard doc.needsCloseConfirmation else { return true }
     let alert = NSAlert()
     alert.messageText = "\(doc.title) kaydedilsin mi?"

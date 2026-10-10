@@ -25,7 +25,6 @@ import SwiftUI
       if completed {UserDefaults.standard.removeObject(forKey:"pendingInstallerVersion")}
     }
     StudioTheme.start()
-    studio.loadHistory()
     workbench = WorkbenchController(state: studio)
     window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 1360, height: 860),
@@ -87,6 +86,7 @@ import SwiftUI
       }
       return
     }
+    studio.loadHistory()
     #if DEBUG
       if let password = ProcessInfo.processInfo.environment["MSSQL_TEST_PASSWORD"] {
         Task {

@@ -14,13 +14,13 @@ extension WorkbenchController {
     state.loadHistory()
     present(
       HistoryPanel(
-        records: state.history, enabled: state.historyEnabled,
+        state: state,
         open: { [weak self] record in
-          guard let self, let server = selectedServer else { return }
+          guard let self, let server = state.historyServer(record) else { return }
           state.newQuery(
             server: server, database: record.database, text: record.text,
             title: "Timeline · \(record.time.formatted())")
-        }), title: "Timeline — Sorgu Geçmişi", width: 880, height: 580)
+        }), title: "Timeline — Sorgu Geçmişi", width: 1120, height: 760, minWidth: 1000, minHeight: 650, identity: "studio.timeline")
   }
   func showAIWindow() {
     present(
@@ -116,6 +116,7 @@ private struct SettingsPanel: View {
   @State private var noLock = UserDefaults.standard.bool(forKey:"sqlAutomaticNoLock")
   @State private var shortcutRevision = 0
   @State private var history = false
+  @State private var historyDays = QueryHistoryPolicy.defaultDays
   @State private var recovery = false
   @State private var updateRepository = UserDefaults.standard.string(forKey:"githubUpdateRepository") ?? ""
   @State private var keychainMessage = ""
@@ -171,6 +172,10 @@ private struct SettingsPanel: View {
         }.tabItem { Label("Kısayollar", systemImage: "command") }.tag("shortcuts")
         settingsPage(title: "Çalışma Alanı", subtitle: "Geçmiş ve oturum kurtarma", icon: "square.stack") {
       Toggle("Sorgu geçmişini bu Mac'te sakla", isOn: $history)
+      StudioFormField("Geçmiş saklama süresi") {
+        Stepper(value: $historyDays, in: 1...3650) { Text("\(historyDays) gün").monospacedDigit() }
+      }.disabled(!history)
+      Text("Varsayılan 30 gün. Süresi dolan kayıtlar açılışta, yeni sorguda ve Uygula ile temizlenir. Çok büyük geçmişlerde ayrıca 16 MB / 20.000 kayıt bütçesi uygulanır.").font(.caption).foregroundStyle(.secondary)
       Toggle("Açık sorgu sekmelerini sonraki açılışta kurtar", isOn: $recovery)
       Text(
         "Sorgu metinleri değerler içerebilir. Kayıtlar yalnızca bu Mac'te Application Support/MSSQLStudio altında tutulur. Bağlantı parolaları bu dosyalara yazılmaz."
@@ -185,6 +190,7 @@ private struct SettingsPanel: View {
               }
             }
             state.history = []
+            NotificationCenter.default.post(name: .init("queryHistoryChanged"), object: state)
             message = "Yerel kayıtlar silindi."
           } catch { message = error.localizedDescription }
         }
@@ -218,6 +224,7 @@ private struct SettingsPanel: View {
       }
     }.padding(24).studioPanel().onAppear {
       history = state.historyEnabled
+      historyDays = state.historyRetentionDays
       recovery = state.recoveryEnabled
     }
   }
@@ -254,6 +261,9 @@ private struct SettingsPanel: View {
           UserDefaults.standard.set(noLock,forKey:"sqlAutomaticNoLock")
           NotificationCenter.default.post(name:Notification.Name("sqlEditorPreferencesChanged"),object:nil)
           state.historyEnabled = history
+          state.historyRetentionDays = historyDays
+          UserDefaults.standard.set(historyDays, forKey: "historyRetentionDays")
+          state.saveHistory()
           state.recoveryEnabled = recovery
           UserDefaults.standard.set(history, forKey: "historyEnabled")
           UserDefaults.standard.set(recovery, forKey: "recoveryEnabled")
@@ -262,48 +272,92 @@ private struct SettingsPanel: View {
   }
 }
 
-private struct HistoryPanel: View {
-  let records: [QueryRecord]
-  let enabled: Bool
+struct HistoryPanel: View {
+  let state: StudioState
   var open: (QueryRecord) -> Void
+  @State private var records: [QueryRecord] = []
   @State private var search = ""
   @State private var selected: UUID?
+  @State private var server = ""
+  @State private var database = ""
+  @State private var status = ""
+  @State private var period = 0
+  @State private var slowest = false
   var filtered: [QueryRecord] {
     records.filter {
-      search.isEmpty || ($0.text + $0.database + $0.server).localizedCaseInsensitiveContains(search)
-    }
+      (search.isEmpty || ($0.text + $0.database + $0.server).localizedCaseInsensitiveContains(search)) &&
+      (server.isEmpty || $0.server == server) && (database.isEmpty || $0.database == database) &&
+      (status.isEmpty || $0.status == status) && (period == 0 || $0.time >= Date().addingTimeInterval(-Double(period)*86400))
+    }.sorted { slowest ? $0.seconds > $1.seconds : $0.time > $1.time }
   }
-  var record: QueryRecord? { records.first { $0.id == selected } }
+  var record: QueryRecord? { filtered.first { $0.id == selected } }
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      StudioPanelHeading(title: "Timeline", icon: "clock.arrow.circlepath", subtitle: "Önceki sorguları bul, incele ve yeni sekmede aç")
-      if !enabled {
-        Text("Geçmiş kaydı kapalı. Ayarlar'dan açıldığında yeni sorgular kaydedilir.")
-          .foregroundStyle(.secondary)
-      }
-      TextField("Geçmişte ara", text: $search)
-      if filtered.isEmpty {
-        StudioEmptyState(title: search.isEmpty ? "Henüz kayıt yok" : "Eşleşme bulunamadı", icon: "clock", detail: search.isEmpty ? "Geçmiş açık olduğunda çalıştırılan sorgular burada listelenir." : "Aramanızı değiştirerek tekrar deneyin.")
-      } else {
+      StudioPanelHeading(title: "Timeline", icon: "clock.arrow.circlepath", subtitle: "Sorgularını bul, sürelerini karşılaştır ve yeniden aç")
+      HStack {
+        Label("\(records.count) sorgu", systemImage: "text.badge.checkmark")
+        Spacer()
+        Text("Saklama: \(state.historyRetentionDays) gün").foregroundStyle(.secondary)
+      }.font(.callout)
+      if !state.historyEnabled { Text("Geçmiş kaydı kapalı. Ayarlar → Çalışma Alanı'ndan açabilirsiniz.").foregroundStyle(.secondary) }
+      TextField("SQL, sunucu veya veritabanında ara", text: $search)
+      HStack {
+        Picker("Sunucu", selection: $server) { Text("Tümü").tag(""); ForEach(Array(Set(records.map(\.server))).sorted(), id: \.self) { Text($0).tag($0) } }
+        Picker("Veritabanı", selection: $database) { Text("Tümü").tag(""); ForEach(Array(Set(records.map(\.database))).sorted(), id: \.self) { Text($0).tag($0) } }
+        Picker("Durum", selection: $status) { Text("Tümü").tag(""); ForEach(["Başarılı", "Hata", "Kısmi"], id: \.self) { Text($0).tag($0) } }
+        Picker("Tarih", selection: $period) { Text("Tümü").tag(0); Text("24 saat").tag(1); Text("7 gün").tag(7); Text("30 gün").tag(30) }
+        Toggle("En yavaş önce", isOn: $slowest)
+      }.controlSize(.small)
+      Text("\(filtered.count) eşleşme · Toplam \(String(format: "%.2f", filtered.reduce(0) { $0 + $1.seconds })) sn").font(.caption).foregroundStyle(.secondary)
       Table(filtered, selection: $selected) {
-        TableColumn("Zaman") { Text($0.time.formatted(date: .abbreviated, time: .standard)) }
+        TableColumn("Zaman") { Text($0.time.formatted(date: .abbreviated, time: .standard)) }.width(min: 150, ideal: 175)
+        TableColumn("Sunucu", value: \.server)
         TableColumn("Veritabanı", value: \.database)
-        TableColumn("Durum", value: \.status)
-        TableColumn("Süre") { Text(String(format: "%.3f s", $0.seconds)) }
+        TableColumn("Sorgu") { Text($0.text.replacingOccurrences(of: "\n", with: " ")).lineLimit(1) }.width(min: 180, ideal: 300)
+        TableColumn("Durum") { Label($0.status, systemImage: $0.status == "Hata" ? "xmark.circle" : $0.status == "Kısmi" ? "exclamationmark.circle" : "checkmark.circle").foregroundStyle($0.status == "Hata" ? Color.red : Color.secondary) }
+        TableColumn("Süre") { Text(String(format: "%.3f sn", $0.seconds)).monospacedDigit() }.width(85)
       }.frame(minHeight: 180)
-      }
       if let record {
-        ScrollView {
-          Text(record.text).font(.custom(StudioTheme.codeFont.fontName, size: 13)).textSelection(
-            .enabled
-          ).frame(
-            maxWidth: .infinity, alignment: .leading)
-        }.frame(maxHeight: 230)
-        StudioActionButton("Yeni Sorgu Sekmesinde Aç", icon:"plus.square", tint:.accentColor) { open(record) }
+        HStack {
+          Text(record.server + " / " + record.database).font(.headline)
+          Spacer()
+          StudioActionButton("Kopyala", icon: "doc.on.doc", tint: .accentColor) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(record.text, forType: .string) }
+          StudioActionButton("Yeni Sekmede Aç", icon: "plus.square", tint: .accentColor) { open(record) }
+            .disabled(state.historyServer(record) == nil)
+        }
+        if let message = record.errorMessage { Text(message).foregroundStyle(.red).font(.caption).lineLimit(3).textSelection(.enabled) }
+        if let count = record.rowCount { Text("\(count) yüklenen satır").font(.caption).foregroundStyle(.secondary) }
+        SQLReadOnlyPreview(sql: record.text).frame(minHeight: 150, idealHeight: 240)
+        if state.historyServer(record) == nil { Text("Bu sunucuyu Explorer'a ekleyerek sorguyu kendi bağlantısında açabilirsiniz.").font(.caption).foregroundStyle(.secondary) }
       } else {
-        Text("İncelemek için bir sorgu seçin.").foregroundStyle(.secondary)
+        StudioEmptyState(title: filtered.isEmpty ? "Eşleşen sorgu yok" : "Sorguyu seçin", icon: "clock", detail: "SQL önizlemesi ve yeniden açma işlemleri burada görünür.").frame(height: 170)
       }
-    }.padding(18).studioPanel()
+    }.padding(20).studioPanel()
+      .onAppear { records = state.history; selected = records.first?.id }
+      .onReceive(NotificationCenter.default.publisher(for: .init("queryHistoryChanged"))) { _ in records = state.history }
+  }
+}
+
+struct SQLReadOnlyPreview: NSViewRepresentable {
+  let sql: String
+  func makeNSView(context: Context) -> NSScrollView {
+    let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.hasHorizontalScroller = true
+    let text = NSTextView(usingTextLayoutManager: true); text.isEditable = false; text.isSelectable = true
+    text.isHorizontallyResizable = true; text.isVerticallyResizable = true
+    text.textContainer?.widthTracksTextView = false; text.textContainer?.containerSize = NSSize(width: 100000, height: 10000000)
+    text.textContainerInset = NSSize(width: 12, height: 10); scroll.documentView = text
+    return scroll
+  }
+  func updateNSView(_ scroll: NSScrollView, context: Context) {
+    guard let text = scroll.documentView as? NSTextView else { return }
+    text.backgroundColor = StudioTheme.editorCanvas
+    if text.string != sql {
+      text.textContentStorage?.textStorage?.setAttributedString(SQLSourceHighlighting.attributed(sql))
+      let lines = sql.components(separatedBy: "\n")
+      let width = min(100000, max(600, (lines.map { ($0 as NSString).size(withAttributes: [.font: StudioTheme.codeFont]).width }.max() ?? 0) + 32))
+      text.textContainer?.containerSize = NSSize(width: width, height: 10000000)
+      text.setFrameSize(NSSize(width: width, height: max(200, CGFloat(lines.count) * 20 + 32)))
+    }
   }
 }
 private struct IndexPanel: View {

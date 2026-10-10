@@ -72,6 +72,16 @@ import SwiftUI
     checkbox.setButtonType(.switch); checkbox.title = ""; checkbox.isEnabled = false; checkbox.controlSize = .small
   }
   required init(coder: NSCoder) { fatalError() }
+  // NSCell's inherited ObjC copy would shallow-copy Swift-owned checkbox storage.
+  // Field editing copies the cell; each copy must own a separate NSButtonCell.
+  override func copy(with zone: NSZone? = nil) -> Any {
+    let cell = GridDataCell(textCell: stringValue)
+    cell.isBit = isBit; cell.font = font; cell.alignment = alignment
+    cell.textColor = textColor; cell.lineBreakMode = lineBreakMode
+    cell.isEditable = isEditable; cell.isSelectable = isSelectable
+    cell.isBordered = isBordered; cell.isEnabled = isEnabled
+    return cell
+  }
   override func draw(withFrame frame: NSRect, in view: NSView) {
     isHighlighted = false
     backgroundStyle = .normal
@@ -223,6 +233,36 @@ import SwiftUI
 final class ResultController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
   let table = CopyTable()
   private var generation = -1
+  var editDefinition: TableDefinition?
+  var editObjectID: Int?
+  private(set) var pendingEdits: [Int: DataEditRow] = [:]
+  var editsChanged: (() -> Void)?
+  var editingAllowed: (() -> Bool)?
+  func discardEdits() { pendingEdits = [:]; editDefinition = nil; editObjectID = nil; table.reloadData(); editsChanged?() }
+  func pendingSQL() throws -> String {
+    guard let editDefinition else { throw SQLFailure("Önce düzenlemeyi açın.") }
+    return try DataEditScripts.changes(table: editDefinition, rows: pendingEdits.keys.sorted().compactMap { pendingEdits[$0] }, expectedObjectID: editObjectID)
+  }
+  func setEditValue(_ value: String?, row: Int, column: Int) {
+    guard canEdit(row: row, column: column) else { return }
+    let index = sourceIndex(row)
+    if pendingEdits[index] == nil {
+      guard pendingEdits.count < 400 else { NSSound.beep(); return }
+      let original = Array(result.values[index]); pendingEdits[index] = DataEditRow(original: original, values: original)
+    }
+    pendingEdits[index]?.values[column] = value
+    if pendingEdits[index]?.values == pendingEdits[index]?.original { pendingEdits.removeValue(forKey: index) }
+    editsChanged?(); table.reloadData()
+  }
+  private func canEdit(row: Int, column: Int) -> Bool {
+    guard editingAllowed?() == true, let definition = editDefinition, row >= 0, row < pageCount, definition.columns.indices.contains(column) else { return false }
+    let c = definition.columns[column]
+    return !c.generated && !definition.primaryKey.contains(c.name)
+  }
+  func setSelectedNull() {
+    guard let column = table.cellColumns.first, table.tableColumns.indices.contains(column), let ordinal = Int(table.tableColumns[column].identifier.rawValue) else { return }
+    setEditValue(nil, row: table.selectedRow, column: ordinal)
+  }
   private(set) var result = Rows()
   private(set) var visibleIndices: [Int]?
   private(set) var rules: [Int: ColumnRule] = [:]
@@ -373,6 +413,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     let changedFields = result.fields != rows.fields
     guard changedFields || self.generation != generation || result.values.count != rows.values.count else { return }
     self.generation = generation
+    if editDefinition != nil { discardEdits() }
     if changedFields {
       for c in table.tableColumns { table.removeTableColumn(c) }
       let n = NSTableColumn(identifier: .init("row"))
@@ -390,6 +431,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
         header.typeSymbol = f.type == -7 ? "checkmark.square" : f.numeric ? "number" : ([91, 92, 93, -9_101, -9_102].contains(Int(f.type)) ? "calendar" : "textformat")
         c.headerCell = header
         let dataCell = GridDataCell(textCell:""); dataCell.isBit = f.type == -7; dataCell.alignment = f.numeric ? .right : .left; c.dataCell = dataCell
+        c.isEditable = true
         c.title = f.name
         c.headerToolTip = "\(f.name) · \(f.dataType)"
         c.width = max(150, min(360, CGFloat(f.name.count * 9 + 45)))
@@ -604,19 +646,33 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     columnIndex != 0 && newColumnIndex != 0
   }
   private func sourceIndex(_ row: Int) -> Int { visibleIndices?[pageStart + row] ?? (pageStart + row) }
+  func tableView(_ tableView: NSTableView, shouldEdit column: NSTableColumn?, row: Int) -> Bool {
+    guard let ordinal = column.flatMap({ Int($0.identifier.rawValue) }) else { return false }
+    return canEdit(row: row, column: ordinal)
+  }
+  func tableView(_ tableView: NSTableView, setObjectValue value: Any?, for column: NSTableColumn?, row: Int) {
+    guard let ordinal = column.flatMap({ Int($0.identifier.rawValue) }) else { return }
+    setEditValue(value as? String ?? "", row: row, column: ordinal)
+  }
   func tableView(_ tableView: NSTableView, objectValueFor column: NSTableColumn?, row: Int) -> Any? {
     guard let column, row >= 0, row < pageCount else { return nil }
-    guard let ordinal = Int(column.identifier.rawValue) else { return String(sourceIndex(row)+1) }
-    let values = result.values[sourceIndex(row)]
+    let index = sourceIndex(row)
+    guard let ordinal = Int(column.identifier.rawValue) else { return (pendingEdits[index] == nil ? "" : "✎ ") + String(index+1) }
+    let values = pendingEdits[index]?.values ?? Array(result.values[index])
     guard values.indices.contains(ordinal), let value = values[ordinal] else { return "NULL" }
-    return String(value.prefix(1000)).replacingOccurrences(of:"\n",with:" ↵ ")
+    if editDefinition != nil { return value }
+    return String(value.prefix(1000)).replacingOccurrences(of: "\n", with: " ↵ ")
   }
   func tableView(_ tableView: NSTableView, willDisplayCell cell: Any, for column: NSTableColumn?, row: Int) {
     guard row >= 0, row < pageCount, let cell = cell as? GridDataCell else { return }
     let ordinal = column.flatMap { Int($0.identifier.rawValue) }
-    let values = ordinal == nil ? [] : result.values[sourceIndex(row)]
+    let index = sourceIndex(row)
+    let values = pendingEdits[index]?.values ?? Array(result.values[index])
     let missing = ordinal.map { !values.indices.contains($0) || values[$0] == nil } ?? false
-    cell.textColor = missing ? .secondaryLabelColor : StudioTheme.text
+    let changed = ordinal.map { pendingEdits[index]?.values[$0] != pendingEdits[index]?.original?[$0] } ?? (pendingEdits[index] != nil)
+    cell.isEditable = ordinal.map { canEdit(row: row, column: $0) } ?? false
+    cell.isSelectable = cell.isEditable
+    cell.textColor = changed ? .systemOrange : missing ? .secondaryLabelColor : StudioTheme.text
     cell.font = missing ? nullFont : StudioTheme.uiFont
   }
   private let nullFont = NSFontManager.shared.convert(StudioTheme.uiFont,toHaveTrait:.italicFontMask)
@@ -636,7 +692,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     }
     var bytes = includeHeaders ? ordinals.reduce(0) { $0 + result.fields[$1].name.utf8.count * 2 + 4 } : 0
     for row in chosen where row < pageCount {
-      let values = result.values[sourceIndex(row)]
+      let values = pendingEdits[sourceIndex(row)]?.values ?? Array(result.values[sourceIndex(row)])
       bytes += ordinals.reduce(0) { $0 + (values[$1]?.utf8.count ?? 4) * 2 + 4 }
       if bytes > 16_777_216 {
         let alert = NSAlert()
@@ -648,7 +704,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     }
     let body = chosen.filter { $0 < pageCount }.map { row in
       ordinals.map { ordinal in
-        let value = result.values[sourceIndex(row)][ordinal]
+        let value = (pendingEdits[sourceIndex(row)]?.values ?? Array(result.values[sourceIndex(row)]))[ordinal]
         let v = value ?? "NULL"
         return v.contains("\t") || v.contains("\n") || v.contains("\"")
           ? "\"" + v.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : v
@@ -668,7 +724,8 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     guard r >= 0, r < pageCount, table.tableColumns.indices.contains(c),
       let i = Int(table.tableColumns[c].identifier.rawValue)
     else { return }
-    let values = result.values[sourceIndex(r)]
+    if canEdit(row: r, column: i) { table.editColumn(c, row: r, with: nil, select: true); return }
+    let values = pendingEdits[sourceIndex(r)]?.values ?? Array(result.values[sourceIndex(r)])
     guard values.indices.contains(i) else { return }
     let alert = NSAlert()
     alert.messageText = result.fields[i].name
@@ -803,6 +860,13 @@ private struct ColumnFilterPanel: View {
   private let navigationHost = NSStackView()
   private let copyHeadersButton = NSButton()
   private let refreshButton = NSButton()
+  private let editDataButton = NSButton(title: "Düzenle", target: nil, action: nil)
+  private let previewDataButton = NSButton(title: "Önizle", target: nil, action: nil)
+  private let revertDataButton = NSButton(title: "Vazgeç", target: nil, action: nil)
+  private let nullDataButton = NSButton(title: "NULL", target: nil, action: nil)
+  private var preparingData = false
+  private var submittingData = false
+  private var dataReview: NSWindowController?
   private let refreshInterval = NSPopUpButton()
   private var refreshTask: Task<Void, Never>?
   deinit { refreshTask?.cancel(); exportJob?.cancel() }
@@ -834,6 +898,17 @@ private struct ColumnFilterPanel: View {
     self.document = document
     editor = EditorController(document: document)
     super.init(nibName: nil, bundle: nil)
+    document.confirmDiscardResultEdits = { [weak self] in
+      guard let self else { return true }
+      view.window?.makeFirstResponder(nil)
+      guard !submittingData else { return false }
+      guard hasDataEdits else { return true }
+      let alert = NSAlert(); alert.messageText = "Gönderilmemiş sonuç düzenlemeleri var"
+      alert.informativeText = "Devam ederseniz bu yerel değişiklikler silinir. Veritabanına göndermek için Önizle'yi kullanın."
+      alert.addButton(withTitle: "Düzenlemeleri Sil ve Devam Et"); alert.addButton(withTitle: "Geri Dön")
+      guard alert.runModal() == .alertFirstButtonReturn else { return false }
+      for grid in tables.values { grid.discardEdits() }; return true
+    }
     document.changed = { [weak self] in
       self?.documentDidChange()
     }
@@ -973,8 +1048,16 @@ private struct ColumnFilterPanel: View {
     summary.font = .systemFont(ofSize: 11)
     summary.textColor = .secondaryLabelColor
     let resultHeader = NSStackView(views: [
-      navigationHost, refreshButton, refreshInterval, rowLimit, copyHeadersButton, export, cancelExport, NSView(), filter,
+      navigationHost, refreshButton, refreshInterval, rowLimit, copyHeadersButton, export, cancelExport, editDataButton, previewDataButton, revertDataButton, nullDataButton, NSView(), filter,
     ])
+    for (button, icon, action) in [(editDataButton, "pencil", #selector(beginDataEditing)), (previewDataButton, "doc.text.magnifyingglass", #selector(previewDataEditing)), (revertDataButton, "arrow.uturn.backward", #selector(revertDataEditing)), (nullDataButton, "nosign", #selector(nullDataEditing))] {
+      button.target = self; button.action = action; button.controlSize = .small
+      button.image = NSImage(systemSymbolName: icon, accessibilityDescription: button.title)
+      button.imagePosition = .imageLeading; button.bezelStyle = .rounded
+      button.contentTintColor = button === revertDataButton || button === nullDataButton ? .systemOrange : .controlAccentColor
+    }
+    editDataButton.toolTip = "Kaynağı doğrula, hücreleri çift tıklayarak yerelde düzenle. Göndermeden önce SQL önizlemesi zorunludur."
+    previewDataButton.toolTip = "Bekleyen UPDATE komutlarını incele ve onaylayarak gönder"
     resultHeader.setAccessibilityIdentifier("gridToolbar")
     navigationHost.spacing = 0
     copyHeadersButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Başlıklarla kopyala")
@@ -1089,6 +1172,89 @@ private struct ColumnFilterPanel: View {
     export.isEnabled = toolbar != nil && exportJob == nil
     copyHeadersButton.isEnabled = toolbar != nil
     filter.isEnabled = toolbar != nil
+    syncDataActions()
+  }
+  private var selectedGrid: ResultController? {
+    guard let index = (resultTabs.selectedTabViewItem?.identifier as? NSNumber)?.intValue else { return nil }
+    return tables[index]
+  }
+  private var hasDataEdits: Bool { tables.values.contains { !$0.pendingEdits.isEmpty } }
+  private func syncDataActions() {
+    let grid = selectedGrid
+    let safe = document.canRefresh && !preparingData && !submittingData
+    editDataButton.title = grid?.editDefinition == nil ? "Düzenle" : "Düzenleme Açık"
+    editDataButton.isEnabled = safe && grid != nil && grid?.editDefinition == nil && document.results.count == 1 && !document.partial
+    previewDataButton.isEnabled = safe && !(grid?.pendingEdits.isEmpty ?? true)
+    previewDataButton.title = "Önizle (\(grid?.pendingEdits.count ?? 0))"
+    revertDataButton.isEnabled = grid?.editDefinition != nil && !submittingData
+    nullDataButton.isEnabled = safe && grid?.editDefinition != nil
+  }
+  private func dataError(_ error: Error) {
+    let alert = NSAlert(); alert.messageText = "Veri düzenleme"; alert.informativeText = error.localizedDescription
+    if let window = view.window { alert.beginSheetModal(for: window) } else { alert.runModal() }
+  }
+  @objc private func beginDataEditing() {
+    guard let grid = selectedGrid, document.canRefresh, !document.partial, document.results.count == 1, let sql = document.lastExecutedSQL else { return }
+    let generation = document.resultGeneration, db = document.database, server = document.server
+    let serverGeneration = server.generation
+    preparingData = true; syncDataActions()
+    // Unattended refresh would discard the staged copy.
+    refreshTask?.cancel(); refreshTask = nil; refreshInterval.selectItem(at: 0)
+    Task { [weak self, weak grid] in
+      guard let self, let grid else { return }
+      defer { preparingData = false; syncDataActions() }
+      do {
+        let source = try ResultEditSource.decode(try await server.catalog(ResultEditSource.metadata(sql), database: db), fields: grid.result.fields, database: db)
+        let identity = try await server.catalog("SELECT object_id FROM sys.tables WHERE schema_id=SCHEMA_ID(\(SQL.literal(source.schema))) AND name=\(SQL.literal(source.table));", database: db)
+        guard !identity.partial, let id = identity.results.first?.values.first?.first.flatMap({ $0 }).flatMap(Int.init) else { throw SQLFailure("Kaynak bir yerel kullanıcı tablosu değil.") }
+        let table = try source.projected(ObjectMetadata.decode(try await server.catalog(ObjectMetadata.table(id), database: db), schema: source.schema, name: source.table))
+        guard document.server === server, server.generation == serverGeneration, document.resultGeneration == generation, document.database == db, document.canRefresh else { throw SQLFailure("Sonuç değişti; güncel sonuçta yeniden deneyin.") }
+        grid.editObjectID = id
+        grid.editDefinition = table
+        grid.editingAllowed = { [weak self] in self?.document.server === server && server.generation == serverGeneration && self?.document.resultGeneration == generation && self?.document.canRefresh == true && self?.submittingData == false }
+        grid.editsChanged = { [weak self] in self?.syncDataActions() }
+        grid.table.reloadData()
+      } catch { dataError(error) }
+    }
+  }
+  @objc private func nullDataEditing() { selectedGrid?.setSelectedNull() }
+  @objc private func revertDataEditing() {
+    guard let grid = selectedGrid, !submittingData else { return }
+    view.window?.makeFirstResponder(nil)
+    if grid.pendingEdits.isEmpty { grid.discardEdits(); return }
+    let alert = NSAlert(); alert.messageText = "Bekleyen düzenlemelerden vazgeçilsin mi?"; alert.addButton(withTitle: "Vazgeç"); alert.addButton(withTitle: "Düzenlemeye Devam Et")
+    if let window = view.window { alert.beginSheetModal(for: window) { response in if response == .alertFirstButtonReturn { grid.discardEdits() } } }
+  }
+  @objc private func previewDataEditing() {
+    view.window?.makeFirstResponder(nil)
+    guard let grid = selectedGrid, document.canRefresh, !submittingData else { return }
+    do {
+      let sql = try grid.pendingSQL(), generation = document.resultGeneration, db = document.database
+      let server = document.server, serverGeneration = document.server.generation
+      let panel = DataChangesPreview(sql: sql, target: document.server.profile.name + " / " + db, submit: { [weak self, weak grid] in
+        guard let self, let grid else { throw SQLFailure("Sorgu kapatıldı.") }
+        guard !submittingData, document.server === server, server.generation == serverGeneration, server.online, document.canRefresh, document.database == db, document.resultGeneration == generation, try grid.pendingSQL() == sql else { throw SQLFailure("Önizlemeden sonra sonuç veya düzenlemeler değişti. Yeniden önizleyin.") }
+        submittingData = true; syncDataActions()
+        defer { submittingData = false; syncDataActions() }
+        guard let definition = grid.editDefinition, let objectID = grid.editObjectID else { throw SQLFailure("Kaynak kimliği kayboldu.") }
+        let current = try ObjectMetadata.decode(try await server.catalog(ObjectMetadata.table(objectID), database: db), schema: definition.schema, name: definition.name)
+        guard current.primaryKey == definition.primaryKey, Set(current.columns.map(\.id)) == Set(definition.columns.map(\.id)), current.columns.allSatisfy({ c in definition.columns.contains(c) }) else { throw SQLFailure("Tablo yapısı değişmiş; güncel sonucu yeniden yükleyin.") }
+        guard document.server === server, server.generation == serverGeneration, server.online, document.canRefresh, document.database == db, document.resultGeneration == generation, try grid.pendingSQL() == sql else { throw SQLFailure("Önizleme artık güncel değil.") }
+        // Dedicated connection: commits cannot affect the console's transaction/session.
+        let connection = ODBCConnection(); var profile = server.profile; profile.database = db
+        do {
+          try await connection.connect(profile, password: server.password)
+          let output = try await connection.execute(sql)
+          await connection.disconnect()
+          guard !output.partial else { throw SQLFailure("Sunucu yanıtı kısmi; sonucu yenileyip kontrol edin, aynı değişiklikleri tekrar göndermeyin.") }
+          grid.discardEdits()
+          submittingData = false
+          if document.resultGeneration == generation && document.database == db && document.canRefresh { refreshResults() }
+        } catch { await connection.disconnect(); throw error }
+      })
+      let window = NSWindow(contentViewController: NSHostingController(rootView: panel)); window.title = "UPDATE Önizlemesi"; window.setContentSize(NSSize(width: 1000, height: 720)); window.styleMask = [.titled, .closable, .resizable]; window.minSize = NSSize(width: 760, height: 520)
+      let controller = DataReviewWindowController(window: window); controller.canClose = { [weak self] in self?.submittingData != true }; window.delegate = controller; dataReview = controller; controller.showWindow(nil)
+    } catch { dataError(error) }
   }
   @objc private func refreshResults() {
     guard document.canRefresh, let sql = document.lastExecutedSQL else { return }
@@ -1098,7 +1264,7 @@ private struct ColumnFilterPanel: View {
   @objc private func setRefreshInterval() {
     refreshTask?.cancel()
     let seconds = [0, 5, 10, 30, 60, 300][refreshInterval.indexOfSelectedItem]
-    guard seconds > 0, document.canRefresh else { refreshInterval.selectItem(at: 0); return }
+    guard seconds > 0, document.canRefresh, !tables.values.contains(where: { $0.editDefinition != nil }) else { refreshInterval.selectItem(at: 0); return }
     refreshTask = Task { [weak self] in
       while !Task.isCancelled {
         do { try await Task.sleep(for: .seconds(seconds)) } catch { return }
@@ -1111,7 +1277,7 @@ private struct ColumnFilterPanel: View {
   }
   private func syncResultSelector() {
     refreshButton.isEnabled = document.canRefresh
-    refreshInterval.isEnabled = document.canRefresh || document.busy
+    refreshInterval.isEnabled = (document.canRefresh || document.busy) && !tables.values.contains(where: { $0.editDefinition != nil })
     if !document.busy && !document.canRefresh { refreshTask?.cancel(); refreshInterval.selectItem(at: 0) }
   }
   func splitView(
@@ -1180,6 +1346,7 @@ private struct ColumnFilterPanel: View {
     submitModuleButton.isEnabled = document.canSubmitModule && !checkingModuleSubmission
     guard isViewLoaded else { return }
     updateConnectionAppearance()
+    syncDataActions()
     actual.state = document.actualPlan ? .on : .off
     actual.isEnabled = !document.busy
     rowLimit.isEnabled = !document.busy
@@ -1513,5 +1680,43 @@ final class PlanController: NSViewController, NSOutlineViewDataSource, NSOutline
         NSAlert(error: error).runModal()
       }
     }
+  }
+}
+
+
+struct DataChangesPreview: View {
+  let sql: String
+  let target: String
+  let submit: () async throws -> Void
+  @State private var sending = false
+  @State private var completed = false
+  @State private var message = ""
+  var body: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      StudioPanelHeading(title: "Değişiklikleri İncele", icon: "doc.text.magnifyingglass", subtitle: target)
+      Text("Aşağıdaki SQL onayınızla tek transaction içinde gönderilir. Satır başka biri tarafından değiştirilmişse tüm işlem geri alınır.").foregroundStyle(.secondary)
+      SQLReadOnlyPreview(sql: sql)
+      if !message.isEmpty { Text(message).foregroundStyle(completed ? Color.green : Color.red).textSelection(.enabled) }
+      HStack {
+        if sending { ProgressView().controlSize(.small) }
+        Spacer()
+        StudioActionButton(completed ? "Gönderildi" : "Onayla ve Veritabanına Gönder", icon: completed ? "checkmark.circle" : "paperplane", tint: .green) {
+          sending = true
+          Task {
+            defer { sending = false }
+            do { try await submit(); completed = true; message = "Değişiklikler gönderildi. Sonuç yeniden yükleniyor." }
+            catch { message = error.localizedDescription + " Bağlantı hatasında işlem tamamlanmış olabilir; yeniden göndermeden önce sonucu kontrol edin." }
+          }
+        }.buttonStyle(StudioPrimaryButton()).disabled(sending || completed || !message.isEmpty)
+      }
+    }.padding(24).studioPanel()
+  }
+}
+
+@MainActor private final class DataReviewWindowController: NSWindowController, NSWindowDelegate {
+  var canClose: (() -> Bool)?
+  func windowShouldClose(_ sender: NSWindow) -> Bool {
+    guard canClose?() != false else { NSSound.beep(); return false }
+    return true
   }
 }
