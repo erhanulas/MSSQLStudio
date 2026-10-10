@@ -392,3 +392,9 @@ Davranış kaynakları: [DataGrip nesne navigasyonu](https://www.jetbrains.com/h
 ### 0.2.32 yayın doğrulaması
 
 [GitHub v0.2.32](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.32) yayımlandı. Uzak CI ikinci denemede 118 farklı testi geçti; ilk arayüz test süreci signal 11 ile kapanmıştı. GitHub paketinin gerçek güncelleyiciyle indirme, SHA-256, sabit sertifika ve sürüm hazırlığı doğrulandı; kurulu uygulama değiştirilmedi. Keychain erişim kuralları değiştirilmediği için tekrar izin istemesinin tamamen kalktığı doğrulanmış değildir.
+
+## Keychain erişim izinleri
+
+Bağlantı parolaları `local.mssqlstudio.servers` hizmetinde kalır; yeni kayıtların görünen etiketi “MSSQL Studio · Kayıtlı bağlantı”dır. Bu teknik hizmet adı bir hata değildir. Aynı kalıcı sertifika ve uygulama kimliğiyle yayımlanan güncellemeler mevcut uygulama erişimini korur. Eski/ad-hoc derlemelerden kalan izinler için Ayarlar → Keychain izinlerini yenile işlemi eklendi. İşlem yalnızca yayın imzasını doğrulayan uygulamada çalışır; parolaları okumadan, silmeden veya dışarı aktarmadan bu hizmetteki bağlantı kayıtlarının erişimini çağıran uygulamaya yeniler. macOS eski izinleri değiştirmek için bir defalık onay/parola isteyebilir. Normal kayıt güncellemeleri erişim kuralını tekrar yazmaz.
+
+Sistem erişim penceresinde “Her Zaman İzin Ver” seçeneği kalıcı uygulama iznini kaydeder; yalnız “İzin Ver” seçimi sonraki erişimlerde tekrar sorabilir. Kilitli anahtar zinciri veya sistem güvenlik değişikliklerinde macOS yine kimlik doğrulayabilir. Yerel imzasız/ad-hoc test derlemesinde gerçek kayıtların izinlerini yenilemeyin.

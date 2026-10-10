@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.40",
+    "date": "2026-10-10",
+    "title": "Keychain erişim izinlerini yenileme",
+    "changes": [
+      "Ayarlara eski bağlantı kayıtlarının uygulama erişimini yenileme işlemi eklendi. macOS bir defalık parola veya onay isteyebilir.",
+      "Yeni Keychain kayıtları anlaşılır bir adla ve uygulamaya özel erişim izniyle oluşturuluyor. Normal parola güncellemeleri erişim iznini yeniden yazmıyor.",
+      "Kalıcı uygulama imzası korunuyor; farklı imzalı uygulamaların kayıtları okuması ve izin yenilemesi engelleniyor."
+    ]
+  },
+  {
     "version": "0.2.39",
     "date": "2026-10-10",
     "title": "SQL editörü ve veritabanına gönderme önizlemesi",

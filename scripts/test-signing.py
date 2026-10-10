@@ -5,41 +5,47 @@ import shutil
 import subprocess
 import tempfile
 import uuid
-from signing import sign, verify
+from signing import sign, verify, requirement
 
+VAULT_SOURCE = (Path(__file__).resolve().parent.parent / 'Sources/SQLServerKit/Persistence.swift').read_text().split('public struct QueryRecord:')[0]
 SOURCE = r'''
 import Foundation
 import Security
+public struct ServerProfile: Codable, Sendable {
+  public var id=UUID(uuidString:"11111111-2222-3333-4444-555555555555")!
+  public var name="Synthetic signing fixture"
+}
+public struct SQLFailure: Error {public init(_ message:String) {}}
+public enum PersonalSigningIdentity {
+  public static func requirement() throws -> String { #"PINNED_REQUIREMENT"# }
+}
+VAULT_SOURCE
 SecKeychainSetUserInteractionAllowed(false)
 let service = CommandLine.arguments[1]
 let operation = CommandLine.arguments[2]
-var keychain: SecKeychain?
-let opened = SecKeychainOpen(CommandLine.arguments[3], &keychain)
-guard opened == errSecSuccess, let keychain else {exit(4)}
-let query: [String:Any] = [kSecMatchSearchList as String:[keychain], kSecClass as String:kSecClassGenericPassword,
-  kSecAttrService as String:service, kSecAttrAccount as String:"signing-regression"]
-var attributes = query
-attributes[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
-let status: OSStatus
-switch operation {
-case "create":
-  attributes[kSecUseKeychain as String] = keychain
-  attributes[kSecValueData as String] = Data("synthetic-signing-test".utf8)
-  status = SecItemAdd(attributes as CFDictionary,nil)
-case "read":
-  attributes[kSecReturnData as String] = true
-  var value: CFTypeRef?
-  status = SecItemCopyMatching(attributes as CFDictionary,&value)
-  if status == errSecSuccess && value as? Data != Data("synthetic-signing-test".utf8) {exit(3)}
-case "delete": status = SecItemDelete(attributes as CFDictionary)
-default: print("BUILD_MARKER"); exit(0)
-}
-print(status)
-'''
+let vault=ServerVault(service:service,keychainPath:CommandLine.arguments[3])
+let profile=ServerProfile()
+var keychain:SecKeychain?
+guard SecKeychainOpen(CommandLine.arguments[3],&keychain) == errSecSuccess,let keychain else {exit(4)}
+do {
+  switch operation {
+  case "renew":
+    guard try vault.renewApplicationAccess() == 1 else {exit(5)}
+  case "read":
+    let records=try vault.list()
+    guard records.count == 1,records.first?.password == "synthetic-signing-test",records.first?.profile.id == profile.id else {exit(3)}
+  case "save": try vault.save(profile,password:"synthetic-signing-test")
+  case "delete": try vault.delete(profile.id)
+  default: print("BUILD_MARKER");exit(0)
+  }
+  print(0)
+} catch {print(-1)}
+'''.replace('VAULT_SOURCE',VAULT_SOURCE).replace('PINNED_REQUIREMENT',requirement('local.mssqlstudio.signing-regression'))
+
 
 
 def status(binary, service, operation):
-    result = subprocess.run([str(binary), service, operation, str(test_keychain)], capture_output=True, text=True, check=True)
+    result = subprocess.run([str(binary), service, operation, str(test_keychain)], capture_output=True, text=True, check=True, timeout=20)
     return int(result.stdout.strip())
 
 with tempfile.TemporaryDirectory(prefix='StudioSigningRegression-', dir='/tmp') as folder:
@@ -68,16 +74,20 @@ with tempfile.TemporaryDirectory(prefix='StudioSigningRegression-', dir='/tmp') 
     shutil.copy2(first,installed)
     created = False
     try:
-        assert status(installed, service, 'create') == 0, 'Cannot create isolated Keychain fixture'
+        assert status(installed, service, 'save') == 0, 'Cannot create isolated Keychain fixture'
         created = True
+        assert status(installed, service, 'save') == 0, 'Vault update failed'
         shutil.copy2(second,installed)
         read_status = status(installed, service, 'read')
         assert read_status == 0, 'Second signed build required Keychain authorization: '+str(read_status)
         shutil.copy2(adhoc,installed)
         assert status(installed, service, 'read') != 0, 'Unrelated ad-hoc binary gained access'
+        assert status(installed, service, 'renew') != 0, 'Unrelated ad-hoc binary renewed access'
     finally:
-        if created:
-            shutil.copy2(first,installed)
-            assert status(installed, service, 'delete') == 0, 'Synthetic Keychain cleanup failed'
-        subprocess.run(['security','delete-keychain',str(test_keychain)],check=True)
-print('PASS: distinct builds, stable certificate/requirement, prompt-free isolated-keychain read, ad-hoc rejection, synthetic item cleanup.')
+        try:
+            if created:
+                shutil.copy2(first,installed)
+                assert status(installed, service, 'delete') == 0, 'Synthetic Keychain cleanup failed'
+        finally:
+            subprocess.run(['security','delete-keychain',str(test_keychain)],check=True)
+print('PASS: distinct builds, stable certificate/requirement, real ServerVault create/update, prompt-free isolated-keychain read, ad-hoc rejection, synthetic item cleanup.')

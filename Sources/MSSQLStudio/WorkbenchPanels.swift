@@ -115,6 +115,8 @@ private struct SettingsPanel: View {
   @State private var history = false
   @State private var recovery = false
   @State private var updateRepository = UserDefaults.standard.string(forKey:"githubUpdateRepository") ?? ""
+  @State private var keychainMessage = ""
+  @State private var renewingKeychain = false
   @State private var message = ""
   var body: some View {
     ScrollView {
@@ -164,6 +166,21 @@ private struct SettingsPanel: View {
       Text("GitHub güncellemeleri").font(.headline)
       TextField("kullanıcı/depo veya GitHub depo adresi",text:$updateRepository).accessibilityIdentifier("githubUpdateRepository")
       Text("Herkese açık Releases kullanılır. Depoyu girip Uygula’ya basın; ardından MSSQL Studio → Güncellemeleri Kontrol Et. Bağlantı parolaları ve sorgular GitHub’a gönderilmez. Boş bırakırsanız uygulamanın yayın adresi kullanılır.").font(.caption).foregroundStyle(.secondary)
+      Divider()
+      Text("Kayıtlı bağlantı parolaları").font(.headline)
+      Text("Güncellemelerden sonra tekrarlayan Keychain izni için eski kayıtların uygulama erişimini bir kez yenileyin. macOS bu işlemde parola isteyebilir. Kayıtlar yalnızca kalıcı imzalı MSSQL Studio'ya açılır; parolalar silinmez veya dışarı aktarılmaz.").font(.caption).foregroundStyle(.secondary)
+      Button(renewingKeychain ? "İzinler yenileniyor…" : "Keychain izinlerini yenile") {
+        renewingKeychain=true;keychainMessage=""
+        Task {
+          defer {renewingKeychain=false}
+          do {
+            let count=try await Task.detached {try ServerVault().renewApplicationAccess()}.value
+            keychainMessage=count == 0 ? "Kayıtlı bağlantı bulunamadı." : "\(count) bağlantının erişim izni yenilendi. Sonraki aynı imzalı güncellemelerde bu izin korunur."
+          } catch {keychainMessage="İzinler tamamen yenilenemedi: "+error.localizedDescription}
+        }
+      }.disabled(renewingKeychain).accessibilityIdentifier("renewKeychainAccess")
+      if !keychainMessage.isEmpty {Text(keychainMessage).font(.caption).textSelection(.enabled)}
+      Divider()
       Text("Yerel çalışma alanı").font(.headline)
       Toggle("Sorgu geçmişini bu Mac'te sakla", isOn: $history)
       Toggle("Açık sorgu sekmelerini sonraki açılışta kurtar", isOn: $recovery)

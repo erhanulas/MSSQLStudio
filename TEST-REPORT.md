@@ -1,3 +1,13 @@
+# Keychain izinleri — yerel geliştirme doğrulaması
+
+10 Ekim 2026. Yeni kayıtlar uygulamaya özel SecAccess ve anlaşılır etiketle oluşturulur. Normal parola güncellemesi ACL'yi tekrar yazmaz. Ayarlardaki açık izin yenileme işlemi önce kalıcı yayın imzasını doğrular, yalnız `local.mssqlstudio.servers` hizmetindeki UUID hesaplarının ACL/etiketini değiştirir; secret verisini okumaz veya değiştirmez. Kurulu uygulamanın mevcut kalıcı designated requirement imzası geçerli bulundu. Kullanıcıya ait bağlantılar/anahtar zinciri kayıtları okunmadı, değiştirilmedi.
+
+Son Release build başarılı (`/tmp/mssql-keychain-final-build.log`). 58 uygulama + 91 core = 149 raporlanan test; 127 geçti, 22 koşullu test atlandı (`/tmp/mssql-keychain-final-tests.log`). Gerçek ServerVault kaynak kodunu derleyen imza regresyonu ayrı geçici sertifika ve ayrı sentetik anahtar zinciriyle geçti: iki farklı derleme arasında UI olmadan create/update/read, ad-hoc uygulamaya okuma ve yenileme reddi, sentetik kayıt/anahtar zinciri temizliği (`/tmp/mssql-vault-isolated-final.log`). Üretim özel imza anahtarı yerelde bulunmadığı için bu tur üretim sertifikasıyla imzalı paket/CI koşusu yapılmadı.
+
+Eski ACL'yi yenileme yerel başsız testte macOS onayını bekledi; bu senaryo başarılı sayılmadı. Gerçek kullanıcı kayıtlarının yenilenmesi kalıcı imzalı yayında kullanıcının sistem onayıyla doğrulanmalıdır. İşlemin bir defalık parola/onay gerektirebileceği arayüzde belirtilir. Kilitli anahtar zinciri gibi OS nedenleriyle bütün parola pencerelerinin yok olacağı garantisi verilmez.
+
+Native smoke: ayrı `local.mssqlstudio.uitest` kimlikli çevrimdışı Release kopyası açıldı; Ayarlar ekranındaki açıklama ve `renewKeychainAccess` düğmesi AX ve görsel olarak doğrulandı. Gerçek izin yenileme düğmesine basılmadı. Test kopyası kapatıldı; kurulu uygulama ve açık kullanıcı oturumu değiştirilmedi. Bu düzeltme henüz GitHub'a yayımlanmadı.
+
 # MSSQL Studio 0.2.39 — yayın doğrulaması
 
 10 Ekim 2026. `b20f901` commit’i `v0.2.39` etiketiyle yayımlandı ve latest olarak doğrulandı. https://github.com/erhanulas/MSSQLStudio/actions/runs/38011208918 başarılı: kalıcı imza, uygulama/PKG derlemesi, manifest ve yayın paketiyle tüm testler geçti. 149 raporlanan test: 127 geçti, 22 koşullu test atlandı. ZIP, PKG ve update.json yayımlandı; latest/download/update.json sürümü 0.2.39 olarak doğrulandı. Kurulu uygulama ve veritabanı bu yayın görevinde değiştirilmedi.
