@@ -1,3 +1,10 @@
+# v0.2.66 yayın doğrulaması — 11 Ekim 2026
+
+- [Public latest v0.2.66](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.66), build 67, kaynak `02a79c3abd8ec249d9992572eb9a4b55f866163c`. [Actions 38167209575](https://github.com/erhanulas/MSSQLStudio/actions/runs/38167209575) imza/izole Keychain, signed ZIP/PKG, manifest, paket testleri, public yayın ve geçici kimlik temizliği dahil başarılıdır.
+- `/tmp/mssql-066-ci-tests.log`: **99 uygulama + 122 core = 221 test; 197 geçti, 24 dış koşullu test atlandı**. Yerel tam koşu da aynı sayımla başarılı. Yeni Explorer seçim/kimlik/no auto-run, editör yıldızı, ortak read/page menüsü ve refresh guard beklentileri korunarak geçti.
+- Public ZIP SHA-256 `df2116a5889c79a16d1b6080697e91b91acf7a031e72165ffcedb301ddc30040`; PKG SHA-256 `10b83faa860bc99722846901676b9711cf47ba906ee35120d4f3848f5d3ba2be`. Her iki dosya `/tmp/MSSQLStudio-0.2.66-verify` altına indirilip update.json ve GitHub asset digest ile eşleştirildi. Manifest digest `3185d61e2f7bc7279b86b1051c9ba92a1f8379d30c592cf3468f41b31aa13260` ayrıca doğrulandı.
+- `scripts/prepare-release.py` indirilen her iki paketin uygulaması için strict/deep codesign, sabit sertifika/DR, bundle ID, 0.2.66/67 sürümü ve aynı binary/metadata/sürüm notlarını doğruladı; yeniden oluşturulan manifest public manifestle aynıdır. Kanıt: `/tmp/mssql-066-public-verification.log`. Kullanıcının kurulu uygulaması/SQL oturumları/Keychain/favoriler/geçmiş dosyaları değiştirilmedi. Native CUA kanıtı ve test sınırları aşağıdadır.
+
 # v0.2.66 geliştirme doğrulaması — 11 Ekim 2026
 
 - Explorer yerel Favori Sorgular dalını Genel / Bu Bağlantı / tam DB adı gruplarıyla gösterir. Çift tıklama çevrimdışı da doğru hedefte yeni sorgu açar; otomatik SQL/yeniden bağlantı yapmaz. Kaydet/düzenle/sil node kimliği, seçim ve genişletmeyi korur. Editör yıldızı kendi belge SQL/ad/DB/UUID'sini favori formuna taşır; boş SQL'de pasiftir ve detached aynı controller'ı kullanır.
@@ -5,7 +12,7 @@
 - `/tmp/mssql-066-full.log`: **99 uygulama + 122 core = 221 test; 197 geçti, 24 dış koşullu test atlandı**; başarısız test yok. İlk ilgili koşuda favori güncellemesi seçim kaybını yakaladı; node kimliği korunurken native reload sonrası seçimi geri yükleme düzeltildi, tam koşuda geçti. Yeni kontroller scope/UUID/DB hedefi/no auto-run, yerel ağaç yenileme/selection/expansion, yıldızın belge kimliği/boş SQL, ortak menü preset/custom ve read/page bağımsızlığı, refresh pending/custom/kapalı/busy/editing guards'ını kapsar.
 - `/tmp/mssql-066-release.log`: Release **BUILD SUCCEEDED**, v0.2.66/build 67. `git diff --check` temiz. Sonuç araçları düzenleme açıkken 830/1280 pt açık/koyu temada aynı sırada ve görünür; genel çalışma alanı/form yerleşimi testleri de geçti.
 - İzole `/tmp/MSSQLStudio-favorites-ui/MSSQLStudio.app`, `local.mssqlstudio.uitest`, PID 46531 native CUA: boş editörde yıldız pasif; SQL yazınca aktif; yıldızdan adlandırılmış master kapsamlı favori kaydedildi. Explorer Favori Sorgular/master altında anında göründü; çift tıklama SQL'i yeni sekmede açtı ve Disconnected/0 rows/0.000 s kaldı. Okuma menüsünden 100.000 seçildi; refresh 10 sn ardından özel 17 sn seçildi ve başarılı SELECT'i beklediği tooltip/AX değerinde doğrulandı. Ortak özel formdan okuma 125.000 / sayfa 77 / refresh kapalı uygulandı; toolbar 77 · 125k ve Kapalı olarak güncellendi. Gerçek kurulu app, Keychain, mevcut favoriler/geçmiş ve SQL Server verisi kullanılmadı. Bu test süreci yalnız kendi PID'siyle kapatıldı.
-- Public imzalı paket/CI doğrulaması yayın tamamlanınca ayrıca kaydedilecektir. Canlı SQL Server/izin ve gerçek kullanıcı güncellemesi test edilmiş sayılmaz.
+- Public imzalı paket/CI doğrulaması üstte kaydedilmiştir. Canlı SQL Server/izin ve gerçek kullanıcı güncellemesi test edilmiş sayılmaz.
 
 # v0.2.65 yayın doğrulaması — 11 Ekim 2026
 
