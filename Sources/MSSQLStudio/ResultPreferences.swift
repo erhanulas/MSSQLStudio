@@ -30,20 +30,25 @@ struct ResultLoadingPanel: View {
   @State private var saveDefault = false
   @State private var message = ""
   var body: some View {
-    VStack(alignment:.leading,spacing:16) {
+    VStack(alignment:.leading,spacing:14) {
       StudioPanelHeading(title:"Sonuç Yükleme",icon:"slider.horizontal.3",subtitle:"Bu sorgu için okuma ve görüntüleme")
-      StudioFormField("Okuma sınırı") { TextField("Satır",value:$rows,format:.number.grouping(.never)).textFieldStyle(.roundedBorder) }
-      StudioFormField("Sayfa boyutu") { TextField("Satır",value:$page,format:.number.grouping(.never)).textFieldStyle(.roundedBorder) }
-      StudioFormField("Yenileme aralığı") { HStack { TextField("Saniye",value:$refresh,format:.number.grouping(.never)).textFieldStyle(.roundedBorder); Text("sn").foregroundStyle(.secondary) } }.disabled(!refreshAllowed)
-      Text("Okuma: 1–5.000.000 satır · Sayfa: 0–1.000.000 (0 = tüm yüklenenler) · Yenileme: 0–3.600 sn (0 = kapalı). Okuma sınırı sonraki çalıştırmada uygulanır.").font(.caption).foregroundStyle(.secondary)
-      if !refreshAllowed { Label("Düzenleme sırasında otomatik yenileme kapalıdır.",systemImage:"pause.circle").font(.caption).foregroundStyle(.secondary) }
-      Toggle("Yeni sorgular için varsayılan yap",isOn:$saveDefault)
-      if !message.isEmpty { Text(message).font(.caption).foregroundStyle(.red) }
-      HStack { Spacer(); StudioActionButton("Uygula",icon:"checkmark") {
-        guard (1...5_000_000).contains(rows), (0...1_000_000).contains(page), (0...3600).contains(refresh) else { message="Lütfen belirtilen aralıklarda değerler girin."; return }
-        apply(rows,page,refreshAllowed ? refresh : 0,saveDefault)
-      }.buttonStyle(StudioPrimaryButton()) }
-    }.padding(20).frame(width:440).fixedSize(horizontal:false,vertical:true).studioPanel()
+      ScrollView {
+        VStack(alignment:.leading,spacing:14) {
+          StudioFormField("Sonuç başına okuma sınırı") {TextField("Satır",value:$rows,format:.number.grouping(.never)).textFieldStyle(.roundedBorder)}
+          StudioFormField("Sayfa boyutu") {TextField("Satır",value:$page,format:.number.grouping(.never)).textFieldStyle(.roundedBorder)}
+          StudioFormField("Yenileme aralığı") {HStack {TextField("Saniye",value:$refresh,format:.number.grouping(.never)).textFieldStyle(.roundedBorder);Text("sn").foregroundStyle(.secondary)}}.disabled(!refreshAllowed)
+          Text("Her sonuç için okuma: 1–5.000.000 satır · Sayfa: 0–1.000.000 (0 = tüm yüklenenler) · Yenileme: 0–3.600 sn (0 = kapalı). Okuma sınırı sonraki çalıştırmada her sonuç kümesine ayrı uygulanır.").font(.caption).foregroundStyle(.secondary)
+          if !refreshAllowed {Label("Düzenleme sırasında otomatik yenileme kapalıdır.",systemImage:"pause.circle").font(.caption).foregroundStyle(.secondary)}
+          Toggle("Yeni sorgular için varsayılan yap",isOn:$saveDefault)
+          if !message.isEmpty {Text(message).font(.caption).foregroundStyle(.red)}
+        }.padding(2)
+      }
+      Divider()
+      HStack {Spacer();StudioActionButton("Uygula",icon:"checkmark") {
+        guard (1...5_000_000).contains(rows),(0...1_000_000).contains(page),(0...3600).contains(refresh) else {message="Lütfen belirtilen aralıklarda değerler girin.";return}
+        apply(rows,page,refreshAllowed ? refresh:0,saveDefault)
+      }.buttonStyle(StudioPrimaryButton())}
+    }.padding(20).frame(maxWidth:.infinity,maxHeight:.infinity).studioPanel()
   }
 }
 
@@ -61,7 +66,7 @@ struct ResultRefreshPanel:View {
         guard (0...3600).contains(seconds) else {message="0–3.600 saniye girin.";return}
         apply(seconds)
       }.buttonStyle(StudioPrimaryButton())}
-    }.padding(20).frame(width:420).fixedSize(horizontal:false,vertical:true).studioPanel()
+    }.padding(20).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading).studioPanel()
   }
 }
 
@@ -73,30 +78,85 @@ struct ResultRefreshPanel:View {
   }
 }
 struct ResultColumnChoice: Identifiable { let id: Int; let name: String; let type: String; let hidden: Bool }
+@MainActor enum ResultColumnNavigation {
+  static func matches(_ columns:[ResultColumnChoice],search:String) -> [ResultColumnChoice] {
+    let search=search.trimmingCharacters(in:.whitespacesAndNewlines)
+    return columns.filter {search.isEmpty || $0.name.localizedStandardContains(search)}
+  }
+  static func next(_ matches:[ResultColumnChoice],selected:Int?,step:Int) -> Int? {
+    guard !matches.isEmpty else {return nil}
+    let index=selected.flatMap {id in matches.firstIndex {$0.id == id}} ?? 0
+    return matches[max(0,min(matches.count-1,index+step))].id
+  }
+}
 struct ResultColumnSearch: View {
-  let columns: [ResultColumnChoice]
-  let select: (Int) -> Void
-  @State private var search = ""
-  @FocusState private var focused: Bool
-  private var matches: [ResultColumnChoice] { columns.filter { search.isEmpty || $0.name.localizedStandardContains(search) } }
-  var body: some View {
+  let columns:[ResultColumnChoice]
+  let select:(Int)->Void
+  var dismiss:()->Void = {}
+  @State private var search=""
+  @State private var selected:Int?
+  @State private var hovered:Int?
+  @FocusState private var focused:Bool
+  private var matches:[ResultColumnChoice] {ResultColumnNavigation.matches(columns,search:search)}
+  private func move(_ step:Int) {selected=ResultColumnNavigation.next(matches,selected:selected,step:step)}
+  private func openSelected() {if let id=selected ?? matches.first?.id {select(id)}}
+  var body:some View {
     VStack(alignment:.leading,spacing:12) {
-      StudioPanelHeading(title:"Kolona Git",icon:"text.magnifyingglass",subtitle:"Başlıkta ara ve kolonu görünür alana getir")
-      TextField("Kolon adı…",text:$search).textFieldStyle(.roundedBorder).focused($focused).onSubmit { if let first=matches.first { select(first.id) } }
-      ScrollView {
-        LazyVStack(spacing:4) {
-          ForEach(matches) { column in
-            Button { select(column.id) } label: {
-              HStack(spacing:10) {
-                Image(systemName:column.hidden ? "eye.slash" : "tablecells").foregroundStyle(Color.accentColor).frame(width:24)
-                VStack(alignment:.leading,spacing:3) { Text(column.name).font(.system(size:12,weight:.medium)); Text(column.type).font(.caption).foregroundStyle(.secondary) }
-                Spacer(); Image(systemName:"arrow.right").foregroundStyle(.secondary)
-              }.padding(10).frame(maxWidth:.infinity,alignment:.leading).contentShape(Rectangle())
-            }.buttonStyle(.plain)
-          }
-          if matches.isEmpty { Text("Eşleşen kolon yok").foregroundStyle(.secondary).padding() }
+      HStack(alignment:.top) {
+        StudioPanelHeading(title:"Kolona Git",icon:"text.magnifyingglass",subtitle:"Başlıkta ara ve hedefi vurgula")
+        Spacer()
+        Button(action:dismiss) {Image(systemName:"xmark").frame(width:24,height:24).contentShape(Rectangle())}
+          .buttonStyle(.plain).help("Kapat (Esc)").accessibilityLabel("Kolon aramasını kapat")
+      }
+      TextField("Kolon adı ara…",text:$search).textFieldStyle(.roundedBorder).focused($focused)
+        .accessibilityIdentifier("columnNavigationSearch").onSubmit(openSelected)
+        .onKeyPress(.downArrow) {move(1);return .handled}
+        .onKeyPress(.upArrow) {move(-1);return .handled}
+      ScrollViewReader {proxy in
+        ScrollView {
+          LazyVStack(spacing:4) {
+            ForEach(matches) {column in
+              ResultColumnSearchRow(column:column,selected:selected == column.id,hovered:hovered == column.id) {selected=column.id;select(column.id)}
+                .id(column.id).onHover {hovered=$0 ? column.id:nil}
+            }
+            if matches.isEmpty {StudioEmptyState(title:"Eşleşen kolon yok",icon:"magnifyingglass",detail:"Kolon adının bir bölümünü deneyin.").padding(.vertical,16)}
+          }.padding(2)
+        }.onChange(of:selected) {_,id in if let id {proxy.scrollTo(id)}}
+      }.frame(maxHeight:.infinity)
+      Divider()
+      HStack {
+        Text("\(matches.count) / \(columns.count) kolon").foregroundStyle(.secondary)
+        Spacer();Text("↑ ↓  Seç · Enter  Git").foregroundStyle(.secondary)
+      }.font(.caption)
+    }.padding(16).frame(maxWidth:.infinity,maxHeight:.infinity).studioPanel()
+      .onAppear {selected=matches.first?.id;focused=true}
+      .onChange(of:search) {_,_ in selected=matches.first?.id}
+      .onExitCommand(perform:dismiss)
+  }
+}
+
+private struct ResultColumnSearchRow:View {
+  let column:ResultColumnChoice
+  let selected:Bool
+  let hovered:Bool
+  let action:()->Void
+  @Environment(\.colorScheme) private var colorScheme
+  private var background:Color {
+    selected ? Color(nsColor:StudioTheme.accent).opacity(colorScheme == .dark ? 0.22:0.10):hovered ? Color.primary.opacity(0.05):.clear
+  }
+  private var detail:String {column.type+(column.hidden ? " · Gizli":"")}
+  var body:some View {
+    Button(action:action) {
+      HStack(spacing:10) {
+        Image(systemName:column.hidden ? "eye.slash":"tablecells").foregroundStyle(Color(nsColor:StudioTheme.accent)).frame(width:22)
+        VStack(alignment:.leading,spacing:3) {
+          Text(column.name).font(.system(size:12,weight:.medium)).lineLimit(1)
+          Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
         }
-      }.frame(height:300)
-    }.padding(20).frame(width:420).studioPanel().onAppear { focused=true }
+        Spacer(minLength:6)
+        Image(systemName:"arrow.turn.down.left").foregroundStyle(.secondary).opacity(selected ? 1:0)
+      }.padding(10).frame(maxWidth:.infinity,alignment:.leading)
+        .background(background,in:RoundedRectangle(cornerRadius:7)).contentShape(Rectangle())
+    }.buttonStyle(.plain).help(column.name+" · "+column.type).accessibilityLabel(column.name+" · "+detail)
   }
 }

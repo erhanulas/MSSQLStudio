@@ -265,3 +265,101 @@ struct UnusedDeclarationTests {
     #expect(TSQL.unusedDeclaredVariables(String(repeating:" ",count:250001)).isEmpty)
   }
 }
+
+
+@Suite struct BatchResultLimitTests {
+  actor Trace {
+    var budgets: [Limits] = []
+    func record(_ budget: Limits) -> Int { budgets.append(budget); return budgets.count }
+    func recorded() -> [Limits] { budgets }
+  }
+  final class Events: @unchecked Sendable {
+    private let lock = NSLock()
+    private var indexes: [Int] = []
+    func receive(_ event: QueryEvent) {
+      if case .result(let index, _) = event { lock.withLock { indexes.append(index) } }
+    }
+    func recorded() -> [Int] { lock.withLock { indexes } }
+  }
+  @Test func truncatedRowsetContinuesGOWithIndependentRowLimitAndSharedBudgets() async throws {
+    var limits = Limits(); limits.rows = 2; limits.resultSets = 5; limits.totalBytes = 2048
+    let trace = Trace(), events = Events()
+    let result = try await TSQL.run("SELECT 1;\nGO 2\nSELECT NULL;", limits: limits, events: events.receive) { _, budget, emit in
+      let call = await trace.record(budget)
+      var output = Execution()
+      var rows = Rows(fields: [Field("Value")], values: call < 3 ? [["1"], ["2"]] : [[nil]])
+      rows.truncated = call == 1
+      output.results = call == 1 ? [Rows(affected: 4), rows] : [rows]
+      output.partial = rows.truncated; output.bytesRead = 100
+      let index = output.results.count - 1
+      emit?(.result(index, rows.fields)); emit?(.rows(index, Array(rows.values)))
+      return output
+    }
+    let budgets = await trace.recorded()
+    #expect(budgets.map(\.rows) == [2, 2, 2])
+    #expect(budgets.map(\.resultSets) == [5, 3, 2])
+    #expect(budgets.map(\.totalBytes) == [2048, 1948, 1848])
+    #expect(events.recorded() == [1, 2, 3])
+    #expect(result.results.count == 4 && result.partial && !result.stoppedEarly)
+    #expect(result.results[1].truncated && !result.results[2].truncated)
+    #expect(result.results[3].values[0][0] == nil)
+  }
+  @Test func hardStopPreventsLaterBatchesEvenAfterRowTruncation() async throws {
+    let trace = Trace()
+    let result = try await TSQL.run("SELECT 1;\nGO\nSELECT 2;\nGO\nSELECT 3;", limits: Limits()) { _, budget, _ in
+      let call = await trace.record(budget)
+      var output = Execution(); output.results = [Rows(fields: [Field("Value")], values: [["1"]])]
+      output.partial = true
+      output.results[0].truncated = call == 1
+      output.stoppedEarly = call == 2
+      return output
+    }
+    #expect(await trace.recorded().count == 2)
+    #expect(result.partial && result.stoppedEarly && result.results.count == 2)
+  }
+  @Test func taskCancellationAfterTruncationNeverExecutesNextBatch() async throws {
+    let trace = Trace()
+    let task = Task {
+      try await TSQL.run("SELECT 1;\nGO\nSELECT 2;", limits: Limits()) { _, budget, _ in
+        _ = await trace.record(budget)
+        var output = Execution(); output.partial = true
+        var rows = Rows(fields: [Field("Value")], values: [["1"]]); rows.truncated = true
+        output.results = [rows]
+        withUnsafeCurrentTask { $0?.cancel() }
+        return output
+      }
+    }
+    let result = try await task.value
+    #expect(await trace.recorded().count == 1)
+    #expect(result.partial && result.stoppedEarly && result.results.count == 1)
+  }
+  @Test func sharedBudgetExhaustionStopsOnlyIfAnotherBatchRemains() async throws {
+    for bytes in [false, true] {
+      var limits = Limits(); limits.resultSets = bytes ? 100 : 1; limits.totalBytes = bytes ? 100 : 2048
+      for sql in ["SELECT 1;", "SELECT 1;\nGO\nSELECT 2;"] {
+        let trace = Trace()
+        let result = try await TSQL.run(sql, limits: limits) { _, budget, _ in
+          _ = await trace.record(budget)
+          var output = Execution(); output.results = [Rows(fields: [Field("Value")], values: [["1"]])]
+          output.bytesRead = 100; return output
+        }
+        #expect(await trace.recorded().count == 1)
+        #expect(result.partial == sql.contains("GO"))
+        #expect(result.stoppedEarly == sql.contains("GO"))
+      }
+    }
+  }
+  @Test func executionErrorAfterTruncationPreservesEarlierRowsAndStops() async throws {
+    let trace = Trace()
+    let result = try await TSQL.run("SELECT 1;\nGO\nTHROW 50000, 'failure', 1;\nGO\nSELECT 3;", limits: Limits()) { _, budget, _ in
+      if await trace.record(budget) == 2 { throw SQLFailure("expected failure") }
+      var output = Execution(); output.partial = true
+      var rows = Rows(fields: [Field("Value")], values: [["0.00000000"], [nil]]); rows.truncated = true
+      output.results = [rows]; return output
+    }
+    #expect(await trace.recorded().count == 2)
+    #expect(result.partial && result.stoppedEarly && result.results.count == 1)
+    #expect(result.results[0].values[0][0] == "0.00000000")
+    #expect(result.messages.contains { $0.contains("expected failure") })
+  }
+}

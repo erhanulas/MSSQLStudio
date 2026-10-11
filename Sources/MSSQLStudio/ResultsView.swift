@@ -219,13 +219,18 @@ import SwiftUI
 }
 @MainActor private final class FilterHeaderCell: NSTableHeaderCell {
   var active = false
+  var navigationTarget = false
   var typeSymbol = "textformat"
   var typeDetail = ""
   var showsFilter = true
   var ascending: Bool?
   override func draw(withFrame cellFrame: NSRect, in controlView: NSView) {
-    StudioTheme.panel.setFill()
+    (navigationTarget ? StudioTheme.selection:StudioTheme.panel).setFill()
     NSBezierPath(rect: cellFrame).fill()
+    if navigationTarget {
+      StudioTheme.accent.setFill()
+      NSBezierPath(rect:NSRect(x:cellFrame.minX,y:cellFrame.maxY-3,width:cellFrame.width,height:3)).fill()
+    }
     StudioTheme.border.setFill()
     NSBezierPath(rect: NSRect(x: cellFrame.maxX - 1, y: cellFrame.minY, width: 1, height: cellFrame.height)).fill()
     NSBezierPath(rect: NSRect(x: cellFrame.minX, y: cellFrame.maxY - 1, width: cellFrame.width, height: 1)).fill()
@@ -235,7 +240,7 @@ import SwiftUI
     guard !stringValue.isEmpty else { return }
     let label = NSMutableParagraphStyle()
     label.lineBreakMode = .byTruncatingTail
-    let font = NSFont.systemFont(ofSize: 11, weight: .medium)
+    let font = NSFont.systemFont(ofSize: 11, weight: navigationTarget ? .semibold:.medium)
     stringValue.draw(
       in: NSRect(
         x: cellFrame.minX + 24, y: typeDetail.isEmpty ? cellFrame.midY - font.pointSize / 2 - 2 : cellFrame.minY + 4,
@@ -455,6 +460,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   private var needsAutoFit = true
   private var chipsHeight: NSLayoutConstraint?
   private var popover: NSPopover?
+  private(set) var highlightedColumnOrdinal:Int?
   var clearSearch: (() -> Void)?
   var partial = false { didSet { updateInfo() } }
   var filter = "" { didSet { if filter != oldValue { reload() } } }
@@ -593,6 +599,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     let changedFields = result.fields != rows.fields
     guard changedFields || self.generation != generation || result.values.count != rows.values.count else { return }
     self.generation = generation
+    highlightColumn(nil)
     if editDefinition != nil { discardEdits() }
     if changedFields {
       for c in table.tableColumns { table.removeTableColumn(c) }
@@ -728,9 +735,16 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   func revealColumn(_ ordinal: Int) {
     guard let position=table.tableColumns.firstIndex(where:{ $0.identifier.rawValue == String(ordinal) }) else { return }
     table.tableColumns[position].isHidden=false
+    view.layoutSubtreeIfNeeded()
     table.scrollColumnToVisible(position)
-    table.headerView?.needsDisplay=true
+    highlightColumn(ordinal)
     table.window?.makeFirstResponder(table)
+  }
+  private func highlightColumn(_ ordinal:Int?) {
+    highlightedColumnOrdinal=ordinal
+    for column in table.tableColumns {(column.headerCell as? FilterHeaderCell)?.navigationTarget=Int(column.identifier.rawValue) == ordinal && ordinal != nil}
+    table.headerView?.setAccessibilityHelp(ordinal.flatMap {result.fields.indices.contains($0) ? "Gidilen kolon: "+result.fields[$0].name:nil})
+    table.headerView?.needsDisplay=true
   }
   private func showColumnMenu(_ position: Int, event: NSEvent) {
     let menu = NSMenu()
@@ -813,24 +827,15 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       result.fields.indices.contains(i)
     else { return }
     popover?.close()
-    let popup = NSPopover()
-    popup.animates = false
-    popup.behavior = .transient
-    popup.contentSize = NSSize(width: 400, height: 540)
-    popup.contentViewController = NSHostingController(
-      rootView: ColumnFilterPanel(rows: result, column: i, initial: rules[i] ?? ColumnRule()) {
-        [weak self, weak popup] rule in
-        try self?.setRule(rule, column: i)
-        popup?.close()
-      }.studioPanel())
-    popover = popup
-    if table.tableColumns[position].isHidden {
-      popup.show(relativeTo: table.bounds, of: table, preferredEdge: .maxY)
-    } else {
-      popup.show(
-        relativeTo: table.headerView?.headerRect(ofColumn: position) ?? table.bounds,
-        of: table.headerView ?? table, preferredEdge: .maxY)
-    }
+    let popup=NSPopover()
+    let panel=ColumnFilterPanel(rows:result,column:i,initial:rules[i] ?? ColumnRule()) { [weak self,weak popup] rule in
+      try self?.setRule(rule,column:i);popup?.close()
+    }.studioPanel()
+    popover=popup
+    let header=table.headerView
+    let anchor=table.tableColumns[position].isHidden ? table:header ?? table
+    let rect=anchor === table ? table.visibleRect:header?.headerRect(ofColumn:position)
+    StudioPopover.show(popup,content:panel,from:anchor,rect:rect,size:NSSize(width:400,height:540))
   }
   func tableViewSelectionDidChange(_ notification: Notification) { editsChanged?() }
   func numberOfRows(in tableView: NSTableView) -> Int { pageCount }
@@ -1023,7 +1028,7 @@ private struct ColumnFilterPanel: View {
         Spacer()
         Button("Uygula") { commit(rule) }.buttonStyle(.borderedProminent)
       }
-    }.padding(16).frame(width: 400, height: 540)
+    }.padding(16).frame(maxWidth:.infinity,maxHeight:.infinity)
       .task(id: search) {
         loading = true
         error = ""
@@ -1056,6 +1061,8 @@ private struct ColumnFilterPanel: View {
   let document: QueryDocument
   var changed: (() -> Void)?
   var favoriteRequested: ((QueryDocument) -> Void)?
+  var favorites:FavoriteQueriesModel? {didSet {syncFavoriteButton()}}
+  private var removingFavorite=false
   private let favoriteButton = StudioToolbarButton(symbol:"star",label:"Sorguyu favorilere ekle",tone:.warning)
   private let panes = ResultSplitView()
   private let resultStrip = NSStackView()
@@ -1104,6 +1111,7 @@ private struct ColumnFilterPanel: View {
   private var tables: [Int: ResultController] = [:]
   private var plans: [Int: String] = [:]
   private var displayed = Set<Int>()
+  private var displayedGeneration: Int?
   private var initialSplitApplied = false
   private var pendingResultUpdate:Task<Void,Never>?
   private var moduleReview: ModuleReviewController?
@@ -1123,6 +1131,7 @@ private struct ColumnFilterPanel: View {
       guard alert.runModal() == .alertFirstButtonReturn else { return false }
       for grid in tables.values { grid.discardEdits() }; return true
     }
+    NotificationCenter.default.addObserver(self,selector:#selector(favoriteListChanged(_:)),name:FavoriteQueriesModel.changed,object:nil)
     document.changed = { [weak self] in
       self?.documentDidChange()
     }
@@ -1206,7 +1215,6 @@ private struct ColumnFilterPanel: View {
       editor.surface.bottomAnchor.constraint(equalTo: editorPane.bottomAnchor),
     ])
     resultTabs.delegate = self
-    resultTabs.tabViewType = .noTabsNoBorder
     resultTabs.tabViewType = .noTabsNoBorder
     resultTabs.setAccessibilityIdentifier("resultSelector")
     refreshButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Sonuçları yenile")
@@ -1627,7 +1635,8 @@ private struct ColumnFilterPanel: View {
       ? appearance!.color.withAlphaComponent(0.12).cgColor : StudioTheme.panel.cgColor
   }
   private func documentDidChange() {
-    guard document.state == .running else {
+    // Execution boundaries must not be hidden by the streaming debounce.
+    guard document.state == .running, displayedGeneration == document.resultGeneration else {
       pendingResultUpdate?.cancel();pendingResultUpdate=nil
       update();changed?();return
     }
@@ -1638,25 +1647,41 @@ private struct ColumnFilterPanel: View {
       pendingResultUpdate=nil;update();changed?()
     }
   }
+  private func removeDisplayedResult(_ index: Int) {
+    let item = resultTabs.tabViewItems.first { ($0.identifier as? NSNumber)?.intValue == index }
+    tables.removeValue(forKey: index)?.removeFromParent()
+    plans.removeValue(forKey: index)
+    displayed.remove(index)
+    if let item {
+      children.first { $0.view === item.view }?.removeFromParent()
+      resultTabs.removeTabViewItem(item)
+    }
+  }
+  private func clearDisplayedResults() {
+    for index in displayed.sorted() { removeDisplayedResult(index) }
+    stripScroll.contentView.scroll(to: .zero)
+    stripScroll.reflectScrolledClipView(stripScroll.contentView)
+  }
   func update() {
     compareModuleButton.isHidden = document.moduleOriginal == nil
     compareModuleButton.isEnabled = !document.busy
     submitModuleButton.isHidden = document.moduleOriginal == nil
     submitModuleButton.isEnabled = document.canSubmitModule && !checkingModuleSubmission
     guard isViewLoaded else { return }
+    if displayedGeneration != document.resultGeneration {
+      displayedGeneration = document.resultGeneration
+      if !document.repeating {
+        clearDisplayedResults()
+        refreshSelection = nil
+      }
+    }
     updateConnectionAppearance()
     syncDataActions()
     actual.state = document.actualPlan ? .on : .off
     actual.isEnabled = !document.busy
     syncFavoriteButton()
     if document.results.isEmpty && !displayed.isEmpty && !(document.repeating && document.busy) {
-      for item in resultTabs.tabViewItems where item.identifier is NSNumber {
-        resultTabs.removeTabViewItem(item)
-      }
-      for child in children { child.removeFromParent() }
-      tables = [:]
-      displayed = []
-      plans = [:]
+      clearDisplayedResults()
     }
     for (index, result) in document.results.enumerated() where !result.fields.isEmpty {
       if let xml = result.values.first?.first.flatMap({ $0 }), xml.contains("<ShowPlanXML"),
@@ -1709,20 +1734,19 @@ private struct ColumnFilterPanel: View {
           if displayed.count == 1 { resultTabs.selectTabViewItem(item) }
         }
         controller.update(result, generation: document.resultGeneration)
-        controller.partial = document.partial
+        controller.partial = result.truncated
         controller.filter = filter.stringValue
         resultTabs.tabViewItems.first(where: { ($0.identifier as? NSNumber)?.intValue == index })?
-          .label = "Results \(index + 1) (\(result.values.count.formatted()))"
+          .label = "Results \(index + 1) (\(result.values.count.formatted()))\(result.truncated ? " · KISMİ" : "")"
       }
     }
-    if !document.busy, document.repeating {
-      let removed = tables.keys.filter { !document.results.indices.contains($0) }
-      for index in removed {
-        if let item = resultTabs.tabViewItems.first(where: { ($0.identifier as? NSNumber)?.intValue == index }) { resultTabs.removeTabViewItem(item) }
-        tables.removeValue(forKey: index)?.removeFromParent()
-        displayed.remove(index)
+    if !document.busy {
+      let current = Set(document.results.indices.filter { !document.results[$0].fields.isEmpty })
+      for index in displayed.subtracting(current).sorted() { removeDisplayedResult(index) }
+      if document.repeating, let identifier = refreshSelection,
+        resultTabs.tabViewItems.contains(where: { $0.identifier as? NSObject == identifier as? NSObject }) {
+        resultTabs.selectTabViewItem(withIdentifier: identifier)
       }
-      if let identifier = refreshSelection { resultTabs.selectTabViewItem(withIdentifier: identifier) }
       refreshSelection = nil
     }
     syncNavigation()
@@ -1733,7 +1757,7 @@ private struct ColumnFilterPanel: View {
       document.state == .running
       ? "Sonuçlar okunuyor · \(document.rowCount.formatted()) satır"
       : "\(document.rowCount.formatted()) satır\(document.partial ? " · KISMİ" : "")"
-    if document.state == .ready && document.results.isEmpty {
+    if document.state == .ready && displayed.isEmpty {
       resultTabs.selectTabViewItem(withIdentifier: "messages")
       syncResultSelector()
     }
@@ -1787,25 +1811,24 @@ private struct ColumnFilterPanel: View {
   @objc private func actualChanged() { document.actualPlan = actual.state == .on }
   @objc private func showLoadingOptions() {
     optionsPopover?.close()
-    let popup=NSPopover(); popup.animates = false; popup.behavior = .transient
-    popup.contentViewController=NSHostingController(rootView:ResultLoadingPanel(rows:document.limits.rows,page:selectedPageSize,refresh:effectiveRefreshSeconds,refreshAllowed:!tables.values.contains { $0.editDefinition != nil }) { [weak self,weak popup] rows,page,refresh,save in
-      guard let self, !document.busy, !submittingData else { return }
-      applyLoadingPreferences(rows:rows,page:page,refresh:refresh,save:save)
-      popup?.close()
-    })
-    optionsPopover=popup; popup.show(relativeTo:rowLimit.bounds,of:rowLimit,preferredEdge:.maxY)
+    let popup=NSPopover()
+    let panel=ResultLoadingPanel(rows:document.limits.rows,page:selectedPageSize,refresh:effectiveRefreshSeconds,refreshAllowed:!tables.values.contains {$0.editDefinition != nil}) { [weak self,weak popup] rows,page,refresh,save in
+      guard let self,!document.busy,!submittingData else {return}
+      applyLoadingPreferences(rows:rows,page:page,refresh:refresh,save:save);popup?.close()
+    }
+    optionsPopover=popup;StudioPopover.show(popup,content:panel,from:rowLimit,size:NSSize(width:440,height:400))
   }
   @objc private func showColumnSearch() {
-    guard let grid=selectedGrid else { return }
+    guard let grid=selectedGrid else {return}
     optionsPopover?.close()
-    let columns=grid.result.fields.enumerated().map { ordinal,field in
-      ResultColumnChoice(id:ordinal,name:field.name,type:field.dataType,hidden:grid.table.tableColumns.first { $0.identifier.rawValue == String(ordinal) }?.isHidden ?? false)
+    let columns=grid.result.fields.enumerated().map {ordinal,field in
+      ResultColumnChoice(id:ordinal,name:field.name,type:field.dataType,hidden:grid.table.tableColumns.first {$0.identifier.rawValue == String(ordinal)}?.isHidden ?? false)
     }
-    let popup=NSPopover(); popup.animates = false; popup.behavior = .transient
-    popup.contentViewController=NSHostingController(rootView:ResultColumnSearch(columns:columns) { [weak grid,weak popup] ordinal in
-      grid?.revealColumn(ordinal); popup?.close()
-    })
-    optionsPopover=popup; popup.show(relativeTo:columnSearchButton.bounds,of:columnSearchButton,preferredEdge:.maxY)
+    let popup=NSPopover()
+    let panel=ResultColumnSearch(columns:columns,select:{ [weak grid,weak popup] ordinal in
+      popup?.close();grid?.revealColumn(ordinal)
+    },dismiss:{[weak popup] in popup?.close()})
+    optionsPopover=popup;StudioPopover.show(popup,content:panel,from:columnSearchButton,size:NSSize(width:420,height:420))
   }
   @objc private func filterChanged() {
     for table in tables.values { table.filter = filter.stringValue }
@@ -1862,12 +1885,12 @@ private struct ColumnFilterPanel: View {
       item.submenu=choices;menu.addItem(item)
     }
     section("Sayfa boyutu · \(selectedPageSize == 0 ? "Tüm yüklenenler":selectedPageSize.formatted())",values:GridPaging.choices,selected:selectedPageSize,action:#selector(changeRowLimit(_:)),identifier:"gridPageChoices")
-    section("Okuma sınırı · \(document.limits.rows.formatted())",values:[10,100,500,1000,10_000,50_000,100_000,1_000_000,5_000_000],selected:document.limits.rows,action:#selector(changeReadLimit(_:)),identifier:"gridReadChoices")
+    section("Sonuç başına okuma · \(document.limits.rows.formatted())",values:[10,100,500,1000,10_000,50_000,100_000,1_000_000,5_000_000],selected:document.limits.rows,action:#selector(changeReadLimit(_:)),identifier:"gridReadChoices")
     menu.addItem(.separator())
     let custom=NSMenuItem(title:"Özel değerler…",action:#selector(showLoadingOptions),keyEquivalent:"");custom.target=self;custom.tag = -1;menu.addItem(custom)
     let save=NSMenuItem(title:"Varsayılan Yap",action:#selector(saveLoadingDefaults),keyEquivalent:"");save.target=self;save.tag = -2;menu.addItem(save)
     rowLimit.menu=menu;rowLimit.selectItem(at:0)
-    rowLimit.toolTip="Sayfa: \(selectedPageSize == 0 ? "Tüm yüklenenler":selectedPageSize.formatted()) · Okuma sınırı: \(document.limits.rows.formatted()) (sonraki çalıştırma) · Sayfa değişimi yalnız yüklenen sonuçları gösterir."
+    rowLimit.toolTip="Sayfa: \(selectedPageSize == 0 ? "Tüm yüklenenler":selectedPageSize.formatted()) · Her sonuç için okuma sınırı: \(document.limits.rows.formatted()) (sonraki çalıştırma) · Sayfa değişimi yalnız yüklenen sonuçları gösterir."
   }
   @objc private func changeReadLimit(_ item:NSMenuItem) {
     guard !document.busy,!submittingData,(1...5_000_000).contains(item.tag) else {return}
@@ -1889,17 +1912,40 @@ private struct ColumnFilterPanel: View {
     guard !document.busy,!submittingData else {return}
     applyPageSize(item.tag)
   }
-  private func syncFavoriteButton() {
-    favoriteButton.isEnabled=favoriteRequested != nil && !document.sql.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty
+  private var matchedFavorite:FavoriteQuery? {favorites?.matching(sql:document.sql,serverID:document.server.id,database:document.database,preferredID:document.favoriteID)}
+  @objc private func favoriteListChanged(_ notification:Notification) {
+    guard notification.object as? FavoriteQueriesModel === favorites else {return}
+    syncFavoriteButton()
   }
-  @objc private func addQueryFavorite() {favoriteRequested?(document)}
+  private func syncFavoriteButton() {
+    let favorite=matchedFavorite
+    favoriteButton.isEnabled = !removingFavorite && (favoriteRequested != nil || favorite != nil) && !document.sql.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty
+    favoriteButton.state=favorite == nil ? .off:.on
+    favoriteButton.image=NSImage(systemSymbolName:favorite == nil ? "star":"star.fill",accessibilityDescription:nil)
+    favoriteButton.toolTip=favorite.map {"Favorilerden çıkar · \($0.name)"} ?? "Sorguyu favorilere ekle"
+    favoriteButton.setAccessibilityLabel(favorite == nil ? "Sorguyu favorilere ekle":"Favorilerden çıkar")
+  }
+  @objc private func addQueryFavorite() {
+    guard !removingFavorite else {return}
+    guard let favorite=matchedFavorite,let favorites else {favoriteRequested?(document);return}
+    removingFavorite=true;syncFavoriteButton()
+    Task { [weak self] in
+      do {
+        try await favorites.delete(favorite.id)
+        if self?.document.favoriteID == favorite.id {self?.document.favoriteID=nil}
+      } catch {
+        if let window=self?.view.window {let alert=NSAlert();alert.messageText="Favori kaldırılamadı";alert.informativeText=error.localizedDescription;_ = await alert.beginSheetModal(for:window)}
+      }
+      self?.removingFavorite=false;self?.syncFavoriteButton()
+    }
+  }
   @objc private func showRefreshOptions() {
     optionsPopover?.close()
-    let popup=NSPopover();popup.animates=false;popup.behavior = .transient
-    popup.contentViewController=NSHostingController(rootView:ResultRefreshPanel(seconds:effectiveRefreshSeconds) { [weak self,weak popup] seconds in
+    let popup=NSPopover()
+    let panel=ResultRefreshPanel(seconds:effectiveRefreshSeconds) { [weak self,weak popup] seconds in
       self?.setAutoRefresh(seconds);popup?.close()
-    })
-    optionsPopover=popup;popup.show(relativeTo:autoRefreshButton.bounds,of:autoRefreshButton,preferredEdge:.maxY)
+    }
+    optionsPopover=popup;StudioPopover.show(popup,content:panel,from:autoRefreshButton,size:NSSize(width:420,height:280))
   }
   @objc private func stopExport() { exportJob?.cancel() }
   @objc private func exportResult(_ sender: NSPopUpButton) {

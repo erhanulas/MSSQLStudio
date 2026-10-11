@@ -130,6 +130,8 @@ public struct Rows: Sendable {
   public var fields: [Field]
   public var values: RowCollection
   public var affected: Int
+  /// This rowset is incomplete because of its row limit or a fetch failure.
+  public var truncated = false
   public var isPlan: Bool {
     fields.count == 1 && values.first?.first.flatMap({ $0 })?.contains("<ShowPlanXML") == true
   }
@@ -145,10 +147,14 @@ public struct Execution: Sendable {
   public var bytesRead = 0
   public var elapsed: TimeInterval = 0
   public var partial = false
+  /// Remaining results/batches were not processed (error, cancellation or shared budget).
+  /// A per-rowset row limit alone does not stop subsequent results.
+  public var stoppedEarly = false
   public init() {}
 }
 public struct Limits: Sendable {
   public var diskResults = false
+  /// Maximum retained rows per result set; byte and result-count budgets remain shared.
   public var rows = 50_000
   public var cellBytes = 2_097_152
   public var totalBytes = 67_108_864

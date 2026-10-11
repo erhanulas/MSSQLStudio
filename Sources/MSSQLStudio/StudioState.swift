@@ -100,6 +100,7 @@ struct ObjectEditorKey: Codable, Equatable {
     lastExecutionSucceeded && state == .ready && transactionCount == 0 && lastExecutedDatabase == database
       && lastExecutedSQL.map(TSQL.canRepeatRead) == true
   }
+  var favoriteID: UUID?
   var file: URL?
   var state = State.disconnected
   var results: [Rows] = []
@@ -315,6 +316,7 @@ struct ObjectEditorKey: Codable, Equatable {
         elapsed = Date().timeIntervalSince(start)
         messages += error.localizedDescription + "\n"
         partial = !results.isEmpty
+        if let index = results.lastIndex(where: { !$0.fields.isEmpty }) { results[index].truncated = true }
         completed?(query, nil, error.localizedDescription)
       }
       if estimated { _ = try? await connection.execute("SET SHOWPLAN_XML OFF;") }

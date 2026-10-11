@@ -91,12 +91,14 @@ public enum SQLIntelligence {
     public let diagnostics: [Diagnostic]
     public let suggestions: [Suggestion]
     public let replacement: NSRange
+    public var procedureCompletion = false
   }
   public final class Catalog: Sendable {
     public let snapshot: SQLCatalogSnapshot
     private let qualified: [String:CatalogSymbol]
     private let names: [String:[CatalogSymbol]]
     private let sorted: [(String,CatalogSymbol)]
+    private let procedures: [(String,CatalogSymbol)]
     public var fresh: Bool { Date().timeIntervalSince(snapshot.synchronizedAt) < 300 }
     public init(snapshot: SQLCatalogSnapshot) {
       self.snapshot = snapshot
@@ -104,6 +106,7 @@ public enum SQLIntelligence {
       for item in snapshot.symbols { qualified[Self.key(item.schema,item.name)] = item; names[item.name.lowercased(),default:[]].append(item) }
       self.qualified = qualified; self.names = names
       sorted = snapshot.symbols.map { ($0.name.lowercased(),$0) }.sorted { $0.0 == $1.0 ? $0.1.schema < $1.1.schema : $0.0 < $1.0 }
+      procedures = sorted.filter {$0.1.kind.contains("PROCEDURE")}
     }
     private static func key(_ schema: String, _ name: String) -> String { schema.lowercased()+"\u{1f}"+name.lowercased() }
     public func resolve(_ parts: [String]) -> CatalogSymbol? {
@@ -114,6 +117,22 @@ public enum SQLIntelligence {
       return values.count == 1 ? values[0] : nil
     }
     public func isAmbiguous(_ parts: [String]) -> Bool { parts.count == 1 && (names[parts[0].lowercased()]?.count ?? 0) > 1 && qualified[Self.key("dbo",parts[0])] == nil }
+    public func matchingProcedures(_ text:String,schema:String?=nil,limit:Int=100) throws -> [CatalogSymbol] {
+      let needle=text.lowercased(), schema=schema?.lowercased(), limit=max(0,min(limit,100))
+      var result:[CatalogSymbol]=[]
+      // Prefer prefixes, then interior matches; unrelated relations cannot consume the limit.
+      for prefixPass in [true,false] {
+        for (index,pair) in procedures.enumerated() {
+          if index%256 == 0 {try Task.checkCancellation()}
+          guard result.count<limit else {return result}
+          let (name,item)=pair
+          guard schema == nil || item.schema.lowercased() == schema else {continue}
+          let prefix=name.hasPrefix(needle)
+          if prefixPass ? prefix : !prefix && name.contains(needle) {result.append(item)}
+        }
+      }
+      return result
+    }
     public func matches(_ prefix: String, schema: String? = nil, limit: Int = 100) -> [CatalogSymbol] {
       let prefix = prefix.lowercased()
       var low = 0, high = sorted.count
@@ -304,14 +323,16 @@ public enum SQLIntelligence {
     let visible = activeBindings(caret)
     var context = before
     if qualifier != nil { context = Array(context.dropLast(2)) }
-    let objectPosition = ["FROM","JOIN","UPDATE","INTO","APPLY","EXEC","EXECUTE"].contains(context.last?.text.uppercased() ?? "")
-    let execution = ["EXEC","EXECUTE"].contains(context.last?.text.uppercased() ?? "")
+    let returnAssignment=context.count>=3 && context.last?.text == "=" && context[context.count-2].kind == .variable && ["EXEC","EXECUTE"].contains(context[context.count-3].text.uppercased())
+    let execution = (["EXEC","EXECUTE"].contains(context.last?.text.uppercased() ?? "") || returnAssignment) && !prefix.hasPrefix("@")
+    let objectPosition = execution || ["FROM","JOIN","UPDATE","INTO","APPLY"].contains(context.last?.text.uppercased() ?? "")
     if !inLiteral {
       if objectPosition {
         let nextToken = tokens.first { $0.range.location >= NSMaxRange(replacement) && $0.range.location > replacement.location }
         let alreadyAliased = nextToken?.text.uppercased() == "AS" || nextToken?.kind == .word
         let occupied = Set(visible.map { $0.alias.lowercased() })
-        for item in catalog?.matches(prefix,schema:qualifier) ?? [] {
+        let candidates = execution ? try catalog?.matchingProcedures(prefix,schema:qualifier) ?? [] : catalog?.matches(prefix,schema:qualifier) ?? []
+        for item in candidates {
           let isRelation = ["USER_TABLE","VIEW"].contains(item.kind)
           if execution && !item.kind.contains("PROCEDURE") { continue }
           if !execution && !isRelation && item.kind != "SYNONYM" { continue }
@@ -342,6 +363,6 @@ public enum SQLIntelligence {
     try Task.checkCancellation()
     var seen = Set<String>()
     suggestions = suggestions.filter { seen.insert($0.text).inserted }.prefix(100).map { $0 }
-    return Analysis(tokens:all,diagnostics:Array(diagnostics.prefix(200)),suggestions:suggestions,replacement:replacement)
+    return Analysis(tokens:all,diagnostics:Array(diagnostics.prefix(200)),suggestions:suggestions,replacement:replacement,procedureCompletion:execution && !inLiteral)
   }
 }

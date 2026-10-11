@@ -134,13 +134,38 @@ import Testing
       "SELECT TOP (100) object_id FROM sys.all_objects;\nGO\nSELECT 'later';", on: c, limits: limits
     )
     #expect(result.partial)
-    #expect(result.results.flatMap(\.values).count == 10)
+    #expect(result.results.flatMap(\.values).count == 11)
+    #expect(!result.stoppedEarly)
+    #expect(result.results.first?.truncated == true)
+    #expect(result.results.last?.values.first?[0] == "later")
     let error = try await TSQL.run("SELECT 1;\nGO\nTHROW 50001,'expected failure',1;", on: c)
     #expect(error.partial)
     #expect(error.messages.contains { $0.contains("expected failure") })
     let next = try await c.execute("SELECT 9")
     #expect(next.results.first?.values.first?[0] == "9")
     await c.disconnect()
+  }
+  @Test(.enabled(if: ProcessInfo.processInfo.environment["MSSQL_TEST_PASSWORD"] != nil))
+  func perResultRowLimitContinuesStatementAndDynamicProcedureResults() async throws {
+    let c = try await connection()
+    do {
+      var limits = Limits(); limits.rows = 10; limits.diskResults = true
+      let result = try await c.execute("SELECT TOP (30) object_id AS First FROM sys.all_objects; EXEC(N'SELECT CAST(NULL AS int) AS Missing; SELECT TOP (20) object_id AS Third FROM sys.all_objects;'); SELECT 1 AS Empty WHERE 1=0;", limits: limits)
+      let rows = result.results.filter { !$0.fields.isEmpty }
+      #expect(rows.count == 4)
+      #expect(rows.map { $0.values.count } == [10, 1, 10, 0])
+      #expect(rows.map(\.truncated) == [true, false, true, false])
+      #expect(rows[1].values[0][0] == nil)
+      #expect(result.partial && !result.stoppedEarly)
+      limits.totalBytes = 1024
+      let capped = try await c.execute("SELECT TOP (30) object_id FROM sys.all_objects; SELECT REPLICATE(CAST('x' AS varchar(max)),3000); SELECT 'must not be read';", limits: limits)
+      #expect(capped.partial && capped.stoppedEarly)
+      #expect(capped.results.filter { !$0.fields.isEmpty }.count == 2)
+      #expect(capped.messages.contains { $0.contains("boyutu") })
+      let next = try await c.execute("SELECT 42;")
+      #expect(next.results.first?.values.first?[0] == "42")
+      await c.disconnect()
+    } catch { await c.disconnect(); throw error }
   }
   @Test(.enabled(if: ProcessInfo.processInfo.environment["MSSQL_TEST_PASSWORD"] != nil))
   func partialCellLimitRetainsRowsAndReuse() async throws {

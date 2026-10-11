@@ -561,6 +561,7 @@ import SQLServerKit
     if document.sql != editor.string {
       textDidChange(Notification(name: NSText.didChangeNotification, object: editor))
     }
+    highlightedSource=nil;highlight()
   }
   @objc func applyTheme() {
     highlightedSource = nil
@@ -612,8 +613,14 @@ import SQLServerKit
     occurrenceHighlights.needsDisplay=true
   }
   func replaceText(_ text: String) {
-    editor.insertText(
-      text, replacementRange: NSRange(location: 0, length: (editor.string as NSString).length))
+    expandAll()
+    guard text != editor.string else {return}
+    // A full native replacement can inherit the first token's color. Invalidate the
+    // attribute cache even when a later undo restores identical source text.
+    highlightedSource=nil
+    editor.typingAttributes[.foregroundColor]=StudioTheme.editorText
+    editor.insertText(text,replacementRange:NSRange(location:0,length:(editor.string as NSString).length))
+    highlight()
     resizeToViewport()
   }
   @objc private func scrolled() {
@@ -651,6 +658,7 @@ import SQLServerKit
     guard !changingPresentation else { return }
     clearOccurrences()
     document.sql = editor.string
+    highlightedSource=nil
     updateOutline(refreshRegions:false)
     regions = []
     resizeToViewport()
@@ -895,7 +903,7 @@ import SQLServerKit
         highlight()
         let prefixLength = caret-analysis.replacement.location
         let dot = analysis.replacement.location > 0 && (source as NSString).substring(with:NSRange(location:analysis.replacement.location-1,length:1)) == "."
-        if (manual || automatic && allowPopup && (prefixLength >= 2 || dot)), !analysis.suggestions.isEmpty, let window = editor.window, window.firstResponder === editor {
+        if (manual || automatic && allowPopup && (analysis.procedureCompletion || prefixLength >= 2 || dot)), !analysis.suggestions.isEmpty, let window = editor.window, window.firstResponder === editor {
           suggestionList.update(analysis.suggestions)
           guard let anchor = suggestionAnchor(), let host = window.contentView else { return }
           let hostAnchor = host.convert(anchor,from:editor)

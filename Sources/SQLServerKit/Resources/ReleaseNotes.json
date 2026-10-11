@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.2.67",
+    "date": "2026-10-12",
+    "title": "Çoklu sonuçlar, favoriler ve editör iyileştirmeleri",
+    "changes": [
+      "Okuma sınırı her sonuç kümesine ayrı uygulanır. İlk sonuç sınıra ulaşsa da sonraki SELECT ve GO çıktıları kendi Results sekmelerinde açılır; sınırlanan sonuç KISMİ olarak belirtilir.",
+      "Yeni SQL çalıştırıldığında önceki sonuç ve plan sekmeleri temizlenir. Altı sonuçtan iki sonuca geçildiğinde yalnız güncel iki sonuç kalır; yenilemede seçim ve kolon genişlikleri korunur.",
+      "Explorer favorilerine sağ tıkla düzenleme ve onaylı silme eklendi. Favori sorgunun yıldızı dolu görünür; tekrar tıklama doğru kapsamdaki kaydı kaldırır. Veritabanı listeden seçilir.",
+      "Kolona Git ve sonuç/indeks popup yerleşimleri düzenlendi. Kolon aramasında klavye gezinmesi, Enter/Esc ve hedef kolon başlığında belirgin vurgu eklendi.",
+      "EXEC ve EXECUTE sonrasında DDL indeksindeki prosedürler ad içinde eşleşmeyle tamamlanır; başlangıç eşleşmeleri önceliklidir ve schema bağlamı korunur.",
+      "Biçimlendirme işlemi Formatla olarak adlandırıldı. Formatlama, tekrar formatlama ve geri alma/yineleme sonrasında açık/koyu SSMS SQL renkleri korunur."
+    ]
+  },
+  {
     "version": "0.2.66",
     "date": "2026-10-11",
     "title": "Explorer favorileri ve birleşik sonuç kontrolleri",

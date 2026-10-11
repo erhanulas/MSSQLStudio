@@ -211,16 +211,33 @@ public enum TSQL {
     _ sql: String, on connection: ODBCConnection, limits: Limits = Limits(),
     events: (@Sendable (QueryEvent) -> Void)? = nil
   ) async throws -> Execution {
+    try await run(sql, limits: limits, events: events) { text, budget, events in
+      try await connection.execute(text, limits: budget, events: events)
+    }
+  }
+  // Shared batch orchestration also permits deterministic budget/streaming tests
+  // without connecting to a user's database.
+  static func run(
+    _ sql: String, limits: Limits,
+    events: (@Sendable (QueryEvent) -> Void)? = nil,
+    execute: @Sendable (String, Limits, (@Sendable (QueryEvent) -> Void)?) async throws -> Execution
+  ) async throws -> Execution {
     let start = Date()
     var output = Execution()
     var budget = limits
     for batch in try batches(sql) {
+      if budget.resultSets <= 0 || budget.totalBytes <= 0 {
+        output.partial = true
+        output.stoppedEarly = true
+        output.messages.append("Sorgu bütçesi doldu; sonraki batch'ler çalıştırılmadı.")
+        break
+      }
       do {
         try Task.checkCancellation()
         let offset = output.results.count
-        let result = try await connection.execute(
-          batch.text, limits: budget,
-          events: { event in
+        let result = try await execute(
+          batch.text, budget,
+          { event in
             switch event {
             case .result(let index, let fields): events?(.result(offset + index, fields))
             case .rows(let index, let rows): events?(.rows(offset + index, rows))
@@ -230,21 +247,17 @@ public enum TSQL {
           })
         output.results += result.results
         output.messages += result.messages
-        output.partial = result.partial
-        budget.rows -= result.results.reduce(0) { $0 + $1.values.count }
+        output.partial = output.partial || result.partial
+        output.stoppedEarly = result.stoppedEarly
         budget.resultSets -= result.results.count
         budget.totalBytes -= result.bytesRead
         output.bytesRead += result.bytesRead
-        if output.partial { break }
-        if budget.rows <= 0 || budget.resultSets <= 0 || budget.totalBytes <= 0 {
-          output.partial = true
-          output.messages.append("Sorgu bütçesi doldu; sonraki batch'ler çalıştırılmadı.")
-          break
-        }
+        if output.stoppedEarly { break }
       } catch {
         let message = "Batch başlangıç satırı \(batch.line): \(error.localizedDescription)"
         guard !output.results.isEmpty else { throw SQLFailure(message) }
         output.partial = true
+        output.stoppedEarly = true
         output.messages.append(message)
         break
       }

@@ -33,6 +33,21 @@ struct SQLIntelligenceTests {
     #expect(try analyze("SELECT * FROM dbo.Customers c JOIN Cus").suggestions.first?.text == "[dbo].[Customers] AS C2")
     #expect(try analyze("EXEC Get").suggestions.map(\.text) == ["[dbo].[GetCustomers]"])
   }
+  @Test func execCompletionContainsProcedureNamesAndIgnoresUnrelatedRelations() throws {
+    let crowded=(0..<500).map {CatalogSymbol(schema:"dbo",name:"CustomerTable\($0)",columns:[])}
+    let procs=[CatalogSymbol(schema:"dbo",name:"CustomerFirst",columns:[],kind:"SQL_STORED_PROCEDURE"),CatalogSymbol(schema:"dbo",name:"usp_GetCustomerDetails",columns:[],kind:"SQL_STORED_PROCEDURE"),CatalogSymbol(schema:"other",name:"GetCustomer",columns:[],kind:"CLR_STORED_PROCEDURE")]
+    let catalog=SQLIntelligence.Catalog(snapshot:.init(symbols:crowded+procs))
+    func result(_ sql:String) throws -> SQLIntelligence.Analysis {try SQLIntelligence.analyze(source:sql,caret:(sql as NSString).length,catalog:catalog,verified:true)}
+    #expect(try result("EXEC customer").suggestions.map(\.text) == ["[dbo].[CustomerFirst]","[other].[GetCustomer]","[dbo].[usp_GetCustomerDetails]"])
+    #expect(try result("EXECUTE dbo.customer").suggestions.map(\.text) == ["[CustomerFirst]","[usp_GetCustomerDetails]"])
+    #expect(try result("EXEC @returnCode = dbo.details").suggestions.map(\.text) == ["[usp_GetCustomerDetails]"])
+    #expect(try result("EXEC ").procedureCompletion && result("EXEC ").suggestions.count == 3)
+    #expect(try !result("EXEC @sql").procedureCompletion)
+    #expect(try result("EXEC ('Customer").suggestions.isEmpty)
+    #expect(try result("-- EXEC customer").suggestions.isEmpty)
+    #expect(try result("SELECT * FROM details").suggestions.isEmpty)
+    #expect(try result("EXEC OtherDB.dbo.customer").suggestions.isEmpty)
+  }
   @Test func columnCompletionUsesAliasAndStatementScope() throws {
     let sql = "SELECT c. FROM dbo.Customers AS c JOIN dbo.Orders AS o ON c.CustomerID=o.CustomerID;"
     let value = try analyze(sql,caret:9)

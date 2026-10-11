@@ -14,8 +14,16 @@ import SQLServerKit
     do {items=try await store.load();error=""} catch {self.error=error.localizedDescription}
   }
   func save(_ value:FavoriteQuery) async throws {items=try await store.save(value);error=""}
+  func matching(sql:String,serverID:UUID,database:String,preferredID:UUID?=nil) -> FavoriteQuery? {
+    let sql=sql.trimmingCharacters(in:.whitespacesAndNewlines)
+    guard !sql.isEmpty else {return nil}
+    let candidates=items.filter {$0.visible(serverID:serverID,database:database) && $0.sql.trimmingCharacters(in:.whitespacesAndNewlines) == sql}
+    if let favorite=candidates.first(where:{$0.id == preferredID}) {return favorite}
+    return candidates.first {$0.scope == .database} ?? candidates.first {$0.scope == .connection} ?? candidates.first
+  }
+  func delete(_ id:UUID) async throws {items=try await store.remove(id);error=""}
   func remove(_ id:UUID) async {
-    do {items=try await store.remove(id);error=""} catch {self.error=error.localizedDescription}
+    do {try await delete(id)} catch {self.error=error.localizedDescription}
   }
 }
 
@@ -26,7 +34,9 @@ extension StudioState {
     guard let server=servers.first(where:{$0.id == target}) else {throw SQLFailure("Favorinin hedef bağlantısını önce Explorer’a ekleyin veya seçin.")}
     let database=favorite.scope == .database ? favorite.database! : favorite.scope == .connection && favorite.serverID != contextServerID ? server.profile.database:contextDatabase
     guard !database.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else {throw SQLFailure("Hedef veritabanını seçin.")}
-    return newQuery(server:server,database:database,text:favorite.sql,title:favorite.name,run:false)
+    let doc=newQuery(server:server,database:database,text:favorite.sql,title:favorite.name,run:false)
+    doc.favoriteID=favorite.id;doc.changed?()
+    return doc
   }
 }
 
@@ -53,7 +63,7 @@ struct FavoriteQueriesPanel:View {
           Text("Bağlantı seçin").tag(nil as UUID?)
           ForEach(state.servers) {Text($0.profile.name).tag(Optional($0.id))}
         }.frame(maxWidth:360)
-        HStack {Text("Veritabanı").foregroundStyle(.secondary);TextField("Hedef veritabanı",text:$contextDatabase).accessibilityLabel("Hedef veritabanı")}
+        FavoriteDatabasePicker(servers:state.servers,serverID:contextServerID,selection:$contextDatabase)
       }.onChange(of:contextServerID) {_,id in contextDatabase=state.servers.first {$0.id == id}?.profile.database ?? ""}
       HStack {
         TextField("Favori adı ara",text:$search)
@@ -143,7 +153,7 @@ struct FavoriteQueryEditor:View {
           ForEach(servers) {Text($0.profile.name).tag(Optional($0.id))}
         }.labelsHidden()}
       }
-      if scope == .database {StudioFormField("Veritabanı") {TextField("Veritabanı adı",text:$database)}}
+      if scope == .database {FavoriteDatabasePicker(servers:servers,serverID:serverID,selection:$database)}
       Text("SQL").fontWeight(.semibold)
       AgentCommandEditor(text:$sql).studioEditor().frame(minHeight:220)
       if !error.isEmpty {Text(error).foregroundStyle(Color(nsColor:StudioTheme.danger))}
@@ -159,5 +169,59 @@ struct FavoriteQueryEditor:View {
         }.buttonStyle(StudioPrimaryButton()).disabled(saving).accessibilityIdentifier("favoriteSave")
       }
     }.padding(20).frame(width:720,height:660).studioPanel()
+      .onChange(of:serverID) {_,id in database=servers.first {$0.id == id}?.profile.database ?? ""}
+  }
+}
+
+@MainActor final class FavoriteDatabaseChoices:ObservableObject {
+  @Published private(set) var names:[String]=[]
+  @Published private(set) var loading=false
+  @Published private(set) var message=""
+  private var generation=UUID()
+  func load(server:ConnectedServer?) async {
+    let token=UUID();generation=token
+    names=Array(Set(server?.databases.map(\.name) ?? [])).sorted {$0.localizedStandardCompare($1) == .orderedAscending}
+    message="";loading=false
+    guard let server else {return}
+    guard server.online || server.catalogFixture != nil else {message="Çevrimdışı · Son yüklenen veritabanları";return}
+    loading=true
+    defer {if generation == token {loading=false}}
+    do {
+      var limits=Limits();limits.rows=5000;limits.totalBytes=8*1024*1024;limits.timeout=15
+      let output=try await server.catalog(Catalog.databases,database:"master",limits:limits)
+      try Task.checkCancellation()
+      guard generation == token else {return}
+      names=Array(Set(Catalog.rows(output).map(\.name))).sorted {$0.localizedStandardCompare($1) == .orderedAscending}
+      if output.partial {message="Liste kısmi; mevcut seçim korunuyor."}
+      else if names.isEmpty {message="Erişilebilir veritabanı bulunamadı; mevcut seçim korunuyor."}
+    } catch is CancellationError {} catch {
+      guard generation == token else {return}
+      message="Veritabanları yüklenemedi: "+error.localizedDescription
+    }
+  }
+}
+struct FavoriteDatabasePicker:View {
+  let servers:[ConnectedServer]
+  let serverID:UUID?
+  @Binding var selection:String
+  @StateObject private var choices=FavoriteDatabaseChoices()
+  @State private var revision=0
+  private var server:ConnectedServer? {servers.first {$0.id == serverID}}
+  var body:some View {
+    VStack(alignment:.leading,spacing:5) {
+      HStack {
+        StudioFormField("Veritabanı") {
+          Picker("Veritabanı",selection:$selection) {
+            if !choices.names.contains(selection) {Text(selection.isEmpty ? "Veritabanı seçin":selection+" · mevcut").tag(selection)}
+            ForEach(choices.names,id:\.self) {Text($0).tag($0)}
+          }.labelsHidden().accessibilityIdentifier("favoriteDatabase")
+        }.disabled(server == nil || choices.loading)
+        if choices.loading {ProgressView().controlSize(.small).accessibilityLabel("Veritabanları yükleniyor")}
+        Button {revision+=1} label:{Image(systemName:"arrow.clockwise")}
+          .disabled(choices.loading || server == nil || !(server?.online == true || server?.catalogFixture != nil))
+          .help("Veritabanlarını yenile").accessibilityLabel("Veritabanlarını yenile")
+      }
+      if !choices.message.isEmpty {Text(choices.message).font(.caption).foregroundStyle(.secondary).lineLimit(2).help(choices.message)}
+    }.task(id:"\(serverID?.uuidString ?? "none")|\(server?.generation.uuidString ?? "")|\(revision)") {await choices.load(server:server)}
   }
 }

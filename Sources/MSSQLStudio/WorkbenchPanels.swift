@@ -1238,3 +1238,28 @@ extension WorkbenchController {
     }
   }
 }
+
+/// Stable native popovers share one viewport and use an anchor in window coordinates.
+@MainActor enum StudioPopover {
+  static func placement(anchor:NSRect,viewport:NSRect,preferred:NSSize,flipped:Bool) -> (size:NSSize,edge:NSRectEdge) {
+    let above=flipped ? anchor.minY-viewport.minY:viewport.maxY-anchor.maxY
+    let below=flipped ? viewport.maxY-anchor.maxY:anchor.minY-viewport.minY
+    let down=below>=preferred.height+24 || (above<preferred.height+24 && below>above)
+    let height=min(preferred.height,max(220,(down ? below:above)-24))
+    return (NSSize(width:min(preferred.width,max(240,viewport.width-32)),height:height),down ? (flipped ? .maxY:.minY):(flipped ? .minY:.maxY))
+  }
+  static func show<Content:View>(_ popup:NSPopover,content:Content,from anchor:NSView,rect:NSRect?=nil,size:NSSize) {
+    guard let host=anchor.window?.contentView else {return}
+    let visible=(rect ?? anchor.bounds).intersection(anchor.visibleRect)
+    guard !visible.isNull,!visible.isEmpty else {return}
+    let converted=host.convert(visible,from:anchor)
+    let point=NSRect(x:converted.midX-4,y:converted.minY,width:8,height:converted.height)
+    let placement=placement(anchor:point,viewport:host.bounds,preferred:size,flipped:host.isFlipped)
+    let controller=NSHostingController(rootView:content.frame(width:placement.size.width,height:placement.size.height))
+    controller.sizingOptions=[]
+    controller.view.frame=NSRect(origin:.zero,size:placement.size)
+    popup.animates=false;popup.behavior = .transient
+    popup.contentViewController=controller;popup.contentSize=placement.size
+    popup.show(relativeTo:point,of:host,preferredEdge:placement.edge)
+  }
+}

@@ -664,6 +664,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         }
         controller = QueryController(document: doc)
         initialFocus = controller
+        controller.favorites=state.favorites
         controller.favoriteRequested = { [weak self] doc in self?.presentFavoriteEditor(for:doc) }
         controller.changed = { [weak self] in
           self?.updateControls()
@@ -832,7 +833,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   @objc func formatSQL() {
     if let doc = state.active {
-      controllers[doc.id]?.format()
+      (controllers[doc.id] ?? detached[doc.id]?.query)?.format()
       renderTabs()
       state.scheduleSnapshot()
     }
@@ -1176,11 +1177,12 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private func showIndexDetails(_ scope:TreeNode?,relativeTo button:NSButton) {
     guard let scope else {return}
     let popover=NSPopover();popover.animates = false;popover.behavior = .transient
-    popover.contentViewController=NSHostingController(rootView:ExplorerIndexPanel(server:scope.server,databases:searchDatabases(scope)) { [weak self] in
+    let panel=ExplorerIndexPanel(server:scope.server,databases:searchDatabases(scope)) { [weak self] in
       if case .server = scope.kind {scope.server.prepareCatalogIndexes(force:true)}
       else {self?.refreshIndexInBackground(server:scope.server,database:scope.database,force:true)}
-    })
-    indexPopover=popover;popover.show(relativeTo:button.bounds,of:button,preferredEdge:.maxX)
+    }
+    indexPopover?.close();indexPopover=popover
+    StudioPopover.show(popover,content:panel,from:button,size:NSSize(width:420,height:500))
   }
   @objc private func rebuildCatalogIndex() {
     guard let scope = searchScope ?? selected ?? roots.first else { return }
@@ -1427,6 +1429,30 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     catch {state.showError(error.localizedDescription)}
   }
   @objc private func openFavoriteAtNode() {if let node=contextNode {openExplorerFavorite(node)}}
+  func favoriteMenu(for node:TreeNode) -> NSMenu {
+    let menu=NSMenu()
+    guard let favorite=node.favorite else {return menu}
+    for (title,symbol,selector) in [("Sorguda Aç","arrow.up.right.square",#selector(openFavoriteMenu(_:))),("Düzenle…","pencil",#selector(editFavoriteMenu(_:))),("Sil…","trash",#selector(deleteFavoriteMenu(_:)))] {
+      let item=NSMenuItem(title:title,action:selector,keyEquivalent:"")
+      item.target=self;item.representedObject=node;item.image=NSImage(systemSymbolName:symbol,accessibilityDescription:title)
+      item.toolTip=favorite.name;menu.addItem(item)
+    }
+    return menu
+  }
+  @objc private func openFavoriteMenu(_ item:NSMenuItem) {if let node=item.representedObject as? TreeNode {openExplorerFavorite(node)}}
+  @objc private func editFavoriteMenu(_ item:NSMenuItem) {
+    guard let node=item.representedObject as? TreeNode,let favorite=state.favorites.items.first(where:{$0.id == node.favorite?.id}) else {return}
+    presentFavoriteEditor(favorite:favorite,serverID:node.server.id,database:node.database)
+  }
+  @objc private func deleteFavoriteMenu(_ item:NSMenuItem) {
+    guard let node=item.representedObject as? TreeNode,let favorite=state.favorites.items.first(where:{$0.id == node.favorite?.id}),let window=view.window else {return}
+    let alert=NSAlert();alert.messageText="Favori sorgu silinsin mi?";alert.informativeText=favorite.name
+    alert.addButton(withTitle:"Favoriyi Sil");alert.addButton(withTitle:"Vazgeç")
+    alert.beginSheetModal(for:window) { [weak self] response in
+      guard response == .alertFirstButtonReturn else {return}
+      Task {await self?.state.favorites.remove(favorite.id);if let self,!self.state.favorites.error.isEmpty {self.state.showError(self.state.favorites.error)}}
+    }
+  }
   private func serverTree(_ server: ConnectedServer) -> TreeNode {
     func folder(_ value: Folder, database: String = "master", item: CatalogItem? = nil) -> TreeNode
     {
@@ -1605,8 +1631,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     guard let node = contextNode else { return }
     if case .favorite = node.kind {
-      command("Sorguda Aç",#selector(openFavoriteAtNode))
-      command("Favori Sorguları Yönet…",#selector(showFavoritesAtNode))
+      let favorites=favoriteMenu(for:node)
+      for item in favorites.items {favorites.removeItem(item);menu.addItem(item)}
       return
     }
     if case .favorites = node.kind {command("Favori Sorguları Yönet…",#selector(showFavoritesAtNode));return}
@@ -1921,10 +1947,13 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   @objc func addFavorite() {if let doc=state.active {presentFavoriteEditor(for:doc)}}
   private func presentFavoriteEditor(for doc:QueryDocument) {
     guard !doc.sql.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else {return}
-    let identity="favorite-editor|\(UUID())"
-    present(FavoriteQueryEditor(model:state.favorites,servers:state.servers,contextServerID:doc.server.id,database:doc.database,sql:doc.sql,name:doc.title,close:{[weak self] in
+    presentFavoriteEditor(favorite:nil,serverID:doc.server.id,database:doc.database,sql:doc.sql,name:doc.title)
+  }
+  private func presentFavoriteEditor(favorite:FavoriteQuery?,serverID:UUID?,database:String,sql:String="",name:String="") {
+    let identity="favorite-editor|\(favorite?.id ?? UUID())"
+    present(FavoriteQueryEditor(model:state.favorites,servers:state.servers,contextServerID:serverID,database:database,favorite:favorite,sql:sql,name:name,close:{[weak self] in
       self?.auxiliaryWindows.first(where:{$0.window?.identifier?.rawValue == identity})?.close()
-    }),title:"Favorilere Ekle",width:720,height:660,minWidth:720,minHeight:660,identity:identity)
+    }),title:favorite == nil ? "Favorilere Ekle":"Favoriyi Düzenle",width:720,height:660,minWidth:720,minHeight:660,identity:identity)
   }
   @objc private func tableProperties() {
     if let item = contextNode?.item {
@@ -2040,7 +2069,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       "run": ("Çalıştır", "play.fill", #selector(execute)),
       "cancel": ("İptal", "stop.fill", #selector(cancel)),
       "plan": ("Tahmini Plan", "point.3.connected.trianglepath.dotted", #selector(estimatedPlan)),
-      "format": ("Biçimlendir", "text.alignleft", #selector(formatSQL)),
+      "format": ("Formatla", "text.alignleft", #selector(formatSQL)),
       "favorites": ("Favori Sorgular", "star", #selector(showFavorites)),
       "activity": ("Activity", "waveform.path.ecg", #selector(activity)),
       "history": ("Geçmiş", "clock.arrow.circlepath", #selector(showHistory)),
@@ -2604,7 +2633,7 @@ extension WorkbenchController {
       }.frame(maxHeight:420)
       Text("Bu Mac’teki arama ve SQL önerisi önbelleği.").font(.caption).foregroundStyle(.secondary)
       StudioActionButton("Yerel İndeksi Yenile",icon:"arrow.clockwise",tint:.accentColor,action:refresh).disabled(!server.online)
-    }.padding(18).frame(width:420).studioPanel()
+    }.padding(18).frame(maxWidth:.infinity,maxHeight:.infinity).studioPanel()
       .onReceive(NotificationCenter.default.publisher(for:.init("catalogIndexUpdated"))) {note in
         if let updated=note.object as? ConnectedServer,updated === server {revision=UUID()}
       }

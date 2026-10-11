@@ -165,7 +165,6 @@ public final class ODBCConnection: @unchecked Sendable {
     let rc = utf16.withUnsafeMutableBufferPointer { SQLExecDirectW(handle, $0.baseAddress, length) }
     try check(rc, kind: SQLSMALLINT(SQL_HANDLE_STMT), handle: handle)
     messages(rc)
-    var totalRows = 0
     var totalBytes = 0
     do {
       while true {
@@ -207,6 +206,7 @@ public final class ODBCConnection: @unchecked Sendable {
           let spool = limits.diskResults ? try ResultSpool() : nil
           var pending: [[String?]] = []
           var pendingBytes = 0
+          var retainedRows = 0
           var lastSnapshot = Date.distantPast
           func flush(force: Bool = false) throws {
             guard !pending.isEmpty else { return }
@@ -230,11 +230,13 @@ public final class ODBCConnection: @unchecked Sendable {
               if fetched == SQL_NO_DATA { break }
               try check(fetched, kind: SQLSMALLINT(SQL_HANDLE_STMT), handle: handle)
               messages(fetched)
-              if totalRows >= max(1, limits.rows) {
+              if retainedRows >= max(1, limits.rows) {
+                rows.truncated = true
                 output.partial = true
                 output.messages.append(
-                  "Satır sınırına ulaşıldı; sonuç kısmi. Kalan sonuçlar alınmadı.")
-                _ = SQLCancelHandle(SQLSMALLINT(SQL_HANDLE_STMT), handle)
+                  "Sonuç \(resultIndex + 1): \(max(1, limits.rows)) satır okuma sınırına ulaşıldı; bu sonuç kısmi. Sonraki sonuçlar okunmaya devam ediyor.")
+                // SQLMoreResults closes this cursor and discards its unread rows.
+                // Cancelling the statement here would also lose later SELECT results.
                 break
               }
               var row: [String?] = []
@@ -255,10 +257,11 @@ public final class ODBCConnection: @unchecked Sendable {
               }
               pending.append(row)
               pendingBytes += row.reduce(0) { $0 + ($1?.utf8.count ?? 0) + 16 }
-              totalRows += 1
+              retainedRows += 1
               if pending.count >= 512 || pendingBytes >= 1_048_576 { try flush() }
             }
           } catch {
+            rows.truncated = true
             try? flush(force: true)
             output.results.append(rows)
             throw error
@@ -267,14 +270,15 @@ public final class ODBCConnection: @unchecked Sendable {
           if spool != nil { events?(.snapshot(resultIndex, rows.values)) }
         }
         output.results.append(rows)
-        if output.partial { break }
+        try cancelledCheck()
         let more = SQLMoreResults(handle)
         if more == SQL_NO_DATA { break }
         try check(more, kind: SQLSMALLINT(SQL_HANDLE_STMT), handle: handle)
         messages(more)
         if output.results.count >= max(1, limits.resultSets) {
           output.partial = true
-          output.messages.append("Sonuç kümesi sınırına ulaşıldı.")
+          output.stoppedEarly = true
+          output.messages.append("Sonuç kümesi sınırına ulaşıldı; kalan sonuçlar alınmadı.")
           _ = SQLCancelHandle(SQLSMALLINT(SQL_HANDLE_STMT), handle)
           break
         }
@@ -283,6 +287,7 @@ public final class ODBCConnection: @unchecked Sendable {
       _ = SQLCancelHandle(SQLSMALLINT(SQL_HANDLE_STMT), handle)
       guard !output.results.isEmpty else { throw error }
       output.partial = true
+      output.stoppedEarly = true
       output.messages.append(error.localizedDescription)
     }
     output.bytesRead = totalBytes

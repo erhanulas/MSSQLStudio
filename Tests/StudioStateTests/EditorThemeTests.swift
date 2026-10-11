@@ -43,6 +43,40 @@ import Testing
       #expect(controller.editor.textLayoutManager != nil)
     }
   }
+  @Test func formatPreservesEverySSMSCategoryImmediatelyOnRepeatUndoAndRedo() throws {
+    _=NSApplication.shared
+    let previous=UserDefaults.standard.string(forKey:"ssmsTheme");defer {StudioTheme.apply(previous ?? "light")}
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      let source="select count(*), N'İstanbul' as [Label], 42 from sys.objects where 1>=1; -- keep\nexec sp_help;"
+      let doc=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Format")
+      doc.server.online=false;doc.sql=source
+      let controller=QueryController(document:doc)
+      let window=NSWindow(contentViewController:controller);window.isReleasedWhenClosed=false
+      defer {window.close()}
+      func views(_ v:NSView)->[NSView] {[v]+v.subviews.flatMap(views)}
+      let editor=try #require(views(controller.view).compactMap {$0 as? SQLTextView}.first)
+      window.makeKeyAndOrderFront(nil);window.makeFirstResponder(editor)
+      let undo=try #require(editor.undoManager)
+      func assertColors() throws {
+        let storage=try #require(editor.textContentStorage?.textStorage)
+        for (needle,kind) in [("COUNT",TSQL.SyntaxStyle.function),("N'İstanbul'",.string),("[Label]",.plain),("sys",.systemObject),("-- keep",.comment),(">=",.operatorSymbol),("sp_help",.procedure)] {
+          let range=(editor.string as NSString).range(of:needle,options:.caseInsensitive)
+          #expect(range.location != NSNotFound)
+          #expect(storage.attribute(.foregroundColor,at:range.location,effectiveRange:nil) as? NSColor == StudioTheme.syntax(kind),"\(theme): \(needle)")
+        }
+        #expect(editor.textLayoutManager != nil && editor.string == doc.sql)
+      }
+      editor.typingAttributes[.foregroundColor]=StudioTheme.syntax(.keyword)
+      undo.beginUndoGrouping();controller.format();undo.endUndoGrouping()
+      let formatted=editor.string;#expect(formatted != source)
+      try assertColors()
+      controller.format();#expect(editor.string == formatted);try assertColors()
+      undo.undo();#expect(editor.string == source);try assertColors()
+      undo.redo();#expect(editor.string == formatted);try assertColors()
+      #expect(doc.lastExecutedSQL == nil)
+    }
+  }
   @Test func unusedDeclarationColorsUpdateWithoutChangingSourceAndSurviveFolds() throws {
     let doc=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Unused variables")
     doc.server.online=false

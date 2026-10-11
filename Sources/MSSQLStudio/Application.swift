@@ -62,19 +62,30 @@ import SwiftUI
       let document = QueryDocument(server: server, database: "master", title: "SQLQuery1.sql")
       document.sql = ""
       document.savedText = document.sql
-      document.intelligenceCatalog = SQLIntelligence.Catalog(snapshot:SQLCatalogSnapshot(symbols:[CatalogSymbol(schema:"dbo",name:"Customers",columns:["CustomerID","Name","City"]),CatalogSymbol(schema:"dbo",name:"Orders",columns:["OrderID","CustomerID","Amount"])]))
+      document.intelligenceCatalog = SQLIntelligence.Catalog(snapshot:SQLCatalogSnapshot(symbols:[CatalogSymbol(schema:"dbo",name:"Customers",columns:["CustomerID","Name","City"]),CatalogSymbol(schema:"dbo",name:"Orders",columns:["OrderID","CustomerID","Amount"]),CatalogSymbol(schema:"dbo",name:"usp_GetCustomerDetails",columns:[],kind:"SQL_STORED_PROCEDURE")]))
       document.catalogDatabase = "master"; document.catalogVerified = true
       if Bundle.main.object(forInfoDictionaryKey:"StudioGridSmoke") as? Bool == true {
         do {
           let spool = try ResultSpool()
-          var rows = Rows(fields:(0..<64).map { Field($0 == 2 ? "Enabled" : "Column\($0)",type:$0 == 2 ? -7 : 12) })
-          for base in stride(from:0,to:2000,by:256) {
-            rows.values = try spool.append((base..<min(2000,base+256)).map { row in
-              (0..<64).map { column -> String? in column == 2 ? String(row%2) : column == 3 && row%3 == 0 ? nil : "\(row):\(column) · İstanbul" }
+          let compact=Bundle.main.object(forInfoDictionaryKey:"StudioGridSmokeCompact") as? Bool == true
+          let rowCount=compact ? 6:2000, columnCount=compact ? 24:64
+          var rows = Rows(fields:(0..<columnCount).map { Field($0 == 2 ? "Enabled" : "Column\($0)",type:$0 == 2 ? -7 : 12) })
+          for base in stride(from:0,to:rowCount,by:256) {
+            rows.values = try spool.append((base..<min(rowCount,base+256)).map { row in
+              (0..<columnCount).map { column -> String? in column == 2 ? String(row%2) : column == 3 && row%3 == 0 ? nil : "\(row):\(column) · İstanbul" }
             })
           }
-          document.results = [rows]; document.rowCount = 2000
+          document.results = [rows]; document.rowCount = rowCount
         } catch { document.messages = "Sentetik grid testi hazırlanamadı." }
+      }
+      if Bundle.main.object(forInfoDictionaryKey:"StudioMultiResultSmoke") as? Bool == true {
+        document.sql = "SELECT TOP (100) object_id FROM sys.all_objects; SELECT NULL AS Missing; SELECT 2 AS Last;"
+        document.savedText = document.sql
+        var first = Rows(fields:[Field("object_id",type:4)],values:(1...10).map {[String($0)]})
+        first.truncated = true
+        document.results = [first, Rows(fields:[Field("Missing",type:4)],values:[[nil]]), Rows(fields:[Field("Last",type:4)],values:[["2"]])]
+        document.rowCount = 12; document.partial = true
+        document.messages = "Sentetik çoklu sonuç: ilk sonuç 10 satırla sınırlandı; sonraki iki sonuç korundu."
       }
       studio.documents.append(document)
       studio.active = document
@@ -176,7 +187,7 @@ import SwiftUI
     find.tag = 1
     edit.addItem(find)
     command(
-      edit, "SQL Biçimlendir", #selector(WorkbenchController.formatSQL), "f",
+      edit, "SQL Formatla", #selector(WorkbenchController.formatSQL), "f",
       modifiers: [.command, .shift])
     let query = menu("Sorgu")
     command(query, "Favori Sorgular…", #selector(WorkbenchController.showFavorites))
