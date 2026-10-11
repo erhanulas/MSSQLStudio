@@ -87,8 +87,11 @@ import Testing
         ("favorite-editor",AnyView(FavoriteQueryEditor(model:model,servers:[server],contextServerID:server.id,database:"Sales",sql:"SELECT 1",close:{})),.init(width:720,height:660))]
       for (name,panel,size) in panels {
         let host=NSHostingController(rootView:panel);host.sizingOptions=[]
-        let window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false;window.setContentSize(size);window.orderFront(nil)
-        try await Task.sleep(for:.milliseconds(150));host.view.layoutSubtreeIfNeeded()
+        let window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false;window.setContentSize(size)
+        try await Task.sleep(for:.milliseconds(150))
+        // Test the requested viewport without macOS shrinking it to the CI display's 642 pt height.
+        // Keeping layout windows offscreen also avoids stealing a different suite's native field editor.
+        host.view.frame=NSRect(origin:.zero,size:size);host.view.layoutSubtreeIfNeeded()
         #expect(host.view.bounds.size == size)
         for control in descendants(host.view).compactMap({$0 as? NSControl}) where !control.isHiddenOrHasHiddenAncestor {
           let rect=host.view.convert(control.bounds,from:control)

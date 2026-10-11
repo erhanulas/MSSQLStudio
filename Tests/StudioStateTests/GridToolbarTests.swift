@@ -123,11 +123,12 @@ import Testing
     #expect(!null.isEnabled)
     #expect(grid.result.values[0] == ["1", "Alpha", "A"])
   }
-  @Test func untouchedNativeEditorCanExitViaEditingToggle() async throws {
+  @Test func untouchedNativeEditorCanExitViaEditingToggle() throws {
     let (controller, grid, window) = try editingFixture()
     defer { window.close() }
+    window.makeKeyAndOrderFront(nil)
     grid.table.editColumn(2, row: 0, with: nil, select: true)
-    try await Task.sleep(for: .milliseconds(50))
+    // Native editing is synchronous; yielding here lets another UI suite change the key window.
     #expect((window.firstResponder as? NSTextView)?.string == "Alpha")
     let toggle = try button("gridEdit", in: controller)
     #expect(toggle.isEnabled && toggle.state == .on)

@@ -1,3 +1,10 @@
+# v0.2.64 paket testi engeli ve v0.2.65 hazırlığı — 11 Ekim 2026
+
+- Kaynak `e55bfca4bcb98df532bb4bf04e12540af147d299`, Actions `38163380845`: imza/izole Keychain, signed app/PKG ve manifest geçti; paket testleri yedi beklentide başarısız oldu. Public yayın adımı atlandı; v0.2.64 yayımlanmadı ve etiketi taşınmadı.
+- `/tmp/mssql-064-ci-tests.log`: 122 core testi başarılı; 96 uygulama testinde iki test başarısız. Altı boyut beklentisinde CI masaüstü tüm pencereleri 642 pt görünür yüksekliğe küçülttü (beklenen 700/660). Mantıksal viewport testleri artık ekran dışında istenen boyutta çizilir; gerçek AppKit kontrol sınırları ve iki tema beklentileri korunur. Bu pencereler başka suite’in native field editor odağını da çalamaz.
+- Untouched grid editor testinin 50 ms beklemesinde başka UI suite pencere açarak odağı değiştirdi; firstResponder nil geldi. Native editColumn eşzamanlı olduğu için test key pencereyi açıkça seçer ve araya async bekleme koymadan içerik/iptal/undo davranışını kontrol eder. Ürün davranışı veya beklenti kaldırılmadı.
+- v0.2.65 / build 66 yerel doğrulama: `/tmp/mssql-065-full.log` **96 uygulama + 122 core = 218 test; 195 geçti, 23 dış koşullu atlandı**; `/tmp/mssql-065-release.log` Release **BUILD SUCCEEDED**. Yedi beklentinin tamamı korundu ve geçti. `git diff --check` temiz. v0.2.64 geliştirme kayıtları aşağıda tarihsel kanıttır.
+
 # v0.2.64 geliştirme doğrulaması — 11 Ekim 2026
 
 - Çalıştır native hücresine 10 pt yatay / 3 pt dikey içerik boşluğu eklendi. Ana/detached ortak bileşen, ikon/metin, tooltip ve erişilebilir ad korunur.
@@ -8,6 +15,8 @@
 - Native yerleşim testleri: Activity 920×700, favoriler 900×660, editör 720×660 açık/koyu; grid toolbar 830/1280, çalışma alanı 1060/1920 ve 1100/1440 kontrolleri geçti. `/tmp/mssql-{activity,favorites,favorite-editor}-{light,dark}.png` rasterleri üretildi; Activity/favori editör açık rasterleri incelendi. Dar segmented etiket sarılması düzeltildi. Rasterler tek başına CUA yerine sayılmadı.
 - Ayrı `/tmp/MSSQLStudio-activity-ui/MSSQLStudio.app` / `local.mssqlstudio.uitest` ile CUA: koyu dört grafik, duraklat/sürdür, örnek tablosu ve elle örnekleme doğrulandı; I/O ve batch oranları oluştu. Sonuç popover’ında 50.000 → 125.000 değişikliği başlıkta görüldü. İsimli DB favorisi kaydedildi, listede seçildi ve SQL/DB hedefi önizlemede doğrulandı. Sheet açılışı sırasında bir geçici AXError sonraki taze ağaç okumasıyla çözüldü. Gerçek Keychain/restore/history/favoriler/network öncesi fixture kullanıldı; canlı SQL Server izin/DMV koşulları doğrulanmış sayılmaz.
 - Son görünür DB etiketi/liste genişliği düzenlemesinden sonra `/tmp/mssql-feature-ui-final.log` 5/5 native özellik testini geçti. Release `/tmp/mssql-feature-release-publish.log`: **BUILD SUCCEEDED**; mevcut EditorView actor izolasyonu uyarısı bu turda eklenmedi. Yayın ve indirilen imzalı paket doğrulaması tamamlanınca ayrı kayıt eklenir. Kullanıcının kurulu uygulaması ve SQL oturumları değiştirilmedi.
+
+- Yayına gönderilen son kaynak `e55bfca4bcb98df532bb4bf04e12540af147d299` yeniden izole CUA uygulamasında açıldı. Görünür DB etiketi ve daraltılmış favori listesi doğrulandı. DB favorisi kaydedilip Sorguda Aç seçildiğinde ana pencere öne geldi; sekme adı, `SELECT 123;`, master hedefi ve Disconnected / 0 rows / 0.000 s durumu doğrulandı. Ayarlar native tab grubunda yalnız altı sekme bulundu; Sonuçlar yok. Bu tur sheet/pencere geçişlerinde CUA’nın geçici AXError yanıtları taze ağaç okumalarıyla çözüldü. İzole test uygulaması sonlandırıldı.
 
 # v0.2.63 yayın doğrulaması — 11 Ekim 2026
 
