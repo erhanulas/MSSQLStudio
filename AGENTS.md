@@ -12,7 +12,7 @@ Bu dosya mimari, geliştirme durumu ve görünüm kurallarının ana kaynağıd�
 
 ## Güncel durum — 11 Ekim 2026
 
-Son doğrulanmış yayın **v0.2.61, build 62**; kaynak `d9c038fe2d140390f34c1f9dbe299111fd12da72`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38101901309` başarılı; indirilen ZIP/PKG SHA-256 ve her iki paketteki sabit uygulama imzası doğrulandı.
+Son doğrulanmış yayın **v0.2.63, build 64**; kaynak `f8d56e06e170f5a1119852a3d36ca3347953390a`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38103401163` başarılı; indirilen ZIP/PKG SHA-256, public digest/manifest ve her iki paketteki sabit uygulama imzası doğrulandı. v0.2.62 paket testinde önizleme tema hatası bulunduğu için yayımlanmadı; etiketi korunur.
 
 - Native SQL Server çalışma alanı: bağlantı/Explorer, bağımsız sorgu sekmeleri, TextKit 2 SQL editörü, disk destekli sonuç grid'i, mesajlar, XML plan ağacı, ayrılabilir sorgu pencereleri.
 - Editör: T-SQL renklendirme/biçimlendirme, GO batch'leri, seçim çalıştırma, DDL indeksli tamamlama/doğrulama, alias ve isteğe bağlı NOLOCK, blok katlama, kelime eşleşmeleri, tanıma geçiş, lexical kullanılmayan DECLARE vurgusu.
@@ -20,7 +20,7 @@ Son doğrulanmış yayın **v0.2.61, build 62**; kaynak `d9c038fe2d140390f34c1f9
 - SQL Agent: job özellikleri/adımlar/zamanlamalar/bildirimler, geçmiş ve Activity Monitor, açık onayla iş komutları. T-SQL adımında veritabanı seçimi ve ana editörle ortak komut renkleri vardır.
 - Ayarlar yedi native sekme kullanır: Görünüm, SQL Editörü, Sonuçlar, Kısayollar, Çalışma Alanı, Güncellemeler, Güvenlik. Uygula/geri bildirim sabittir; sekme geçişleri kaydedilmemiş girdileri korur. Kısayollar hemen kaydedilir.
 - v0.2.47: genel form hizalaması, Gelişmiş adım grupları ve işlem ikon/renkleri yayımlandı. Son yerel doğrulama: 67 uygulama + 99 core = 166 test; 144 geçti, 22 dış koşullu test atlandı. Yayın işi `38040358461` başarılı; indirilen ZIP'in SHA-256 ve sabit imzası doğrulandı.
-- Son yerel tasarım turunda açık/koyu çalışma alanı, Ayarlar ve sonuç yükleme paneli CUA ile incelendi. 204 testten 180 geçti, 24 dış koşullu test atlandı; son tema düzeltmesiyle ilgili 21 testten 20 geçti, 1 dış koşullu test atlandı ve Release derlemesi geçti. Tüm yönetim formları tek tek yeniden kontrol edilmedi. Bu tasarım değişiklikleri v0.2.61 içinde yayımlandı; ayrıntılar TEST-REPORT.md içindedir.
+- v0.2.63: ortak form/kart/başlık, primary/secondary düğme, Agent gezinmesi ve native işlem renkleri yenilendi. SQL renkleri açık/koyu temaya uyarlanan SSMS kategorilerini izler; ana editör/Agent/fark önizlemesi tema geçişinde aynı paleti kullanır. Yerel ve gerçek yayın paketleriyle CI: 205 testten 181 geçti, 24 dış koşullu test atlandı; Release derlemesi geçti. Koyu Agent Genel CUA ile incelendi; sonra CUA bağlantısı kesildiğinden bütün yönetim formları yeniden gezilmiş sayılmaz. Ayrıntılar TEST-REPORT.md içindedir.
 
 Explorer/bağlantı revizyonu v0.2.49 içinde yayımlandı: 168 testten 146 geçti, 22 dış koşullu test atlandı; Release derlemesi başarılı. İzole bağlantı formu ve DB indeks düğmesi görsel kontrolden geçti; canlı DB davranışı doğrulanmış değildir. Ayrıntılar TEST-REPORT.md içindedir.
 

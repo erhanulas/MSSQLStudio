@@ -1,3 +1,11 @@
+# v0.2.63 yayın doğrulaması — 11 Ekim 2026
+
+- Public latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.63; build 64, kaynak `f8d56e06e170f5a1119852a3d36ca3347953390a`. Actions `38103401163` tüm adımlarıyla başarılı: kalıcı imza/izole Keychain, signed app/PKG, manifest, gerçek paketlerle test ve public yayın tamamlandı.
+- `/tmp/mssql-063-ci-success-tests.log`: **91 uygulama + 114 core = 205 test; 181 geçti, 24 dış koşullu test atlandı**. Paket testinin önce bulduğu fark önizleme tema regresyonu genişletilerek geçti. Yerel test ve görsel kontrol kapsamı/sınırları aşağıdadır.
+- İndirilen ZIP SHA-256 `38af059c6717d401501108ec46053c3b79b081ac009c071dfe5da047898c5be5`; PKG SHA-256 `4d79e464f6f0de11deffdeed5f4f3f6f8295dacf46d36b58ce007e255782ce06`. Her ikisi public GitHub digest ve update.json ile eşleşti; manifestin kendi digest'i de doğrulandı.
+- prepare-release.py `/tmp/MSSQLStudio-0.2.63-verify` altındaki public ZIP/PKG için strict/deep codesign, sabit sertifika/DR, bundle ID, sürüm, aynı binary/metadata ve sürüm notlarını doğruladı. Uygulamanın 0.2.63/64 bilgisi ayrıca doğrulandı; üretilen manifest public manifestle aynı.
+- İzole UI fixture sonlandırıldı. Kullanıcının kurulu uygulaması, açık SQL oturumları, Keychain ve veritabanı değiştirilmedi. Canlı SQL Server koşulları doğrulanmış sayılmaz; CUA servis kesintisi nedeniyle bütün yönetim formları yeniden gezilmedi.
+
 # v0.2.62 CI hatası ve önizleme tema düzeltmesi — 11 Ekim 2026
 
 - Kaynak `06ce5b70dbd38e8a651140ad2b2de5f8e495d614`, Actions `38103019195`: imza/izole Keychain, signed app/PKG üretimi ve manifest doğrulaması geçti; paket testleri ManagementWorkspaceTests içindeki dört renk beklentisinde başarısız oldu. Public latest v0.2.61 kaldı; v0.2.62 yayımlanmış sayılmaz ve etiketi taşınmadı.
