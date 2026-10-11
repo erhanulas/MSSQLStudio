@@ -1,3 +1,11 @@
+# v0.2.61 yayın doğrulaması — 11 Ekim 2026
+
+- Public latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.61; build 62, kaynak d9c038fe2d140390f34c1f9dbe299111fd12da72. Actions 38101901309 bütün adımlarıyla başarılı: sabit imza/izole Keychain, uygulama ve PKG üretimi, manifest ve gerçek yayın paketleriyle testler geçti.
+- İndirilen ZIP SHA-256 1790432b6d828bbe22ba85321391d539832e00a5e34ce081ca996e378949efaf; PKG SHA-256 72bdb55b081d13c84b9d67da747bfca6a046d276221bf0dfda23040c13aee847. Her ikisi public GitHub asset digest ve update.json ile eşleşti.
+- prepare-release.py indirilen ZIP/PKG için strict/deep imza, sabit sertifika/DR, local.mssqlstudio.app kimliği, sürüm, aynı binary/metadata ve sürüm notlarını doğruladı. Uygulamanın 0.2.61/62 bilgisi ayrıca doğrulandı. İndirme/doğrulama dosyaları /tmp/MSSQLStudio-0.2.61-verify altında.
+- Yayın öncesi sürüm geçmişi testleri `/tmp/mssql-061-notes-tests.log`: 4/4 geçti. Tasarım geliştirmesinin tam test ve native görsel kanıtları aşağıdadır; aşağıdaki henüz yayımlanmadı başlığı o turun tarihsel durumudur.
+- Kullanıcının kurulu uygulaması, açık sorguları, Keychain ve veritabanı değiştirilmedi.
+
 # Genel çalışma alanı tasarımı — 10 Ekim 2026 (henüz yayımlanmadı)
 
 - Açık/koyu palette pencere çerçevesi, Explorer/panel ve editör ayrı yüzeylere taşındı. Sorgu/sonuç sekmelerinin seçimi, satır seçimi, boşluklar ve tipografi yenilendi. Ana toolbar, Explorer ve ayrılmış sorgu penceresi ortak ikon/hover bileşenini kullanır. Sonuç satırları yalnız görünür aralıkta düz zebra zemine çizilir; native hücre, kopyalama/düzenleme ve spool davranışı korunur.

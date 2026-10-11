@@ -10,9 +10,9 @@ Bu dosya mimari, geliştirme durumu ve görünüm kurallarının ana kaynağıd�
 - `Sources/SQLServerKit/Resources/ReleaseNotes.json`: uygulamadaki ve GitHub yayınındaki sürüm notlarının tek kaynağı. Yeni mimari/tasarım Markdown dosyaları açmak yerine önce mevcut belgeleri güncelleyin.
 - Eski `ARCHITECTURE.md`, `DESIGN.md` ve `docs/PERSONAL-SIGNING.md` içerikleri bu rehberde birleştirilmiştir. Ayrı, çelişen kopyalar üretmeyin. Ayrıntılı eski uygulama/yayın geçmişi Git geçmişinde ve test raporundadır.
 
-## Güncel durum — 10 Ekim 2026
+## Güncel durum — 11 Ekim 2026
 
-Son doğrulanmış yayın **v0.2.60, build 61**; kaynak `c2ebc5f495404fa63b73d2b1eaf7aa765cf6e69f`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38082255408` başarılı; indirilen ZIP/PKG SHA-256 ve her iki paketteki sabit uygulama imzası doğrulandı.
+Son doğrulanmış yayın **v0.2.61, build 62**; kaynak `d9c038fe2d140390f34c1f9dbe299111fd12da72`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38101901309` başarılı; indirilen ZIP/PKG SHA-256 ve her iki paketteki sabit uygulama imzası doğrulandı.
 
 - Native SQL Server çalışma alanı: bağlantı/Explorer, bağımsız sorgu sekmeleri, TextKit 2 SQL editörü, disk destekli sonuç grid'i, mesajlar, XML plan ağacı, ayrılabilir sorgu pencereleri.
 - Editör: T-SQL renklendirme/biçimlendirme, GO batch'leri, seçim çalıştırma, DDL indeksli tamamlama/doğrulama, alias ve isteğe bağlı NOLOCK, blok katlama, kelime eşleşmeleri, tanıma geçiş, lexical kullanılmayan DECLARE vurgusu.
@@ -20,7 +20,7 @@ Son doğrulanmış yayın **v0.2.60, build 61**; kaynak `c2ebc5f495404fa63b73d2b
 - SQL Agent: job özellikleri/adımlar/zamanlamalar/bildirimler, geçmiş ve Activity Monitor, açık onayla iş komutları. T-SQL adımında veritabanı seçimi ve ana editörle ortak komut renkleri vardır.
 - Ayarlar yedi native sekme kullanır: Görünüm, SQL Editörü, Sonuçlar, Kısayollar, Çalışma Alanı, Güncellemeler, Güvenlik. Uygula/geri bildirim sabittir; sekme geçişleri kaydedilmemiş girdileri korur. Kısayollar hemen kaydedilir.
 - v0.2.47: genel form hizalaması, Gelişmiş adım grupları ve işlem ikon/renkleri yayımlandı. Son yerel doğrulama: 67 uygulama + 99 core = 166 test; 144 geçti, 22 dış koşullu test atlandı. Yayın işi `38040358461` başarılı; indirilen ZIP'in SHA-256 ve sabit imzası doğrulandı.
-- Son yerel tasarım turunda açık/koyu çalışma alanı, Ayarlar ve sonuç yükleme paneli CUA ile incelendi. 204 testten 180 geçti, 24 dış koşullu test atlandı; son tema düzeltmesiyle ilgili 21 testten 20 geçti, 1 dış koşullu test atlandı ve Release derlemesi geçti. Tüm yönetim formları tek tek yeniden kontrol edilmedi. Bu tasarım değişiklikleri henüz yayımlanmadı; ayrıntılar TEST-REPORT.md içindedir.
+- Son yerel tasarım turunda açık/koyu çalışma alanı, Ayarlar ve sonuç yükleme paneli CUA ile incelendi. 204 testten 180 geçti, 24 dış koşullu test atlandı; son tema düzeltmesiyle ilgili 21 testten 20 geçti, 1 dış koşullu test atlandı ve Release derlemesi geçti. Tüm yönetim formları tek tek yeniden kontrol edilmedi. Bu tasarım değişiklikleri v0.2.61 içinde yayımlandı; ayrıntılar TEST-REPORT.md içindedir.
 
 Explorer/bağlantı revizyonu v0.2.49 içinde yayımlandı: 168 testten 146 geçti, 22 dış koşullu test atlandı; Release derlemesi başarılı. İzole bağlantı formu ve DB indeks düğmesi görsel kontrolden geçti; canlı DB davranışı doğrulanmış değildir. Ayrıntılar TEST-REPORT.md içindedir.
 
