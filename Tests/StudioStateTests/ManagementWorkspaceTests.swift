@@ -21,6 +21,8 @@ import SwiftUI
     server.online=false;#expect(!doc.canSubmitModule)
   }
   @Test func reviewUsesSourceColorsAcrossAlignedMultilineRowsAndSubmitsOnlyOnClick() async throws {
+    let previousTheme=UserDefaults.standard.string(forKey:"ssmsTheme")
+    defer {StudioTheme.apply(previousTheme ?? "light");if previousTheme == nil {UserDefaults.standard.removeObject(forKey:"ssmsTheme")}}
     let parent=NSWindow(contentRect:NSRect(x:0,y:0,width:1200,height:800),styleMask:[.titled],backing:.buffered,defer:false)
     parent.isReleasedWhenClosed=false
     var submitted=0
@@ -28,9 +30,6 @@ import SwiftUI
     let edited=old.replacingOccurrences(of:"/* first",with:"-- inserted\n/* first").replacingOccurrences(of:", 1;",with:", 2;")
     let review=ModuleReviewController(parent:parent,title:"Fixture / Demo / P",original:old,edited:edited,canApply:true,approved:{submitted+=1},finished:{})
     defer {withExtendedLifetime(review) {};parent.close()}
-    for _ in 0..<100 {
-      if parent.attachedSheet?.contentView?.subviews.isEmpty == false {try await Task.sleep(for:.milliseconds(10))}
-    }
     let sheet=try #require(parent.attachedSheet)
     let expectedWidth=max(960,min(1400,(parent.screen?.visibleFrame.width ?? (1400/0.94))*0.94))
     #expect(abs((sheet.contentView?.bounds.width ?? 0)-expectedWidth) < 2)
@@ -38,8 +37,15 @@ import SwiftUI
     StudioTheme.decorate(try #require(sheet.contentView))
     let children=descendants(try #require(sheet.contentView))
     let texts=children.compactMap {$0 as? NSTextView}
+    let submit=try #require(children.compactMap {$0 as? NSButton}.first {$0.title == "Veritabanına Gönder"})
+    let deadline=ContinuousClock.now.advanced(by:.seconds(2))
+    while !submit.isEnabled && ContinuousClock.now < deadline {try await Task.sleep(for:.milliseconds(20))}
     #expect(texts.count == 3)
-    for text in texts {
+    for text in texts {text.setSelectedRange((text.string as NSString).range(of:"İstanbul 😀"))}
+    let sources=texts.map(\.string),selections=texts.map {$0.selectedRange()},viewports=texts.map {$0.enclosingScrollView?.contentView.bounds.origin}
+    for theme in ["light","dark","light"] {
+      StudioTheme.apply(theme)
+      for (index,text) in texts.enumerated() {
       let storage=try #require(text.textContentStorage?.textStorage)
       let source=text.string as NSString
       for (needle,color) in [("ALTER",StudioTheme.syntax(.keyword)),("second */",StudioTheme.syntax(.comment)),("@unused",StudioTheme.unusedVariable),("N'İstanbul 😀'",StudioTheme.syntax(.string))] {
@@ -49,8 +55,11 @@ import SwiftUI
       }
       #expect(text.textLayoutManager != nil && !text.isEditable)
       #expect(text.enclosingScrollView?.contentView.bounds.minX == 0)
+      #expect(text.backgroundColor == StudioTheme.editorCanvas)
+      #expect(text.string == sources[index] && text.selectedRange() == selections[index])
+      #expect(text.enclosingScrollView?.contentView.bounds.origin == viewports[index])
+      }
     }
-    let submit=try #require(children.compactMap {$0 as? NSButton}.first {$0.title == "Veritabanına Gönder"})
     #expect(submit.isEnabled && submitted == 0)
     submit.performClick(nil)
     #expect(submitted == 1 && parent.attachedSheet == nil)

@@ -11,6 +11,7 @@ import SwiftUI
   private let apply=StudioToolbarButton(symbol:"paperplane.fill",label:"Veritabanına Gönder",tone:.accent,title:"Veritabanına Gönder",width:175,prominent:true)
   private var syncing=false
   private var task:Task<Void,Never>?
+  private var comparison:SQLTextDiff.Comparison?
   private var approved: (() -> Void)?
   private var finished: (() -> Void)?
   private var observers:[NSObjectProtocol]=[]
@@ -57,10 +58,14 @@ import SwiftUI
           other.contentView.scroll(to:NSPoint(x:other.contentView.bounds.minX,y:scroll.contentView.bounds.minY));other.reflectScrolledClipView(other.contentView);self.syncing=false}
       })
     }
+    observers.append(NotificationCenter.default.addObserver(forName:StudioTheme.changed,object:nil,queue:.main) { [weak self] _ in
+      MainActor.assumeIsolated { self?.refreshSQLTheme(original:previewOriginal,edited:previewEdited) }
+    })
     parent.beginSheet(panel)
     task=Task { [weak self] in
       let comparison=await Task.detached(priority:.userInitiated) {SQLTextDiff.compare(previewOriginal,previewEdited)}.value
       guard let self,!Task.isCancelled else {return}
+      self.comparison=comparison
       render(comparison,to:left,old:true,source:previewOriginal);render(comparison,to:right,old:false,source:previewEdited)
       summary.stringValue="−\(comparison.removed) kaldırılan  ·  +\(comparison.added) eklenen satır"+(comparison.simplified ? "  ·  Büyük değişiklik için blok karşılaştırması":"")
       let truncated=oversized || comparison.lines.count>10_000
@@ -90,8 +95,24 @@ import SwiftUI
     view.defaultParagraphStyle=style
     view.textContentStorage?.textStorage?.addAttribute(.paragraphStyle,value:style,range:NSRange(location:0,length:(view.string as NSString).length))
   }
-  private func render(_ comparison:SQLTextDiff.Comparison,to scroll:NSScrollView,old:Bool,source:String) {
+  private func refreshSQLTheme(original:String,edited:String) {
+    for scroll in [left,right,script] {
+      (scroll.documentView as? NSTextView)?.backgroundColor=StudioTheme.editorCanvas
+    }
+    if let comparison {
+      render(comparison,to:left,old:true,source:original,revealChange:false)
+      render(comparison,to:right,old:false,source:edited,revealChange:false)
+    }
+    if let view=script.documentView as? NSTextView {
+      let selection=view.selectedRange(),viewport=script.contentView.bounds.origin
+      view.textContentStorage?.textStorage?.setAttributedString(SQLSourceHighlighting.attributed(edited))
+      size(view,in:script,text:edited)
+      view.setSelectedRange(selection);script.contentView.scroll(to:viewport);script.reflectScrolledClipView(script.contentView)
+    }
+  }
+  private func render(_ comparison:SQLTextDiff.Comparison,to scroll:NSScrollView,old:Bool,source:String,revealChange:Bool=true) {
     guard let view=scroll.documentView as? NSTextView else {return}
+    let selection=view.selectedRange(),viewport=scroll.contentView.bounds.origin
     let attributed=NSMutableAttributedString(string:"")
     let colored=SQLSourceHighlighting.attributed(source)
     var offsets:[Int]=[],offset=0
@@ -123,10 +144,11 @@ import SwiftUI
       }
     }
     view.textContentStorage?.textStorage?.setAttributedString(attributed);size(view,in:scroll,text:attributed.string)
-    if let firstChange {view.scrollRangeToVisible(firstChange)}
+    if revealChange,let firstChange {view.scrollRangeToVisible(firstChange)}
     // Start at the line beginning: jumping to an inline change can otherwise hide
     // the object name and the first half of a long SQL line.
-    scroll.contentView.scroll(to:NSPoint(x:0,y:scroll.contentView.bounds.minY))
+    if revealChange {scroll.contentView.scroll(to:NSPoint(x:0,y:scroll.contentView.bounds.minY))}
+    else {view.setSelectedRange(selection);scroll.contentView.scroll(to:viewport)}
     scroll.reflectScrolledClipView(scroll.contentView)
   }
   @objc private func changeTab() {split.isHidden=tabs.selectedSegment != 0;script.isHidden=tabs.selectedSegment == 0}

@@ -1,3 +1,11 @@
+# v0.2.62 CI hatası ve önizleme tema düzeltmesi — 11 Ekim 2026
+
+- Kaynak `06ce5b70dbd38e8a651140ad2b2de5f8e495d614`, Actions `38103019195`: imza/izole Keychain, signed app/PKG üretimi ve manifest doğrulaması geçti; paket testleri ManagementWorkspaceTests içindeki dört renk beklentisinde başarısız oldu. Public latest v0.2.61 kaldı; v0.2.62 yayımlanmış sayılmaz ve etiketi taşınmadı.
+- `/tmp/mssql-062-ci-failure-tests.log` mevcut GitHub kimliğiyle okundu. Fark panelleri hazırlandıktan sonra tema değişirken çalıştırılacak SQL paneli önceki paleti koruyordu. ModuleReviewController artık StudioTheme.changed bildiriminde hem hizalı diff satırlarını hem çalıştırılacak SQL'i yeniler. Diff zemini, metin, seçim, viewport ve açık gönderim onayı korunur; karşılaştırma yeniden hesaplanmaz.
+- Regresyon testi açık–koyu–açık geçişinde üç gerçek TextKit 2 alanının syntax/unused renklerini, editör zeminini, aynı metin/seçim/viewport'u ve yalnız düğmeye tıklayınca gönderimi kontrol eder. `/tmp/mssql-063-review-regression.log`: **1/1 geçti**. Eski yapay 100×10 ms bekleme yerine en fazla 2 saniye hazır durum beklenir.
+- `/tmp/mssql-063-final-tests.log`: **91 uygulama + 114 core = 205 test; 181 geçti, 24 dış koşullu test atlandı**. Sürüm geçmişi ve genişletilen preview regresyonu bu tam koşuya dahildir. `/tmp/mssql-063-release-build.log`: Release **BUILD SUCCEEDED**; `git diff --check` temiz.
+- Düzeltme yeni v0.2.63/build 64 yayınına alınır. Önceki yerel tasarım kontrolü aşağıda tarihsel kanıttır.
+
 # Premium form tasarımı ve SSMS renkleri — 11 Ekim 2026
 
 - Ortak StudioPanelStyle bütün alt formlara secondary düğme ve GroupBox kart stilini taşır. Primary/secondary yüzeyler, 100 ms hover, pressed/disabled kontrastı, semantic toolbar renkleri, panel başlıkları ve 12 pt kartlar yenilendi. Bağlantı/Ayarlar kartları, Agent ikonlu gezinmesi, SQL gönderim düğmeleri ve Hakkında sürüm seçimi uyarlandı. İşlem yolları ve onaylar korunur; tasarım kuralları AGENTS.md'ye işlendi.
