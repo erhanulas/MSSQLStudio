@@ -12,7 +12,7 @@ Bu dosya mimari, geliştirme durumu ve görünüm kurallarının ana kaynağıd�
 
 ## Güncel durum — 11 Ekim 2026
 
-Son doğrulanmış yayın **v0.2.63, build 64**; kaynak `f8d56e06e170f5a1119852a3d36ca3347953390a`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38103401163` başarılı; indirilen ZIP/PKG SHA-256, public digest/manifest ve her iki paketteki sabit uygulama imzası doğrulandı. v0.2.62 paket testinde önizleme tema hatası bulunduğu için yayımlanmadı; etiketi korunur.
+Son doğrulanmış yayın **v0.2.65, build 66**; kaynak `b53675694d533df71d485102b0132b3670679f86`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38163928401` başarılı; indirilen ZIP/PKG SHA-256, public digest/manifest ve her iki paketteki sabit uygulama imzası doğrulandı. v0.2.62 önizleme tema hatası, v0.2.64 CI viewport/odak test engeli nedeniyle yayımlanmadı; bu etiketler korunur.
 
 - Native SQL Server çalışma alanı: bağlantı/Explorer, bağımsız sorgu sekmeleri, TextKit 2 SQL editörü, disk destekli sonuç grid'i, mesajlar, XML plan ağacı, ayrılabilir sorgu pencereleri.
 - Editör: T-SQL renklendirme/biçimlendirme, GO batch'leri, seçim çalıştırma, DDL indeksli tamamlama/doğrulama, alias ve isteğe bağlı NOLOCK, blok katlama, kelime eşleşmeleri, tanıma geçiş, lexical kullanılmayan DECLARE vurgusu.
@@ -20,6 +20,7 @@ Son doğrulanmış yayın **v0.2.63, build 64**; kaynak `f8d56e06e170f5a1119852a
 - SQL Agent: job özellikleri/adımlar/zamanlamalar/bildirimler, geçmiş ve Activity Monitor, açık onayla iş komutları. T-SQL adımında veritabanı seçimi ve ana editörle ortak komut renkleri vardır.
 - Ayarlar altı native sekme kullanır: Görünüm, SQL Editörü, Kısayollar, Çalışma Alanı, Güncellemeler, Güvenlik. Sonuç tercihleri yalnız sonuç alanından yönetilir. Uygula/geri bildirim sabittir; sekme geçişleri kaydedilmemiş girdileri korur. Kısayollar hemen kaydedilir.
 - v0.2.47: genel form hizalaması, Gelişmiş adım grupları ve işlem ikon/renkleri yayımlandı. Son yerel doğrulama: 67 uygulama + 99 core = 166 test; 144 geçti, 22 dış koşullu test atlandı. Yayın işi `38040358461` başarılı; indirilen ZIP'in SHA-256 ve sabit imzası doğrulandı.
+- v0.2.65: dört grafikli sunucu Activity Monitor/örnek tablosu, sorguda aktif istek izleme, genel/Explorer/DB kapsamlı isimli favoriler ve görünür sonuç okuma sınırı yayımlandı. Çalıştır içerik boşluğu düzeltildi; sonuç tercihleri Ayarlar’dan kaldırıldı. Paketlerle CI: 218 testten 194 geçti, 24 dış koşullu atlandı; yerelde 195 geçti / 23 atlandı. Release ve izole CUA akışları doğrulandı; canlı SQL Server koşulları doğrulanmış sayılmaz.
 - v0.2.63: ortak form/kart/başlık, primary/secondary düğme, Agent gezinmesi ve native işlem renkleri yenilendi. SQL renkleri açık/koyu temaya uyarlanan SSMS kategorilerini izler; ana editör/Agent/fark önizlemesi tema geçişinde aynı paleti kullanır. Yerel ve gerçek yayın paketleriyle CI: 205 testten 181 geçti, 24 dış koşullu test atlandı; Release derlemesi geçti. Koyu Agent Genel CUA ile incelendi; sonra CUA bağlantısı kesildiğinden bütün yönetim formları yeniden gezilmiş sayılmaz. Ayrıntılar TEST-REPORT.md içindedir.
 
 Explorer/bağlantı revizyonu v0.2.49 içinde yayımlandı: 168 testten 146 geçti, 22 dış koşullu test atlandı; Release derlemesi başarılı. İzole bağlantı formu ve DB indeks düğmesi görsel kontrolden geçti; canlı DB davranışı doğrulanmış değildir. Ayrıntılar TEST-REPORT.md içindedir.

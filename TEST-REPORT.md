@@ -1,3 +1,11 @@
+# v0.2.65 yayın doğrulaması — 11 Ekim 2026
+
+- [Public latest v0.2.65](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.65), build 66, kaynak `b53675694d533df71d485102b0132b3670679f86`. [Actions 38163928401](https://github.com/erhanulas/MSSQLStudio/actions/runs/38163928401) bütün adımlarıyla başarılı: sabit imza/izole Keychain, signed ZIP/PKG, manifest, paket testleri ve public yayın tamamlandı.
+- `/tmp/mssql-065-ci-tests.log`: **96 uygulama + 122 core = 218 test; 194 geçti, 24 dış koşullu test atlandı**. v0.2.64 paket testinde bulunan altı viewport ve bir field editor beklentisi korunarak geçti. Yerelde `/tmp/mssql-065-full.log`: 195 geçti / 23 dış koşullu atlandı; Release `/tmp/mssql-065-release.log` başarılı. Yerel ve CI farklı koşullu test ortamları ayrı sayıldı.
+- Public ZIP SHA-256 `691730fd811c0de984b47f479583c2336cdfa342c9a459306367f6cb886903ce`; PKG SHA-256 `6da8fac7fc732834256d02ac3e364592a7d0900c0d5acacf6d3b82df3b714a91`. Her ikisi indirilen update.json ve GitHub asset digest ile eşleşti. Manifest digest `c262831c35ad9818bfe5e0eb41b59f3aaf59792867889b9134c7bfbcf4a001b9` ayrıca doğrulandı.
+- `/tmp/MSSQLStudio-0.2.65-verify` içindeki public paketler `scripts/prepare-release.py` ile strict/deep codesign, sabit sertifika/DR, bundle ID, 0.2.65/66 sürümü, aynı uygulama binary/metadata ve sürüm notları açısından doğrulandı. Yeniden üretilen manifest public manifestle aynı. Kanıt: `/tmp/mssql-065-public-verification.log`.
+- Yeni işlevlerin native CUA kanıtı ve ölçüm/favori/veri bütünlüğü test kapsamı aşağıdadır. v0.2.64 açılmadı; etiketi taşınmadı. Kullanıcının kurulu uygulaması, açık SQL oturumları, Keychain, mevcut favori/geçmiş dosyaları ve DB değiştirilmedi. Canlı SQL Server/izin koşulları test ortamı tanımlı olmadığı için doğrulanmış sayılmaz.
+
 # v0.2.64 paket testi engeli ve v0.2.65 hazırlığı — 11 Ekim 2026
 
 - Kaynak `e55bfca4bcb98df532bb4bf04e12540af147d299`, Actions `38163380845`: imza/izole Keychain, signed app/PKG ve manifest geçti; paket testleri yedi beklentide başarısız oldu. Public yayın adımı atlandı; v0.2.64 yayımlanmadı ve etiketi taşınmadı.
