@@ -1,3 +1,10 @@
+# v0.2.67 yayın doğrulaması — 12 Ekim 2026
+
+- [Public latest v0.2.67](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.67), build 68, kaynak `402231c43febb07d8189f26c323b0a0c68da9eb0`. [Actions 38183331282](https://github.com/erhanulas/MSSQLStudio/actions/runs/38183331282) kalıcı imza/izole Keychain, signed ZIP/PKG, manifest, paket testleri, public yayın ve geçici kimlik temizliği dahil başarılıdır.
+- `/tmp/mssql-067-ci-tests.log`: **110 uygulama + 129 core = 239 test; 214 geçti, 25 dış koşullu test atlandı**. Son tam yerel koşuyla aynı sayım geçti. Sonuç başına okuma ve GO devamı, 6 → 2 sekme temizliği/plan/refresh/native kontrolleri ve önceki favori/Formatla/EXEC/popup geliştirmeleri bu sürümdedir. Canlı SQL Server testleri ortam bilgisi olmadığı için atlandı; doğrulanmış sayılmaz.
+- İndirilen ZIP SHA-256 `852daf966184e915bd7bf043f99d5824a5453df51383a2b9a2407fe296c41c99`; PKG SHA-256 `8261f1c7d189e0b52134b2548cbab61230f32d89fdd94d2dfcd0add66500d627`. Dosyalar `/tmp/MSSQLStudio-0.2.67-verify` altında public update.json ve GitHub asset digest ile eşleştirildi. Manifest digest `38257d7d7838e839d528cb3910305744a100cb2ab8f53a0dbe14ed387640be8d` ayrıca doğrulandı.
+- `scripts/prepare-release.py` indirilen her iki paketin uygulaması için strict/deep codesign, sabit sertifika/DR, bundle ID, 0.2.67/68 sürümü ve aynı binary/metadata/sürüm notlarını doğruladı; yeniden oluşturulan manifest public manifestle aynıdır. Kanıt: `/tmp/mssql-067-public-verification.log`. Kurulu kullanıcı uygulaması/SQL oturumları/Keychain/favoriler/geçmiş değiştirilmedi. Yerel/native/CUA kapsamı ve sınırları aşağıdaki tarihli kayıtlardadır.
+
 # v0.2.67 yayın hazırlığı — 12 Ekim 2026
 
 - Sürüm 0.2.67 / build 68 hazırlandı; origin/main ile başlangıç HEAD aynıydı ve v0.2.67 etiketi yerelde/uzakta kullanılmamıştı. Favori/popup/EXEC/Formatla geliştirmeleri, sonuç başına okuma sınırı ve eski sekme temizliği birlikte yayımlanacak.
