@@ -644,7 +644,7 @@ extension ServerAppearance {
     super.drawBackground(in: dirtyRect)
     if isServer {
       color.withAlphaComponent(0.1).setFill()
-      NSBezierPath(rect: bounds.intersection(dirtyRect)).fill()
+      NSBezierPath(roundedRect: bounds.insetBy(dx: 3, dy: 1), xRadius: 5, yRadius: 5).fill()
     }
     stripe(in: dirtyRect)
   }
@@ -730,9 +730,9 @@ struct ConnectionAppearanceFields: View {
   override func drawSelection(in dirtyRect: NSRect) {
     guard selectionHighlightStyle != .none else { return }
     StudioTheme.selection.setFill()
-    NSBezierPath(rect: bounds.intersection(dirtyRect)).fill()
+    NSBezierPath(roundedRect: bounds.insetBy(dx: 3, dy: 1), xRadius: 5, yRadius: 5).fill()
     StudioTheme.accent.withAlphaComponent(0.45).setFill()
-    NSBezierPath(rect: NSRect(x: 0, y: 0, width: 2, height: bounds.height)).fill()
+    NSBezierPath(roundedRect: NSRect(x: 3, y: 4, width: 2, height: max(0, bounds.height - 8)), xRadius: 1, yRadius: 1).fill()
   }
 }
 
@@ -809,6 +809,21 @@ struct StudioFormField<Content: View>: View {
   }
 }
 
+/// Native tabs retain keyboard, target/action and accessibility behavior.
+@MainActor final class StudioResultTabButton: NSButton {
+  override var state: NSControl.StateValue { didSet { refreshStyle() } }
+  override var intrinsicContentSize: NSSize {
+    let size = super.intrinsicContentSize
+    return NSSize(width: size.width + 18, height: 26)
+  }
+  func refreshStyle() {
+    wantsLayer = true; layer?.cornerRadius = 5
+    layer?.backgroundColor = (state == .on ? StudioTheme.selection : .clear).cgColor
+    contentTintColor = state == .on ? StudioTheme.accent : StudioTheme.muted
+    font = .systemFont(ofSize: 11, weight: state == .on ? .semibold : .regular)
+  }
+}
+
 @MainActor final class StudioToolbarButton: NSButton {
   enum Tone { case neutral, accent, success, warning, danger }
   var tone: Tone { didSet { refreshStyle() } }
@@ -848,9 +863,9 @@ struct StudioFormField<Content: View>: View {
     let active = prominent || state == .on
     contentTintColor = isEnabled ? color : StudioTheme.muted.withAlphaComponent(0.4)
     layer?.backgroundColor = (isEnabled
-      ? color.withAlphaComponent(pressed ? 0.24 : hovered ? 0.17 : active ? 0.13 : 0.06)
-      : StudioTheme.muted.withAlphaComponent(0.035)).cgColor
-    layer?.borderColor = (isEnabled ? color.withAlphaComponent(active || hovered ? 0.3 : 0.13) : StudioTheme.border.withAlphaComponent(0.45)).cgColor
+      ? color.withAlphaComponent(pressed ? 0.20 : hovered ? 0.12 : active ? 0.12 : 0.025)
+      : StudioTheme.muted.withAlphaComponent(0.015)).cgColor
+    layer?.borderColor = (isEnabled ? color.withAlphaComponent(active || hovered ? 0.28 : 0) : NSColor.clear).cgColor
   }
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
@@ -923,10 +938,10 @@ struct StudioPanelHeading: View {
     HStack(alignment: .center, spacing: 12) {
       Image(systemName: icon).font(.system(size: 20, weight: .regular))
         .foregroundStyle(.tint)
-        .frame(width: 38, height: 38)
+        .frame(width: 34, height: 34)
         .background(.tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 9))
       VStack(alignment: .leading, spacing: 3) {
-        Text(title).font(.system(size: 18, weight: .semibold))
+        Text(title).font(.system(size: 17, weight: .semibold))
         Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
       }
       Spacer(minLength: 0)
@@ -979,31 +994,32 @@ extension View {
       srgbRed: CGFloat((hex >> 16) & 255) / 255,
       green: CGFloat((hex >> 8) & 255) / 255, blue: CGFloat(hex & 255) / 255, alpha: 1)
   }
-  static var canvas: NSColor { color(0xFFFFFF, 0x202229) }
-  static var panel: NSColor { color(0xF3F4F8, 0x292C35) }
-  static var text: NSColor { color(0x272B38, 0xDCE0EB) }
-  static var border: NSColor { color(0xE1E4ED, 0x3B3F4C) }
-  static var selection: NSColor { color(0xE1EBFF, 0x334766) }
-  static var lineNumber: NSColor { color(0x008080, 0x858585) }
-  static var editorCanvas: NSColor { color(0xFFFFFF,0x1E1E1E) }
+  static var canvas: NSColor { color(0xFFFFFF, 0x191D25) }
+  static var chrome: NSColor { color(0xEBEFF5, 0x141820) }
+  static var panel: NSColor { color(0xF4F6FA, 0x222833) }
+  static var text: NSColor { color(0x263247, 0xE1E7F0) }
+  static var border: NSColor { color(0xE1E6EF, 0x333C4A) }
+  static var selection: NSColor { color(0xE8EFFF, 0x2C4062) }
+  static var lineNumber: NSColor { color(0x8A94A6, 0x707E95) }
+  static var editorCanvas: NSColor { color(0xFFFFFF,0x191D25) }
   static var unusedVariable: NSColor { color(0x929292,0x808080) }
-  static var editorText: NSColor { color(0x000000,0xD4D4D4) }
+  static var editorText: NSColor { color(0x263247,0xDCE4F0) }
   static var codeFont: NSFont {
     NSFont(name: "Consolas", size: 13) ?? .monospacedSystemFont(ofSize: 13, weight: .regular)
   }
   static var uiFont: NSFont { .systemFont(ofSize: 12) }
-  static var accent: NSColor { color(0x4C6FE8, 0x8CA7FF) }
-  static var muted: NSColor { color(0x737D94, 0x9BA5BB) }
-  static var stripe: NSColor { color(0xF8F9FC, 0x242730) }
-  static func surface(_ view: NSView, card: Bool = false) {
-    view.identifier = .init(card ? "studio.card" : "studio.chrome")
+  static var accent: NSColor { color(0x3869D6, 0x8EAEFF) }
+  static var muted: NSColor { color(0x5E6D82, 0x9DAAC0) }
+  static var stripe: NSColor { color(0xFAFBFD, 0x1C212B) }
+  static func surface(_ view: NSView, card: Bool = false, chrome: Bool = false, sidebar: Bool = false) {
+    view.identifier = .init(sidebar ? "studio.sidebar" : card ? "studio.card" : chrome ? "studio.frame" : "studio.chrome")
     view.wantsLayer = true
     paintSurface(view)
   }
   private static func paintSurface(_ view: NSView) {
-    view.layer?.backgroundColor = (view.identifier?.rawValue == "studio.card" ? canvas : panel).cgColor
-    if view.identifier?.rawValue == "studio.card" {
-      view.layer?.cornerRadius = 8
+    view.layer?.backgroundColor = (view.identifier?.rawValue == "studio.card" ? canvas : view.identifier?.rawValue == "studio.frame" ? chrome : panel).cgColor
+    if ["studio.card", "studio.sidebar"].contains(view.identifier?.rawValue ?? "") {
+      view.layer?.cornerRadius = 10
       view.layer?.borderWidth = 1
       view.layer?.borderColor = border.cgColor
       view.layer?.masksToBounds = true
@@ -1034,21 +1050,26 @@ extension View {
     UserDefaults.standard.set(value == "dark" ? "dark" : "light", forKey: "ssmsTheme")
     NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
     for window in NSApp.windows {
-      window.backgroundColor = panel
+      window.backgroundColor = chrome
       if let view = window.contentView { decorate(view) }
     }
     NotificationCenter.default.post(name: changed, object: nil)
   }
   static func decorate(_ view: NSView) {
     if let button = view as? StudioToolbarButton { button.refreshStyle() }
+    if let button = view as? StudioResultTabButton { button.refreshStyle() }
+    if let label = view as? NSTextField, label.identifier?.rawValue == "studio.mutedLabel" { label.textColor = muted }
+    // AppKit owns private text/layout views inside controls and the shared field editor.
+    // Preserve their native typography and appearance when updating the SQL workspace.
+    if view is NSTextField || view is NSPopUpButton || view is NSSegmentedControl { return }
     if let table = view as? NSTableView {
-      table.backgroundColor = canvas
+      table.backgroundColor = table is NSOutlineView ? panel : canvas
       table.gridColor = border
       table.headerView?.needsDisplay = true
       table.enumerateAvailableRowViews { row, _ in row.needsDisplay = true }
     } else if let scroll = view as? NSScrollView {
-      scroll.backgroundColor = canvas
-    } else if let textView = view as? NSTextView, !(textView is SQLTextView), !["sqlSourcePreview","agentCommandEditor"].contains(textView.identifier?.rawValue ?? "") {
+      scroll.backgroundColor = scroll.identifier?.rawValue == "studio.chrome" ? panel : canvas
+    } else if let textView = view as? NSTextView, !textView.isFieldEditor, !(textView is SQLTextView), !["sqlSourcePreview","agentCommandEditor"].contains(textView.identifier?.rawValue ?? "") {
       textView.backgroundColor = canvas
       textView.textColor = text
       textView.font = codeFont

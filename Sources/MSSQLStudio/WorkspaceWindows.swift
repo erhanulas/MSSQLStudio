@@ -19,11 +19,18 @@ import AppKit
     let host = NSViewController()
     host.view = NSView()
     host.addChild(query)
-    let run = NSButton(title: "Çalıştır", target: self, action: #selector(execute))
-    let cancel = NSButton(title: "İptal", target: self, action: #selector(stop))
-    let dock = NSButton(title: "Çalışma Alanına Dön", target: self, action: #selector(dock))
+    StudioTheme.surface(host.view, chrome: true)
+    let run = StudioToolbarButton(symbol: "play.fill", label: "Çalıştır", tone: .success, title: "Çalıştır", width: 88, prominent: true)
+    let cancel = StudioToolbarButton(symbol: "stop.fill", label: "İptal", tone: .warning, title: "İptal", width: 66)
+    let dock = StudioToolbarButton(symbol: "arrow.uturn.backward", label: "Çalışma Alanına Dön", tone: .neutral, title: "Çalışma Alanına Dön", width: 170)
+    run.target = self; run.action = #selector(execute)
+    cancel.target = self; cancel.action = #selector(stop)
+    dock.target = self; dock.action = #selector(DetachedQueryWindow.dock)
+    label.font = .systemFont(ofSize: 11, weight: .medium)
+    label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     updateConnectionAppearance()
     let header = NSStackView(views: [label, NSView(), run, cancel, dock])
+    StudioTheme.surface(header)
     header.edgeInsets = NSEdgeInsets(top: 1, left: 8, bottom: 1, right: 8)
     let stack = NSStackView(views: [header, query.view])
     stack.orientation = .vertical
@@ -36,7 +43,7 @@ import AppKit
       stack.trailingAnchor.constraint(equalTo: host.view.trailingAnchor),
       stack.topAnchor.constraint(equalTo: host.view.topAnchor),
       stack.bottomAnchor.constraint(equalTo: host.view.bottomAnchor),
-      header.heightAnchor.constraint(equalToConstant: 28),
+      header.heightAnchor.constraint(equalToConstant: 36),
       header.widthAnchor.constraint(equalTo: stack.widthAnchor),
       query.view.widthAnchor.constraint(equalTo: stack.widthAnchor),
     ])

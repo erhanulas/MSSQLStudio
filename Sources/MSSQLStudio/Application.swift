@@ -44,7 +44,7 @@ import SwiftUI
     window.toolbar = toolbar
     createMenu()
     StudioTheme.decorate(workbench.view)
-    window.backgroundColor = StudioTheme.panel
+    window.backgroundColor = StudioTheme.chrome
     NotificationCenter.default.addObserver(
       self, selector: #selector(styleWindow(_:)), name: NSWindow.didBecomeKeyNotification,
       object: nil)
@@ -113,7 +113,7 @@ import SwiftUI
   }
   @objc private func styleWindow(_ notification: Notification) {
     guard let window = notification.object as? NSWindow else { return }
-    window.backgroundColor = StudioTheme.panel
+    window.backgroundColor = StudioTheme.chrome
     if let content = window.contentView { StudioTheme.decorate(content) }
   }
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

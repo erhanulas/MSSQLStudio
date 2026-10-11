@@ -56,7 +56,7 @@ import SwiftUI
 @MainActor final class ResultSplitView: NSSplitView {
   var hideDivider = false
   override var dividerThickness: CGFloat { hideDivider ? 0 : super.dividerThickness }
-  override func drawDivider(in rect: NSRect) { if !hideDivider { super.drawDivider(in: rect) } }
+  override func drawDivider(in rect: NSRect) { if !hideDivider { StudioTheme.border.setFill(); rect.fill() } }
 }
 @MainActor enum GridPaging {
   static let choices = [10,100,250,500,1000,0]
@@ -132,6 +132,15 @@ import SwiftUI
   var cellSelectionChanged: (() -> Void)?
   private(set) var cellColumns = IndexSet() {
     didSet { if cellColumns != oldValue { needsDisplay = true; cellSelectionChanged?() } }
+  }
+  override func drawBackground(inClipRect clip: NSRect) {
+    StudioTheme.canvas.setFill(); clip.fill()
+    let visible = rows(in: clip)
+    guard visible.location != NSNotFound, visible.length > 0 else { return }
+    StudioTheme.stripe.setFill()
+    for row in visible.location..<NSMaxRange(visible) where !row.isMultiple(of: 2) {
+      NSIntersectionRect(rect(ofRow: row), clip).fill()
+    }
   }
   override func highlightSelection(inClipRect clip: NSRect) {
     StudioTheme.selection.setFill()
@@ -1139,8 +1148,9 @@ private struct ColumnFilterPanel: View {
     actual.action = #selector(actualChanged)
     actual.font = .systemFont(ofSize: 11)
     position.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
-    position.textColor = .tertiaryLabelColor
-    connectionBadge.font = .systemFont(ofSize: 11, weight: .semibold)
+    position.textColor = StudioTheme.muted
+    position.identifier = .init("studio.mutedLabel")
+    connectionBadge.font = .systemFont(ofSize: 10, weight: .medium)
     connectionBadge.lineBreakMode = .byTruncatingMiddle
     connectionBadge.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     connectionBadge.setAccessibilityIdentifier("queryConnectionBadge")
@@ -1303,8 +1313,10 @@ private struct ColumnFilterPanel: View {
     export.bezelStyle = .rounded; export.contentTintColor = StudioTheme.accent
     export.setAccessibilityLabel("Sonuçları dışa aktar")
     resultStrip.spacing = 2
-    resultStrip.edgeInsets = NSEdgeInsets(top: 2,left: 6,bottom: 2,right: 6)
+    resultStrip.edgeInsets = NSEdgeInsets(top: 3,left: 6,bottom: 3,right: 6)
+    StudioTheme.surface(resultStrip)
     resultStrip.setAccessibilityIdentifier("resultTabStrip")
+    StudioTheme.surface(stripScroll)
     stripScroll.documentView = resultStrip
     stripScroll.hasHorizontalScroller = true; stripScroll.autohidesScrollers = true
     resultStrip.translatesAutoresizingMaskIntoConstraints = false
@@ -1320,10 +1332,10 @@ private struct ColumnFilterPanel: View {
       stripScroll.leadingAnchor.constraint(equalTo: resultPane.leadingAnchor),
       stripScroll.trailingAnchor.constraint(equalTo: resultPane.trailingAnchor),
       stripScroll.topAnchor.constraint(equalTo: resultPane.topAnchor),
-      stripScroll.heightAnchor.constraint(equalToConstant: 28),
+      stripScroll.heightAnchor.constraint(equalToConstant: 32),
       resultStrip.leadingAnchor.constraint(equalTo: stripScroll.contentView.leadingAnchor),
       resultStrip.topAnchor.constraint(equalTo: stripScroll.contentView.topAnchor),
-      resultStrip.heightAnchor.constraint(equalToConstant: 28),
+      resultStrip.heightAnchor.constraint(equalToConstant: 32),
       resultHeader.topAnchor.constraint(equalTo: stripScroll.bottomAnchor),
       resultHeader.heightAnchor.constraint(equalToConstant: 34),
       resultTabs.leadingAnchor.constraint(equalTo: resultPane.leadingAnchor, constant: 2),
@@ -1378,7 +1390,7 @@ private struct ColumnFilterPanel: View {
     if resultStrip.arrangedSubviews.count != resultTabs.numberOfTabViewItems {
       for child in resultStrip.arrangedSubviews { resultStrip.removeArrangedSubview(child); child.removeFromSuperview() }
       for index in resultTabs.tabViewItems.indices {
-        let button = NSButton(title: "",target: self,action: #selector(selectResultTab(_:)))
+        let button = StudioResultTabButton(title: "",target: self,action: #selector(selectResultTab(_:)))
         button.tag = index; button.bezelStyle = .inline; button.isBordered = false; button.font = StudioTheme.uiFont
         resultStrip.addArrangedSubview(button)
       }
@@ -1389,6 +1401,7 @@ private struct ColumnFilterPanel: View {
       button.contentTintColor = item === resultTabs.selectedTabViewItem ? StudioTheme.accent : StudioTheme.muted
       button.state = item === resultTabs.selectedTabViewItem ? .on : .off
       button.setAccessibilityValue(button.state == .on ? "Seçili" : "")
+      (button as? StudioResultTabButton)?.refreshStyle()
     }
   }
   @objc private func selectResultTab(_ button: NSButton) { resultTabs.selectTabViewItem(at: button.tag) }

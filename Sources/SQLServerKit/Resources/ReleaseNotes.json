@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.61",
+    "date": "2026-10-11",
+    "title": "Yenilenen çalışma alanı tasarımı",
+    "changes": [
+      "Açık ve koyu temalarda Explorer, editör ve sonuç alanları daha belirgin yüzeyler, dengeli renkler ve düzenli boşluklarla yenilendi.",
+      "Sorgu ve sonuç sekmelerinin aktif durumu belirginleştirildi; sekmelerin ikon ve boşluk alanları da seçim ve sürüklemeye katılır.",
+      "Ana araç çubuğu, Explorer ve ayrılmış sorgu pencereleri ortak ikon, renk ve hover görünümünü kullanır.",
+      "Sonuç tablosunun satır zeminleri ve seçim görünümü sadeleştirildi; kopyalama, düzenleme ve sayısal hassasiyet korunur.",
+      "Tema geçişlerinde native giriş alanlarının yazı tipi korunur; Explorer daraltma ve mevcut pencere boyutu davranışı devam eder."
+    ]
+  },
+  {
     "version": "0.2.60",
     "date": "2026-10-10",
     "title": "Açıklamalı ikonlar ve hızlı sonuç panelleri",

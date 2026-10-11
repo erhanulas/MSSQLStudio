@@ -20,7 +20,7 @@ Son doğrulanmış yayın **v0.2.60, build 61**; kaynak `c2ebc5f495404fa63b73d2b
 - SQL Agent: job özellikleri/adımlar/zamanlamalar/bildirimler, geçmiş ve Activity Monitor, açık onayla iş komutları. T-SQL adımında veritabanı seçimi ve ana editörle ortak komut renkleri vardır.
 - Ayarlar yedi native sekme kullanır: Görünüm, SQL Editörü, Sonuçlar, Kısayollar, Çalışma Alanı, Güncellemeler, Güvenlik. Uygula/geri bildirim sabittir; sekme geçişleri kaydedilmemiş girdileri korur. Kısayollar hemen kaydedilir.
 - v0.2.47: genel form hizalaması, Gelişmiş adım grupları ve işlem ikon/renkleri yayımlandı. Son yerel doğrulama: 67 uygulama + 99 core = 166 test; 144 geçti, 22 dış koşullu test atlandı. Yayın işi `38040358461` başarılı; indirilen ZIP'in SHA-256 ve sabit imzası doğrulandı.
-- Son hizalama turunda CUA `Sky Computer Use native pipe closed before response` hatası verdi. Tüm formların son görsel kontrolü tamamlanmadı; build/test başarısı bu kontrolün yerine geçmez. Yeni arayüz işinde bu kontrolü yeniden deneyin.
+- Son yerel tasarım turunda açık/koyu çalışma alanı, Ayarlar ve sonuç yükleme paneli CUA ile incelendi. 204 testten 180 geçti, 24 dış koşullu test atlandı; son tema düzeltmesiyle ilgili 21 testten 20 geçti, 1 dış koşullu test atlandı ve Release derlemesi geçti. Tüm yönetim formları tek tek yeniden kontrol edilmedi. Bu tasarım değişiklikleri henüz yayımlanmadı; ayrıntılar TEST-REPORT.md içindedir.
 
 Explorer/bağlantı revizyonu v0.2.49 içinde yayımlandı: 168 testten 146 geçti, 22 dış koşullu test atlandı; Release derlemesi başarılı. İzole bağlantı formu ve DB indeks düğmesi görsel kontrolden geçti; canlı DB davranışı doğrulanmış değildir. Ayrıntılar TEST-REPORT.md içindedir.
 
@@ -94,11 +94,13 @@ Tablodaki kısa dosya adları, ayrıca yol belirtilmedikçe aynı satır grubunu
 
 Kullanıcının önceliği düzenli, hizalı, sakin ve premium native bir görünüm; SSMS iş akışı ile DataGrip'in okunabilirlik yaklaşımıdır. Marka varlığı kopyalamayın, SF Symbols kullanın. Yalnız tek bildirilen ekranı düzeltip aynı kusuru diğer formlarda bırakmayın; benzer yerleşimleri de inceleyin.
 
-- Ana düzen solda Object Explorer, ortada sorgu sekmeleri/editör, altta sonuç/mesaj/plan. Explorer daraltılınca kendiliğinden kapanmaz; gizleme açık eylemdir. Native pencere, menü ve dosya panellerini koruyun.
+- Ana düzen solda Object Explorer, ortada sorgu sekmeleri/editör, altta sonuç/mesaj/plan. Dış çerçeve, ikincil panel ve editör zemini ayrı tonlardır; aktif sekme zemin/kenarlık ve ağırlıkla ayrılır. Ana pencerenin 1060 pt alt sınırı korunur; Explorer varsayılan olarak pencerenin %22’sini kullanır ve kullanıcı isteğiyle 140 pt’ye kadar daralabilir; etiketler sırf daha çok içerik sığdırmak için okunamaz boyuta indirilmez. Explorer daraltılınca kendiliğinden kapanmaz; gizleme açık eylemdir. Native pencere, menü ve dosya panellerini koruyun.
+- Tema uygulaması native metin alanları/popup/segmented kontrollerin özel alt view’larını SQL editörü gibi biçimlendirmez; field editor macOS tarafından yönetilir. Yardımcı metin renkleri tema değişiminde yenilenir.
 - Formlarda `StudioFormField`: 150 pt etiket sütunu + 12 pt aralık; Job Gelişmiş'te uzun etiketler için 180 pt. Etiketler satır sarar; alan başlangıcı etiket uzunluğuyla kaymaz. Grid kullanan bağlantı formu da 150 pt sütun kullanır. Birim ve numeric stepper'lar ortak hizadadır.
 - Placeholder görünür etiketin yerine geçmez. Çok sayıda şema/ad/kaynak alanını tek dar HStack'e sıkıştırmayın; etiketli satırlara ayırın. İlişkili alanları başlıklı kart/GroupBox gruplarında toplayın. Kontrol/işlem çubuğunu kaydırılan uzun içerikten ayırın; küçük pencere ve uzun metinde taşmayı inceleyin.
 - İkonlu kontrollerin üzerine gelince işlev adı kısa sürede görünmelidir; tooltip ve erişilebilir ad zorunludur. Sonuç araçlarında ortak StudioHoverHelp 200 ms içinde adı gösterir; tıklama/çıkışta kapanır ve fareyi/odağı yakalamaz. Aynı işi yapan bitişik düğmeleri birleştirin; aç/kapat veya başlat/iptal durumları tek kontrolü paylaşmalıdır. Farklı veri kapsamı olan kopyalama/çoğaltma gibi işlemleri birleştirmeyin. Dışa aktarma sonuç çubuğunun en sağındadır, arrow.down.document simgesini kullanır; çalışırken aynı konumda iptal görünür.
 - İkonla açılan kısa ayar/arama/filtre popover’ları animasyonsuz açılır; ilk veri yüklemesine yapay bekleme eklemeyin. Ağ ve büyük veri işleri arka planda kalır; arama yazımı için debounce korunabilir.
+- Sürekli araç çubukları sakin görünür: normal durumda hafif ton, aktif/hover/basılı durumda belirgin vurgu; her ikona sürekli güçlü kutu çizilmez. Native üst toolbar ve ayrılmış sorgu başlığı aynı StudioToolbarButton kullanır. Sonuç sekmeleri StudioResultTabButton ile seçimi belirginleştirir. Grid satır zemini sadece görünür satırlar üzerinde düz çizilir; hücre başına yeni view oluşturulmaz.
 - Sık kullanılan sonuç araçları `StudioToolbarButton` kullanır: anlamlı SF ikon, işleme göre tonlu zemin/kenarlık, hover/pressed/disabled durumları, tooltip ve erişilebilir ad.
 - İşlem düğmeleri metin + anlamlı ikon kullanır (`StudioActionButton`). Birincil eylem `StudioPrimaryButton`; ikincil eylemlerde accent ikon, başlatmada yeşil, durdurma/ayırmada turuncu, silmede kırmızı. Renk tek başına anlam taşımaz; metin, ikon, tooltip ve erişilebilir ad kalır. Disabled durumu soluk ve tutarlıdır.
 - Satır/sekme/düğmenin **tüm görünen alanı** tıklanır; yalnız harfler veya ikonun çizgileri değil. Expanded frame/padding sonrasında uygun `contentShape` kullanın. İkon-only düğmelere yeterli hit alanı ve erişilebilir ad verin. Seçili sayfayı zemin/kalın yazı ve `.isSelected` ile belirtin.
@@ -108,14 +110,16 @@ Kullanıcının önceliği düzenli, hizalı, sakin ve premium native bir görü
 
 | Token / ölçü | Açık | Koyu |
 |---|---|---|
-| Canvas | `FFFFFF` | `202229` |
-| Panel | `F3F4F8` | `292C35` |
-| Metin | `272B38` | `DCE0EB` |
-| Accent | `4C6FE8` | `8CA7FF` |
-| Seçim | `E1EBFF` | `334766` |
-| Kenarlık (1 pt) | `E1E4ED` | `3B3F4C` |
+| Canvas / SQL editörü | `FFFFFF` | `191D25` |
+| Panel / Explorer | `F4F6FA` | `222833` |
+| Pencere çerçevesi | `EBEFF5` | `141820` |
+| Metin | `263247` | `E1E7F0` |
+| Yardımcı metin | `5E6D82` | `9DAAC0` |
+| Accent | `3869D6` | `8EAEFF` |
+| Seçim | `E8EFFF` | `2C4062` |
+| Kenarlık (1 pt) | `E1E6EF` | `333C4A` |
 
-Sistem UI fontu 12 pt; yardımcı metin 10–11 pt; SQL varsa Consolas 13 pt, yoksa native monospace. Grid/ağaç satırı 24/25 pt, sorgu sekmesi/sonuç araç satırı 34 pt. Panel köşesi yaklaşık 8 pt, kontrol 5–6 pt; Ayarlar kartları 12 pt kullanabilir. Renk/ölçü kaynağı kodda StudioTheme ve ortak bileşenlerdir.
+Sistem UI fontu 12 pt; yardımcı metin 10–11 pt; SQL varsa Consolas 13 pt, yoksa native monospace. Grid/ağaç satırı 24/27 pt, sorgu sekmesi 40 pt, sonuç sekmesi 32 pt ve sonuç araç satırı 34 pt. Panel köşesi yaklaşık 10 pt, kontrol 5–6 pt; Ayarlar kartları 12 pt kullanabilir. Renk/ölçü kaynağı kodda StudioTheme ve ortak bileşenlerdir.
 
 ## Bağlantı formu ve Explorer yenileme düzeni
 

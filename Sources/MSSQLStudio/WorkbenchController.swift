@@ -166,6 +166,12 @@ import UniformTypeIdentifiers
   }
   func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation { .move }
 }
+@MainActor final class QueryTabSurface: NSStackView {
+  weak var primaryButton: DocumentButton?
+  // Padding and the document icon belong to the same draggable/selectable tab.
+  override func mouseDown(with event: NSEvent) { primaryButton?.mouseDown(with: event) }
+  override func rightMouseDown(with event: NSEvent) { primaryButton?.rightMouseDown(with: event) }
+}
 @MainActor final class QueryTabStrip: NSStackView {
   static let type = NSPasteboard.PasteboardType("local.mssqlstudio.queryTab")
   var documentIDs: [UUID] = []
@@ -216,7 +222,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private let searchScopePicker = NSPopUpButton()
   private let searchType = NSPopUpButton()
   private var searchScopes: [TreeNode] = []
-  private let indexStatus = NSButton(title:"İndeks",target:nil,action:nil)
+  private let indexStatus = StudioToolbarButton(symbol: "externaldrive", label: "Yerel indeks durumu ve işlemleri", tone: .neutral, width: 26)
   private var indexDetailsByDatabase:[String:String]=[:]
   private var indexPopover:NSPopover?
   private var indexStatusTask: Task<Void,Never>?
@@ -233,7 +239,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private var searchTask: Task<Void, Never>?
   private var searchToken = UUID()
   private var searchRunning = false
-  private let explorerToggle = NSButton()
+  private let explorerToggle = StudioToolbarButton(symbol: "sidebar.left", label: "Object Explorer’ı Göster / Gizle", tone: .neutral)
   private let tabs = QueryTabStrip()
   private let content = NSView()
   private let database = NSPopUpButton()
@@ -268,14 +274,14 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     guard isViewLoaded else { return }
     StudioTheme.decorate(view)
     for item in view.window?.toolbar?.items ?? [] {
-      (item.view as? NSButton)?.contentTintColor = item.itemIdentifier.rawValue == "run" ? StudioTheme.color(0x287E59, 0x79CDA5) : StudioTheme.muted
+      (item.view as? StudioToolbarButton)?.refreshStyle()
     }
     reloadWorkspace()
   }
   required init?(coder: NSCoder) { fatalError() }
   override func loadView() {
     view = NSView()
-    StudioTheme.surface(view)
+    StudioTheme.surface(view, chrome: true)
     split.splitView.isVertical = true
     split.splitView.autosaveName="MSSQLStudio.ExplorerWidths"
     buildExplorer()
@@ -285,27 +291,27 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     sidebar.canCollapseFromWindowResize = false
     sidebar.minimumThickness = 140
     sidebar.maximumThickness = 760
-    sidebar.preferredThicknessFraction = 0.20
+    sidebar.preferredThicknessFraction = 0.22
     split.addSplitViewItem(sidebar)
     split.addSplitViewItem(NSSplitViewItem(viewController: center))
     addChild(split)
     view.addSubview(split.view)
     split.view.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      split.view.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 5),
-      split.view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -5),
-      split.view.topAnchor.constraint(equalTo: view.topAnchor, constant: 4),
-      split.view.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -5),
+      split.view.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+      split.view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+      split.view.topAnchor.constraint(equalTo: view.topAnchor, constant: 6),
+      split.view.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -8),
     ])
     sidebar.isCollapsed=UserDefaults.standard.bool(forKey:"explorerCollapsed")
     reloadWorkspace()
   }
   private func buildExplorer() {
     let background = NSView()
-    StudioTheme.surface(background, card: true)
+    StudioTheme.surface(background, sidebar: true)
     explorer.view = background
-    let label = NSTextField(labelWithString: "Object Explorer")
-    label.font = .systemFont(ofSize: 12, weight: .semibold)
+    let label = NSTextField(labelWithString: "EXPLORER")
+    label.font = .systemFont(ofSize: 10, weight: .semibold)
     let refresh = symbolButton("arrow.clockwise", tip: "Seçili dalın nesnelerini sunucudan yenile", action: #selector(refreshExplorer))
     let connect = symbolButton("plus", tip: "Sunucuya bağlan", action: #selector(showConnect))
     let collapse = symbolButton("sidebar.left", tip: "Object Explorer’ı gizle", action: #selector(toggleExplorer))
@@ -317,17 +323,20 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     let header = NSStackView(views: [label, NSView(), connect, indexStatus, refresh, collapse])
     header.orientation = .horizontal
     header.spacing = 2
-    header.heightAnchor.constraint(equalToConstant: 28).isActive = true
+    header.heightAnchor.constraint(equalToConstant: 32).isActive = true
     label.textColor = StudioTheme.muted
+    label.identifier = .init("studio.mutedLabel")
     label.lineBreakMode = .byTruncatingTail
     label.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+    explorerSearch.controlSize = .small
+    explorerSearch.font = .systemFont(ofSize: 12)
     explorerSearch.placeholderString = "Nesnelerde filtrele"
     explorerSearch.target = self
     explorerSearch.action = #selector(filterExplorer)
     outline.headerView = nil
-    outline.rowHeight = 25
+    outline.rowHeight = 27
     outline.intercellSpacing = NSSize(width: 1, height: 1)
-    outline.indentationPerLevel = 16
+    outline.indentationPerLevel = 14
     outline.selectionHighlightStyle = .regular
     outline.usesAlternatingRowBackgroundColors = false
     let column = NSTableColumn(identifier: .init("object"))
@@ -356,6 +365,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     searchOptions.distribution = .fillEqually
     // Metadata names and explanatory text must not dictate the pane's minimum width.
     for control in [searchScopePicker,searchOperator,searchType] {
+      control.controlSize = .small; control.font = .systemFont(ofSize: 11)
       control.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
       (control.cell as? NSPopUpButtonCell)?.lineBreakMode = .byTruncatingTail
     }
@@ -368,6 +378,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     searchScopePicker.target = self; searchScopePicker.action = #selector(changeSearchScope)
     searchScopePicker.setAccessibilityLabel("Nesne arama kapsamı")
     searchScopePicker.toolTip = "Arama bu bağlantı ve veritabanında kalır; metni temizlemek kapsamı değiştirmez."
+    explorerTabs.segmentStyle = .texturedRounded
+    explorerTabs.controlSize = .small
     explorerTabs.selectedSegment = 0
     explorerTabs.target = self; explorerTabs.action = #selector(changeExplorerTab)
     explorerTabs.setAccessibilityLabel("Explorer sekmeleri")
@@ -375,13 +387,13 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     stack.orientation = .vertical
     stack.distribution = .fill
     stack.alignment = .leading
-    stack.spacing = 4
+    stack.spacing = 7
     background.addSubview(stack)
     stack.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      stack.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 6),
-      stack.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -6),
-      stack.topAnchor.constraint(equalTo: background.topAnchor, constant: 6),
+      stack.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 10),
+      stack.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -10),
+      stack.topAnchor.constraint(equalTo: background.topAnchor, constant: 8),
       stack.bottomAnchor.constraint(equalTo: background.bottomAnchor, constant: -4),
       header.widthAnchor.constraint(equalTo: stack.widthAnchor),
       explorerTabs.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -398,8 +410,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     tabs.reorder = { [weak self] id,index in self?.moveQueryTab(id,to: index) }
     tabs.orientation = .horizontal
     tabs.alignment = .centerY
-    tabs.spacing = 3
-    tabs.edgeInsets = NSEdgeInsets(top: 1, left: 4, bottom: 1, right: 4)
+    tabs.spacing = 4
+    tabs.edgeInsets = NSEdgeInsets(top: 4, left: 6, bottom: 4, right: 6)
     let tabScroll = NSScrollView()
     tabScroll.documentView = tabs
     tabScroll.hasHorizontalScroller = true
@@ -409,7 +421,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     NSLayoutConstraint.activate([
       tabs.leadingAnchor.constraint(equalTo: tabScroll.contentView.leadingAnchor),
       tabs.topAnchor.constraint(equalTo: tabScroll.contentView.topAnchor),
-      tabs.heightAnchor.constraint(equalToConstant: 26),
+      tabs.heightAnchor.constraint(equalToConstant: 36),
     ])
     database.target = self
     database.action = #selector(changeDatabase)
@@ -430,7 +442,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     row.edgeInsets = NSEdgeInsets(top: 1, left: 8, bottom: 1, right: 8)
     database.controlSize = .small
     database.widthAnchor.constraint(equalToConstant: 170).isActive = true
-    status.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+    status.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
     status.textColor = .secondaryLabelColor
     let statusRow = NSStackView(views: [status, NSView()])
     StudioTheme.surface(statusRow)
@@ -446,13 +458,13 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       stack.trailingAnchor.constraint(equalTo: center.view.trailingAnchor),
       stack.topAnchor.constraint(equalTo: center.view.topAnchor),
       stack.bottomAnchor.constraint(equalTo: center.view.bottomAnchor),
-      tabScroll.heightAnchor.constraint(equalToConstant: 34),
+      tabScroll.heightAnchor.constraint(equalToConstant: 40),
       tabScroll.widthAnchor.constraint(equalTo: stack.widthAnchor),
       row.widthAnchor.constraint(equalTo: stack.widthAnchor),
       content.widthAnchor.constraint(equalTo: stack.widthAnchor),
       statusRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
       row.heightAnchor.constraint(equalToConstant: 30),
-      statusRow.heightAnchor.constraint(equalToConstant: 24),
+      statusRow.heightAnchor.constraint(equalToConstant: 26),
     ])
     content.setContentHuggingPriority(.init(1), for: .vertical)
     content.setContentCompressionResistancePriority(.init(1), for: .vertical)
@@ -473,16 +485,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     return box
   }
   private func symbolButton(_ symbol: String, tip: String, action: Selector) -> NSButton {
-    let button = NSButton(
-      image: NSImage(systemSymbolName: symbol, accessibilityDescription: tip)!, target: self,
-      action: action)
-    button.bezelStyle = .inline
-    button.toolTip = tip
-    button.isBordered = false
-    button.contentTintColor = StudioTheme.muted
-    button.image = button.image?.withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
-    button.widthAnchor.constraint(equalToConstant: 25).isActive = true
-    button.heightAnchor.constraint(equalToConstant: 25).isActive = true
+    let button = StudioToolbarButton(symbol: symbol, label: tip, tone: .neutral, width: 26)
+    button.target = self; button.action = action
     return button
   }
   private var selected: TreeNode? { outline.item(atRow: outline.selectedRow) as? TreeNode }
@@ -595,22 +599,23 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       close.bezelStyle = .inline
       close.isBordered = false
       close.controlSize = .mini
-      let group = NSStackView(views: [button, close])
+      let group = QueryTabSurface(views: [button, close])
+      group.primaryButton = button
       group.identifier = NSUserInterfaceItemIdentifier("connectionAccent")
       group.wantsLayer = true
       group.layer?.backgroundColor =
         (state.active === doc ? StudioTheme.canvas : StudioTheme.panel).cgColor
       button.contentTintColor = state.active === doc ? StudioTheme.accent : StudioTheme.muted
-      button.font = StudioTheme.uiFont
+      button.font = .systemFont(ofSize: 12, weight: state.active === doc ? .medium : .regular)
       button.attributedTitle = NSAttributedString(
         string: button.title,
         attributes: [
-          .font: StudioTheme.uiFont,
+          .font: button.font!,
           .foregroundColor: state.active === doc ? StudioTheme.text : StudioTheme.muted,
         ])
-      group.layer?.cornerRadius = 5
+      group.layer?.cornerRadius = 6
       group.layer?.borderWidth = state.active === doc ? 1 : 0
-      group.layer?.borderColor = StudioTheme.border.cgColor
+      group.layer?.borderColor = StudioTheme.accent.withAlphaComponent(0.28).cgColor
       close.contentTintColor = StudioTheme.muted
       let icon = NSImageView(image: NSImage(systemSymbolName: doc.pinned ? "pin.fill" : "doc.text", accessibilityDescription: doc.pinned ? "Sabitlenmiş sekme" : nil)!)
       icon.contentTintColor = doc.server.profile.appearance?.isMarked == true
@@ -631,8 +636,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       }
       button.toolTip =
         "\(doc.server.profile.appearance?.badge ?? "") · \(doc.server.profile.name) · \(doc.database)"
-      group.spacing = 3
-      group.edgeInsets = NSEdgeInsets(top: 5, left: 9, bottom: 5, right: 7)
+      group.spacing = 6
+      group.edgeInsets = NSEdgeInsets(top: 4, left: 10, bottom: 4, right: 8)
       tabs.addArrangedSubview(group)
     }
     let plus = symbolButton("plus", tip: "Yeni Sorgu (\(GridShortcuts.binding(.newQuery).label))", action: #selector(newQuery))
@@ -1952,17 +1957,12 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     item.image = NSImage(systemSymbolName: definition.1, accessibilityDescription: definition.0)
     item.target = self
     item.action = definition.2
-    let button = NSButton(title: id.rawValue == "run" ? "Çalıştır" : "", target: self, action: definition.2)
-    button.image = item.image?.withSymbolConfiguration(.init(pointSize: 14, weight: .regular))
-    button.imagePosition = id.rawValue == "run" ? .imageLeading : .imageOnly
-    button.font = .systemFont(ofSize: 12, weight: .medium)
-    button.bezelStyle = .inline
-    button.isBordered = false
-    button.contentTintColor = id.rawValue == "run" ? StudioTheme.color(0x287E59, 0x79CDA5) : StudioTheme.muted
+    let button = StudioToolbarButton(symbol: definition.1, label: definition.0,
+      tone: id.rawValue == "run" ? .success : id.rawValue == "cancel" ? .warning : .neutral,
+      title: id.rawValue == "run" ? "Çalıştır" : "", width: id.rawValue == "run" ? 88 : 30,
+      prominent: id.rawValue == "run")
+    button.target = self; button.action = definition.2
     button.toolTip = id.rawValue == "run" ? "Çalıştır (⌘↩ / F5)" : definition.0
-    button.setAccessibilityLabel(definition.0)
-    button.widthAnchor.constraint(equalToConstant: id.rawValue == "run" ? 82 : 30).isActive = true
-    button.heightAnchor.constraint(equalToConstant: 28).isActive = true
     item.view = button
     return item
   }
