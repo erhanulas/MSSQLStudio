@@ -251,9 +251,7 @@ private struct SettingsPanel: View {
           }
         }
         VStack(alignment: .leading, spacing: 16, content: content)
-          .frame(maxWidth: .infinity, alignment: .leading).padding(20)
-          .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
-          .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+          .frame(maxWidth: .infinity, alignment: .leading).studioCard(padding: 20)
       }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
     }
   }
@@ -844,7 +842,7 @@ struct StudioFormField<Content: View>: View {
     bezelStyle = .rounded; isBordered = false; controlSize = .small
     font = .systemFont(ofSize: 11, weight: .semibold)
     setAccessibilityLabel(label); toolTip = label
-    wantsLayer = true; layer?.cornerRadius = 6; layer?.borderWidth = 1
+    wantsLayer = true; layer?.cornerRadius = 7; layer?.borderWidth = 1
     widthAnchor.constraint(equalToConstant: width).isActive = true
     heightAnchor.constraint(equalToConstant: 26).isActive = true
     setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -856,14 +854,14 @@ struct StudioFormField<Content: View>: View {
     switch tone {
     case .neutral: color = StudioTheme.muted
     case .accent: color = StudioTheme.accent
-    case .success: color = .systemGreen
-    case .warning: color = .systemOrange
-    case .danger: color = .systemRed
+    case .success: color = StudioTheme.success
+    case .warning: color = StudioTheme.warning
+    case .danger: color = StudioTheme.danger
     }
     let active = prominent || state == .on
-    contentTintColor = isEnabled ? color : StudioTheme.muted.withAlphaComponent(0.4)
+    contentTintColor = isEnabled ? prominent ? (StudioTheme.dark ? StudioTheme.canvas : .white) : color : StudioTheme.muted.withAlphaComponent(0.4)
     layer?.backgroundColor = (isEnabled
-      ? color.withAlphaComponent(pressed ? 0.20 : hovered ? 0.12 : active ? 0.12 : 0.025)
+      ? color.withAlphaComponent(prominent ? pressed ? 0.80 : hovered ? 0.92 : 1 : pressed ? 0.20 : hovered ? 0.12 : active ? 0.12 : 0.035)
       : StudioTheme.muted.withAlphaComponent(0.015)).cgColor
     layer?.borderColor = (isEnabled ? color.withAlphaComponent(active || hovered ? 0.28 : 0) : NSColor.clear).cgColor
   }
@@ -892,6 +890,7 @@ struct StudioActionButton: View {
   let tint: Color?
   let action: () -> Void
   @Environment(\.isEnabled) private var enabled
+  @Environment(\.studioPrimaryAction) private var primary
   init(_ title: String, icon: String, tint: Color? = nil, action: @escaping () -> Void) {
     self.title = title; self.icon = icon; self.tint = tint; self.action = action
   }
@@ -900,20 +899,95 @@ struct StudioActionButton: View {
       Label {
         Text(title)
       } icon: {
-        if let tint { Image(systemName: icon).foregroundStyle(enabled ? tint : Color.secondary) }
+        if let tint, !primary { Image(systemName: icon).foregroundStyle(enabled ? tint : Color.secondary) }
         else { Image(systemName: icon) }
       }.contentShape(Rectangle())
-    }.accessibilityLabel(title)
+    }.accessibilityLabel(title).help(title)
+  }
+}
+private struct StudioPrimaryActionKey: EnvironmentKey {
+  static let defaultValue = false
+}
+private extension EnvironmentValues {
+  var studioPrimaryAction: Bool {
+    get { self[StudioPrimaryActionKey.self] }
+    set { self[StudioPrimaryActionKey.self] = newValue }
   }
 }
 struct StudioPrimaryButton: ButtonStyle {
-  @Environment(\.isEnabled) private var enabled
   func makeBody(configuration: Configuration) -> some View {
-    configuration.label.font(.system(size: 12, weight: .semibold))
-      .padding(.horizontal, 14).padding(.vertical, 7)
-      .foregroundStyle(enabled ? (StudioTheme.dark ? Color(nsColor: StudioTheme.canvas) : Color.white) : Color.secondary)
-      .background(enabled ? Color(nsColor: StudioTheme.accent).opacity(configuration.isPressed ? 0.8 : 1) : Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
-      .contentShape(RoundedRectangle(cornerRadius: 6))
+    StudioButtonSurface(configuration: configuration, primary: true)
+  }
+}
+struct StudioSecondaryButton: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    StudioButtonSurface(configuration: configuration, primary: false)
+  }
+}
+private struct StudioButtonSurface: View {
+  let configuration: ButtonStyleConfiguration
+  let primary: Bool
+  @Environment(\.isEnabled) private var enabled
+  @Environment(\.controlSize) private var size
+  @State private var hovered = false
+  private var compact: Bool { size == .small || size == .mini }
+  private var ink: Color {
+    enabled ? (primary ? Color(nsColor: StudioTheme.dark ? StudioTheme.canvas : .white) : Color(nsColor: StudioTheme.text)) : Color.secondary
+  }
+  var body: some View {
+    configuration.label
+      .font(.system(size: compact ? 11 : 12, weight: .medium))
+      .symbolRenderingMode(.hierarchical)
+      .padding(.horizontal, primary ? 14 : compact ? 8 : 10)
+      .padding(.vertical, compact ? 4 : 6)
+      .foregroundStyle(ink)
+      .frame(minHeight: compact ? 24 : 30)
+      .background {
+        RoundedRectangle(cornerRadius: 7).fill(
+          LinearGradient(colors: primary && enabled
+            ? [Color(nsColor: StudioTheme.accent), Color(nsColor: StudioTheme.accent).opacity(0.88)]
+            : [Color(nsColor: StudioTheme.controlSurface), Color(nsColor: StudioTheme.controlSurface)],
+            startPoint: .top, endPoint: .bottom))
+          .overlay(RoundedRectangle(cornerRadius: 7).fill(Color(nsColor: StudioTheme.accent).opacity(enabled && (hovered || configuration.isPressed) ? configuration.isPressed ? 0.14 : 0.06 : 0)))
+      }
+      .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(
+        primary && enabled ? Color.white.opacity(0.16) : Color(nsColor: hovered && enabled ? StudioTheme.accent : StudioTheme.controlBorder).opacity(enabled ? 0.8 : 0.4)))
+      .shadow(color: Color.black.opacity(enabled ? primary ? 0.10 : 0.035 : 0), radius: primary ? 3 : 1, y: 1)
+      .opacity(enabled ? 1 : 0.5)
+      .contentShape(RoundedRectangle(cornerRadius: 7))
+      .environment(\.studioPrimaryAction, primary)
+      .onHover { hovered = $0 }
+      .animation(.easeOut(duration: 0.10), value: hovered)
+  }
+}
+struct StudioGroupBoxStyle: GroupBoxStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    VStack(alignment: .leading, spacing: 14) {
+      configuration.label.font(.system(size: 12, weight: .semibold)).foregroundStyle(Color(nsColor: StudioTheme.text))
+      configuration.content.frame(maxWidth: .infinity, alignment: .leading)
+    }.studioCard()
+  }
+}
+struct StudioNavigationItem: View {
+  let title: String
+  let icon: String
+  let selected: Bool
+  let action: () -> Void
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 9) {
+        Image(systemName: icon).font(.system(size: 13, weight: .medium)).frame(width: 20)
+          .foregroundStyle(Color(nsColor: selected ? StudioTheme.accent : StudioTheme.muted))
+        Text(title).font(.system(size: 12, weight: selected ? .semibold : .regular))
+        Spacer(minLength: 0)
+      }.padding(.horizontal, 10).padding(.vertical, 9)
+        .foregroundStyle(Color(nsColor: StudioTheme.text))
+        .background(selected ? Color(nsColor: StudioTheme.selection) : .clear, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(alignment: .leading) {
+          if selected { Capsule().fill(Color(nsColor: StudioTheme.accent)).frame(width: 3, height: 16) }
+        }.contentShape(Rectangle())
+    }.buttonStyle(.plain).help(title).accessibilityLabel(title)
+      .accessibilityAddTraits(selected ? .isSelected : [])
   }
 }
 struct StudioEmptyState: View {
@@ -936,12 +1010,13 @@ struct StudioPanelHeading: View {
   let subtitle: String
   var body: some View {
     HStack(alignment: .center, spacing: 12) {
-      Image(systemName: icon).font(.system(size: 20, weight: .regular))
-        .foregroundStyle(.tint)
-        .frame(width: 34, height: 34)
-        .background(.tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 9))
+      Image(systemName: icon).font(.system(size: 20, weight: .medium))
+        .foregroundStyle(Color(nsColor: StudioTheme.accent))
+        .frame(width: 42, height: 42)
+        .background(LinearGradient(colors: [Color(nsColor: StudioTheme.accent).opacity(0.16), Color(nsColor: StudioTheme.accent).opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(nsColor: StudioTheme.accent).opacity(0.12)))
       VStack(alignment: .leading, spacing: 3) {
-        Text(title).font(.system(size: 17, weight: .semibold))
+        Text(title).font(.system(size: 19, weight: .semibold))
         Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
       }
       Spacer(minLength: 0)
@@ -953,10 +1028,12 @@ struct StudioPanelStyle: ViewModifier {
   func body(content: Content) -> some View {
     content
       .textFieldStyle(.roundedBorder)
+      .buttonStyle(StudioSecondaryButton())
+      .groupBoxStyle(StudioGroupBoxStyle())
       .font(.system(size: 12))
       .tint(Color(nsColor: StudioTheme.accent))
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-      .background(Color(nsColor: StudioTheme.panel))
+      .background(LinearGradient(colors: [Color(nsColor: StudioTheme.panel), Color(nsColor: StudioTheme.chrome)], startPoint: .top, endPoint: .bottom))
       .onReceive(NotificationCenter.default.publisher(for: StudioTheme.changed)) { _ in revision += 1 }
       .environment(\.colorScheme, revision >= 0 && StudioTheme.dark ? .dark : .light)
       .overlay(alignment: .top) { Rectangle().fill(Color(nsColor: StudioTheme.border)).frame(height: 1).allowsHitTesting(false) }
@@ -964,9 +1041,13 @@ struct StudioPanelStyle: ViewModifier {
 }
 extension View {
   func studioPanel() -> some View { modifier(StudioPanelStyle()) }
+  func studioCard(padding: CGFloat = 16) -> some View {
+    self.padding(padding).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 12))
+      .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(nsColor: StudioTheme.border)))
+  }
   func studioEditor() -> some View {
-    padding(8).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 6))
-      .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: StudioTheme.border)))
+    padding(8).background(Color(nsColor: StudioTheme.editorCanvas), in: RoundedRectangle(cornerRadius: 8))
+      .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: StudioTheme.border)))
   }
 }
 
@@ -996,14 +1077,19 @@ extension View {
   }
   static var canvas: NSColor { color(0xFFFFFF, 0x191D25) }
   static var chrome: NSColor { color(0xEBEFF5, 0x141820) }
+  static var controlSurface: NSColor { color(0xFFFFFF, 0x2B3341) }
+  static var controlBorder: NSColor { color(0xCAD3E0, 0x48576D) }
+  static var success: NSColor { color(0x21814E, 0x7BC69C) }
+  static var warning: NSColor { color(0xA86412, 0xF0B866) }
+  static var danger: NSColor { color(0xC23B48, 0xEE8792) }
   static var panel: NSColor { color(0xF4F6FA, 0x222833) }
   static var text: NSColor { color(0x263247, 0xE1E7F0) }
   static var border: NSColor { color(0xE1E6EF, 0x333C4A) }
   static var selection: NSColor { color(0xE8EFFF, 0x2C4062) }
-  static var lineNumber: NSColor { color(0x8A94A6, 0x707E95) }
-  static var editorCanvas: NSColor { color(0xFFFFFF,0x191D25) }
+  static var lineNumber: NSColor { color(0x008080, 0x4EC9B0) }
+  static var editorCanvas: NSColor { color(0xFFFFFF,0x1E1E1E) }
   static var unusedVariable: NSColor { color(0x929292,0x808080) }
-  static var editorText: NSColor { color(0x263247,0xDCE4F0) }
+  static var editorText: NSColor { color(0x000000,0xD4D4D4) }
   static var codeFont: NSFont {
     NSFont(name: "Consolas", size: 13) ?? .monospacedSystemFont(ofSize: 13, weight: .regular)
   }
@@ -1027,12 +1113,12 @@ extension View {
   }
   static func syntax(_ style: TSQL.SyntaxStyle) -> NSColor {
     switch style {
-    case .keyword: return color(0x0000FF, 0x569CD6)
-    case .string: return color(0xFF0000, 0xCE9178)
+    case .keyword: return color(0x0000FF, 0x6CA0FF)
+    case .string: return color(0xFF0000, 0xFF8080)
     case .comment: return color(0x008000, 0x6A9955)
-    case .function: return color(0xFF00FF, 0xDCDCAA)
-    case .systemObject: return color(0x008000, 0x4EC9B0)
-    case .procedure: return color(0x800000, 0xC586C0)
+    case .function: return color(0xFF00FF, 0xE88BFF)
+    case .systemObject: return color(0x008000, 0x72C77B)
+    case .procedure: return color(0x800000, 0xD88585)
     case .operatorSymbol: return color(0x808080, 0xB4B4B4)
     case .plain: return editorText
     }

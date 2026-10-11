@@ -70,6 +70,7 @@ Tablodaki kısa dosya adları, ayrıca yol belirtilmedikçe aynı satır grubunu
 
 - TextKit 2'yi koruyun; `layoutManager` erişimiyle TextKit 1'e geçmeyin. Native find/scroll/selection/undo/completion davranışını koruyun. Renklendirmede metni yeniden atamayın; yalnız değişen attribute aralıklarını güncelleyin. IME marked text sırasında biçimlendirmeyi erteleyin.
 - Ana editör, fark önizleme ve Agent komut alanı `SQLSourceHighlighting`/StudioTheme renklerini paylaşır. Genel tema dekorasyonu `sqlSourcePreview` veya `agentCommandEditor` syntax renklerini sıfırlamamalıdır. Undo/redo restored text ile SwiftUI binding'i senkron tutun; renklendirmeyi undo kaydına eklemeyin.
+- SQL renkleri SSMS kategorilerini izler: keyword mavi, string kırmızı, yorum yeşil, sistem fonksiyonu magenta, sistem nesnesi yeşil, sistem procedure maroon, operatör gri, satır numarası teal. Açık tema değerleri sırasıyla `0000FF/FF0000/008000/FF00FF/008000/800000/808080/008080`; koyu temada aynı kategorilerin okunur karşılıkları `6CA0FF/FF8080/6A9955/E88BFF/72C77B/D88585/B4B4B4/4EC9B0` kullanılır. Düz SQL metni `000000/D4D4D4`, editör zemini `FFFFFF/1E1E1E` olur. Genel UI palette değişimi SQL renklerini değiştirmemelidir. Koyu RGB değerleri uygulamanın uyarlamasıdır; Microsoft'un birebir koyu paleti olduğu iddia edilmez. Kaynak: [SSMS renk kategorileri](https://learn.microsoft.com/en-us/ssms/scripting/color-coding-in-query-editors). Lexical sınıflandırma tam T-SQL parser eşdeğeri değildir.
 - Katlama özgün SQL source'u koruyan projection'dır. Katlama/açmada başlık, caret ve viewport farkındalığı korunmalı; gereksiz animasyon, scroll veya metin sıfırlama yapılmamalıdır. Kapalı blok göstergesi açık halde kaybolur; +/− görünümü durumu anlaşılır kılar.
 - Çift tıklama kelime seçimi/eşleşme vurgusudur; metin kaybolup geri gelmemeli, dirty/undo değişmemelidir. Native mouse tracking bitene kadar boyamayı erteleyin. @/@@/# önekleri ve composed Unicode karakterlerini koruyun. Tanıma gitme ayrı command-click/⌘B eylemidir.
 - Kullanılmayan DECLARE adı aynı GO batch'inde lexical başka kullanım yoksa soluk görünür. Yorum/string/bracket kullanımı sayılmaz. Bu tam T-SQL scope/dataflow analizi değildir; dinamik SQL ve tüm grameri çözdüğünü iddia etmeyin.
@@ -102,15 +103,16 @@ Kullanıcının önceliği düzenli, hizalı, sakin ve premium native bir görü
 - İkonla açılan kısa ayar/arama/filtre popover’ları animasyonsuz açılır; ilk veri yüklemesine yapay bekleme eklemeyin. Ağ ve büyük veri işleri arka planda kalır; arama yazımı için debounce korunabilir.
 - Sürekli araç çubukları sakin görünür: normal durumda hafif ton, aktif/hover/basılı durumda belirgin vurgu; her ikona sürekli güçlü kutu çizilmez. Native üst toolbar ve ayrılmış sorgu başlığı aynı StudioToolbarButton kullanır. Sonuç sekmeleri StudioResultTabButton ile seçimi belirginleştirir. Grid satır zemini sadece görünür satırlar üzerinde düz çizilir; hücre başına yeni view oluşturulmaz.
 - Sık kullanılan sonuç araçları `StudioToolbarButton` kullanır: anlamlı SF ikon, işleme göre tonlu zemin/kenarlık, hover/pressed/disabled durumları, tooltip ve erişilebilir ad.
-- İşlem düğmeleri metin + anlamlı ikon kullanır (`StudioActionButton`). Birincil eylem `StudioPrimaryButton`; ikincil eylemlerde accent ikon, başlatmada yeşil, durdurma/ayırmada turuncu, silmede kırmızı. Renk tek başına anlam taşımaz; metin, ikon, tooltip ve erişilebilir ad kalır. Disabled durumu soluk ve tutarlıdır.
+- İşlem düğmeleri metin + anlamlı ikon kullanır (`StudioActionButton`). Birincil eylem `StudioPrimaryButton`, ikincil eylem `StudioSecondaryButton`; ortak yüzeyde 7 pt köşe, hafif kenarlık, 100 ms hover, belirgin pressed/disabled kullanılır. Birincil ikon metinle aynı kontrast rengini alır. İkincil eylemlerde accent ikon, başlatmada yeşil, durdurma/ayırmada turuncu, silmede kırmızı; semantic renkler StudioTheme'den gelir. Renk tek başına anlam taşımaz; metin, ikon, tooltip ve erişilebilir ad kalır.
 - Satır/sekme/düğmenin **tüm görünen alanı** tıklanır; yalnız harfler veya ikonun çizgileri değil. Expanded frame/padding sonrasında uygun `contentShape` kullanın. İkon-only düğmelere yeterli hit alanı ve erişilebilir ad verin. Seçili sayfayı zemin/kalın yazı ve `.isSelected` ile belirtin.
 - Ayarlar'da native sekmeler, kalıcı Uygula/mesaj alanı ve pencere yeniden kullanımı korunur. Tema/sekme değişimi form kimliğini yeniden yaratıp kullanıcının girdisini sıfırlamamalıdır. Hakkında sürüm satırlarının boş alanı da tıklanır.
 - Job/trigger satır adlarına `(Enabled)` benzeri durum metinlerini yığmayın; ikon, tooltip ve erişilebilirlik açıklamasını kullanın. Loading göstergesi görünür olsun; başka sekmeye geçişi engellemesin.
-- Ortak bileşenleri kullanın: StudioTheme, StudioPanelHeading, StudioEmptyState, StudioPanelStyle/studioPanel, studioEditor, StudioFormField, StudioActionButton, StudioPrimaryButton, StudioToolbarButton. Rastgele font/renk/ölçü veya ağır gölge eklemeyin.
+- Ortak bileşenleri kullanın: StudioTheme, StudioPanelHeading, StudioEmptyState, StudioPanelStyle/studioPanel, studioCard, StudioGroupBoxStyle, studioEditor, StudioFormField, StudioActionButton, StudioPrimaryButton, StudioSecondaryButton, StudioNavigationItem, StudioToolbarButton. studioPanel ikincil düğme ve GroupBox stilini alt formlara taşır; açık primary/plain stilleri korunur. Form kartları 12 pt köşe ve 16 pt iç boşluk kullanır. Gezinti ikon, seçili zemin/sol işaret ve erişilebilir seçili durumla görünür olur. Rastgele font/renk/ölçü veya ağır gölge eklemeyin.
 
 | Token / ölçü | Açık | Koyu |
 |---|---|---|
-| Canvas / SQL editörü | `FFFFFF` | `191D25` |
+| Canvas | `FFFFFF` | `191D25` |
+| SQL editörü | `FFFFFF` | `1E1E1E` |
 | Panel / Explorer | `F4F6FA` | `222833` |
 | Pencere çerçevesi | `EBEFF5` | `141820` |
 | Metin | `263247` | `E1E7F0` |
@@ -118,8 +120,10 @@ Kullanıcının önceliği düzenli, hizalı, sakin ve premium native bir görü
 | Accent | `3869D6` | `8EAEFF` |
 | Seçim | `E8EFFF` | `2C4062` |
 | Kenarlık (1 pt) | `E1E6EF` | `333C4A` |
+| Kontrol zemini / kenarlığı | `FFFFFF / CAD3E0` | `2B3341 / 48576D` |
+| Başlat / uyarı / tehlike | `21814E / A86412 / C23B48` | `7BC69C / F0B866 / EE8792` |
 
-Sistem UI fontu 12 pt; yardımcı metin 10–11 pt; SQL varsa Consolas 13 pt, yoksa native monospace. Grid/ağaç satırı 24/27 pt, sorgu sekmesi 40 pt, sonuç sekmesi 32 pt ve sonuç araç satırı 34 pt. Panel köşesi yaklaşık 10 pt, kontrol 5–6 pt; Ayarlar kartları 12 pt kullanabilir. Renk/ölçü kaynağı kodda StudioTheme ve ortak bileşenlerdir.
+Sistem UI fontu 12 pt; yardımcı metin 10–11 pt; panel başlığı 19 pt ve ikon alanı 42 pt. SQL varsa Consolas 13 pt, yoksa native monospace. Grid/ağaç satırı 24/27 pt, sorgu sekmesi 40 pt, sonuç sekmesi 32 pt ve sonuç araç satırı 34 pt. Panel/kart köşesi 12 pt, işlem düğmesi 7 pt; sistem popup/text field kendi native biçimini korur. Renk/ölçü kaynağı kodda StudioTheme ve ortak bileşenlerdir.
 
 ## Bağlantı formu ve Explorer yenileme düzeni
 

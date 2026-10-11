@@ -1958,7 +1958,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     item.target = self
     item.action = definition.2
     let button = StudioToolbarButton(symbol: definition.1, label: definition.0,
-      tone: id.rawValue == "run" ? .success : id.rawValue == "cancel" ? .warning : .neutral,
+      tone: id.rawValue == "run" ? .success : id.rawValue == "cancel" ? .warning : ["connect", "query", "save", "format", "ai"].contains(id.rawValue) ? .accent : .neutral,
       title: id.rawValue == "run" ? "Çalıştır" : "", width: id.rawValue == "run" ? 88 : 30,
       prominent: id.rawValue == "run")
     button.target = self; button.action = definition.2
@@ -2145,13 +2145,7 @@ private struct ConnectionForm: View {
   @State private var connectionPage = "Genel"
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      HStack {
-        Label(editing ? "Bağlantı ayarları" : "Yeni bağlantı", systemImage: "server.rack")
-          .font(.title2.weight(.semibold))
-        Spacer()
-        Text(editing ? "Bağlantı ve görünür veritabanlarını düzenle" : "Sunucuya bağlan, veritabanlarını seç")
-          .font(.caption).foregroundStyle(.secondary)
-      }
+      StudioPanelHeading(title: editing ? "Bağlantı ayarları" : "Yeni bağlantı", icon: "server.rack", subtitle: editing ? "Bağlantı ve görünür veritabanlarını düzenle" : "Sunucuya bağlan, veritabanlarını seç")
       Divider()
       HStack(alignment: .top, spacing: 18) {
         VStack(alignment: .leading, spacing: 12) {
@@ -2218,7 +2212,7 @@ private struct ConnectionForm: View {
           }
           }.padding(2)
           }
-                }.padding(14).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: StudioTheme.border))).frame(width: 420).disabled(loading)
+                }.studioCard(padding: 16).frame(width: 420).disabled(loading)
         Divider()
         VStack(alignment: .leading, spacing: 12) {
           HStack {
@@ -2243,7 +2237,7 @@ private struct ConnectionForm: View {
 
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
           }
-        }.padding(14).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: StudioTheme.border))).frame(maxWidth: .infinity, maxHeight: .infinity)
+        }.studioCard(padding: 16).frame(maxWidth: .infinity, maxHeight: .infinity)
       }.frame(maxHeight: .infinity)
       Divider()
       HStack {

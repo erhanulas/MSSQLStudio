@@ -8,7 +8,7 @@ import SwiftUI
   private let body=NSView(),summary=NSTextField(labelWithString:"Farklar hazırlanıyor…")
   private let tabs=NSSegmentedControl(labels:["Yan yana farklar","Çalıştırılacak SQL"],trackingMode:.selectOne,target:nil,action:nil)
   private let split=NSSplitView()
-  private let apply=NSButton(title:"Veritabanına Gönder",target:nil,action:nil)
+  private let apply=StudioToolbarButton(symbol:"paperplane.fill",label:"Veritabanına Gönder",tone:.accent,title:"Veritabanına Gönder",width:175,prominent:true)
   private var syncing=false
   private var task:Task<Void,Never>?
   private var approved: (() -> Void)?
@@ -21,7 +21,7 @@ import SwiftUI
     if let visible=parent.screen?.visibleFrame {
       panel.setContentSize(NSSize(width:min(1400,visible.width*0.94),height:min(840,visible.height*0.90)))
     }
-    let host=NSView();panel.contentView=host
+    let host=NSView();StudioTheme.surface(host);panel.contentView=host
     let heading=NSTextField(labelWithString:title);heading.font = .systemFont(ofSize:14,weight:.semibold)
     summary.font = .systemFont(ofSize:11);summary.textColor = .secondaryLabelColor
     let top=NSStackView(views:[heading,summary,tabs]);top.orientation = .vertical;top.alignment = .leading;top.spacing=8
@@ -41,9 +41,7 @@ import SwiftUI
     configure(script,text:previewEdited)
     for view in [split,script] {embed(view,in:body)}
     script.isHidden=true
-    let cancel=NSButton(title:canApply ? "Vazgeç":"Kapat",target:self,action:#selector(closeReview));cancel.bezelStyle = .rounded;cancel.keyEquivalent="\u{1b}"
-    apply.image=NSImage(systemSymbolName:"paperplane.fill",accessibilityDescription:nil);apply.imagePosition = .imageLeading;apply.contentTintColor = StudioTheme.accent
-    cancel.image=NSImage(systemSymbolName:"xmark",accessibilityDescription:nil);cancel.imagePosition = .imageLeading
+    let cancel=StudioToolbarButton(symbol:"xmark",label:canApply ? "Vazgeç":"Kapat",tone:.neutral,title:canApply ? "Vazgeç":"Kapat",width:80);cancel.target=self;cancel.action=#selector(closeReview);cancel.keyEquivalent="\u{1b}"
     apply.target=self;apply.action=#selector(submit);apply.bezelStyle = .rounded;apply.isHidden = !canApply;apply.isEnabled=false
     let note=NSTextField(labelWithString:canApply ? "SQL yalnızca Veritabanına Gönder’e bastığınızda gönderilir.":"Bu ekran karşılaştırma içindir; SQL gönderilmez.");note.font = .systemFont(ofSize:11);note.textColor = .secondaryLabelColor
     let footer=NSStackView(views:[note,NSView(),cancel,apply]);footer.edgeInsets=NSEdgeInsets(top:12,left:18,bottom:14,right:18)
@@ -386,6 +384,16 @@ struct AgentPropertiesPanel:View {
   @State private var confirmDetach=false
   @State private var pickSchedule=false
   private let pages=["Genel","Adımlar","Zamanlamalar","Uyarılar","Bildirimler","Hedefler"]
+  private func pageIcon(_ page: String) -> String {
+    switch page {
+    case "Genel": return "slider.horizontal.3"
+    case "Adımlar": return "list.number"
+    case "Zamanlamalar": return "calendar"
+    case "Bildirimler": return "bell"
+    case "Uyarılar": return "exclamationmark.triangle"
+    default: return "server.rack"
+    }
+  }
   var body:some View {
     VStack(alignment:.leading,spacing:12) {
       HStack {
@@ -400,11 +408,12 @@ struct AgentPropertiesPanel:View {
         VStack(alignment:.leading) {
           Text("Sayfa seçin").font(.caption).foregroundStyle(.secondary).padding(.horizontal,10)
           ForEach(pages,id:\.self) {item in
-            Button {page=item} label:{Text(item).fontWeight(page == item ? .semibold:.regular).frame(maxWidth:.infinity,alignment:.leading).padding(8).background(page == item ? Color.accentColor.opacity(0.15):Color.clear,in:RoundedRectangle(cornerRadius:5)).contentShape(Rectangle())}.buttonStyle(.plain).accessibilityIdentifier("agentPage"+item).accessibilityAddTraits(page == item ? .isSelected:[])
+            StudioNavigationItem(title: item, icon: pageIcon(item), selected: page == item) { page = item }
+              .accessibilityIdentifier("agentPage" + item)
           }
           Spacer()
           Text("\(server.profile.name)\nmsdb").font(.caption).foregroundStyle(.secondary).padding(10)
-        }.frame(minWidth:145,idealWidth:160,maxWidth:210)
+        }.padding(6).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 12)).frame(minWidth:155,idealWidth:170,maxWidth:220)
         Group {
           switch page {
           case "Genel":generalPage

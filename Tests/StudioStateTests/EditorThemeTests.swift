@@ -10,6 +10,39 @@ import Testing
 }
 
 @MainActor @Suite(.serialized) struct EditorThemeTests {
+  @Test func ssmsColorCategoriesStayCorrectInMainEditorAndPreviewsAcrossThemes() throws {
+    _ = NSApplication.shared
+    let previous = UserDefaults.standard.string(forKey: "ssmsTheme")
+    defer { StudioTheme.apply(previous ?? "light") }
+    let source = "-- SSMS colors\nSELECT COUNT(*), GETDATE(), N'İstanbul', [Customer], sys.objects\nFROM dbo.Orders WHERE Amount >= 42;\nEXEC sp_help;"
+    let doc = QueryDocument(server: ConnectedServer(profile: ServerProfile(), password: ""), database: "master", title: "SSMS")
+    doc.server.online = false; doc.sql = source
+    let controller = EditorController(document: doc)
+    controller.editor.setSelectedRange(NSRange(location: 3, length: 4))
+    let selection = controller.editor.selectedRange()
+    func hex(_ color: NSColor?) -> UInt32? {
+      guard let value = color?.usingColorSpace(.sRGB) else { return nil }
+      return UInt32((value.redComponent * 255).rounded()) << 16 | UInt32((value.greenComponent * 255).rounded()) << 8 | UInt32((value.blueComponent * 255).rounded())
+    }
+    for (theme, colors, background, lineNumber) in [
+      ("light", [0x008000,0x0000FF,0xFF00FF,0xFF0000,0x000000,0x008000,0x808080,0x800000], 0xFFFFFF, 0x008080),
+      ("dark", [0x6A9955,0x6CA0FF,0xE88BFF,0xFF8080,0xD4D4D4,0x72C77B,0xB4B4B4,0xD88585], 0x1E1E1E, 0x4EC9B0)
+    ] {
+      StudioTheme.apply(theme)
+      let storage = try #require(controller.editor.textContentStorage?.textStorage)
+      let preview = SQLSourceHighlighting.attributed(source)
+      for (needle, expected) in zip(["-- SSMS", "SELECT", "COUNT", "N'İstanbul'", "[Customer]", "sys", ">", "sp_help"], colors) {
+        let offset = (source as NSString).range(of: needle).location
+        #expect(hex(storage.attribute(.foregroundColor, at: offset, effectiveRange: nil) as? NSColor) == UInt32(expected), "\(theme): \(needle)")
+        #expect(hex(preview.attribute(.foregroundColor, at: offset, effectiveRange: nil) as? NSColor) == UInt32(expected))
+      }
+      #expect(hex(controller.editor.backgroundColor) == UInt32(background))
+      #expect(hex(StudioTheme.lineNumber) == UInt32(lineNumber))
+      #expect(controller.editor.string == source && doc.sql == source)
+      #expect(controller.editor.selectedRange() == selection)
+      #expect(controller.editor.textLayoutManager != nil)
+    }
+  }
   @Test func unusedDeclarationColorsUpdateWithoutChangingSourceAndSurviveFolds() throws {
     let doc=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Unused variables")
     doc.server.online=false
@@ -313,7 +346,10 @@ import Testing
     let controller = EditorController(document:doc)
     controller.editor.setSelectedRange(NSRange(location:(doc.sql as NSString).length,length:0))
     controller.scheduleIntelligence(allowPopup:false)
-    try await Task.sleep(for:.milliseconds(450))
+    let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+    while controller.diagnostics.isEmpty && ContinuousClock.now < deadline {
+      try await Task.sleep(for: .milliseconds(20))
+    }
     #expect(controller.diagnostics.count == 1)
     #expect(controller.editor.textLayoutManager != nil)
   }

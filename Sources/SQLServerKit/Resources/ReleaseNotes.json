@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.62",
+    "date": "2026-10-11",
+    "title": "Premium formlar ve SSMS editör renkleri",
+    "changes": [
+      "Uygulama genelindeki ortak form, kart, başlık ve düğme tasarımı daha dengeli boşluklar, ince kenarlıklar ve tutarlı açık/koyu yüzeylerle yenilendi.",
+      "Birincil işlemler belirginleştirildi; ikincil düğmeler, işlev renkleri, ikon açıklamaları ve hızlı hover durumları ortak stile taşındı.",
+      "Bağlantı ve Ayarlar kartları, Agent sayfa gezinmesi, SQL gönderim düğmeleri ve Hakkında sürüm seçimi yeni görsel dile uyarlandı.",
+      "SQL editöründe SSMS renk kategorileri geri getirildi: mavi anahtar sözcükler, kırmızı metinler, yeşil yorumlar, magenta sistem fonksiyonları ve maroon sistem prosedürleri açık/koyu temaya uyarlanır.",
+      "Ana editör, Agent komutu ve SQL önizlemeleri aynı renkleri paylaşır; tema değişiminde SQL metni, seçim, TextKit 2 ve undo davranışı korunur."
+    ]
+  },
+  {
     "version": "0.2.61",
     "date": "2026-10-11",
     "title": "Yenilenen çalışma alanı tasarımı",

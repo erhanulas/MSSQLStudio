@@ -59,7 +59,7 @@ struct AboutPanel: View {
               ForEach(history) { note in versionButton(note.version, current: note.version == identity.version) }
             }
           }
-        }.padding(16).frame(width: 158)
+        }.padding(16).frame(width: 158).background(Color(nsColor: StudioTheme.panel))
         Divider()
         ScrollView {
           VStack(alignment: .leading, spacing: 16) {
@@ -89,7 +89,7 @@ struct AboutPanel: View {
       }.padding(.horizontal, 24).padding(.vertical, 16)
       Text("Değişiklik notları uygulamayla birlikte gelir; çevrimdışı okunabilir.")
         .font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 24).padding(.bottom, 16)
-    }.background(Color(nsColor: StudioTheme.panel))
+    }.studioPanel()
   }
   private func versionButton(_ version: String, current: Bool) -> some View {
     Button { selection = version } label: {
@@ -99,7 +99,8 @@ struct AboutPanel: View {
       }.frame(maxWidth: .infinity, alignment: .leading).padding(10)
         .foregroundStyle(selection == version ? Color.accentColor : Color.primary)
         .background(selection == version ? Color.accentColor.opacity(0.10) : Color.clear,
-          in: RoundedRectangle(cornerRadius: 6))
+          in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selection == version ? Color(nsColor: StudioTheme.accent).opacity(0.25) : .clear))
       .contentShape(Rectangle())
     }.buttonStyle(.plain).accessibilityAddTraits(selection == version ? .isSelected : []).accessibilityLabel("\(version)\(current ? " Kurulu sürüm" : "")")
       .accessibilityIdentifier("aboutRelease-\(version)")
