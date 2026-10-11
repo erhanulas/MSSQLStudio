@@ -3,7 +3,10 @@ import SwiftUI
 import SQLServerKit
 
 @MainActor final class FavoriteQueriesModel:ObservableObject {
-  @Published private(set) var items:[FavoriteQuery]=[]
+  static let changed = Notification.Name("studioFavoriteQueriesChanged")
+  @Published private(set) var items:[FavoriteQuery]=[] {
+    didSet {if items != oldValue {NotificationCenter.default.post(name:Self.changed,object:self)}}
+  }
   @Published var error=""
   private let store:FavoriteQueryStore
   init(url:URL) {store=FavoriteQueryStore(url:url)}

@@ -1055,12 +1055,14 @@ private struct ColumnFilterPanel: View {
 @MainActor final class QueryController: NSViewController, NSTabViewDelegate, NSSplitViewDelegate {
   let document: QueryDocument
   var changed: (() -> Void)?
+  var favoriteRequested: ((QueryDocument) -> Void)?
+  private let favoriteButton = StudioToolbarButton(symbol:"star",label:"Sorguyu favorilere ekle",tone:.warning)
   private let panes = ResultSplitView()
   private let resultStrip = NSStackView()
   private let stripScroll = NSScrollView()
   private var selectedPageSize = GridPaging.defaultSize
   private let columnSearchButton = StudioToolbarButton(symbol: "text.magnifyingglass", label: "Kolon başlığında ara")
-  private let loadingOptionsButton = StudioToolbarButton(symbol: "slider.horizontal.3", label: "Sonuç yükleme ayarları", tone: .neutral, title: "Okuma: 50.000", width: 160)
+  private let autoRefreshButton = StudioToolbarButton(symbol:"clock.arrow.circlepath",label:"Otomatik yenileme",tone:.neutral)
   private var optionsPopover: NSPopover?
   private var selectedRefreshSeconds = 0
   private var defaultRefreshApplied = false
@@ -1080,7 +1082,6 @@ private struct ColumnFilterPanel: View {
   private var preparingData = false
   private var submittingData = false
   private var dataReview: NSWindowController?
-  private let refreshInterval = NSPopUpButton()
   private var refreshTask: Task<Void, Never>?
   deinit { refreshTask?.cancel(); exportJob?.cancel() }
   private let resultPane = NSView()
@@ -1096,7 +1097,7 @@ private struct ColumnFilterPanel: View {
   private let summary = NSTextField(labelWithString: "")
   private let actual = NSButton(checkboxWithTitle: "Gerçek plan", target: nil, action: nil)
   private let filter = NSSearchField()
-  private let rowLimit = StudioToolbarPopUpButton()
+  private let rowLimit = StudioToolbarPopUpButton(frame:.zero,pullsDown:true)
   private let export = StudioToolbarPopUpButton(frame: .zero, pullsDown: true)
   private let cancelExport = StudioToolbarButton(symbol: "stop.circle", label: "Dışa aktarmayı iptal et", tone: .warning)
   private var exportJob: Task<Void, Never>?
@@ -1125,7 +1126,7 @@ private struct ColumnFilterPanel: View {
     document.changed = { [weak self] in
       self?.documentDidChange()
     }
-    editor.edited = { [weak self] in self?.changed?() }
+    editor.edited = { [weak self] in self?.syncFavoriteButton();self?.changed?() }
     editor.position = { [weak self] line, column in
       self?.position.stringValue = "Ln \(line), Col \(column)"
     }
@@ -1183,7 +1184,9 @@ private struct ColumnFilterPanel: View {
     submitModuleButton.setAccessibilityIdentifier("submitModule")
     submitModuleButton.isHidden=document.moduleOriginal == nil
     submitModuleButton.isEnabled=document.canSubmitModule
-    let header = NSStackView(views: [connectionBadge, NSView(), compareModuleButton, submitModuleButton, actual, position, toggle])
+    favoriteButton.target=self;favoriteButton.action=#selector(addQueryFavorite)
+    favoriteButton.setAccessibilityIdentifier("queryFavorite")
+    let header = NSStackView(views: [connectionBadge, NSView(), favoriteButton, compareModuleButton, submitModuleButton, actual, position, toggle])
     header.spacing = 10
     header.wantsLayer = true
     editorHeader = header
@@ -1211,13 +1214,8 @@ private struct ColumnFilterPanel: View {
     refreshButton.action = #selector(refreshResults)
     refreshButton.toolTip = "Son çalıştırılan SELECT sorgusunu yenile"
     refreshButton.setAccessibilityIdentifier("refreshResults")
-    refreshInterval.addItems(withTitles: ["Kapalı", "5 sn", "10 sn", "30 sn", "60 sn", "5 dk"])
-    for item in refreshInterval.itemArray { item.image = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: nil) }
-    refreshInterval.controlSize = .small
-    refreshInterval.widthAnchor.constraint(equalToConstant: 90).isActive = true
-    refreshInterval.target = self
-    refreshInterval.action = #selector(setRefreshInterval)
-    refreshInterval.setAccessibilityLabel("Otomatik yenileme süresi")
+    autoRefreshButton.target=self;autoRefreshButton.action=#selector(showAutoRefreshOptions)
+    autoRefreshButton.setAccessibilityIdentifier("gridAutoRefresh")
     messages.isEditable = false
     messages.isSelectable = true
     messages.font = StudioTheme.codeFont
@@ -1246,10 +1244,8 @@ private struct ColumnFilterPanel: View {
     export.widthAnchor.constraint(equalToConstant: 38).isActive = true
     configurePageMenu()
     rowLimit.controlSize = .small
-    rowLimit.target = self
-    rowLimit.action = #selector(changeRowLimit)
-    rowLimit.toolTip = "Page Size · Sayfada gösterilecek satırlar. All yalnızca yüklenen sonuçları kapsar."
-    rowLimit.setAccessibilityLabel("Page Size")
+    rowLimit.setAccessibilityLabel("Sayfa boyutu ve okuma sınırı")
+    rowLimit.setAccessibilityIdentifier("gridRowOptions")
     cancelExport.title = ""
     cancelExport.image = NSImage(systemSymbolName: "stop.circle", accessibilityDescription: "Dışa aktarmayı iptal et")
     cancelExport.toolTip = "Devam eden dışa aktarmayı iptal et"
@@ -1266,7 +1262,7 @@ private struct ColumnFilterPanel: View {
     editingDivider.widthAnchor.constraint(equalToConstant: 1).isActive = true
     editingDivider.heightAnchor.constraint(equalToConstant: 18).isActive = true
     let resultHeader = NSStackView(views: [
-      navigationHost, refreshButton, rowLimit, columnSearchButton,
+      navigationHost, refreshButton, rowLimit, autoRefreshButton, columnSearchButton,
       copyHeadersButton, editingDivider, editDataButton, dataActionsBar,
       previewDataButton, NSView(), filter, cancelExport, export,
     ])
@@ -1288,16 +1284,13 @@ private struct ColumnFilterPanel: View {
     cloneRowButton.toolTip = "Seçili satırı çoğalt · Anahtar ve üretilen alanlar kopyalanmaz"
     undoRowButton.toolTip = "Seçili satırlardaki yerel değişiklikleri geri al"
     nullDataButton.toolTip = "Seçili düzenlenebilir hücreyi NULL yap"
-    for (button, action) in [(columnSearchButton, #selector(showColumnSearch)), (loadingOptionsButton, #selector(showLoadingOptions))] {
-      button.target = self; button.action = action
-    }
+    columnSearchButton.target=self;columnSearchButton.action=#selector(showColumnSearch)
     resultHeader.setAccessibilityIdentifier("gridToolbar")
     navigationHost.spacing = 0
     copyHeadersButton.target = self; copyHeadersButton.action = #selector(copyHeadersSelection)
     updateShortcutHints()
     NotificationCenter.default.addObserver(self, selector: #selector(updateShortcutHints), name: GridShortcuts.changed, object: nil)
     filter.toolTip = "Yalnızca yüklenen sonuçlarda ara; sunucuya sorgu göndermez"
-    refreshInterval.toolTip = "Son başarılı SELECT için otomatik yenileme süresi"
     StudioTheme.surface(resultHeader)
     resultHeader.edgeInsets = NSEdgeInsets(top: 1, left: 6, bottom: 1, right: 6)
     resultHeader.spacing = 3
@@ -1308,7 +1301,7 @@ private struct ColumnFilterPanel: View {
     filter.widthAnchor.constraint(greaterThanOrEqualToConstant: 90).isActive = true
     filter.widthAnchor.constraint(lessThanOrEqualToConstant: 140).isActive = true
     filter.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-    rowLimit.widthAnchor.constraint(equalToConstant: 76).isActive = true
+    rowLimit.widthAnchor.constraint(equalToConstant: 128).isActive = true
     rowLimit.setContentCompressionResistancePriority(.required, for: .horizontal)
     export.bezelStyle = .rounded; export.contentTintColor = StudioTheme.accent
     export.setAccessibilityLabel("Sonuçları dışa aktar")
@@ -1320,9 +1313,6 @@ private struct ColumnFilterPanel: View {
     stripScroll.documentView = resultStrip
     stripScroll.hasHorizontalScroller = true; stripScroll.autohidesScrollers = true
     resultStrip.translatesAutoresizingMaskIntoConstraints = false
-    loadingOptionsButton.setAccessibilityIdentifier("gridReadOptions")
-    resultPane.addSubview(loadingOptionsButton)
-    loadingOptionsButton.translatesAutoresizingMaskIntoConstraints = false
     resultPane.addSubview(stripScroll)
     stripScroll.translatesAutoresizingMaskIntoConstraints = false
     resultPane.addSubview(resultHeader)
@@ -1333,9 +1323,7 @@ private struct ColumnFilterPanel: View {
       resultHeader.leadingAnchor.constraint(equalTo: resultPane.leadingAnchor),
       resultHeader.trailingAnchor.constraint(equalTo: resultPane.trailingAnchor),
       stripScroll.leadingAnchor.constraint(equalTo: resultPane.leadingAnchor),
-      stripScroll.trailingAnchor.constraint(equalTo: loadingOptionsButton.leadingAnchor,constant:-8),
-      loadingOptionsButton.trailingAnchor.constraint(equalTo:resultPane.trailingAnchor,constant:-6),
-      loadingOptionsButton.centerYAnchor.constraint(equalTo:stripScroll.centerYAnchor),
+      stripScroll.trailingAnchor.constraint(equalTo: resultPane.trailingAnchor),
       stripScroll.topAnchor.constraint(equalTo: resultPane.topAnchor),
       stripScroll.heightAnchor.constraint(equalToConstant: 32),
       resultStrip.leadingAnchor.constraint(equalTo: stripScroll.contentView.leadingAnchor),
@@ -1441,7 +1429,8 @@ private struct ColumnFilterPanel: View {
     editDataButton.toolTip = editing ? "Düzenleme açık · Kapatmak için tıklayın" : "Hücreleri düzenlemek için kaynağı doğrula ve düzenleme modunu aç"
     editDataButton.isEnabled = editing ? !preparingData && !submittingData : safe && grid != nil && document.results.count == 1 && !document.partial
     columnSearchButton.isEnabled = grid != nil
-    loadingOptionsButton.isEnabled = !document.busy && !submittingData
+    rowLimit.isEnabled = !document.busy && !submittingData
+    autoRefreshButton.isEnabled = !document.busy && !submittingData && !tables.values.contains {$0.editDefinition != nil}
     let pending = !(grid?.pendingEdits.isEmpty ?? true) || grid?.hasDraftChanges == true
     let canChange = !preparingData && !submittingData
     previewDataButton.isEnabled = canChange && grid?.editingAllowed?() == true && pending
@@ -1474,7 +1463,7 @@ private struct ColumnFilterPanel: View {
     let cellIdentity = cell.flatMap { grid.cellIdentity(row: $0.0, position: $0.1) }
     preparingData = true; syncDataActions()
     // Unattended refresh would discard the staged copy.
-    applyRefreshSeconds(0); refreshInterval.selectItem(at: 0)
+    setAutoRefresh(0)
     Task { [weak self, weak grid] in
       guard let self, let grid else { return }
       defer { preparingData = false; syncDataActions() }
@@ -1554,13 +1543,22 @@ private struct ColumnFilterPanel: View {
     refreshSelection = resultTabs.selectedTabViewItem?.identifier
     document.execute(override: sql, repeatRead: true)
   }
-  @objc private func setRefreshInterval() { applyRefreshSeconds([0,5,10,30,60,300][refreshInterval.indexOfSelectedItem]) }
+  func setAutoRefresh(_ seconds:Int) {
+    guard !document.busy,!submittingData,!tables.values.contains(where:{$0.editDefinition != nil}),(0...3600).contains(seconds) else {return}
+    document.initialRefreshSeconds=seconds
+    defaultRefreshApplied=document.canRefresh
+    applyRefreshSeconds(seconds)
+  }
+  @objc private func showAutoRefreshOptions() {
+    autoRefreshButton.menu?.popUp(positioning:nil,at:NSPoint(x:0,y:autoRefreshButton.bounds.maxY+3),in:autoRefreshButton)
+  }
+  @objc private func changeAutoRefresh(_ item:NSMenuItem) {setAutoRefresh(item.tag)}
   private func applyRefreshSeconds(_ seconds: Int) {
     refreshTask?.cancel(); refreshTask=nil
     selectedRefreshSeconds=0
     defer {syncReadOptions()}
     guard (0...3600).contains(seconds) else { return }
-    guard seconds > 0, document.canRefresh, !tables.values.contains(where: { $0.editDefinition != nil }) else { refreshInterval.selectItem(at: 0); return }
+    guard seconds > 0, document.canRefresh, !tables.values.contains(where: { $0.editDefinition != nil }) else { return }
     selectedRefreshSeconds=seconds
 
     refreshTask = Task { [weak self] in
@@ -1578,8 +1576,8 @@ private struct ColumnFilterPanel: View {
       defaultRefreshApplied=true; applyRefreshSeconds(document.initialRefreshSeconds ?? ResultReadPreferences.refreshSeconds)
     }
     refreshButton.isEnabled = document.canRefresh
-    refreshInterval.isEnabled = (document.canRefresh || document.busy) && !tables.values.contains(where: { $0.editDefinition != nil })
-    if !document.busy && !document.canRefresh { applyRefreshSeconds(0); refreshInterval.selectItem(at: 0) }
+    autoRefreshButton.isEnabled = !document.busy && !submittingData && !tables.values.contains(where: { $0.editDefinition != nil })
+    if !document.busy && !document.canRefresh { applyRefreshSeconds(0) }
   }
   func splitView(
     _ splitView: NSSplitView, constrainMinCoordinate proposed: CGFloat, ofSubviewAt index: Int
@@ -1650,7 +1648,7 @@ private struct ColumnFilterPanel: View {
     syncDataActions()
     actual.state = document.actualPlan ? .on : .off
     actual.isEnabled = !document.busy
-    rowLimit.isEnabled = !document.busy
+    syncFavoriteButton()
     if document.results.isEmpty && !displayed.isEmpty && !(document.repeating && document.busy) {
       for item in resultTabs.tabViewItems where item.identifier is NSNumber {
         resultTabs.removeTabViewItem(item)
@@ -1795,7 +1793,7 @@ private struct ColumnFilterPanel: View {
       applyLoadingPreferences(rows:rows,page:page,refresh:refresh,save:save)
       popup?.close()
     })
-    optionsPopover=popup; popup.show(relativeTo:loadingOptionsButton.bounds,of:loadingOptionsButton,preferredEdge:.maxY)
+    optionsPopover=popup; popup.show(relativeTo:rowLimit.bounds,of:rowLimit,preferredEdge:.maxY)
   }
   @objc private func showColumnSearch() {
     guard let grid=selectedGrid else { return }
@@ -1812,17 +1810,7 @@ private struct ColumnFilterPanel: View {
   @objc private func filterChanged() {
     for table in tables.values { table.filter = filter.stringValue }
   }
-  private func configurePageMenu() {
-    rowLimit.removeAllItems()
-    for size in GridPaging.choices {
-      rowLimit.addItem(withTitle: size == 0 ? "All" : String(size.formatted()))
-      rowLimit.lastItem?.tag = size
-    }
-    rowLimit.addItem(withTitle: "Özel…"); rowLimit.lastItem?.tag = -1
-    rowLimit.menu?.addItem(.separator())
-    rowLimit.addItem(withTitle: "Varsayılan Yap"); rowLimit.lastItem?.tag = -2
-    syncPageMenu()
-  }
+  private func configurePageMenu() {syncPageMenu()}
   private var effectiveRefreshSeconds:Int {defaultRefreshApplied ? selectedRefreshSeconds : document.initialRefreshSeconds ?? ResultReadPreferences.refreshSeconds}
   func applyLoadingPreferences(rows:Int,page:Int,refresh:Int,save:Bool) {
     guard !document.busy,!submittingData,(1...5_000_000).contains(rows),(0...1_000_000).contains(page),(0...3600).contains(refresh) else {return}
@@ -1832,28 +1820,63 @@ private struct ColumnFilterPanel: View {
     defaultRefreshApplied=document.canRefresh
     applyPageSize(page);applyRefreshSeconds(seconds)
     if save {ResultReadPreferences.save(rows:rows,page:page,refresh:seconds)}
-    configurePageMenu()
+    syncPageMenu()
   }
   private func syncReadOptions() {
-    loadingOptionsButton.title="Okuma: \(document.limits.rows.formatted())"
-    loadingOptionsButton.tone=effectiveRefreshSeconds>0 ? .success:.neutral
-    loadingOptionsButton.toolTip="Sonuç yükleme ayarları · Okuma sınırı: \(document.limits.rows.formatted()) (sonraki çalıştırma) · Sayfa: \(selectedPageSize == 0 ? "Tüm yüklenenler":selectedPageSize.formatted()) · Yenileme: \(effectiveRefreshSeconds == 0 ? "Kapalı":"\(effectiveRefreshSeconds) sn")\(effectiveRefreshSeconds>0 && !document.canRefresh ? " (başarılı SELECT sonrası)":"")"
+    let seconds=effectiveRefreshSeconds
+    autoRefreshButton.tone=seconds>0 ? .success:.neutral
+    autoRefreshButton.state=seconds>0 ? .on:.off
+    autoRefreshButton.image=NSImage(systemSymbolName:seconds>0 ? "clock.badge.checkmark":"clock.arrow.circlepath",accessibilityDescription:"Otomatik yenileme")
+    autoRefreshButton.toolTip="Otomatik yenileme · \(seconds == 0 ? "Kapalı":"\(seconds) sn")\(seconds>0 && !document.canRefresh ? " · Başarılı SELECT sonrası başlar":"")"
+    autoRefreshButton.setAccessibilityValue(seconds == 0 ? "Kapalı":"\(seconds) sn")
+    let menu=NSMenu()
+    for value in [0,5,10,30,60,300] {
+      let item=NSMenuItem(title:value == 0 ? "Kapalı":"Her \(value) saniyede",action:#selector(changeAutoRefresh(_:)),keyEquivalent:"")
+      item.target=self;item.tag=value;item.state=value == seconds ? .on:.off
+      menu.addItem(item)
+    }
+    if seconds>0 && ![5,10,30,60,300].contains(seconds) {
+      let item=NSMenuItem(title:"Her \(seconds) saniyede (özel)",action:#selector(changeAutoRefresh(_:)),keyEquivalent:"")
+      item.target=self;item.tag=seconds;item.state = .on;menu.addItem(item)
+    }
+    menu.addItem(.separator())
+    let custom=NSMenuItem(title:"Özel süre…",action:#selector(showRefreshOptions),keyEquivalent:"");custom.target=self;menu.addItem(custom)
+    autoRefreshButton.menu=menu
   }
   private func syncPageMenu() {
     syncReadOptions()
-    for item in rowLimit.itemArray where !item.isSeparatorItem && item.submenu == nil && item.tag >= 0 && GridPaging.choices.contains(item.tag) {
-      item.title = item.tag == 0 ? "All" : item.tag.formatted()
-      item.toolTip = item.tag == GridPaging.defaultSize ? "Varsayılan sayfa boyutu" : nil
+    let menu=NSMenu()
+    func compact(_ value:Int) -> String {value>=1000 && value%1000 == 0 ? "\(value/1000)k":value.formatted()}
+    let pageTitle=selectedPageSize == 0 ? "Tümü":compact(selectedPageSize)
+    let title=NSMenuItem(title:"\(pageTitle) · \(compact(document.limits.rows))",action:nil,keyEquivalent:"")
+    title.image=NSImage(systemSymbolName:"tablecells",accessibilityDescription:nil);menu.addItem(title)
+    func section(_ label:String,values:[Int],selected:Int,action:Selector,identifier:String) {
+      let item=NSMenuItem(title:label,action:nil,keyEquivalent:"");item.identifier = .init(identifier)
+      let choices=NSMenu()
+      for value in values + (values.contains(selected) ? []:[selected]) {
+        let option=NSMenuItem(title:value == 0 ? "Tüm yüklenenler":value.formatted(),action:action,keyEquivalent:"")
+        option.target=self;option.tag=value;option.state=value == selected ? .on:.off;choices.addItem(option)
+      }
+      choices.addItem(.separator())
+      let custom=NSMenuItem(title:"Özel…",action:#selector(showLoadingOptions),keyEquivalent:"");custom.target=self;choices.addItem(custom)
+      item.submenu=choices;menu.addItem(item)
     }
-    if let item = rowLimit.itemArray.first(where: { $0.tag == selectedPageSize && $0.tag >= 0 }) { rowLimit.select(item) }
-    else { rowLimit.itemArray.first(where: { $0.tag == -1 })?.title = selectedPageSize.formatted(); rowLimit.selectItem(withTag: -1) }
-    rowLimit.toolTip = "Sayfa boyutu: \(selectedPageSize == 0 ? "Tüm yüklenenler" : selectedPageSize.formatted()) · Varsayılan: \(GridPaging.defaultSize == 0 ? "All" : GridPaging.defaultSize.formatted())"
-
+    section("Sayfa boyutu · \(selectedPageSize == 0 ? "Tüm yüklenenler":selectedPageSize.formatted())",values:GridPaging.choices,selected:selectedPageSize,action:#selector(changeRowLimit(_:)),identifier:"gridPageChoices")
+    section("Okuma sınırı · \(document.limits.rows.formatted())",values:[10,100,500,1000,10_000,50_000,100_000,1_000_000,5_000_000],selected:document.limits.rows,action:#selector(changeReadLimit(_:)),identifier:"gridReadChoices")
+    menu.addItem(.separator())
+    let custom=NSMenuItem(title:"Özel değerler…",action:#selector(showLoadingOptions),keyEquivalent:"");custom.target=self;custom.tag = -1;menu.addItem(custom)
+    let save=NSMenuItem(title:"Varsayılan Yap",action:#selector(saveLoadingDefaults),keyEquivalent:"");save.target=self;save.tag = -2;menu.addItem(save)
+    rowLimit.menu=menu;rowLimit.selectItem(at:0)
+    rowLimit.toolTip="Sayfa: \(selectedPageSize == 0 ? "Tüm yüklenenler":selectedPageSize.formatted()) · Okuma sınırı: \(document.limits.rows.formatted()) (sonraki çalıştırma) · Sayfa değişimi yalnız yüklenen sonuçları gösterir."
   }
-  @objc private func changeReadLimit(_ item: NSMenuItem) {
-    guard !document.busy else { return }
-    document.limits = ResultReadPreferences.limits(rows:item.tag)
-    configurePageMenu()
+  @objc private func changeReadLimit(_ item:NSMenuItem) {
+    guard !document.busy,!submittingData,(1...5_000_000).contains(item.tag) else {return}
+    document.limits=ResultReadPreferences.limits(rows:item.tag)
+    syncPageMenu()
+  }
+  @objc private func saveLoadingDefaults() {
+    guard !document.busy,!submittingData else {return}
+    ResultReadPreferences.save(rows:document.limits.rows,page:selectedPageSize,refresh:effectiveRefreshSeconds)
   }
   func applyPageSize(_ value: Int, makeDefault: Bool = false) {
     guard (0...1_000_000).contains(value) else { return }
@@ -1862,17 +1885,21 @@ private struct ColumnFilterPanel: View {
     for table in tables.values { table.setPageSize(value) }
     syncPageMenu()
   }
-  @objc private func changeRowLimit() {
-    let value = rowLimit.selectedItem?.tag ?? 500
-    if value == -2 { applyPageSize(selectedPageSize, makeDefault: true); return }
-    if value == -1 {
-      let alert = NSAlert(); alert.messageText = "Sayfa Boyutu"
-      alert.informativeText = "Sayfa başına 1–1.000.000 satır girin."
-      let field = NSTextField(string: String(max(1,selectedPageSize))); field.frame = NSRect(x:0,y:0,width:220,height:26)
-      alert.accessoryView = field; alert.addButton(withTitle: "Uygula"); alert.addButton(withTitle: "Vazgeç")
-      if alert.runModal() == .alertFirstButtonReturn, let size = Int(field.stringValue), (1...1_000_000).contains(size) { applyPageSize(size) }
-      else { syncPageMenu() }
-    } else if value >= 0 { applyPageSize(value) }
+  @objc private func changeRowLimit(_ item:NSMenuItem) {
+    guard !document.busy,!submittingData else {return}
+    applyPageSize(item.tag)
+  }
+  private func syncFavoriteButton() {
+    favoriteButton.isEnabled=favoriteRequested != nil && !document.sql.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty
+  }
+  @objc private func addQueryFavorite() {favoriteRequested?(document)}
+  @objc private func showRefreshOptions() {
+    optionsPopover?.close()
+    let popup=NSPopover();popup.animates=false;popup.behavior = .transient
+    popup.contentViewController=NSHostingController(rootView:ResultRefreshPanel(seconds:effectiveRefreshSeconds) { [weak self,weak popup] seconds in
+      self?.setAutoRefresh(seconds);popup?.close()
+    })
+    optionsPopover=popup;popup.show(relativeTo:autoRefreshButton.bounds,of:autoRefreshButton,preferredEdge:.maxY)
   }
   @objc private func stopExport() { exportJob?.cancel() }
   @objc private func exportResult(_ sender: NSPopUpButton) {

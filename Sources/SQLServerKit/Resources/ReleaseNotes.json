@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.66",
+    "date": "2026-10-11",
+    "title": "Explorer favorileri ve birleşik sonuç kontrolleri",
+    "changes": [
+      "Favoriler Explorer’da Genel, Bu Bağlantı ve veritabanı gruplarında listelenir. Çift tıklama doğru hedefte yeni sorgu sekmesi açar; SQL otomatik çalıştırılmaz.",
+      "SQL editörünün yanındaki yıldız, açık sorguyu adı ve kapsamıyla hızlıca favorilere ekleme formuna taşır. Ayrılmış sorgu pencerelerinde de kendi sorgusunu kullanır.",
+      "Sayfa boyutu ve okuma sınırı aynı sonuç menüsünde toplandı. Hazır değerler, özel giriş ve varsayılan kaydetme desteklenir; sayfalama mevcut sonuçları, okuma sınırı sonraki yürütmeyi etkiler.",
+      "Sonuç çubuğuna ayrı otomatik yenileme düğmesi eklendi. Hazır veya özel süre, kapatma ve görünür durum sunar; ilk başarılı SELECT sonrası başlar ve düzenleme sırasında durur.",
+      "Favori değişikliklerinde Explorer seçimi ve açık gruplar korunur. Sonuç kontrolleri açık/koyu temada dar pencerelerde aynı satırda kalır; ikonlar hızlı açıklama ve erişilebilir ad taşır."
+    ]
+  },
+  {
     "version": "0.2.65",
     "date": "2026-10-11",
     "title": "Grafikli Activity Monitor ve favori sorgular",

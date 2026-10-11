@@ -146,11 +146,10 @@ import Testing
     #expect(ResultController().pageSize == 77)
     #expect(grid.table.numberOfRows == 77)
     #expect(doc.limits.rows == cap)
-    let popup = try #require(views(query.view).compactMap { $0 as? NSPopUpButton }.first { $0.accessibilityLabel() == "Page Size" })
+    let popup = try #require(views(query.view).compactMap { $0 as? NSPopUpButton }.first { $0.accessibilityIdentifier() == "gridRowOptions" })
     #expect(popup.itemArray.contains { $0.title == "Varsayılan Yap" })
-    #expect(!popup.itemArray.contains { $0.title == "Sorgu okuma sınırı" })
-    let readOptions=try #require(views(query.view).compactMap {$0 as? NSButton}.first {$0.accessibilityIdentifier() == "gridReadOptions"})
-    #expect(readOptions.title == "Okuma: \(doc.limits.rows.formatted())")
+    #expect(popup.itemArray.contains {$0.identifier?.rawValue == "gridReadChoices"})
+    #expect(popup.toolTip?.contains(doc.limits.rows.formatted()) == true)
   }
   @Test func automaticWidthsHorizontalScrollingAndLeftResultTabs() throws {
     _ = NSApplication.shared

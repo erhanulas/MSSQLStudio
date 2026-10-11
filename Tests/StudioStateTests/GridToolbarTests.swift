@@ -193,7 +193,7 @@ import Testing
       let rect = controller.view.convert(control.bounds, from: control)
       #expect(rect.minX >= 0 && rect.maxX <= 831, "Toolbar control overflow: \(rect)")
     }
-    #expect(controls.contains { $0.accessibilityLabel() == "Page Size" })
+    #expect(controls.contains { $0.accessibilityIdentifier() == "gridRowOptions" })
     #expect(controls.contains { ($0 as? NSPopUpButton)?.itemTitles.contains("Geçerli sayfa · CSV…") == true })
     #expect(!views.contains { $0.accessibilityLabel() == "Kolon filtresi" })
     let tabs = try #require(views.compactMap { $0 as? NSTabView }.first)

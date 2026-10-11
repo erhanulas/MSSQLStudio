@@ -47,6 +47,24 @@ struct ResultLoadingPanel: View {
   }
 }
 
+struct ResultRefreshPanel:View {
+  @State var seconds:Int
+  var apply:(Int)->Void
+  @State private var message=""
+  var body:some View {
+    VStack(alignment:.leading,spacing:16) {
+      StudioPanelHeading(title:"Otomatik Yenileme",icon:"clock.arrow.circlepath",subtitle:"Son başarılı SELECT sorgusunu tekrar oku")
+      StudioFormField("Yenileme aralığı") {HStack {TextField("Saniye",value:$seconds,format:.number.grouping(.never)).textFieldStyle(.roundedBorder);Text("sn").foregroundStyle(.secondary)}}
+      Text("0 kapalı · 1–3.600 saniye. İlk başarılı SELECT sonrası başlar; düzenleme veya açık işlem sırasında çalışmaz.").font(.caption).foregroundStyle(.secondary)
+      if !message.isEmpty {Text(message).foregroundStyle(.red)}
+      HStack {Spacer();StudioActionButton("Uygula",icon:"checkmark") {
+        guard (0...3600).contains(seconds) else {message="0–3.600 saniye girin.";return}
+        apply(seconds)
+      }.buttonStyle(StudioPrimaryButton())}
+    }.padding(20).frame(width:420).fixedSize(horizontal:false,vertical:true).studioPanel()
+  }
+}
+
 @MainActor final class ResultWorkspaceView: NSView {
   var searchColumns: (() -> Void)?
   override func performKeyEquivalent(with event: NSEvent) -> Bool {

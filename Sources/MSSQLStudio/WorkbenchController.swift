@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 @MainActor final class TreeNode: NSObject {
   enum Kind {
-    case server, group, database
+    case server, group, database, favorites, favorite
     case folder(Folder)
     case object(Folder)
     case detail
@@ -17,7 +17,9 @@ import UniformTypeIdentifiers
     case relation(LinkedCatalog.Relation), columns(LinkedCatalog.Relation), detail
   }
   var linked: LinkedBranch?
-  let title: String
+  var title: String
+  var favorite: FavoriteQuery?
+  var favoriteScope: FavoriteQuery.Scope?
   let generation: UUID
   let kind: Kind
   let server: ConnectedServer
@@ -60,7 +62,7 @@ import UniformTypeIdentifiers
     if linked != nil {return true}
     if case .object(.linkedServers) = kind {return true}
     switch kind {
-    case .server, .group, .database: return true
+    case .server, .group, .database, .favorites: return true
     case .folder(let folder):
       return [
         .databases, .tables, .views, .procedures, .functions, .synonyms, .columns, .indexes, .keys,
@@ -68,7 +70,7 @@ import UniformTypeIdentifiers
         .schedules,
       ].contains(folder)
     case .object(let folder): return [.tables, .views, .procedures, .functions].contains(folder)
-    case .detail: return false
+    case .detail, .favorite: return false
     }
   }
   private var category: Folder? {
@@ -82,6 +84,7 @@ import UniformTypeIdentifiers
     case .server:
       return server.profile.appearance?.isMarked == true
         ? server.profile.appearance!.color : StudioTheme.accent
+    case .favorites, .favorite: return StudioTheme.warning
     case .database: return StudioTheme.color(0x278A91, 0x69C3C7)
     case .group:
       if title == "Security" { return StudioTheme.color(0xB77A36, 0xDDB17F) }
@@ -106,6 +109,8 @@ import UniformTypeIdentifiers
   }
   var icon: String {
     switch kind {
+    case .favorites: return favoriteScope == .global ? "globe" : favoriteScope == .database ? "cylinder.split.1x2" : "star.circle"
+    case .favorite: return "star.fill"
     case .server: return "server.rack"
     case .database: return "cylinder.split.1x2"
     case .group:
@@ -266,6 +271,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     NotificationCenter.default.addObserver(self,selector:#selector(refreshManagedObject(_:)),name:.init("studioManagedObjectCompleted"),object:nil)
     NotificationCenter.default.addObserver(self, selector: #selector(catalogIndexUpdated(_:)), name: .init("catalogIndexUpdated"), object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(catalogIndexUpdated(_:)), name: .init("sqlCatalogChanged"), object: nil)
+    NotificationCenter.default.addObserver(self,selector:#selector(favoritesChanged),name:FavoriteQueriesModel.changed,object:state.favorites)
     state.changed = { [weak self] in self?.reloadWorkspace() }
   }
   deinit {agentPolling?.cancel()}
@@ -305,6 +311,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     ])
     sidebar.isCollapsed=UserDefaults.standard.bool(forKey:"explorerCollapsed")
     reloadWorkspace()
+    Task { [weak self] in await self?.state.favorites.load() }
   }
   private func buildExplorer() {
     let background = NSView()
@@ -550,6 +557,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         roots.append(serverTree(server))
       }
     }
+    for root in roots {synchronizeFavorites(in:root)}
     rebuildSearchScopes()
     outline.reloadData()
     for root in roots where outline.row(forItem: root) >= 0 && !outline.isItemExpanded(root) {
@@ -656,6 +664,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         }
         controller = QueryController(document: doc)
         initialFocus = controller
+        controller.favoriteRequested = { [weak self] doc in self?.presentFavoriteEditor(for:doc) }
         controller.changed = { [weak self] in
           self?.updateControls()
           self?.renderTabs()
@@ -907,6 +916,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     if case .folder = node.kind {refresh(node)} else {refresh(node.parent ?? node)}
   }
   func refresh(_ node: TreeNode) {
+    if case .favorites = node.kind {Task {await state.favorites.load()};return}
+    if case .favorite = node.kind {return}
     if case .object = node.kind, !node.expandable,let parent=node.parent {refresh(parent);return}
     if case .folder(.databases) = node.kind,
       let root = roots.first(where: { $0.server === node.server })
@@ -943,6 +954,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
           node.server.prepareCatalogIndexes()
           rebuildSearchScopes()
           node.children = serverTree(node.server).children
+          synchronizeFavorites(in:node)
           node.loaded = true
           outline.reloadItem(node, reloadChildren: true)
           updateControls()
@@ -1357,6 +1369,11 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     if case .relation(let relation)=node.linked {
       cell.toolTip=relation.qualified + " · " + relation.type + (relation.remarks.isEmpty ? "" : "\n"+relation.remarks)
     }
+    if let favorite=node.favorite {
+      cell.toolTip="\(favorite.name) · \(favorite.scope == .global ? "Genel":favorite.scope == .connection ? "Bağlantı":"Veritabanı") · \(node.server.profile.name) / \(node.database) · Çift tıklayarak sorguda aç (çalıştırılmaz)"
+      label.setAccessibilityLabel(cell.toolTip)
+    }
+    if case .favorites = node.kind {cell.toolTip="Yerel favori sorgular · Bağlantı kapalıyken de açılabilir"}
     return cell
   }
   func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
@@ -1367,6 +1384,49 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     if case .server = node.kind { row.isServer = true }
     return row
   }
+  @objc private func favoritesChanged() {
+    guard isViewLoaded else {return}
+    let selection=selected
+    for root in roots {
+      let folder=synchronizeFavorites(in:root)
+      if !showingSearch {outline.reloadItem(folder,reloadChildren:true)}
+    }
+    if !showingSearch,let selection {
+      let row=outline.row(forItem:selection)
+      if row>=0 {outline.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)}
+      else {outline.deselectAll(nil)}
+    }
+  }
+  @discardableResult private func synchronizeFavorites(in root:TreeNode) -> TreeNode {
+    let folder=root.children.first {if case .favorites=$0.kind {return true};return false}
+      ?? TreeNode("Favori Sorgular",kind:.favorites,server:root.server,database:root.server.profile.database)
+    folder.loaded=true
+    if !root.children.contains(where:{$0 === folder}) {root.children.append(folder)}
+    let items=state.favorites.items.filter {$0.scope == .global || $0.serverID == root.server.id}
+    let databases=Set(items.filter {$0.scope == .database}.compactMap(\.database)).sorted {$0.localizedStandardCompare($1) == .orderedAscending}
+    let groups:[(FavoriteQuery.Scope,String,String)] = [(.global,"Genel",root.server.profile.database),(.connection,"Bu Bağlantı",root.server.profile.database)] + databases.map {(.database,$0,$0)}
+    folder.children=groups.compactMap {scope,title,database in
+      let values=items.filter {$0.scope == scope && (scope != .database || $0.database == database)}
+      guard !values.isEmpty else {return nil}
+      let group=folder.children.first {$0.favoriteScope == scope && $0.database == database}
+        ?? TreeNode(title,kind:.favorites,server:root.server,database:database)
+      group.favoriteScope=scope;group.loaded=true
+      group.children=values.map {value in
+        let node=group.children.first {$0.favorite?.id == value.id}
+          ?? TreeNode(value.name,kind:.favorite,server:root.server,database:database)
+        node.title=value.name;node.favorite=value;node.loaded=true
+        return node
+      }
+      return group
+    }
+    return folder
+  }
+  func openExplorerFavorite(_ node:TreeNode) {
+    guard let favorite=node.favorite else {return}
+    do {try state.openFavorite(favorite,contextServerID:node.server.id,contextDatabase:node.database)}
+    catch {state.showError(error.localizedDescription)}
+  }
+  @objc private func openFavoriteAtNode() {if let node=contextNode {openExplorerFavorite(node)}}
   private func serverTree(_ server: ConnectedServer) -> TreeNode {
     func folder(_ value: Folder, database: String = "master", item: CatalogItem? = nil) -> TreeNode
     {
@@ -1479,6 +1539,11 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   @objc private func openObject() {
     guard let node = outline.item(atRow: outline.clickedRow) as? TreeNode else { return }
+    if case .favorite = node.kind {openExplorerFavorite(node);return}
+    if case .favorites = node.kind {
+      if outline.isItemExpanded(node) {outline.collapseItem(node)} else {outline.expandItem(node)}
+      return
+    }
     guard node.server.online else {
       Task { await state.reconnectExplorer(node.server) }
       return
@@ -1539,6 +1604,12 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       let item=NSMenuItem(title:title,action:nil,keyEquivalent:"");item.submenu=scripts;menu.addItem(item)
     }
     guard let node = contextNode else { return }
+    if case .favorite = node.kind {
+      command("Sorguda Aç",#selector(openFavoriteAtNode))
+      command("Favori Sorguları Yönet…",#selector(showFavoritesAtNode))
+      return
+    }
+    if case .favorites = node.kind {command("Favori Sorguları Yönet…",#selector(showFavoritesAtNode));return}
     if case .server = node.kind {command("Favori Sorgular…",#selector(showFavoritesAtNode))}
     if case .database = node.kind {command("Favori Sorgular…",#selector(showFavoritesAtNode))}
 
@@ -1847,8 +1918,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     present(FavoriteQueriesPanel(state:state,model:state.favorites,contextServerID:server?.id,contextDatabase:database,didOpen:{[weak self] in self?.view.window?.makeKeyAndOrderFront(nil)}),
       title:"Favori Sorgular",width:1100,height:760,minWidth:900,minHeight:660,identity:"favorites|\(server?.id.uuidString ?? "global")|\(database)")
   }
-  @objc func addFavorite() {
-    guard let doc=state.active,!doc.sql.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else {return}
+  @objc func addFavorite() {if let doc=state.active {presentFavoriteEditor(for:doc)}}
+  private func presentFavoriteEditor(for doc:QueryDocument) {
+    guard !doc.sql.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else {return}
     let identity="favorite-editor|\(UUID())"
     present(FavoriteQueryEditor(model:state.favorites,servers:state.servers,contextServerID:doc.server.id,database:doc.database,sql:doc.sql,name:doc.title,close:{[weak self] in
       self?.auxiliaryWindows.first(where:{$0.window?.identifier?.rawValue == identity})?.close()

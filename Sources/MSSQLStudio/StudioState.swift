@@ -369,7 +369,7 @@ struct ObjectEditorKey: Codable, Equatable {
   var active: QueryDocument?
   var changed: (() -> Void)?
   var history: [QueryRecord] = []
-  lazy var favorites = FavoriteQueriesModel(url: (Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" || ProcessInfo.processInfo.arguments.contains("--ui-smoke")
+  lazy var favorites = FavoriteQueriesModel(url: (Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" || ProcessInfo.processInfo.arguments.contains("--ui-smoke") || ProcessInfo.processInfo.arguments.contains(where:{$0.contains(".xctest")})
     ? URL(fileURLWithPath:"/tmp/MSSQLStudio-UI-\(ProcessInfo.processInfo.processIdentifier)") : folder).appendingPathComponent("favorites.json"))
   private var nextQueryNumber = 1
   var historyEnabled = UserDefaults.standard.bool(forKey: "historyEnabled")
