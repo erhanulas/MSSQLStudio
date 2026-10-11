@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.64",
+    "date": "2026-10-11",
+    "title": "Grafikli Activity Monitor ve favori sorgular",
+    "changes": [
+      "Çalıştır düğmesinin ikon ve metni çevresine güvenli iç boşluk eklendi; ana ve ayrılmış sorgu pencereleri ortak görünümü kullanır.",
+      "Activity Monitor, SQL Server CPU, bekleyen kullanıcı görevleri, veritabanı I/O ve batch hızını gösteren dört canlı grafikle yenilendi. Yenileme, duraklatma, örnek tablosu ve sorguda tablo olarak izleme sunar.",
+      "Adlandırılmış favori sorgular eklendi. Genel, Explorer bağlantısı veya veritabanı kapsamı seçilebilir; favoriler aranabilir, düzenlenebilir, silinebilir ve otomatik çalıştırılmadan sorgu sekmesinde açılabilir.",
+      "Okuma sınırı sonuç sekmelerinin yanında görünür hale getirildi. Okuma sınırı, sayfa boyutu ve otomatik yenileme doğrudan sonuç alanından yönetilir; Ayarlar içindeki Sonuçlar sekmesi kaldırıldı. Mevcut varsayılanlar korunur.",
+      "Grafiklerde eksik ölçüm, yetki hatası, sunucu yeniden başlaması ve bağlantı kesintisi sıfır veri gibi gösterilmez. Performans sayaçlarının hızları ardışık örnek farkından hesaplanır."
+    ]
+  },
+  {
     "version": "0.2.63",
     "date": "2026-10-11",
     "title": "Premium formlar ve SSMS editör renkleri",

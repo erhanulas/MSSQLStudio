@@ -148,7 +148,9 @@ import Testing
     #expect(doc.limits.rows == cap)
     let popup = try #require(views(query.view).compactMap { $0 as? NSPopUpButton }.first { $0.accessibilityLabel() == "Page Size" })
     #expect(popup.itemArray.contains { $0.title == "Varsayılan Yap" })
-    #expect(popup.itemArray.contains { $0.title == "Sorgu okuma sınırı" })
+    #expect(!popup.itemArray.contains { $0.title == "Sorgu okuma sınırı" })
+    let readOptions=try #require(views(query.view).compactMap {$0 as? NSButton}.first {$0.accessibilityIdentifier() == "gridReadOptions"})
+    #expect(readOptions.title == "Okuma: \(doc.limits.rows.formatted())")
   }
   @Test func automaticWidthsHorizontalScrollingAndLeftResultTabs() throws {
     _ = NSApplication.shared

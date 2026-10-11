@@ -615,7 +615,11 @@ private struct ObjectPropertiesPanel:View {
 @MainActor enum ObjectManagementUIFixture {
   static func catalog(_ sql:String) -> Execution {
     var e=Execution()
-    if sql == Catalog.databases {
+    if sql == ActivityMonitoring.overviewSQL {
+      let time=Date();let ticks=Int64(time.timeIntervalSince1970)
+      let f=ISO8601DateFormatter();f.formatOptions=[.withInternetDateTime,.withFractionalSeconds]
+      e.results=[Rows(values:[[f.string(from:time),"fixture-start",String(20+ticks%20),String(2+ticks%4),String(ticks*2_097_152),String(ticks*25)]]),Rows(values:[])]
+    } else if sql == Catalog.databases {
       e.results=[Rows(values:[["1","master","","ONLINE"],["5","DemoDB","","ONLINE"],["6","Reporting","","ONLINE"]])]
     } else if sql.contains("StudioAgent.history") {
       let id="00000000-0000-0000-0000-000000000027"

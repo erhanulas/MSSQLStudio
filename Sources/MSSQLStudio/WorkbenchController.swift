@@ -1498,6 +1498,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     switch node.kind {
     case .object(let folder) where [.tables, .views].contains(folder): selectRows()
     case .object(let folder) where [.procedures,.functions,.triggers].contains(folder): modifyManagedModule()
+    case .folder(.activity):showPerformanceMonitor(node.server)
     case .object(.jobs):showAgentProperties(node)
     case .object(.schedules):showAgentSchedule(node)
     case .object: objectProperties()
@@ -1522,7 +1523,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     func command(_ title: String, _ selector: Selector) {
       let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
       item.target = self
-      let symbol = title.contains("Yenile") ? "arrow.clockwise" : title.contains("Sorgu") ? "plus.square" : title.contains("İndeks") ? "externaldrive" : title.contains("Özellikler") ? "slider.horizontal.3" : title.contains("Kopyala") ? "doc.on.doc" : "gearshape"
+      let symbol = title.contains("Favori") ? "star" : title.contains("Yenile") ? "arrow.clockwise" : title.contains("Sorgu") ? "plus.square" : title.contains("İndeks") ? "externaldrive" : title.contains("Özellikler") ? "slider.horizontal.3" : title.contains("Kopyala") ? "doc.on.doc" : "gearshape"
       item.image=NSImage(systemSymbolName:symbol,accessibilityDescription:nil)
       menu.addItem(item)
     }
@@ -1538,6 +1539,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       let item=NSMenuItem(title:title,action:nil,keyEquivalent:"");item.submenu=scripts;menu.addItem(item)
     }
     guard let node = contextNode else { return }
+    if case .server = node.kind {command("Favori Sorgular…",#selector(showFavoritesAtNode))}
+    if case .database = node.kind {command("Favori Sorgular…",#selector(showFavoritesAtNode))}
 
     if !node.server.online || node.server.startupError != nil {
       command(node.server.reconnecting ? "Bağlanıyor…" : "Yeniden Bağlan", #selector(reconnectServer))
@@ -1608,7 +1611,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     if case .folder(.synonyms)=node.kind {command("New Synonym…",#selector(newManagedSynonym))}
     if case .folder(let f)=node.kind, [.indexes,.keys,.constraints].contains(f), node.ownerObject != nil {command("New…",#selector(manageChildStructure))}
     if case .folder(let folder) = node.kind, !node.expandable {
-      command("Verileri Aç", #selector(openMonitoring))
+      command(folder == .activity ? "Grafikli Activity Monitor…":"Verileri Aç", #selector(openMonitoring))
+      if folder == .activity {command("Sorguda Tablo Olarak İzle",#selector(openActivityTable))}
       if folder == .jobs { command("New SQL Agent Job…", #selector(jobDesigner)) }
     }
     if case .database = node.kind {
@@ -1821,16 +1825,34 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   @objc private func openMonitoring() {
     if let node = contextNode, case .folder(let folder) = node.kind {
+      if folder == .activity {showPerformanceMonitor(node.server);return}
       state.newQuery(
         server: node.server, database: node.database, text: Catalog.monitoring(folder),
         title: folder.rawValue, run: true)
     }
   }
-  @objc func activity() {
-    if let server = selectedServer {
-      state.newQuery(
-        server: server, text: Catalog.monitoring(.activity), title: "Activity Monitor", run: true)
-    }
+  @objc func activity() {if let server=selectedServer {showPerformanceMonitor(server)}}
+  func showPerformanceMonitor(_ server:ConnectedServer) {
+    present(ActivityMonitorPanel(server:server,openTable:{[weak self] in self?.createActivityTable(server)}),
+      title:"Activity Monitor · \(server.profile.name)",width:1080,height:780,minWidth:920,minHeight:700,identity:"activity|\(server.id)")
+  }
+  @objc private func openActivityTable() {if let server=contextNode?.server ?? selectedServer {createActivityTable(server)}}
+  private func createActivityTable(_ server:ConnectedServer) {
+    state.newQuery(server:server,database:"master",text:Catalog.monitoring(.activity),title:"Activity Monitor · İstekler",run:true,refreshSeconds:10)
+    view.window?.makeKeyAndOrderFront(nil)
+  }
+  @objc func showFavorites() {presentFavorites(server:selectedServer,database:selectedDatabase)}
+  @objc private func showFavoritesAtNode() {if let node=contextNode {presentFavorites(server:node.server,database:Self.queryDatabase(for:node))}}
+  private func presentFavorites(server:ConnectedServer?,database:String) {
+    present(FavoriteQueriesPanel(state:state,model:state.favorites,contextServerID:server?.id,contextDatabase:database,didOpen:{[weak self] in self?.view.window?.makeKeyAndOrderFront(nil)}),
+      title:"Favori Sorgular",width:1100,height:760,minWidth:900,minHeight:660,identity:"favorites|\(server?.id.uuidString ?? "global")|\(database)")
+  }
+  @objc func addFavorite() {
+    guard let doc=state.active,!doc.sql.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else {return}
+    let identity="favorite-editor|\(UUID())"
+    present(FavoriteQueryEditor(model:state.favorites,servers:state.servers,contextServerID:doc.server.id,database:doc.database,sql:doc.sql,name:doc.title,close:{[weak self] in
+      self?.auxiliaryWindows.first(where:{$0.window?.identifier?.rawValue == identity})?.close()
+    }),title:"Favorilere Ekle",width:720,height:660,minWidth:720,minHeight:660,identity:identity)
   }
   @objc private func tableProperties() {
     if let item = contextNode?.item {
@@ -1914,6 +1936,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     ].contains(item.action) {
       return state.active?.state == .ready
     }
+    if item.action == #selector(addFavorite) {return state.active?.sql.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty == false}
     if item.action == #selector(cancel) { return state.active?.state == .running }
     if [
       #selector(saveSQL), #selector(saveAsSQL), #selector(formatSQL), #selector(closeTab),
@@ -1930,7 +1953,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
     [
       .init("connect"), .init("query"), .init("save"), .space, .init("run"), .init("cancel"),
-      .init("plan"), .space, .init("format"), .flexibleSpace, .init("activity"), .init("history"),
+      .init("plan"), .space, .init("format"), .flexibleSpace, .init("activity"), .init("favorites"), .init("history"),
       .init("ai"),
     ]
   }
@@ -1946,6 +1969,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       "cancel": ("İptal", "stop.fill", #selector(cancel)),
       "plan": ("Tahmini Plan", "point.3.connected.trianglepath.dotted", #selector(estimatedPlan)),
       "format": ("Biçimlendir", "text.alignleft", #selector(formatSQL)),
+      "favorites": ("Favori Sorgular", "star", #selector(showFavorites)),
       "activity": ("Activity", "waveform.path.ecg", #selector(activity)),
       "history": ("Geçmiş", "clock.arrow.circlepath", #selector(showHistory)),
       "ai": ("AI", "sparkles", #selector(aiAssistant)),

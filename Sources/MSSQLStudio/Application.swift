@@ -84,6 +84,11 @@ import SwiftUI
         workbench.showAgentProperties(node)
         workbench.showAgentHistory(node)
       }
+      if Bundle.main.object(forInfoDictionaryKey:"StudioActivitySmoke") as? Bool == true {
+        server.catalogFixture=ObjectManagementUIFixture.catalog
+        if studio.servers.isEmpty {studio.servers.append(server)}
+        workbench.showPerformanceMonitor(server)
+      }
       return
     }
     studio.loadHistory()
@@ -174,6 +179,9 @@ import SwiftUI
       edit, "SQL Biçimlendir", #selector(WorkbenchController.formatSQL), "f",
       modifiers: [.command, .shift])
     let query = menu("Sorgu")
+    command(query, "Favori Sorgular…", #selector(WorkbenchController.showFavorites))
+    command(query, "Favorilere Ekle…", #selector(WorkbenchController.addFavorite))
+    query.addItem(.separator())
     command(query, "Çalıştır", #selector(WorkbenchController.execute), "\r")
     command(query, "İptal", #selector(WorkbenchController.cancel), ".")
     command(query, "Sorgu Oturumunu Yeniden Bağla", #selector(WorkbenchController.reconnectQuery))

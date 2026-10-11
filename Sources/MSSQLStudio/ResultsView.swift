@@ -1060,7 +1060,7 @@ private struct ColumnFilterPanel: View {
   private let stripScroll = NSScrollView()
   private var selectedPageSize = GridPaging.defaultSize
   private let columnSearchButton = StudioToolbarButton(symbol: "text.magnifyingglass", label: "Kolon başlığında ara")
-  private let loadingOptionsButton = StudioToolbarButton(symbol: "slider.horizontal.3", label: "Sonuç yükleme ayarları", tone: .neutral)
+  private let loadingOptionsButton = StudioToolbarButton(symbol: "slider.horizontal.3", label: "Sonuç yükleme ayarları", tone: .neutral, title: "Okuma: 50.000", width: 160)
   private var optionsPopover: NSPopover?
   private var selectedRefreshSeconds = 0
   private var defaultRefreshApplied = false
@@ -1266,7 +1266,7 @@ private struct ColumnFilterPanel: View {
     editingDivider.widthAnchor.constraint(equalToConstant: 1).isActive = true
     editingDivider.heightAnchor.constraint(equalToConstant: 18).isActive = true
     let resultHeader = NSStackView(views: [
-      navigationHost, refreshButton, rowLimit, loadingOptionsButton, columnSearchButton,
+      navigationHost, refreshButton, rowLimit, columnSearchButton,
       copyHeadersButton, editingDivider, editDataButton, dataActionsBar,
       previewDataButton, NSView(), filter, cancelExport, export,
     ])
@@ -1320,6 +1320,9 @@ private struct ColumnFilterPanel: View {
     stripScroll.documentView = resultStrip
     stripScroll.hasHorizontalScroller = true; stripScroll.autohidesScrollers = true
     resultStrip.translatesAutoresizingMaskIntoConstraints = false
+    loadingOptionsButton.setAccessibilityIdentifier("gridReadOptions")
+    resultPane.addSubview(loadingOptionsButton)
+    loadingOptionsButton.translatesAutoresizingMaskIntoConstraints = false
     resultPane.addSubview(stripScroll)
     stripScroll.translatesAutoresizingMaskIntoConstraints = false
     resultPane.addSubview(resultHeader)
@@ -1330,7 +1333,9 @@ private struct ColumnFilterPanel: View {
       resultHeader.leadingAnchor.constraint(equalTo: resultPane.leadingAnchor),
       resultHeader.trailingAnchor.constraint(equalTo: resultPane.trailingAnchor),
       stripScroll.leadingAnchor.constraint(equalTo: resultPane.leadingAnchor),
-      stripScroll.trailingAnchor.constraint(equalTo: resultPane.trailingAnchor),
+      stripScroll.trailingAnchor.constraint(equalTo: loadingOptionsButton.leadingAnchor,constant:-8),
+      loadingOptionsButton.trailingAnchor.constraint(equalTo:resultPane.trailingAnchor,constant:-6),
+      loadingOptionsButton.centerYAnchor.constraint(equalTo:stripScroll.centerYAnchor),
       stripScroll.topAnchor.constraint(equalTo: resultPane.topAnchor),
       stripScroll.heightAnchor.constraint(equalToConstant: 32),
       resultStrip.leadingAnchor.constraint(equalTo: stripScroll.contentView.leadingAnchor),
@@ -1553,13 +1558,11 @@ private struct ColumnFilterPanel: View {
   private func applyRefreshSeconds(_ seconds: Int) {
     refreshTask?.cancel(); refreshTask=nil
     selectedRefreshSeconds=0
-    loadingOptionsButton.contentTintColor = StudioTheme.accent
-    loadingOptionsButton.toolTip="Sonuç yükleme ayarları · Otomatik yenileme kapalı"
+    defer {syncReadOptions()}
     guard (0...3600).contains(seconds) else { return }
     guard seconds > 0, document.canRefresh, !tables.values.contains(where: { $0.editDefinition != nil }) else { refreshInterval.selectItem(at: 0); return }
     selectedRefreshSeconds=seconds
-    loadingOptionsButton.contentTintColor = .systemGreen
-    loadingOptionsButton.toolTip="Sonuç yükleme ayarları · Otomatik yenileme: \(seconds) sn"
+
     refreshTask = Task { [weak self] in
       while !Task.isCancelled {
         do { try await Task.sleep(for: .seconds(seconds)) } catch { return }
@@ -1572,7 +1575,7 @@ private struct ColumnFilterPanel: View {
   }
   private func syncResultSelector() {
     if !defaultRefreshApplied && document.canRefresh {
-      defaultRefreshApplied=true; applyRefreshSeconds(ResultReadPreferences.refreshSeconds)
+      defaultRefreshApplied=true; applyRefreshSeconds(document.initialRefreshSeconds ?? ResultReadPreferences.refreshSeconds)
     }
     refreshButton.isEnabled = document.canRefresh
     refreshInterval.isEnabled = (document.canRefresh || document.busy) && !tables.values.contains(where: { $0.editDefinition != nil })
@@ -1787,12 +1790,10 @@ private struct ColumnFilterPanel: View {
   @objc private func showLoadingOptions() {
     optionsPopover?.close()
     let popup=NSPopover(); popup.animates = false; popup.behavior = .transient
-    popup.contentViewController=NSHostingController(rootView:ResultLoadingPanel(rows:document.limits.rows,page:selectedPageSize,refresh:selectedRefreshSeconds,refreshAllowed:!tables.values.contains { $0.editDefinition != nil }) { [weak self,weak popup] rows,page,refresh,save in
+    popup.contentViewController=NSHostingController(rootView:ResultLoadingPanel(rows:document.limits.rows,page:selectedPageSize,refresh:effectiveRefreshSeconds,refreshAllowed:!tables.values.contains { $0.editDefinition != nil }) { [weak self,weak popup] rows,page,refresh,save in
       guard let self, !document.busy, !submittingData else { return }
-      document.limits=ResultReadPreferences.limits(rows:rows)
-      applyPageSize(page); applyRefreshSeconds(refresh)
-      if save { ResultReadPreferences.save(rows:rows,page:page,refresh:refresh) }
-      configurePageMenu(); popup?.close()
+      applyLoadingPreferences(rows:rows,page:page,refresh:refresh,save:save)
+      popup?.close()
     })
     optionsPopover=popup; popup.show(relativeTo:loadingOptionsButton.bounds,of:loadingOptionsButton,preferredEdge:.maxY)
   }
@@ -1820,18 +1821,26 @@ private struct ColumnFilterPanel: View {
     rowLimit.addItem(withTitle: "Özel…"); rowLimit.lastItem?.tag = -1
     rowLimit.menu?.addItem(.separator())
     rowLimit.addItem(withTitle: "Varsayılan Yap"); rowLimit.lastItem?.tag = -2
-    let cap = NSMenuItem(title: "Sorgu okuma sınırı", action: nil, keyEquivalent: "")
-    cap.tag = -3
-    let submenu = NSMenu()
-    for size in [50_000,1_000_000,5_000_000] {
-      let item = submenu.addItem(withTitle: size.formatted(), action: #selector(changeReadLimit(_:)), keyEquivalent: "")
-      item.tag = size; item.target = self
-      item.state = size == document.limits.rows ? .on : .off
-    }
-    cap.submenu = submenu; rowLimit.menu?.addItem(.separator()); rowLimit.menu?.addItem(cap)
     syncPageMenu()
   }
+  private var effectiveRefreshSeconds:Int {defaultRefreshApplied ? selectedRefreshSeconds : document.initialRefreshSeconds ?? ResultReadPreferences.refreshSeconds}
+  func applyLoadingPreferences(rows:Int,page:Int,refresh:Int,save:Bool) {
+    guard !document.busy,!submittingData,(1...5_000_000).contains(rows),(0...1_000_000).contains(page),(0...3600).contains(refresh) else {return}
+    let seconds=tables.values.contains {$0.editDefinition != nil} ? 0:refresh
+    document.limits=ResultReadPreferences.limits(rows:rows)
+    document.initialRefreshSeconds=seconds
+    defaultRefreshApplied=document.canRefresh
+    applyPageSize(page);applyRefreshSeconds(seconds)
+    if save {ResultReadPreferences.save(rows:rows,page:page,refresh:seconds)}
+    configurePageMenu()
+  }
+  private func syncReadOptions() {
+    loadingOptionsButton.title="Okuma: \(document.limits.rows.formatted())"
+    loadingOptionsButton.tone=effectiveRefreshSeconds>0 ? .success:.neutral
+    loadingOptionsButton.toolTip="Sonuç yükleme ayarları · Okuma sınırı: \(document.limits.rows.formatted()) (sonraki çalıştırma) · Sayfa: \(selectedPageSize == 0 ? "Tüm yüklenenler":selectedPageSize.formatted()) · Yenileme: \(effectiveRefreshSeconds == 0 ? "Kapalı":"\(effectiveRefreshSeconds) sn")\(effectiveRefreshSeconds>0 && !document.canRefresh ? " (başarılı SELECT sonrası)":"")"
+  }
   private func syncPageMenu() {
+    syncReadOptions()
     for item in rowLimit.itemArray where !item.isSeparatorItem && item.submenu == nil && item.tag >= 0 && GridPaging.choices.contains(item.tag) {
       item.title = item.tag == 0 ? "All" : item.tag.formatted()
       item.toolTip = item.tag == GridPaging.defaultSize ? "Varsayılan sayfa boyutu" : nil

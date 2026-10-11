@@ -133,6 +133,7 @@ struct ObjectEditorKey: Codable, Equatable {
   var elapsed = 0.0
   var rowCount = 0
   var partial = false
+  var initialRefreshSeconds: Int?
   var limits: Limits = ResultReadPreferences.limits(rows:ResultReadPreferences.readLimit)
   var actualPlan = false
   var task: Task<Void, Never>?
@@ -368,6 +369,8 @@ struct ObjectEditorKey: Codable, Equatable {
   var active: QueryDocument?
   var changed: (() -> Void)?
   var history: [QueryRecord] = []
+  lazy var favorites = FavoriteQueriesModel(url: (Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" || ProcessInfo.processInfo.arguments.contains("--ui-smoke")
+    ? URL(fileURLWithPath:"/tmp/MSSQLStudio-UI-\(ProcessInfo.processInfo.processIdentifier)") : folder).appendingPathComponent("favorites.json"))
   private var nextQueryNumber = 1
   var historyEnabled = UserDefaults.standard.bool(forKey: "historyEnabled")
   var historyRetentionDays = QueryHistoryPolicy.days(UserDefaults.standard.object(forKey: "historyRetentionDays") as? Int ?? QueryHistoryPolicy.defaultDays)
@@ -533,7 +536,7 @@ struct ObjectEditorKey: Codable, Equatable {
   }
   @discardableResult func newQuery(
     server: ConnectedServer, database: String? = nil, text: String = "", title: String? = nil,
-    run: Bool = false
+    run: Bool = false, refreshSeconds: Int? = nil
   ) -> QueryDocument {
     let doc = QueryDocument(
       server: server, database: database ?? server.profile.database,
@@ -555,6 +558,7 @@ struct ObjectEditorKey: Codable, Equatable {
     documents.append(doc)
     active = doc
     doc.runAfterConnect = run
+    doc.initialRefreshSeconds = refreshSeconds
     changed?()
     doc.connect()
 

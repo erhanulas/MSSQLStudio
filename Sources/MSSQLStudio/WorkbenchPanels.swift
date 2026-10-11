@@ -123,9 +123,6 @@ private struct SettingsPanel: View {
   @State private var renewingKeychain = false
   @State private var message = ""
   @State private var selectedTab = "appearance"
-  @State private var resultReadLimit = ResultReadPreferences.readLimit
-  @State private var resultPageSize = GridPaging.defaultSize
-  @State private var resultRefreshSeconds = ResultReadPreferences.refreshSeconds
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
       StudioPanelHeading(title: "Ayarlar", icon: "slider.horizontal.3", subtitle: "Çalışma alanını kendine göre düzenle")
@@ -159,14 +156,6 @@ private struct SettingsPanel: View {
       Text("Yalnızca FROM/JOIN tablo veya view tamamlamalarında. Varsayılan kapalıdır; NOLOCK henüz commit edilmemiş verileri okuyabilir.").font(.caption).foregroundStyle(.secondary)
       Text("⌃Space: önerileri aç · Tab / Enter: kabul et · Escape: kapat. Alias yalnızca öneriyi kabul ettiğinizde eklenir. Doğrulama güncel, doğrulanmış aktif veritabanı indeksini kullanır.").font(.caption).foregroundStyle(.secondary)
         }.tabItem { Label("SQL Editörü", systemImage: "chevron.left.forwardslash.chevron.right") }.tag("editor")
-        settingsPage(title:"Sonuçlar",subtitle:"Yeni sorgular için yükleme tercihleri",icon:"tablecells") {
-          StudioFormField("Okuma sınırı") { TextField("Satır",value:$resultReadLimit,format:.number.grouping(.never)).textFieldStyle(.roundedBorder) }
-          StudioFormField("Sayfa boyutu") { TextField("Satır",value:$resultPageSize,format:.number.grouping(.never)).textFieldStyle(.roundedBorder) }
-          StudioFormField("Otomatik yenileme") { HStack { TextField("Saniye",value:$resultRefreshSeconds,format:.number.grouping(.never)).textFieldStyle(.roundedBorder); Text("sn").foregroundStyle(.secondary) } }
-          Text("Okuma sınırı 1–5.000.000; sayfa boyutu 0–1.000.000. Sayfada 0 tüm yüklenen satırları gösterir. Yenileme 0–3.600 saniye; 0 kapalıdır.").font(.caption).foregroundStyle(.secondary)
-          Label("Otomatik yenileme yalnız başarılı SELECT sonuçlarında çalışır; hücre düzenlerken durur.",systemImage:"arrow.clockwise.circle").font(.caption).foregroundStyle(.secondary)
-          Text("Bu tercihler yeni sorgulara uygulanır. Açık sorgunun yükleme tercihlerini sonuç çubuğundaki ayar ikonundan değiştirebilirsiniz. Yüksek sınırlar daha fazla disk ve zaman kullanır; bellek/disk ve süre korumaları devam eder.").font(.caption).foregroundStyle(.secondary)
-        }.tabItem { Label("Sonuçlar",systemImage:"tablecells") }.tag("results")
         settingsPage(title: "Kısayollar", subtitle: "Sık kullandığın işlemlere hızlı erişim", icon: "command") {
       ForEach(GridShortcuts.Action.allCases, id: \.rawValue) { action in
         HStack {
@@ -256,14 +245,12 @@ private struct SettingsPanel: View {
     }
   }
   private func applySettings() {
-          guard (1...5_000_000).contains(resultReadLimit), (0...1_000_000).contains(resultPageSize), (0...3600).contains(resultRefreshSeconds) else { message="Sonuç yükleme değerlerini belirtilen aralıklarda girin."; return }
           let source=updateRepository.trimmingCharacters(in:.whitespacesAndNewlines)
           if !source.isEmpty {
             do {updateRepository=try GitHubUpdateSource.repository(source)}catch {message=error.localizedDescription;return}
           }
           if source.isEmpty {UserDefaults.standard.removeObject(forKey:"githubUpdateRepository")}
           else {UserDefaults.standard.set(updateRepository,forKey:"githubUpdateRepository")}
-          ResultReadPreferences.save(rows:resultReadLimit,page:resultPageSize,refresh:resultRefreshSeconds)
           StudioTheme.apply(theme)
           UserDefaults.standard.set(completion,forKey:"sqlAutomaticCompletion")
           UserDefaults.standard.set(Int(completionDelay),forKey:SQLEditorPreferences.completionDelayKey)
@@ -822,6 +809,15 @@ struct StudioFormField<Content: View>: View {
   }
 }
 
+@MainActor final class StudioToolbarButtonCell: NSButtonCell {
+  func contentFrame(_ bounds:NSRect) -> NSRect {
+    bounds.insetBy(dx:title.isEmpty ? 4:10,dy:3)
+  }
+  override func drawInterior(withFrame cellFrame:NSRect,in controlView:NSView) {
+    super.drawInterior(withFrame:contentFrame(cellFrame),in:controlView)
+  }
+}
+
 @MainActor final class StudioToolbarButton: NSButton {
   enum Tone { case neutral, accent, success, warning, danger }
   var tone: Tone { didSet { refreshStyle() } }
@@ -835,6 +831,7 @@ struct StudioFormField<Content: View>: View {
   init(symbol: String, label: String, tone: Tone = .accent, title: String = "", width: CGFloat = 28, prominent: Bool = false) {
     self.tone = tone; self.prominent = prominent
     super.init(frame: .zero)
+    cell = StudioToolbarButtonCell()
     self.title = title
     image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)?
       .withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
