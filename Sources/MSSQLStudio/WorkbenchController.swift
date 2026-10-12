@@ -227,6 +227,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private let searchScopePicker = NSPopUpButton()
   private let searchType = NSPopUpButton()
   private var searchScopes: [TreeNode] = []
+  private var searchDatabaseByServer: [UUID:String] = [:]
   private let indexStatus = StudioToolbarButton(symbol: "externaldrive", label: "Yerel indeks durumu ve işlemleri", tone: .neutral, width: 26)
   private var indexDetailsByDatabase:[String:String]=[:]
   private var indexPopover:NSPopover?
@@ -1253,20 +1254,24 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     return [scope.database]
   }
   private func rebuildSearchScopes() {
-    let oldServer = searchScope?.server.id
-    let oldDatabase = searchScope?.database
-    searchScopes = roots.flatMap { root in [TreeNode("Tüm seçili veritabanları",kind:.server,server:root.server,database:"*")] + root.server.databases.map { item in
-      TreeNode(item.name,kind:.database,server:root.server,database:item.name,item:item)
-    } }
+    if let scope=searchScope {searchDatabaseByServer[scope.server.id]=scope.database}
+    let candidate = (showingSearch ? searchScope?.server : selected?.server) ?? searchScope?.server ?? selectedServer
+    let server = roots.first {$0.server === candidate}?.server ?? roots.first?.server
+    searchScopes = server.map { server in
+      [TreeNode("Tüm seçili veritabanları",kind:.server,server:server,database:"*")] + server.databases.map { item in
+        TreeNode(item.name,kind:.database,server:server,database:item.name,item:item)
+      }
+    } ?? []
     searchScopePicker.removeAllItems()
     for scope in searchScopes { searchScopePicker.addItem(withTitle: "\(scope.server.profile.name) / \(scope.database == "*" ? "Tüm seçili veritabanları" : scope.database)") }
     let previous = UserDefaults.standard.string(forKey: "explorerSearchScope")
     let index = searchScopes.firstIndex { scope in
-      if let oldServer, let oldDatabase { return scope.server.id == oldServer && scope.database == oldDatabase }
+      if let database=searchDatabaseByServer[scope.server.id] {return scope.database == database}
       return "\(scope.server.id.uuidString)|\(scope.database)" == previous
     } ?? 0
     if searchScopes.indices.contains(index) { searchScopePicker.selectItem(at:index); searchScope = searchScopes[index] }
     else { searchScope = nil }
+    searchScopePicker.isEnabled = !searchScopes.isEmpty
   }
   @objc private func changeSearchScope() {
     guard searchScopes.indices.contains(searchScopePicker.indexOfSelectedItem) else { return }
@@ -1404,8 +1409,12 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     return true
   }
   func outlineViewSelectionDidChange(_ notification: Notification) {
+    if !showingSearch, let node=selected, node.server !== searchScope?.server {
+      rebuildSearchScopes()
+      filterExplorer()
+    }
     updateControls()
-    // Search scope is explicit; tree selection does not silently move it.
+    // Database scope stays explicit within the selected Explorer connection.
   }
   func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any)
     -> NSView?

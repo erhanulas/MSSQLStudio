@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.75",
+    "date": "2026-10-12",
+    "title": "Boşluksuz SQL tamamlama ve Explorer’a özel arama kapsamı",
+    "changes": [
+      "SQL tamamlama penceresi öneri sayısına göre büyüyüp küçülürken başlığın üzerinde gereksiz boşluk bırakmaz. Kompakt satırlar, ekran alanına uyarlama ve klavyeyle seçim korunur.",
+      "Nesneler arama kapsamı yalnız seçili Explorer bağlantısının veritabanlarını listeler. Başka Explorer seçildiğinde kapsam o bağlantıya geçer; her bağlantının çalışma sırasında seçilen veritabanı hatırlanır.",
+      "Aynı Explorer içinde başka nesne seçmek veya arama metnini temizlemek seçilen arama veritabanını değiştirmez. Kaldırılan bağlantılar ve veritabanları kapsam listesinden çıkarılır."
+    ]
+  },
+  {
     "version": "0.2.74",
     "date": "2026-10-12",
     "title": "Explorer bağlantılarını sürükleyerek sırala",

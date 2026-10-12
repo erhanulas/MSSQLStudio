@@ -5,6 +5,54 @@ import Testing
 
 @MainActor @Suite(.serialized) struct WorkspaceInteractionTests {
   func views(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(views) }
+  @Test func searchScopeOnlyOffersSelectedExplorerAndRemembersItsDatabase() throws {
+    _=NSApplication.shared
+    let state=StudioState()
+    let servers=["Alpha","Beta"].map { name in
+      let server=ConnectedServer(profile:ServerProfile(name:name),password:"");server.online=false
+      server.databases=[CatalogItem(id:1,name:"Shared"),CatalogItem(id:2,name:name+"DB")]
+      return server
+    }
+    let old=UserDefaults.standard.string(forKey:"explorerSearchScope")
+    defer {if let old {UserDefaults.standard.set(old,forKey:"explorerSearchScope")} else {UserDefaults.standard.removeObject(forKey:"explorerSearchScope")}}
+    // A saved scope for another connection must not leak into the selected one.
+    UserDefaults.standard.set(servers[1].id.uuidString+"|BetaDB",forKey:"explorerSearchScope")
+    state.servers=servers
+    let controller=WorkbenchController(state:state);_ = controller.view
+    let controls=views(controller.view)
+    let outline=try #require(controls.compactMap {$0 as? NSOutlineView}.first)
+    let picker=try #require(controls.compactMap {$0 as? NSPopUpButton}.first {$0.accessibilityLabel() == "Nesne arama kapsamı"})
+    let search=try #require(controls.compactMap {$0 as? NSSearchField}.first {$0.placeholderString == "Nesnelerde filtrele"})
+    let roots=(0..<outline.numberOfRows).compactMap {outline.item(atRow:$0) as? TreeNode}.filter {if case .server=$0.kind {return true};return false}
+    func select(_ node:TreeNode) {
+      outline.selectRowIndexes(IndexSet(integer:outline.row(forItem:node)),byExtendingSelection:false)
+    }
+    func choose(_ title:String) throws {
+      picker.selectItem(withTitle:title)
+      #expect(NSApp.sendAction(try #require(picker.action),to:picker.target,from:picker))
+    }
+    select(roots[0])
+    #expect(picker.itemTitles == ["Alpha / Tüm seçili veritabanları","Alpha / Shared","Alpha / AlphaDB"])
+    try choose("Alpha / AlphaDB")
+    let folder=try #require(roots[0].children.first);outline.expandItem(folder)
+    select(try #require(folder.children.first))
+    #expect(picker.titleOfSelectedItem == "Alpha / AlphaDB")
+    select(roots[1])
+    #expect(picker.itemTitles == ["Beta / Tüm seçili veritabanları","Beta / Shared","Beta / BetaDB"])
+    try choose("Beta / Shared")
+    select(roots[0]);#expect(picker.titleOfSelectedItem == "Alpha / AlphaDB")
+    search.stringValue="";#expect(NSApp.sendAction(try #require(search.action),to:search.target,from:search))
+    #expect(picker.titleOfSelectedItem == "Alpha / AlphaDB")
+    state.changed?();#expect(picker.titleOfSelectedItem == "Alpha / AlphaDB")
+    select(roots[1]);#expect(picker.titleOfSelectedItem == "Beta / Shared")
+    servers[1].databases=[CatalogItem(id:2,name:"BetaDB")];state.changed?()
+    #expect(picker.itemTitles == ["Beta / Tüm seçili veritabanları","Beta / BetaDB"])
+    #expect(picker.indexOfSelectedItem == 0)
+    state.servers=[servers[0]];state.changed?()
+    #expect(picker.itemTitles.allSatisfy {$0.hasPrefix("Alpha / ")})
+    state.servers=[];state.changed?()
+    #expect(picker.numberOfItems == 0 && !picker.isEnabled)
+  }
   @Test func newQueryFocusesEditorAndUpdatesDoNotStealFocus() async throws {
     let state=StudioState(),server=ConnectedServer(profile:ServerProfile(),password:"")
     server.online=false

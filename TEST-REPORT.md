@@ -1,3 +1,12 @@
+## 12 Ekim 2026 — v0.2.75 / build 76: SQL tamamlama boşluğu ve Explorer arama kapsamı
+
+- Tamamlama: native kapsayıcı ilk büyük içerik yüksekliğini koruyup küçülen yüzeyi aşağıda bırakıyordu. Native regresyonda 30 → 1 geçişinde yüzey 78 pt iken kapsayıcı contentSize 468 pt ve fazladan 390 pt boşluk ölçüldü. Yalnız kapat/aç yeterli olmadı; değişen boyutta controller çıkarılıp son boyutuyla yeniden bağlanınca kontroller geçti. Aynı boyutta gereksiz kapat/aç yok; animasyon kapalı, yüzey kapsayıcıyla boyutlanır. [Apple contentSize](https://developer.apple.com/documentation/appkit/nspopover/contentsize) controller atanırken içerik view boyutunun kullanıldığını belirtir.
+- Arama: tüm root’lardan scope üretimi yerine seçili Explorer sunucusu kullanılır. Bağlantı başına çalışma süresince DB tercihi, aynı Explorer içindeki açık kapsam ve eski UUID kapsam tercihi korunur. DB/bağlantı kaldırılınca geçerli kapsam seçilir; bağlantı yoksa kontrol pasiftir.
+- Yeni native test: 1/3/30/2/1/18 öneride başlık/kapsayıcı yerleşimi; gerçek EditorController popup’ında 30/1/30/11/1 geçişleri, simetrik native insets ve odak. İki Explorer’da farklı ve aynı adlı DB seçenekleri, kayıtlı başka UUID, bağlantı değişimi, tercihe geri dönüş, metin temizleme/state refresh, DB/bağlantı kaldırma kontrol edildi.
+- Yerel tam test `/tmp/mssql-075-tests.log`: 127 app + 141 core = **268 test; 243 geçti / 25 dış koşullu atlandı**, iki hedefin tamamlanmış özetleri doğrulandı. İlgili 15 native test: 14 geçti / 1 canlı koşullu atlandı. Release derlemesi başarılı (`/tmp/mssql-075-release.log`).
+- İzole `/tmp/MSSQLStudio-075-ui/MSSQLStudio.app` CUA: ilk bağlantı menüsünde yalnız UI Test / tüm DB ve DemoDB; UI Test B’de yalnız kendi tüm DB seçeneği görüldü. İlk bağlantıya dönüşte DemoDB korundu. 100 öneri/16 görünür satırdan tek CustomerID önerisine geçişin ekran görüntüsünde başlık üstünde boşluk yoktu. Tab ile `[CustomerID]` eklendi, editör odağı korundu. Yalnız sentetik veri kullanıldı; gerçek Keychain/DB/açık uygulama değiştirilmedi.
+- Yayın doğrulaması hazırlanıyor; Git push tek başına yayın kanıtı sayılmaz.
+
 # v0.2.71 yayın doğrulaması — 12 Ekim 2026
 
 - [Public latest v0.2.71](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.71), build 72, kaynak `befc15206686c0f638b830d6c6f902e94b934497`. [Actions 38233875621](https://github.com/erhanulas/MSSQLStudio/actions/runs/38233875621) sabit imza/sentetik Keychain fixture, signed ZIP/PKG, manifest, yayın paketi testleri, yayın ve geçici kimlik temizliği dahil **başarılıdır**.

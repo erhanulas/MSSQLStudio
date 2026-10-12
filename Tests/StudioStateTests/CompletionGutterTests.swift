@@ -4,6 +4,28 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct CompletionGutterTests {
+  @Test func completionSurfaceStaysAtPopoverTopWhenSuggestionCountChanges() throws {
+    _ = NSApplication.shared
+    let window=NSWindow(contentRect:NSRect(x:100,y:100,width:900,height:700),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false
+    let host=try #require(window.contentView)
+    let list=SQLSuggestionList(),popover=NSPopover()
+    popover.animates=false;popover.contentViewController=list
+    defer {popover.close();window.close()}
+    window.orderFront(nil)
+    for count in [1,3,30,2,1,18] {
+      list.update((0..<count).map {.init(text:"Column\($0)",label:"Column\($0)",kind:.column)})
+      popover.contentSize=list.preferredContentSize
+      popover.show(relativeTo:NSRect(x:200,y:350,width:1,height:18),of:host,preferredEdge:.minY)
+      let parent=try #require(list.view.superview)
+      parent.layoutSubtreeIfNeeded()
+      #expect(list.view.frame.size == list.preferredContentSize)
+      // Native popover chrome has symmetric 13 pt insets; content must not drift
+      // toward the bottom and leave count-dependent space above the heading.
+      #expect(abs((parent.bounds.maxY-list.view.frame.maxY)-list.view.frame.minY) < 1)
+      #expect(parent.bounds.height-list.view.bounds.height <= 30)
+    }
+  }
   @Test func completionPresentationRetainsInsertionTextSelectionAndEditorFocus() throws {
     _ = NSApplication.shared
     let old=UserDefaults.standard.string(forKey:"ssmsTheme")
@@ -99,6 +121,26 @@ import Testing
     #expect(!editor.completionShown)
     editor.editor.undoManager?.undo()
     #expect(editor.editor.string == "SELECT * FROM TBLSTSABIT WHERE STOK_")
+    for suffix in ["29","","1","29"] {
+      let source="SELECT * FROM TBLSTSABIT WHERE STOK_"+suffix
+      editor.editor.string=source
+      editor.editor.setSelectedRange(NSRange(location:(source as NSString).length,length:0))
+      editor.scheduleIntelligence(manual:true)
+      let expected=suffix == "29" ? 1:suffix == "1" ? 11:30
+      for _ in 0..<200 {
+        if editor.completionShown && table.numberOfRows == expected {break}
+        try await Task.sleep(for:.milliseconds(10))
+      }
+      #expect(editor.completionShown && table.numberOfRows == expected)
+      let surface=try #require(table.enclosingScrollView?.superview)
+      let parent=try #require(surface.superview)
+      parent.layoutSubtreeIfNeeded()
+      #expect(surface.bounds.height == editor.completionSize.height)
+      #expect(abs((parent.bounds.maxY-surface.frame.maxY)-surface.frame.minY) < 1)
+      #expect(parent.bounds.height-surface.bounds.height <= 30)
+      #expect(table.enclosingScrollView?.frame.minY == 27)
+      #expect(window.firstResponder === editor.editor)
+    }
   }
 
   @Test func fixedGutterTracksVerticalScrollFilterSortPagingAndEditsWithoutEnteringClipboard() async throws {

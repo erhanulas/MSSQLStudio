@@ -114,6 +114,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   var accept: ((Int) -> Void)?
   override func loadView() {
     let surface=SQLSuggestionSurface(frame:NSRect(x:0,y:0,width:500,height:200))
+    surface.autoresizingMask = [.width,.height]
     let column=NSTableColumn(identifier:.init("suggestion")); column.width=488
     table.addTableColumn(column); table.headerView=nil; table.rowHeight=26
     table.style = .plain
@@ -1046,16 +1047,29 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
         let prefixLength = caret-analysis.replacement.location
         let dot = analysis.replacement.location > 0 && (source as NSString).substring(with:NSRange(location:analysis.replacement.location-1,length:1)) == "."
         if (manual || automatic && allowPopup && (analysis.procedureCompletion || prefixLength >= 2 || dot)), !analysis.suggestions.isEmpty, let window = editor.window, window.firstResponder === editor {
-          suggestionList.update(analysis.suggestions,prefix:(source as NSString).substring(with:NSRange(location:analysis.replacement.location,length:prefixLength)))
           guard let anchor = suggestionAnchor(), let host = window.contentView else { return }
           let hostAnchor = host.convert(anchor,from:editor)
           var below=true
+          let preferredHeight=CGFloat(max(1,min(16,analysis.suggestions.count)))*26+52
+          var maximumHeight=preferredHeight
           if let screen=window.screen {
             let screenAnchor=window.convertToScreen(host.convert(hostAnchor,to:nil))
-            let placement=SQLSuggestionList.placement(anchor:screenAnchor,screen:screen.visibleFrame,preferredHeight:suggestionList.preferredContentSize.height)
+            let placement=SQLSuggestionList.placement(anchor:screenAnchor,screen:screen.visibleFrame,preferredHeight:preferredHeight)
             below=placement.below
-            suggestionList.fit(maximumHeight:placement.height)
+            maximumHeight=placement.height
           }
+          let rows=max(1,min(16,Int((maximumHeight-52)/26),analysis.suggestions.count))
+          // AppKit can retain the first content height after the list shrinks.
+          // Reattach the sized controller to reset the native content container;
+          // closing/reopening alone leaves count-dependent space above the heading.
+          let resizing=suggestionPopover.contentSize.height != CGFloat(rows)*26+52
+          if resizing {
+            suggestionPopover.close()
+            suggestionPopover.contentViewController=nil
+          }
+          suggestionList.update(analysis.suggestions,prefix:(source as NSString).substring(with:NSRange(location:analysis.replacement.location,length:prefixLength)))
+          suggestionList.fit(maximumHeight:maximumHeight)
+          if resizing {suggestionPopover.contentViewController=suggestionList}
           suggestionPopover.contentSize=suggestionList.preferredContentSize
           let edge:NSRectEdge=below ? (host.isFlipped ? .maxY:.minY):(host.isFlipped ? .minY:.maxY)
           suggestionPopover.show(relativeTo:hostAnchor,of:host,preferredEdge:edge)
