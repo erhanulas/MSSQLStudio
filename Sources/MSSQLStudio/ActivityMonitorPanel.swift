@@ -73,7 +73,7 @@ import SQLServerKit
       self.error=error.localizedDescription;previous=nil;return
     }
     guard includeDiagnostics,current(),diagnosticRevision == diagnosticsRevision,!Task.isCancelled else {return}
-    limits.rows=160;limits.resultSets=4;limits.totalBytes=2_000_000;limits.timeout=10
+    limits.rows=400;limits.resultSets=5;limits.totalBytes=4_000_000;limits.timeout=10
     do {
       let result=try await reader(ActivityMonitoring.diagnosticsSQL,limits)
       try Task.checkCancellation()
@@ -100,13 +100,16 @@ struct ActivityMonitorPanel:View {
   @State private var range=5
   @State private var diagnosticKind=0
   @State private var selectedRequest:String?
+  @State private var selectedBlockingContext:String?
+  @State private var selectedBlockingSession:Int64?
   init(server:ConnectedServer,openTable:@escaping ()->Void) {
     self.init(model:ActivityMonitorModel(server:server),openTable:openTable)
   }
-  init(model:ActivityMonitorModel,initialMode:Int=0,initialDiagnosticKind:Int=0,initialSelectedRequest:String?=nil,openTable:@escaping ()->Void) {
+  init(model:ActivityMonitorModel,initialMode:Int=0,initialDiagnosticKind:Int=0,initialSelectedRequest:String?=nil,initialSelectedBlockingContext:String?=nil,openTable:@escaping ()->Void) {
     _model=StateObject(wrappedValue:model);self.openTable=openTable
     _mode=State(initialValue:initialMode);_diagnosticKind=State(initialValue:initialDiagnosticKind)
     _selectedRequest=State(initialValue:initialSelectedRequest)
+    _selectedBlockingContext=State(initialValue:initialSelectedBlockingContext)
   }
   private var latest:ActivityMonitoring.Sample? {model.samples.last}
   private var displayedSamples:[ActivityMonitoring.Sample] {ActivityChartPoint.window(model.samples,minutes:range)}
@@ -145,6 +148,7 @@ struct ActivityMonitorPanel:View {
       .background(MonitorVisibilityProbe {visible=$0;model.setActivity(visible:$0,paused:paused)})
       .onChange(of:paused) {_,value in model.setActivity(visible:visible,paused:value)}
       .onChange(of:diagnosticKind) {_,_ in selectedRequest=nil}
+      .onChange(of:selectedRequest) {_,_ in selectedBlockingContext=nil;selectedBlockingSession=nil}
       .onChange(of:mode) {_,value in if value != 2 {model.clearDiagnostics();selectedRequest=nil}}
       .onReceive(NotificationCenter.default.publisher(for:ConnectedServer.explorerConnectionChanged)) {notification in
         if notification.object as? ConnectedServer === model.server {model.connectionChanged()}
@@ -246,7 +250,7 @@ struct ActivityMonitorPanel:View {
           Text("Uzun süren · \(model.diagnostics.longRunning.count)").tag(1)
           Text("Yedekleme · \(model.diagnostics.backups.count)").tag(2)
         }.pickerStyle(.segmented).labelsHidden().frame(maxWidth:570)
-          .help("Bloklanan istekler, 30 saniyeyi aşan istekler veya devam eden yedeklemeler").accessibilityIdentifier("activityDiagnosticKind")
+          .help("Her grupta ilk 30 istek: bloklanan istekler, 30 saniyeyi aşan istekler veya devam eden yedeklemeler. Bloklayan zincirinde en çok 8 üst seviye / 60 oturum okunur.").accessibilityIdentifier("activityDiagnosticKind")
         Spacer(minLength:0)
         Text(model.diagnosticsTime.map {$0.formatted(date:.omitted,time:.standard)} ?? "Henüz okunmadı").font(.caption).foregroundStyle(.secondary)
       }
@@ -270,7 +274,9 @@ struct ActivityMonitorPanel:View {
     }.accessibilityIdentifier("activityDBA")
   }
   @ViewBuilder private var requestDetail:some View {
-    if let selected {
+    if let selected,diagnosticKind == 0 {
+      blockingDetail(selected)
+    } else if let selected {
       VStack(alignment:.leading,spacing:6) {
         HStack(spacing:14) {
           Label("Oturum \(selected.sessionID) · \(selected.status)",systemImage:"text.alignleft").fontWeight(.medium)
@@ -292,6 +298,89 @@ struct ActivityMonitorPanel:View {
         .font(.caption).foregroundStyle(.secondary).frame(maxWidth:.infinity,alignment:.leading).padding(12)
         .background(Color(nsColor:StudioTheme.canvas),in:RoundedRectangle(cornerRadius:8))
     }
+  }
+  private func blockingDetail(_ request:ActivityMonitoring.Request) -> some View {
+    let chain=model.diagnostics.blockingChain(for:request)
+    let contexts=model.diagnostics.blockingContexts.filter {chain.sessionIDs.contains($0.sessionID) && $0.sessionID != request.sessionID}
+    let chosen=contexts.first {$0.id == selectedBlockingContext}
+    let session=chosen?.sessionID ?? selectedBlockingSession ?? request.blocker
+    let choices=contexts.filter {$0.sessionID == session}
+    // With MARS, require a request choice rather than presenting arbitrary SQL.
+    let context=chosen ?? (choices.count == 1 ? choices.first:nil)
+    return VStack(alignment:.leading,spacing:6) {
+      HStack(spacing:6) {
+        Label("Bloklanma zinciri",systemImage:"point.3.connected.trianglepath.dotted").font(.system(size:11,weight:.semibold))
+        Text("Üst oturum → bekleyen · anlık örnek").font(.system(size:10)).foregroundStyle(.secondary)
+        Spacer(minLength:0)
+      }.help("DMV’ler farklı anlarda okunabilir. Zincir anlık bağlamdır; görünen SQL’in kilidi alan ifade olduğunu kanıtlamaz.")
+      ScrollView(.horizontal) {
+        HStack(spacing:6) {
+          ForEach(Array(chain.sessionIDs.enumerated()),id:\.offset) {index,id in
+            if index>0 {Image(systemName:"arrow.right").font(.system(size:10,weight:.semibold)).foregroundStyle(.secondary).help("Soldaki oturum sağdaki oturumu blokluyor")}
+            let leaf=id == request.sessionID
+            let node=contexts.first {$0.sessionID == id}
+            Button {
+              if !leaf {selectedBlockingSession=id;selectedBlockingContext=nil}
+            } label: {
+              HStack(spacing:6) {
+                Image(systemName:leaf ? "hourglass":index == 0 && chain.termination == .root ? "lock.fill":"link")
+                VStack(alignment:.leading,spacing:2) {
+                  Text("Oturum \(id)").font(.system(size:11,weight:.semibold))
+                  Text(leaf ? "Bloklanan istek":node == nil ? "Ayrıntı okunamadı":index == 0 && chain.termination == .root ? "Üst bloklayan · \(node!.status)":"Ara oturum · \(node!.status)")
+                    .font(.system(size:9)).lineLimit(1)
+                }
+              }.foregroundStyle(Color(nsColor:leaf ? StudioTheme.muted:StudioTheme.danger))
+                .padding(.horizontal,9).padding(.vertical,6)
+                .background(Color(nsColor:session == id ? StudioTheme.danger:StudioTheme.muted).opacity(session == id ? 0.12:0.06),in:RoundedRectangle(cornerRadius:7))
+                .overlay(RoundedRectangle(cornerRadius:7).stroke(Color(nsColor:session == id ? StudioTheme.danger:StudioTheme.border).opacity(0.5)))
+            }.buttonStyle(.plain).disabled(leaf || node == nil)
+              .help(leaf ? "Seçili bloklanan sorgu solda gösterilir":"Bu oturumun sorgu ve bağlantı ayrıntılarını göster")
+              .accessibilityIdentifier("activityChainSession\(id)")
+          }
+        }.padding(1)
+      }.fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("activityBlockingChain")
+      if let notice=chain.notice {Text(notice).font(.system(size:10)).foregroundStyle(Color(nsColor:StudioTheme.warning)).lineLimit(2).help(notice)}
+      HStack(alignment:.top,spacing:10) {
+        blockingSQLPane(title:"Bekleyen · Oturum \(request.sessionID)",subtitle:"\(request.database) · \(request.wait) · Tx \(ActivityFormat.count(request.openTransactions))",sql:request.sql,help:"Bloklanan isteğin o anda çalıştırdığı ifade; ilk 2.000 karakter.")
+        VStack(alignment:.leading,spacing:5) {
+          HStack(spacing:5) {
+            Text(session.map {"Bloklayan · Oturum \($0)"} ?? "Bloklayan oturum").font(.system(size:11,weight:.semibold))
+            Spacer(minLength:0)
+            if choices.count>1 {
+              Menu {
+                ForEach(choices) {choice in
+                  Button("İstek \(choice.requestID.map(String.init) ?? "—") · \(choice.command) · \(choice.wait.isEmpty ? choice.status:choice.wait)") {selectedBlockingContext=choice.id}
+                }
+              } label: {Label(context?.requestID.map {"İstek \($0)"} ?? "İstek seçin",systemImage:"list.bullet")}
+                .font(.system(size:10)).help("Aynı oturumdaki etkin istekler; SQL metnini açıkça seçin")
+                .accessibilityIdentifier("activityBlockingRequestChoice")
+            }
+            copySQLButton(context?.sql ?? "")
+          }
+          Text(context.map {"\($0.login) · \($0.host) · \($0.program) · Tx \(ActivityFormat.count($0.openTransactions))"} ?? (choices.count>1 ? "Birden fazla etkin istek var; sorguyu seçin.":"Oturum ayrıntısı okunamadı veya sonlandı."))
+            .font(.system(size:10)).foregroundStyle(.secondary).lineLimit(1)
+            .help(context.map {"\($0.database) · \($0.status)\n\($0.login) · \($0.host) · \($0.program)\nBekleme: \($0.wait) · \(ActivityFormat.duration($0.waitMS))\nKaynak: \($0.waitResource)"} ?? "")
+          Text(context?.sqlSource == .recent ? "Bağlantının son batch’i · kilidi alan ifade olduğu kesin değil":context?.sqlSource == .current ? "O anda çalışan ifade · ilk 2.000 karakter":"SQL bağlamı okunamadı")
+            .font(.system(size:9)).foregroundStyle(context?.sqlSource == .recent ? Color(nsColor:StudioTheme.warning):.secondary)
+            .lineLimit(1).help("Açık transaction içindeki önceki bir ifade kilidi tutuyor olabilir. SQL metni salt okunur bağlamdır.")
+          SQLReadOnlyPreview(sql:context?.sql.isEmpty == false ? context!.sql:"-- Gösterilecek SQL yok; oturum/istek bağlamını kontrol edin.")
+            .frame(minHeight:100,idealHeight:115,maxHeight:150).accessibilityIdentifier("activityBlockerSQL")
+        }.frame(maxWidth:.infinity,alignment:.leading)
+      }
+    }.studioCard(padding:10)
+  }
+  private func blockingSQLPane(title:String,subtitle:String,sql:String,help:String) -> some View {
+    VStack(alignment:.leading,spacing:5) {
+      HStack {Text(title).font(.system(size:11,weight:.semibold));Spacer(minLength:0);copySQLButton(sql)}
+      Text(subtitle).font(.system(size:10)).foregroundStyle(.secondary).lineLimit(1).help(subtitle)
+      Text("O anda çalışan ifade · ilk 2.000 karakter").font(.system(size:9)).foregroundStyle(.secondary)
+      SQLReadOnlyPreview(sql:sql.isEmpty ? "-- SQL metni sağlanmadı veya görüntüleme yetkisi yok.":sql)
+        .frame(minHeight:100,idealHeight:115,maxHeight:150).accessibilityIdentifier("activityBlockedSQL")
+    }.frame(maxWidth:.infinity,alignment:.leading).help(help)
+  }
+  private func copySQLButton(_ sql:String) -> some View {
+    Button {NSPasteboard.general.clearContents();NSPasteboard.general.setString(sql,forType:.string)} label: {Image(systemName:"doc.on.doc")}
+      .buttonStyle(.borderless).disabled(sql.isEmpty).help("SQL’i kopyala").accessibilityLabel("SQL’i kopyala")
   }
   private var footer:some View {
     VStack(alignment:.leading,spacing:7) {
@@ -443,7 +532,7 @@ struct ActivityChartPoint:Identifiable {
   }
 }
 
-private struct MonitorVisibilityProbe:NSViewRepresentable {
+struct MonitorVisibilityProbe:NSViewRepresentable {
   let changed:(Bool)->Void
   func makeNSView(context:Context) -> Probe {let view=Probe();view.changed=changed;return view}
   func updateNSView(_ view:Probe,context:Context) {view.changed=changed}

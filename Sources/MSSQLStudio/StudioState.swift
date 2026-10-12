@@ -124,6 +124,8 @@ struct ObjectEditorKey: Codable, Equatable {
   private(set) var repeating = false
   private(set) var lastExecutedSQL: String?
   private(set) var lastExecutedDatabase: String?
+  // In-process test injection; normal documents always use their independent ODBC session.
+  var executionFixture: ((String, Limits) async throws -> Execution)?
   var canRefresh: Bool {
     lastExecutionSucceeded && state == .ready && transactionCount == 0 && lastExecutedDatabase == database
       && lastExecutedSQL.map(TSQL.canRepeatRead) == true
@@ -305,6 +307,7 @@ struct ObjectEditorKey: Codable, Equatable {
     let token = executionID
     let start = Date()
     let captureActual = actualPlan && !estimated
+    let executionFixture = self.executionFixture
     task = Task { [weak self] in
       guard let self else { return }
       defer {
@@ -319,26 +322,31 @@ struct ObjectEditorKey: Codable, Equatable {
         changed?()
       }
       do {
-        if estimated {
+        if estimated && executionFixture == nil {
           guard
             !TSQL.lex(query).contains(where: {
               $0.kind != .comment && $0.text.uppercased() == "SHOWPLAN_XML"
             })
           else { throw SQLFailure("Tahmini plana SHOWPLAN_XML komutu eklenemez.") }
           _ = try await connection.execute("SET SHOWPLAN_XML ON;")
-        } else if captureActual {
+        } else if captureActual && executionFixture == nil {
           _ = try await connection.execute("SET STATISTICS XML ON;")
         }
-        let output = try await TSQL.run(
-          query, on: connection, limits: limits,
-          events: { [weak self] event in
-            Task { @MainActor [weak self] in
-              guard let self, self.executionID == token,
-                self.state == .running || self.state == .cancelling
-              else { return }
-              self.receive(event)
-            }
-          })
+        let output: Execution
+        if let executionFixture {
+          output = try await executionFixture(query, limits)
+        } else {
+          output = try await TSQL.run(
+            query, on: connection, limits: limits,
+            events: { [weak self] event in
+              Task { @MainActor [weak self] in
+                guard let self, self.executionID == token,
+                  self.state == .running || self.state == .cancelling
+                else { return }
+                self.receive(event)
+              }
+            })
+        }
         acceptingEvents = false
         results = output.results
         messages += output.messages.joined(separator: "\n") + "\n"
@@ -363,7 +371,7 @@ struct ObjectEditorKey: Codable, Equatable {
         completed?(query, nil, error.localizedDescription)
         await recordConnectionFailure(error)
       }
-      if state != .disconnected {
+      if state != .disconnected && executionFixture == nil {
         if estimated { _ = try? await connection.execute("SET SHOWPLAN_XML OFF;") }
         if captureActual { _ = try? await connection.execute("SET STATISTICS XML OFF;") }
         do {

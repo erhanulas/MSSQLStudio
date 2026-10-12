@@ -140,6 +140,11 @@ import SwiftUI
         if studio.servers.isEmpty {studio.servers.append(server)}
         workbench.showPerformanceMonitor(server)
       }
+      if Bundle.main.object(forInfoDictionaryKey:"StudioDatabaseFilesSmoke") as? Bool == true {
+        server.catalogFixture=ObjectManagementUIFixture.catalog
+        if studio.servers.isEmpty {studio.servers.append(server)}
+        workbench.showDatabaseFiles(server)
+      }
       return
     }
     studio.loadHistory()

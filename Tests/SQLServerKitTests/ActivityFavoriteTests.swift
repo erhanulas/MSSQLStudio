@@ -140,7 +140,7 @@ struct ActivityFavoriteTests {
   }
   func diagnosticExecution() -> Execution {
     var result=Execution()
-    result.results=[Rows(values:[["71","0","Sales","suspended","SELECT","60000","30","10","2","72","LCK_M_S","1",nil,nil,"SELECT N'İstanbul';"]]),Rows(values:[["71","1","Sales","running","SELECT","120000","500","30","0",nil,nil,"2",nil,nil,"SELECT 2;"]]),Rows(values:[["90","0","Sales","running","BACKUP DATABASE","100000","100","0","40",nil,"BACKUPIO","0","25.5",nil,"BACKUP DATABASE Sales TO DISK = N'backup.bak';"]]),Rows()]
+    result.results=[Rows(values:[["71","0","Sales","suspended","SELECT","60000","30","10","2","72","LCK_M_S","1",nil,nil,"SELECT N'İstanbul';"]]),Rows(values:[["71","1","Sales","running","SELECT","120000","500","30","0",nil,nil,"2",nil,nil,"SELECT 2;"]]),Rows(values:[["90","0","Sales","running","BACKUP DATABASE","100000","100","0","40",nil,"BACKUPIO","0","25.5",nil,"BACKUP DATABASE Sales TO DISK = N'backup.bak';"]]),Rows(),Rows()]
     return result
   }
   @Test func diagnosticsDecodeCategoriesRequestIdentityAndBackupProgress() throws {
@@ -152,7 +152,7 @@ struct ActivityFavoriteTests {
     #expect(result.backups[0].percentComplete == 25.5 && result.backups[0].remainingMS == nil && result.backups[0].elapsedMS == 100000)
   }
   @Test func diagnosticsPreserveOtherCategoriesAndPermissionFailures() throws {
-    var e=diagnosticExecution();e.results[0]=Rows();e.results[3]=Rows(values:[["Bloklanan istekler","VIEW SERVER STATE izni gerekli."]])
+    var e=diagnosticExecution();e.results[0]=Rows();e.results[4]=Rows(values:[["Bloklanan istekler","VIEW SERVER STATE izni gerekli."]])
     let result=try ActivityMonitoring.decodeDiagnostics(e)
     #expect(result.blocked.isEmpty && result.longRunning.count == 1 && result.backups.count == 1 && result.issues.count == 1)
     e.results[2]=Rows(values:[["90","0",nil,nil,nil,"-1","NaN","overflow",nil,"-5",nil,"-2","101",nil,String(repeating:"🙂",count:2200)]])
@@ -177,13 +177,75 @@ struct ActivityFavoriteTests {
   }
   @Test func diagnosticsSQLUsesBoundedCurrentStatementReadsAndIndependentCategories() {
     let sql=ActivityMonitoring.diagnosticsSQL
-    #expect(sql.components(separatedBy:"SELECT TOP(30)").count == 4 && sql.components(separatedBy:"BEGIN CATCH").count == 4)
+    #expect(sql.components(separatedBy:"SELECT TOP(30)").count == 4 && sql.components(separatedBy:"BEGIN CATCH").count == 5)
     #expect(sql.contains("r.total_elapsed_time>=30000") && sql.contains("r.blocking_session_id>0"))
     #expect(sql.contains("IF @canMonitor=0 THROW") && !sql.contains("last_wait_type"))
     #expect(sql.contains("SUBSTRING(CONVERT(varbinary(max),t.text),r.statement_start_offset+1") && sql.contains("r.statement_end_offset-r.statement_start_offset+2"))
     #expect(sql.contains("COLLATE Latin1_General_100_CI_AS_SC,2000)") && sql.contains("sql_text nvarchar(4000)"))
     #expect(sql.contains("r.reads,r.writes") && sql.contains("THEN r.percent_complete ELSE NULL END"))
     #expect(!sql.contains("estimated_completion_time") && !sql.contains("dm_exec_query_plan") && !sql.contains("CREATE TABLE") && !sql.contains("KILL "))
+    #expect(sql.contains("WHILE @depth<7") && sql.contains("SET @capacity=60-") && sql.contains("TOP(@capacity)"))
+    #expect(sql.contains("SELECT TOP(4) q.*,COUNT_BIG(*) OVER() AS request_count"))
+    #expect(sql.contains("r.request_id IS NULL") && sql.contains("c.most_recent_sql_handle") && sql.contains("N'recent'"))
+  }
+  func blockingRow(_ session:String="72",request:String?=nil,count:String="0",blocker:String?=nil,source:String="recent",sql:String="UPDATE dbo.Items SET Value=N'🙂';") -> [String?] {
+    [session,request,count,"Sales",request == nil ? "sleeping":"suspended",request == nil ? nil:"SELECT",blocker,"LCK_M_S","5000","KEY: 5:123","2","app_user","ERP-01","ERP",source,sql]
+  }
+  @Test func blockerContextPreservesSleepingHeadCurrentRequestAndUnicode() throws {
+    var e=diagnosticExecution()
+    let sql="-- 🙂\nSELECT N'İstanbul';"
+    e.results[3]=Rows(values:[blockingRow("72",request:"4",count:"1",blocker:"63",source:"current",sql:sql),blockingRow("63")])
+    let d=try ActivityMonitoring.decodeDiagnostics(e)
+    #expect(d.blockingContexts.count == 2)
+    let current=d.blockingContexts[0],head=d.blockingContexts[1]
+    #expect(current.id == "72:4" && current.blocker == 63 && current.sqlSource == .current && current.sql == sql)
+    #expect(current.waitMS == 5000 && current.waitResource == "KEY: 5:123")
+    #expect(head.requestID == nil && head.requestCount == 0 && head.status == "sleeping" && head.sqlSource == .recent && head.openTransactions == 2)
+    #expect(head.login == "app_user" && head.host == "ERP-01" && head.program == "ERP")
+    let chain=d.blockingChain(for:d.blocked[0])
+    #expect(chain.sessionIDs == [63,72,71] && chain.termination == .root && chain.notice == nil)
+  }
+  @Test func malformedBlockerResultsNeverBecomeCompleteChains() throws {
+    var base=diagnosticExecution();base.results[3]=Rows(values:[blockingRow()])
+    var variants:[Execution]=[]
+    var e=base;e.results[3].truncated=true;variants.append(e)
+    e=base;e.results[3].fields=[Field("wrong")];variants.append(e)
+    for row in [blockingRow("0"),blockingRow(request:"0",count:"0",source:"current"),blockingRow(count:"1"),blockingRow(source:"invented"),blockingRow(request:"0",count:"2",source:"current")] {
+      e=base;e.results[3]=Rows(values:[row]);variants.append(e)
+    }
+    e=base;e.results[3]=Rows(values:[blockingRow(),blockingRow()]);variants.append(e)
+    e=base;e.results[3]=Rows(values:(1...61).map {blockingRow(String($0))});variants.append(e)
+    for variant in variants {#expect(throws:SQLFailure.self) {try ActivityMonitoring.decodeDiagnostics(variant)}}
+  }
+  @Test func chainsDetectMissingCycleAmbiguitySpecialOwnerAndDepthLimits() {
+    let leaf=ActivityMonitoring.Request(sessionID:100,requestID:0,blocker:90)
+    func node(_ id:Int64,_ parent:Int64?,request:Int64=0,count:Int64=1) -> ActivityMonitoring.BlockingContext {
+      .init(sessionID:id,requestID:request,requestCount:count,blocker:parent,sqlSource:.current)
+    }
+    var d=ActivityMonitoring.Diagnostics()
+    #expect(d.blockingChain(for:leaf).termination == .missing(90))
+    d.blockingContexts=[node(90,80),node(80,90)]
+    let cycle=d.blockingChain(for:leaf)
+    #expect(cycle.sessionIDs == [80,90,100] && cycle.termination == .cycle(90) && cycle.notice?.contains("deadlock kanıtı değildir") == true)
+    d.blockingContexts=[node(90,80,count:2),node(90,70,request:1,count:2)]
+    #expect(d.blockingChain(for:leaf).termination == .ambiguous(90))
+    d.blockingContexts=[node(90,-2)]
+    #expect(d.blockingChain(for:leaf).termination == .special(-2))
+    d.blockingContexts=[node(90,80,count:5)]
+    #expect(d.blockingChain(for:leaf).termination == .requestLimit(90))
+    d.blockingContexts=(0..<10).map {node(90-Int64($0),89-Int64($0))}
+    let deep=d.blockingChain(for:leaf)
+    #expect(deep.sessionIDs.count == 9 && deep.termination == .depthLimit)
+    d.blockingContexts=[node(90,100)]
+    #expect(d.blockingChain(for:leaf).termination == .cycle(100))
+  }
+  @Test func marsRequestsWithCommonParentRetainAllSQLInsteadOfChoosingOne() throws {
+    var e=diagnosticExecution()
+    e.results[3]=Rows(values:[blockingRow("72",request:"0",count:"2",blocker:"63",source:"current",sql:"SELECT 1;"),blockingRow("72",request:"1",count:"2",blocker:"63",source:"current",sql:"SELECT 2;"),blockingRow("63",source:"unavailable",sql:"")])
+    let d=try ActivityMonitoring.decodeDiagnostics(e)
+    #expect(d.blockingContexts.filter {$0.sessionID == 72}.map(\.sql) == ["SELECT 1;","SELECT 2;"])
+    #expect(d.blockingChain(for:d.blocked[0]).sessionIDs == [63,72,71])
+    #expect(d.blockingContexts.last?.sqlSource == .unavailable)
   }
   @Test func favoritesMatchProfileIdentityAndExactDatabase() throws {
     let a=UUID(),b=UUID()

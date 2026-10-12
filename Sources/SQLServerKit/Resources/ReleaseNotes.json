@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.95",
+    "date": "2026-10-12",
+    "title": "Bloklanma zinciri, dosya izleme ve sorgu deneyimi",
+    "changes": [
+      "Activity Monitor DBA görünümünde bloklayan oturumlar ve ilişkili SQL metinleri incelenebilir. Bloklanma zinciri kök oturumdan bekleyen isteğe kadar gösterilir; boşta duran oturumun son SQL’i çalışan sorgudan ayrı belirtilir.",
+      "Management içindeki Database Files ayrı bir izleme penceresinde açılır. Veritabanı filtresi, dosya listesi, boyut, kullanım, büyüme ve fiziksel yol bilgileri salt okunur incelenebilir.",
+      "Aktif SQL sorgu sekmesi belirgin seçim zemini, üst vurgu çizgisi, kenarlık ve kalın başlıkla gösterilir. Bağlantı rengi ve sekme işlemleri korunur.",
+      "Noktalı virgülle başlayan CTE ve birden fazla SELECT içeren güvenli okuma sorgularında Sonuçları Yenile etkin kalır. Yenileme çalıştırılmış SQL snapshot’ını ve sonuç sınırlarını korur; yazma veya yönetim komutları otomatik tekrar kapsamına alınmaz."
+    ]
+  },
+  {
     "version": "0.2.94",
     "date": "2026-10-12",
     "title": "Gelişmiş Activity Monitor ve DBA tanıları",

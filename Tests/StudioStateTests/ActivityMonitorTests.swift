@@ -58,9 +58,9 @@ import Testing
     var sqls:[String]=[],tick=0,failDiagnostics=false
     let model=ActivityMonitorModel(server:server,reader:{sql,limits in
       sqls.append(sql)
-      #expect(limits.timeout == 10 && limits.totalBytes <= 2_000_000)
+      #expect(limits.timeout == 10 && limits.totalBytes <= 4_000_000)
       if sql == ActivityMonitoring.overviewSQL {tick+=5;#expect(limits.rows == 30 && limits.resultSets == 2);return overview(tick)}
-      #expect(sql == ActivityMonitoring.diagnosticsSQL && limits.rows == 160 && limits.resultSets == 4)
+      #expect(sql == ActivityMonitoring.diagnosticsSQL && limits.rows == 400 && limits.resultSets == 5)
       if failDiagnostics {throw SQLFailure("DBA permission denied")}
       return ObjectManagementUIFixture.catalog(sql)
     })
@@ -162,6 +162,47 @@ import Testing
     #expect(hovered.value == 30 && hovered.time == start.addingTimeInterval(10))
     #expect(ActivityChartPoint.nearest([],to:start) == nil)
   }
+  @Test func blockerChainIncludesSleepingHeadAndOfflineInvalidatesItsSQL() async throws {
+    let server=ConnectedServer(profile:ServerProfile(),password:"")
+    var reads=0
+    let model=ActivityMonitorModel(server:server,reader:{sql,_ in reads+=1;return sql == ActivityMonitoring.overviewSQL ? overview(5):ObjectManagementUIFixture.catalog(sql)})
+    await model.load(includeDiagnostics:true)
+    let blocked=try #require(model.diagnostics.blocked.last)
+    let chain=model.diagnostics.blockingChain(for:blocked)
+    #expect(chain.sessionIDs == [63,71,72] && chain.termination == .root)
+    #expect(model.diagnostics.blockingContexts.first?.status == "sleeping")
+    #expect(model.diagnostics.blockingContexts.first?.sqlSource == .recent)
+    #expect(model.diagnostics.blockingContexts.first?.openTransactions == 1)
+    server.online=false;model.connectionChanged()
+    #expect(model.diagnostics.blockingContexts.isEmpty && model.diagnosticsTime == nil && reads == 2)
+  }
+  @Test func multipleActiveBlockerRequestsRequireAnExplicitSQLChoice() async throws {
+    _=NSApplication.shared
+    let server=ConnectedServer(profile:ServerProfile(),password:"")
+    let model=ActivityMonitorModel(server:server,reader:{sql,_ in
+      if sql == ActivityMonitoring.overviewSQL {return overview(5)}
+      var result=ObjectManagementUIFixture.catalog(sql)
+      let row:[String?]=["63","0","2","DemoDB","running","SELECT","0",nil,"0",nil,"1","user","host","app","current","SELECT N'explicit-first-request';"]
+      var second=row;second[1]="1";second[15]="SELECT N'explicit-second-request';"
+      result.results[3]=Rows(values:[row,second])
+      return result
+    })
+    await model.load(includeDiagnostics:true)
+    #expect(model.diagnostics.blockingContexts.count == 2)
+    func descendants(_ view:NSView) -> [NSView] {[view]+view.subviews.flatMap(descendants)}
+    for chosen in [nil,"63:1"] as [String?] {
+      let panel=ActivityMonitorPanel(model:model,initialMode:2,initialSelectedRequest:"71:0",initialSelectedBlockingContext:chosen,openTable:{})
+      let host=NSHostingController(rootView:panel);host.sizingOptions=[]
+      let window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false;window.setContentSize(NSSize(width:920,height:700))
+      defer {window.close()}
+      try await Task.sleep(for:.milliseconds(100));host.view.layoutSubtreeIfNeeded()
+      let texts=descendants(host.view).compactMap {$0 as? SQLPreviewScrollView}.compactMap {($0.documentView as? NSTextView)?.string}
+      #expect(texts.count == 2 && texts.contains(model.diagnostics.blocked.first!.sql))
+      #expect(!texts.contains("SELECT N'explicit-first-request';"))
+      if chosen == nil {#expect(texts.contains { $0.contains("Gösterilecek SQL yok") })}
+      else {#expect(texts.contains("SELECT N'explicit-second-request';"))}
+    }
+  }
   @Test func populatedViewsAndSelectedDBAFitSupportedMinimumInBothThemes() async throws {
     _=NSApplication.shared
     let old=UserDefaults.standard.string(forKey:"ssmsTheme");defer {StudioTheme.apply(old ?? "light")}
@@ -169,6 +210,7 @@ import Testing
     for theme in ["light","dark"] {
       StudioTheme.apply(theme)
       for state in 0..<8 {
+        #expect(StudioTheme.dark == (theme == "dark"))
         let server=ConnectedServer(profile:ServerProfile(name:"Offline populated fixture"),password:"")
         var tick=0,failDiagnostics=false,failOverview=false
         let model=ActivityMonitorModel(server:server,reader:{sql,_ in
@@ -180,7 +222,7 @@ import Testing
           }
           if failDiagnostics {throw SQLFailure("DBA görüntüleme yetkisi doğrulanamadı.")}
           var result=ObjectManagementUIFixture.catalog(sql)
-          if state == 5 || state == 7 {result.results[3]=Rows(values:[["Uzun süren","Bu bölüm için görüntüleme yetkisi eksik."]])}
+          if state == 5 || state == 7 {result.results[4]=Rows(values:[["Uzun süren","Bu bölüm için görüntüleme yetkisi eksik."]])}
           return result
         })
         for _ in 0..<3 {await model.load(includeDiagnostics:true)}
@@ -191,10 +233,13 @@ import Testing
         let panel=ActivityMonitorPanel(model:model,initialMode:mode,initialDiagnosticKind:kind,initialSelectedRequest:mode == 2 ? rows.first?.id:nil,openTable:{})
         let host=NSHostingController(rootView:panel);host.sizingOptions=[]
         let window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false
+        window.appearance=NSAppearance(named:theme == "dark" ? .darkAqua:.aqua)
         let size=NSSize(width:920,height:700);window.setContentSize(size)
         defer {window.close()}
         try await Task.sleep(for:.milliseconds(100))
         host.view.frame=NSRect(origin:.zero,size:size);host.view.layoutSubtreeIfNeeded()
+        host.view.displayIfNeeded()
+        #expect(StudioTheme.dark == (theme == "dark"))
         #expect(host.view.bounds.size == size)
         let views=descendants(host.view)
         for control in views.compactMap({$0 as? NSControl}) where !control.isHiddenOrHasHiddenAncestor {
@@ -204,7 +249,7 @@ import Testing
         if mode == 2 {
           let preview=try #require(views.compactMap {$0 as? SQLPreviewScrollView}.first)
           let previewRect=host.view.convert(preview.bounds,from:preview)
-          #expect(previewRect.width>=700 && previewRect.height>=100)
+          #expect(previewRect.width>=(kind == 0 ? 350:700) && previewRect.height>=100)
           #expect(previewRect.minX>=0 && previewRect.maxX<=920 && previewRect.minY>=0 && previewRect.maxY<=700,"\(theme) state\(state) SQL \(previewRect)")
           let table=try #require(views.compactMap {$0 as? NSTableView}.first)
           #expect(table.numberOfRows == rows.count && table.selectedRowIndexes == IndexSet(integer:0))
@@ -212,10 +257,22 @@ import Testing
           let tableRect=host.view.convert(tableScroll.bounds,from:tableScroll)
           #expect(tableRect.height>=120 && tableRect.minX>=0 && tableRect.maxX<=920 && tableRect.minY>=0 && tableRect.maxY<=700,"\(theme) state\(state) table \(tableRect)")
           #expect(previewRect.maxY<=tableRect.minY || tableRect.maxY<=previewRect.minY)
-          #expect((preview.documentView as? NSTextView)?.string == rows.first?.sql)
+          #expect(views.compactMap {$0 as? SQLPreviewScrollView}.contains {(($0.documentView as? NSTextView)?.string) == rows.first?.sql})
         }
         if let rep=host.view.bitmapImageRepForCachingDisplay(in:host.view.bounds) {
           host.view.cacheDisplay(in:host.view.bounds,to:rep)
+          let corner=try #require(rep.colorAt(x:5,y:5)?.usingColorSpace(.deviceRGB))
+          let brightness=(corner.redComponent+corner.greenComponent+corner.blueComponent)/3
+          #expect(theme == "dark" ? brightness<0.4:brightness>0.7,"Bitmap must render the requested theme, not an old frame")
+          var colors=Set<Int>()
+          for y in stride(from:0,to:rep.pixelsHigh,by:16) {
+            for x in stride(from:0,to:rep.pixelsWide,by:16) {
+              if let color=rep.colorAt(x:x,y:y)?.usingColorSpace(.deviceRGB) {
+                colors.insert((Int(color.redComponent*255)<<16)|(Int(color.greenComponent*255)<<8)|Int(color.blueComponent*255))
+              }
+            }
+          }
+          #expect(colors.count>20,"Bitmap must contain populated controls/text rather than an empty surface")
           let data=try #require(rep.representation(using:.png,properties:[:]))
           try data.write(to:URL(fileURLWithPath:"/tmp/mssql-activity-state\(state)-\(theme).png"))
           if state == 0 || state == 4 {try data.write(to:URL(fileURLWithPath:"/tmp/mssql-activity-\(state == 0 ? "populated":"dba")-\(theme).png"))}

@@ -614,6 +614,9 @@ private struct ObjectPropertiesPanel:View {
 /// Synthetic UI-only metadata. Assigned exclusively by the isolated UI-test launch branch.
 @MainActor enum ObjectManagementUIFixture {
   static func catalog(_ sql:String) -> Execution {
+    if sql == DatabaseFilesMonitoring.inventorySQL || sql.hasPrefix(DatabaseFilesMonitoring.detailSQL.components(separatedBy:"FROM sys.database_files")[0]) {
+      return DatabaseFilesUIFixture.catalog(sql)
+    }
     var e=Execution()
     if sql == ActivityMonitoring.overviewSQL {
       let time=Date();let ticks=Int64(time.timeIntervalSince1970)
@@ -631,6 +634,9 @@ private struct ObjectPropertiesPanel:View {
         ["84","0","Reporting","running","SELECT","125000","48000","980000","0","0","PAGEIOLATCH_SH","0",nil,nil,"SELECT CustomerID, SUM(Amount) AS TotalAmount\nFROM dbo.OrderHistory\nGROUP BY CustomerID;"]
       ]),rows([
         ["91","0","DemoDB","suspended","BACKUP DATABASE","142000","800","740000","0","0","ASYNC_IO_COMPLETION","0","64.5",nil,"BACKUP DATABASE [DemoDB] TO DISK = N'/offline-fixture/DemoDB.bak' WITH COMPRESSION;"]
+      ]),Rows(fields:["session_id","request_id","request_count","database_name","status","command","blocker","wait_type","wait_ms","wait_resource","open_transactions","login_name","host_name","program_name","sql_source","sql_text"].map {Field($0)},values:[
+        ["63",nil,"0","DemoDB","sleeping",nil,nil,nil,nil,nil,"1","erp_user","ERP-APP","Order Service","recent","BEGIN TRANSACTION;\nUPDATE dbo.Customers SET Name = N'İstanbul' WHERE CustomerID = 10;\n-- Transaction henüz kapatılmadı."],
+        ["71","0","1","DemoDB","suspended","SELECT","63","LCK_M_S","185000","KEY: 5:720575940000 (offline)","1","report_user","REPORT-APP","Reporting","current","SELECT CustomerID, Name FROM dbo.Customers WHERE City = N'İstanbul';"]
       ]),Rows(values:[])]
     } else if sql == Catalog.databases {
       e.results=[Rows(values:[["1","master","","ONLINE"],["5","DemoDB","","ONLINE"],["6","Reporting","","ONLINE"]])]

@@ -59,6 +59,8 @@ import Testing
     state.servers=[a,b];state.documents=[document];state.active=document
     let controller=WorkbenchController(state:state)
     controller.showPerformanceMonitor(a)
+    let monitor=try #require(NSApp.windows.first {$0.identifier?.rawValue == "activity|\(a.id)"})
+    #expect(monitor.contentMinSize.width >= 920 && monitor.contentMinSize.height >= 700)
     let first=try #require(NSApp.windows.first {$0.identifier?.rawValue == "activity|\(a.id)" && $0.isVisible})
     defer {for window in NSApp.windows where ["activity|\(a.id)","activity|\(b.id)"].contains(window.identifier?.rawValue ?? "") {window.close()}}
     controller.showPerformanceMonitor(a);controller.showPerformanceMonitor(b)

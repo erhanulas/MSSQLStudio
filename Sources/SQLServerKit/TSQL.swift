@@ -82,11 +82,30 @@ public enum TSQL {
   /// Conservative eligibility for unattended repetition; this is not a SQL authorization boundary.
   public static func canRepeatRead(_ sql: String) -> Bool {
     let tokens = lex(sql).filter { $0.kind != .space && $0.kind != .comment }
-    guard let first = tokens.first?.text.uppercased(), ["SELECT", "WITH"].contains(first) else { return false }
     let forbidden = Set("KILL SHUTDOWN RECONFIGURE BULK RECEIVE SEND MOVE PRINT THROW RAISERROR DECLARE INSERT UPDATE DELETE MERGE INTO EXEC EXECUTE CREATE ALTER DROP TRUNCATE GRANT REVOKE DENY BACKUP RESTORE DBCC USE SET BEGIN COMMIT ROLLBACK SAVE TRAN TRANSACTION WAITFOR GO OPENROWSET OPENQUERY OPENDATASOURCE NEXT UPDLOCK XLOCK HOLDLOCK TABLOCKX".split(separator: " ").map(String.init))
-    return !tokens.contains { token in
+    guard !tokens.contains(where: { token in
       token.kind != .string && forbidden.contains(token.text.uppercased())
-    } && tokens.contains { $0.text.uppercased() == "SELECT" }
+    }) else { return false }
+    // SQL Server commonly requires ;WITH after another statement. Empty statement
+    // terminators must not make an otherwise read-only CTE ineligible. Check each
+    // statement head so this does not admit a bare procedure invocation or a
+    // non-SELECT CTE tail. GO (including repeat counts) remains explicitly blocked.
+    var starting = true, hasSelect = false, anySelect = false, depth = 0
+    for token in tokens {
+      if token.text == ";" {
+        guard depth == 0, starting || hasSelect else { return false }
+        starting = true; hasSelect = false
+        continue
+      }
+      if starting {
+        guard ["SELECT", "WITH"].contains(token.text.uppercased()) else { return false }
+        starting = false
+      }
+      if token.text == "(" { depth += 1 }
+      if token.text == ")" { depth -= 1; if depth < 0 { return false } }
+      if token.text.uppercased() == "SELECT" { hasSelect = true; anySelect = true }
+    }
+    return depth == 0 && anySelect && (starting || hasSelect)
   }
 
   public static let keywords = Set(

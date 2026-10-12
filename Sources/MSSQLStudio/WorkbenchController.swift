@@ -192,6 +192,29 @@ import UniformTypeIdentifiers
 }
 @MainActor final class QueryTabSurface: NSStackView {
   weak var primaryButton: DocumentButton?
+  private let activeIndicator = CALayer()
+  private(set) var isActiveTab = false
+  func configure(active: Bool, connectionColor: NSColor?) {
+    isActiveTab = active
+    wantsLayer = true
+    layer?.cornerRadius = 6
+    layer?.masksToBounds = true
+    layer?.backgroundColor = (active ? StudioTheme.selection : StudioTheme.panel).cgColor
+    layer?.borderWidth = active ? 1.5 : connectionColor == nil ? 0 : 1
+    layer?.borderColor = (active ? StudioTheme.accent.withAlphaComponent(0.75) : connectionColor ?? StudioTheme.border).cgColor
+    if activeIndicator.superlayer == nil { layer?.addSublayer(activeIndicator) }
+    activeIndicator.backgroundColor = StudioTheme.accent.cgColor
+    activeIndicator.cornerRadius = 1.5
+    activeIndicator.isHidden = !active
+    setAccessibilitySelected(active)
+    needsLayout = true
+  }
+  override func layout() {
+    super.layout()
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    activeIndicator.frame = NSRect(x: 8, y: isFlipped ? 1 : max(1, bounds.height-4), width: max(0, bounds.width-16), height: 3)
+    CATransaction.commit()
+  }
   // Padding and the document icon belong to the same draggable/selectable tab.
   override func mouseDown(with event: NSEvent) { primaryButton?.mouseDown(with: event) }
   override func rightMouseDown(with event: NSEvent) { primaryButton?.rightMouseDown(with: event) }
@@ -654,20 +677,16 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       let group = QueryTabSurface(views: [button, close])
       group.primaryButton = button
       group.identifier = NSUserInterfaceItemIdentifier("connectionAccent")
-      group.wantsLayer = true
-      group.layer?.backgroundColor =
-        (state.active === doc ? StudioTheme.canvas : StudioTheme.panel).cgColor
+      let connectionColor = doc.server.profile.appearance.flatMap { $0.isMarked ? $0.color : nil }
+      group.configure(active: state.active === doc, connectionColor: connectionColor)
       button.contentTintColor = state.active === doc ? StudioTheme.accent : StudioTheme.muted
-      button.font = .systemFont(ofSize: 12, weight: state.active === doc ? .medium : .regular)
+      button.font = .systemFont(ofSize: 12, weight: state.active === doc ? .semibold : .regular)
       button.attributedTitle = NSAttributedString(
         string: button.title,
         attributes: [
           .font: button.font!,
           .foregroundColor: state.active === doc ? StudioTheme.text : StudioTheme.muted,
         ])
-      group.layer?.cornerRadius = 6
-      group.layer?.borderWidth = state.active === doc ? 1 : 0
-      group.layer?.borderColor = StudioTheme.accent.withAlphaComponent(0.28).cgColor
       close.contentTintColor = StudioTheme.muted
       let icon = NSImageView(image: NSImage(systemSymbolName: doc.pinned ? "pin.fill" : "doc.text", accessibilityDescription: doc.pinned ? "Sabitlenmiş sekme" : nil)!)
       icon.contentTintColor = doc.server.profile.appearance?.isMarked == true
@@ -681,11 +700,6 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         progress.heightAnchor.constraint(equalToConstant:14).isActive=true
         progress.startAnimation(nil);group.insertArrangedSubview(progress,at:0)
       } else {group.insertArrangedSubview(icon, at: 0)}
-      if let appearance = doc.server.profile.appearance, appearance.isMarked {
-        group.wantsLayer = true
-        group.layer?.borderColor = appearance.color.cgColor
-        group.layer?.borderWidth = 1
-      }
       button.toolTip =
         "\(doc.server.profile.appearance?.badge ?? "") · \(doc.server.profile.name) · \(doc.database)"
       group.spacing = 6
@@ -1850,12 +1864,14 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
   }
   @objc private func openObject() {
-    guard let node = outline.item(atRow: outline.clickedRow) as? TreeNode else { return }
+    let row=outline.clickedRow>=0 ? outline.clickedRow:outline.selectedRow
+    guard let node = outline.item(atRow:row) as? TreeNode else { return }
     if case .favorite = node.kind {openExplorerFavorite(node);return}
     if case .favorites = node.kind {
       if outline.isItemExpanded(node) {outline.collapseItem(node)} else {outline.expandItem(node)}
       return
     }
+    if case .folder(.files)=node.kind {showDatabaseFiles(node.server);return}
     guard node.server.online else {
       Task { await state.reconnectExplorer(node.server) }
       return
@@ -2218,6 +2234,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   @objc private func openMonitoring() {
     if let node = contextNode, case .folder(let folder) = node.kind {
       if folder == .activity {showPerformanceMonitor(node.server);return}
+      if folder == .files {showDatabaseFiles(node.server);return}
       state.newQuery(
         server: node.server, database: node.database, text: Catalog.monitoring(folder),
         title: folder.rawValue, run: true)
@@ -2225,8 +2242,17 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   @objc func activity() {if let server=selectedServer {showPerformanceMonitor(server)}}
   func showPerformanceMonitor(_ server:ConnectedServer) {
-    present(ActivityMonitorPanel(server:server,openTable:{[weak self] in self?.createActivityTable(server)}),
+    let window=present(ActivityMonitorPanel(server:server,openTable:{[weak self] in self?.createActivityTable(server)}),
       title:"Activity Monitor · \(server.profile.name)",width:1220,height:840,minWidth:920,minHeight:700,identity:"activity|\(server.id)")
+    window.minSize=window.frameRect(forContentRect:NSRect(x:0,y:0,width:920,height:700)).size
+  }
+  func showDatabaseFiles(_ server:ConnectedServer,database:String="") {
+    let window=present(DatabaseFilesPanel(server:server,database:database,openQuery:{[weak self] in
+      guard let self else {return}
+      self.state.newQuery(server:server,database:"master",text:Catalog.monitoring(.files),title:"Database Files · Envanter")
+      self.view.window?.makeKeyAndOrderFront(nil)
+    }),title:"Database Files · \(server.profile.name)",width:1120,height:760,minWidth:920,minHeight:620,identity:"files|\(server.id)")
+    window.minSize=window.frameRect(forContentRect:NSRect(x:0,y:0,width:920,height:620)).size
   }
   @objc private func openActivityTable() {if let server=contextNode?.server ?? selectedServer {createActivityTable(server)}}
   private func createActivityTable(_ server:ConnectedServer) {

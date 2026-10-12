@@ -74,10 +74,49 @@ public enum ActivityMonitoring {
   \(diagnosticSection(category:0,title:"Bloklanan istekler",condition:"r.blocking_session_id>0",order:"r.wait_time DESC,r.total_elapsed_time DESC,r.session_id,r.request_id"))
   \(diagnosticSection(category:1,title:"Uzun süren istekler",condition:"r.total_elapsed_time>=30000 AND r.command NOT IN (N'BACKUP DATABASE',N'BACKUP LOG')",order:"r.total_elapsed_time DESC,r.session_id,r.request_id"))
   \(diagnosticSection(category:2,title:"Yedeklemeler",condition:"r.command IN (N'BACKUP DATABASE',N'BACKUP LOG')",order:"r.total_elapsed_time DESC,r.session_id,r.request_id"))
+  \(blockingContextSQL)
   SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text FROM @requests WHERE category=0 ORDER BY elapsed_ms DESC,session_id,request_id;
   SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text FROM @requests WHERE category=1 ORDER BY elapsed_ms DESC,session_id,request_id;
   SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text FROM @requests WHERE category=2 ORDER BY elapsed_ms DESC,session_id,request_id;
+  SELECT session_id,request_id,request_count,database_name,status,command,blocker,wait_type,wait_ms,wait_resource,open_transactions,login_name,host_name,program_name,sql_source,sql_text FROM @blockingContext ORDER BY session_id,request_id;
   SELECT metric,message FROM @issues;
+  """
+  // Walk only ancestors of the bounded blocked list. TOP(4) text rows per
+  // session preserve MARS ambiguity without joining every connection/request.
+  // A sleeping head has no current request: its recent batch is historical
+  // context, never proof that this batch acquired the retained locks.
+  private static let blockingContextSQL = """
+  DECLARE @blockingIDs TABLE(session_id int PRIMARY KEY,depth int);
+  DECLARE @blockingContext TABLE(session_id int,request_id int,request_count bigint,database_name nvarchar(128),status nvarchar(60),command nvarchar(60),blocker int,wait_type nvarchar(60),wait_ms bigint,wait_resource nvarchar(256),open_transactions bigint,login_name nvarchar(128),host_name nvarchar(128),program_name nvarchar(128),sql_source nvarchar(20),sql_text nvarchar(4000));
+  BEGIN TRY
+    IF @canMonitor=0 THROW 51000,@permissionMessage,1;
+    INSERT @blockingIDs SELECT DISTINCT blocker,0 FROM @requests WHERE category=0 AND blocker>0;
+    DECLARE @depth int=0,@capacity int;
+    WHILE @depth<7
+    BEGIN
+      SET @capacity=60-(SELECT COUNT(*) FROM @blockingIDs);
+      IF @capacity<=0 BREAK;
+      INSERT @blockingIDs
+      SELECT TOP(@capacity) r.blocking_session_id,@depth+1
+      FROM sys.dm_exec_requests r JOIN @blockingIDs b ON b.session_id=r.session_id AND b.depth=@depth
+      WHERE r.blocking_session_id>0 AND NOT EXISTS(SELECT 1 FROM @blockingIDs known WHERE known.session_id=r.blocking_session_id)
+      GROUP BY r.blocking_session_id ORDER BY r.blocking_session_id;
+      IF @@ROWCOUNT=0 BREAK;
+      SET @depth+=1;
+    END;
+    IF EXISTS(SELECT 1 FROM sys.dm_exec_requests r JOIN @blockingIDs b ON b.session_id=r.session_id WHERE r.blocking_session_id>0 AND NOT EXISTS(SELECT 1 FROM @blockingIDs known WHERE known.session_id=r.blocking_session_id))
+      INSERT @issues VALUES(N'Bloklanma zinciri',N'En çok 8 üst seviye / 60 oturum gösterilir; zincirin devamı bu örnekte okunmadı.');
+    INSERT @blockingContext
+    SELECT s.session_id,r.request_id,COALESCE(r.request_count,0),DB_NAME(COALESCE(r.database_id,s.database_id)),COALESCE(r.status,s.status),r.command,r.blocking_session_id,r.wait_type,CONVERT(bigint,r.wait_time),r.wait_resource,CONVERT(bigint,s.open_transaction_count),s.login_name,s.host_name,s.program_name,
+      CASE WHEN r.request_id IS NOT NULL THEN N'current' WHEN c.most_recent_sql_handle IS NOT NULL THEN N'recent' ELSE N'unavailable' END,
+      CASE WHEN r.request_id IS NOT NULL THEN LEFT(CONVERT(nvarchar(max),SUBSTRING(CONVERT(varbinary(max),t.text),r.statement_start_offset+1,CASE WHEN r.statement_end_offset=-1 OR r.statement_end_offset-r.statement_start_offset>=7998 THEN 8000 ELSE r.statement_end_offset-r.statement_start_offset+2 END)) COLLATE Latin1_General_100_CI_AS_SC,2000)
+        ELSE LEFT(t.text COLLATE Latin1_General_100_CI_AS_SC,2000) END
+    FROM @blockingIDs b JOIN sys.dm_exec_sessions s ON s.session_id=b.session_id
+    OUTER APPLY(SELECT TOP(4) q.*,COUNT_BIG(*) OVER() AS request_count FROM sys.dm_exec_requests q WHERE q.session_id=s.session_id ORDER BY q.request_id) r
+    OUTER APPLY(SELECT TOP(1) c.most_recent_sql_handle FROM sys.dm_exec_connections c WHERE c.session_id=s.session_id AND r.request_id IS NULL ORDER BY c.connect_time DESC,c.connection_id) c
+    OUTER APPLY sys.dm_exec_sql_text(CASE WHEN r.request_id IS NOT NULL THEN r.sql_handle ELSE c.most_recent_sql_handle END) t;
+    IF EXISTS(SELECT 1 FROM @blockingContext WHERE request_count>4) INSERT @issues VALUES(N'Bloklanma zinciri',N'Oturum başına ilk 4 etkin istek gösterilir; çoklu istekli oturumda kök kesinleştirilemeyebilir.');
+  END TRY BEGIN CATCH INSERT @issues VALUES(N'Bloklanma zinciri',ERROR_MESSAGE()); END CATCH;
   """
   private static func diagnosticSection(category:Int,title:String,condition:String,order:String) -> String {
     """
@@ -139,12 +178,61 @@ public enum ActivityMonitoring {
   }
   public struct Diagnostics: Sendable, Equatable {
     public var blocked,longRunning,backups:[Request]
+    public var blockingContexts:[BlockingContext]
     public var issues:[String]
-    public init(blocked:[Request]=[],longRunning:[Request]=[],backups:[Request]=[],issues:[String]=[]) {self.blocked=blocked;self.longRunning=longRunning;self.backups=backups;self.issues=issues}
+    public init(blocked:[Request]=[],longRunning:[Request]=[],backups:[Request]=[],blockingContexts:[BlockingContext]=[],issues:[String]=[]) {self.blocked=blocked;self.longRunning=longRunning;self.backups=backups;self.blockingContexts=blockingContexts;self.issues=issues}
+    public func blockingChain(for request:Request) -> BlockingChain {
+      var ids=[request.sessionID],seen=Set(ids),next=request.blocker
+      var termination=BlockingChain.Termination.root
+      while let session=next,session>0 {
+        if !seen.insert(session).inserted {termination = .cycle(session);break}
+        ids.append(session)
+        let context=blockingContexts.filter {$0.sessionID == session}
+        guard !context.isEmpty else {termination = .missing(session);break}
+        if context.contains(where:{$0.requestCount>4}) {termination = .requestLimit(session);break}
+        let parents=Set(context.compactMap(\.blocker).filter {$0 != 0})
+        guard parents.count<=1 else {termination = .ambiguous(session);break}
+        next=parents.first
+        if let next,next<0 {termination = .special(next);break}
+        if ids.count>=9,next != nil {termination = .depthLimit;break}
+      }
+      return .init(sessionIDs:ids.reversed(),termination:termination)
+    }
+  }
+  public struct BlockingContext:Identifiable,Sendable,Equatable {
+    public enum SQLSource:String,Sendable {case current,recent,unavailable}
+    public var id:String {"\(sessionID):\(requestID.map(String.init) ?? "idle")"}
+    public var sessionID:Int64
+    public var requestID:Int64?
+    public var requestCount:Int64
+    public var database,status,command,wait,waitResource,login,host,program,sql:String
+    public var blocker,waitMS,openTransactions:Int64?
+    public var sqlSource:SQLSource
+    public init(sessionID:Int64,requestID:Int64?=nil,requestCount:Int64=0,database:String="",status:String="",command:String="",blocker:Int64?=nil,wait:String="",waitMS:Int64?=nil,waitResource:String="",openTransactions:Int64?=nil,login:String="",host:String="",program:String="",sqlSource:SQLSource = .unavailable,sql:String="") {
+      self.sessionID=sessionID;self.requestID=requestID;self.requestCount=requestCount;self.database=database;self.status=status;self.command=command;self.blocker=blocker;self.wait=wait;self.waitMS=waitMS;self.waitResource=waitResource;self.openTransactions=openTransactions;self.login=login;self.host=host;self.program=program;self.sqlSource=sqlSource;self.sql=sql
+    }
+  }
+  public struct BlockingChain:Sendable,Equatable {
+    public enum Termination:Sendable,Equatable {case root,missing(Int64),cycle(Int64),depthLimit,requestLimit(Int64),ambiguous(Int64),special(Int64)}
+    /// Root/known ancestor first, selected blocked request last.
+    public var sessionIDs:[Int64]
+    public var termination:Termination
+    public var notice:String? {
+      switch termination {
+      case .root:nil
+      case .missing(let id):"Oturum \(id) ayrıntısı okunamadı veya örnekleme sırasında sonlandı; kök doğrulanamadı."
+      case .cycle(let id):"Oturum \(id) çevresinde döngü görüldü; kök yok. DMV örneği tek başına deadlock kanıtı değildir."
+      case .depthLimit:"Zincir 8 üst seviyede sınırlandı; devamı okunmadı."
+      case .requestLimit(let id):"Oturum \(id) için yalnız ilk 4 istek okundu; zincirin devamı kesin değil."
+      case .ambiguous(let id):"Oturum \(id) birden fazla bloklayan oturumu bekliyor; tek bir kök gösterilemiyor."
+      case .special(let id):"Bloklayan kimliği \(id): normal bir oturum değil; zincirin kökü doğrulanamadı."
+      }
+    }
   }
 
   private static let overviewColumns=["sampled_at","started_at","cpu_percent","waiting_tasks","io_bytes","batch_requests","active_requests","blocked_requests","backup_requests","open_transactions","idle_transactions","user_sessions","sql_memory_mb","available_memory_mb","memory_grants_pending","io_reads","io_writes","read_stall_ms","write_stall_ms","process_cpu_ms","logical_cpu_count"]
   private static let requestColumns=["session_id","request_id","database_name","status","command","elapsed_ms","cpu_ms","reads","writes","blocker","wait_type","open_transactions","percent_complete","remaining_ms","sql_text"]
+  private static let blockingColumns=["session_id","request_id","request_count","database_name","status","command","blocker","wait_type","wait_ms","wait_resource","open_transactions","login_name","host_name","program_name","sql_source","sql_text"]
   private static func validate(_ execution:Execution) throws {
     guard !execution.partial,!execution.stoppedEarly,!execution.results.contains(where:{$0.truncated}) else {throw SQLFailure("Activity Monitor sonucu eksik veya kısmi; güncel ölçüm olarak kullanılmadı.")}
   }
@@ -175,7 +263,7 @@ public enum ActivityMonitoring {
   }
   public static func decodeDiagnostics(_ execution:Execution) throws -> Diagnostics {
     try validate(execution)
-    guard execution.results.count == 4 else {throw SQLFailure("Activity Monitor DBA sonucu eksik; üç istek listesi ve tanı sonucu gerekli.")}
+    guard execution.results.count == 5 else {throw SQLFailure("Activity Monitor DBA sonucu eksik; üç istek listesi, bloklayan oturumlar ve tanı sonucu gerekli.")}
     func requests(_ rows:Rows) throws -> [Request] {
       try schema(rows,requestColumns)
       guard rows.values.count<=30 else {throw SQLFailure("Activity Monitor DBA istek listesi sınırı aşıldı.")}
@@ -187,7 +275,21 @@ public enum ActivityMonitoring {
         return request
       }
     }
-    return try Diagnostics(blocked:requests(execution.results[0]),longRunning:requests(execution.results[1]),backups:requests(execution.results[2]),issues:issues(execution.results[3]))
+    let rows=execution.results[3]
+    try schema(rows,blockingColumns)
+    guard rows.values.count<=240 else {throw SQLFailure("Activity Monitor bloklayan oturum sınırı aşıldı.")}
+    var ids=Set<String>()
+    let contexts=try rows.values.map {row in
+      guard let session=counter(row[0]),session>0,let count=counter(row[2]),let source=BlockingContext.SQLSource(rawValue:row[14] ?? ""),row[1] == nil || counter(row[1]) != nil,row[6] == nil || row[6].flatMap(Int64.init) != nil else {throw SQLFailure("Activity Monitor bloklayan oturum bilgisi geçersiz.")}
+      let request=counter(row[1])
+      guard (request == nil && count == 0 && source != .current) || (request != nil && count>0 && source == .current) else {throw SQLFailure("Activity Monitor bloklayan istek bağlamı tutarsız.")}
+      let context=BlockingContext(sessionID:session,requestID:request,requestCount:count,database:row[3] ?? "",status:row[4] ?? "",command:row[5] ?? "",blocker:row[6].flatMap(Int64.init),wait:row[7] ?? "",waitMS:counter(row[8]),waitResource:row[9] ?? "",openTransactions:counter(row[10]),login:row[11] ?? "",host:row[12] ?? "",program:row[13] ?? "",sqlSource:source,sql:String((row[15] ?? "").prefix(2000)))
+      guard ids.insert(context.id).inserted else {throw SQLFailure("Activity Monitor bloklayan istek kimliği yinelendi.")}
+      return context
+    }
+    let grouped=Dictionary(grouping:contexts,by:\.sessionID)
+    guard grouped.count<=60,grouped.values.allSatisfy({group in group.count<=4 && Set(group.map(\.requestCount)).count == 1 && (group.first!.requestCount == 0 ? group.count == 1:group.count == min(4,Int(group.first!.requestCount)))}) else {throw SQLFailure("Activity Monitor bloklayan oturum sonucu eksik veya sınırı aşıldı.")}
+    return try Diagnostics(blocked:requests(execution.results[0]),longRunning:requests(execution.results[1]),backups:requests(execution.results[2]),blockingContexts:contexts,issues:issues(execution.results[4]))
   }
   public static func sample(_ current:Snapshot,previous:Snapshot?) -> Sample {
     let seconds=previous.map {current.time.timeIntervalSince($0.time)}
