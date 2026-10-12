@@ -1,13 +1,14 @@
 [
   {
-    "version": "0.2.72",
+    "version": "0.2.73",
     "date": "2026-10-12",
     "title": "Kompakt SQL tamamlama ve kontrollü Explorer bağlantıları",
     "changes": [
       "SQL tamamlama listesi kompakt tek satırlı önerilerle en çok 16 görünür satır sunar. Caret ekranın altındaysa pencere yukarı açılır; tür ikonları, eşleşme vurgusu ve klavye ile hızlı gezinme korunur.",
       "Explorer bağlantı kontrolü ve nesne yenileme yalnız bağlı oturumlarda çalışır. Kopmuş bağlantı arka planda kendiliğinden yeniden açılmaz.",
       "Yeni Sorgu kısayolu kapalı Explorer bağlantısını mevcut profil ve seçilen veritabanıyla bir kez yeniden açmayı dener. Başarısızlık görünür mesajla bildirilir; bağlantı formu açılmaz.",
-      "Explorer bağlantı işlemleri menüsü ve sunucu sağ tık menüsüne Aktif Bağlantıyı Kapat eklendi. Açık sorgu oturumları ve transaction’lar korunur; kapalı bağlantı açıkça yeniden bağlanabilir."
+      "Explorer bağlantı işlemleri menüsü ve sunucu sağ tık menüsüne Aktif Bağlantıyı Kapat eklendi. Açık sorgu oturumları ve transaction’lar korunur; kapalı bağlantı açıkça yeniden bağlanabilir.",
+      "Tema veya çalışma alanı yenilenirken Explorer’da seçilen favori sorgu ve nesne seçimi korunur."
     ]
   },
   {

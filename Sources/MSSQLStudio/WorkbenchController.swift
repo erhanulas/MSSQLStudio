@@ -535,6 +535,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   private func reloadWorkspace() {
     guard isViewLoaded else { return }
+    let selection=selected
     let removed = roots.filter {root in !state.servers.contains(where:{$0 === root.server})}
     if !removed.isEmpty {
       roots.removeAll {root in removed.contains(where:{$0 === root})}
@@ -565,6 +566,10 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     outline.reloadData()
     for root in roots where outline.row(forItem: root) >= 0 && !outline.isItemExpanded(root) {
       outline.expandItem(root)
+    }
+    if let selection {
+      let row=outline.row(forItem:selection)
+      if row >= 0 {outline.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)}
     }
     renderTabs()
     renderActive()

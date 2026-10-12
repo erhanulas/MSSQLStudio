@@ -1177,4 +1177,12 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - İlgili 15 uygulama testi geçti. Tam paket çalışması 124 uygulama + 140 core = **264 test, 239 geçti / 25 dış koşullu atlandı**; iki hedefin tamamlanmış test özetleri doğrulandı. Log: `/tmp/mssql-072-tests.log`.
 - Release build başarılı: `/tmp/mssql-072-release.log`. İzole `/tmp/MSSQLStudio-072-ui/MSSQLStudio.app` (local.mssqlstudio.uitest) CUA kontrolünde 100 önerinin 16 kompakt satırı, ekran altındaki caret için yukarı açılış, End ile son öneri/Home-Down-Tab ile `[Name]` ekleme ve Explorer bağlantı menüsü gözlendi. Gerçek kullanıcı app’i, Keychain ve SQL oturumları değiştirilmedi; test app’i kapatıldı.
 - Canlı SQL Server ağ kesintisi/yeniden bağlantısı bu ortamda doğrulanmadı; sentetik kontrol canlı ağ kanıtı değildir. Frozen credential helper kaynak/binary/hash değişmedi.
-- Yayın CI/paket doğrulaması henüz bekleniyor.
+- v0.2.72 Actions `38235910774` imzalı paketleri hazırladı fakat uygulama testlerinde favori ağacı seçimi kontrolü başarısız oldu (264 test: 238 geçti / 25 dış koşullu atlandı / 1 hata). Yayın açılmadı; etiket korunur. Başka native testlerden gelen tema bildiriminin reloadData sırasında Explorer seçimini düşürdüğü belirlendi. Tema bildirimiyle deterministik regresyon kontrolü eklendi, çalışma alanı yenilemesi mevcut node seçimini geri yükleyecek şekilde düzeltildi. Sonraki yayın adayı v0.2.73/build 74.
+
+
+## 12 Ekim 2026 — v0.2.73 geliştirme doğrulaması
+
+- v0.2.72’deki tamamlayıcı pencere ve kontrollü Explorer bağlantı değişiklikleri korunur. Çalışma alanı/tema yenilemesinde mevcut Explorer node seçimi geri yüklenir; favori seçildikten sonra tema bildirimi ve favori güncellemesi sırasıyla tetiklenerek seçim ve genişletme regresyonu denetlenir.
+- Tam yerel test çalışması: **124 uygulama + 140 core = 264 test, 239 geçti / 25 dış koşullu atlandı**. İki hedefin tamamlanmış özetleri `/tmp/mssql-073-tests.log` içinde; Release build `/tmp/mssql-073-release.log` başarılı.
+- Tamamlama/Explorer native CUA kanıtı önceki adayda aynı tamamlayıcı kaynakla alındı; bu revizyonda değişen seçim davranışı native regresyon testinde doğrulandı. Gerçek SQL Server kesintisi/yeniden bağlantısı doğrulanmış sayılmaz.
+- Yayın CI/paket doğrulaması bekleniyor.
