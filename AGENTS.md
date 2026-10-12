@@ -12,9 +12,9 @@ Bu dosya mimari, geliştirme durumu ve görünüm kurallarının ana kaynağıd�
 
 ## Güncel durum — 12 Ekim 2026
 
-Son doğrulanmış yayın **v0.2.83, build 84**; kaynak `c0f7667c35ab3b5299bfa9e4a25b9b8e773aace4`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38260060704` başarılı; 303 paket testi (278 geçti / 25 dış koşullu atlandı), public latest, indirilen ZIP/PKG/credential archive SHA-256, digest/manifest, app/helper strict imzaları ve exact frozen helper eşitliği doğrulandı. Helper v1 hash'leri v0.2.69'dan aynen korunur; yeniden derlenmez/imzalanmaz. v0.2.62 önizleme tema hatası, v0.2.64 CI viewport/odak test engeli ve v0.2.72 favori ağacı seçim regresyonu nedeniyle yayımlanmadı; bu etiketler korunur.
+Son doğrulanmış yayın **v0.2.84, build 85**; kaynak `0bc167ddea8bc877ba901223a743adaac20316c8`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38265849294` başarılı; 315 paket testi (289 geçti / 26 dış koşullu atlandı), public latest, indirilen ZIP/PKG/credential archive SHA-256, digest/manifest, app/helper strict imzaları ve exact frozen helper eşitliği doğrulandı. Uygulamanın kendi Foundation updater yolu exact 0.2.84 için geçti. Helper v1 hash'leri v0.2.69'dan aynen korunur; yeniden derlenmez/imzalanmaz. v0.2.62 önizleme tema hatası, v0.2.64 CI viewport/odak test engeli ve v0.2.72 favori ağacı seçim regresyonu nedeniyle yayımlanmadı; bu etiketler korunur.
 
-- v0.2.84 / build 85 hazırlanıyor: iki DB DDL karşılaştırma ve seçili taşıma. Yerel 315 test (289 geçti / 26 dış koşullu atlandı), Release, izole Explorer/fark/taşıma önizlemesi CUA ve Microsoft ScriptDOM SQL 2017 grammar denetimi geçti. Canlı iki DB taşıması test edilmedi; yayın doğrulaması bekleniyor.
+- v0.2.84: iki DB DDL karşılaştırma ve seçili taşıma yayımlandı. Yerel/CI 315 test (289 geçti / 26 dış koşullu atlandı), Release, izole Explorer/fark/taşıma önizlemesi CUA ve Microsoft ScriptDOM SQL 2017 grammar denetimi geçti. Public paketler/digest/manifest/strict imza/frozen helper ve uygulamanın kendi Foundation feed yolu exact 0.2.84 için doğrulandı. Canlı iki DB taşıması test edilmedi; özel tablo/dependency kapsam sınırları aşağıdadır.
 
 - v0.2.82 etiketi korunur; son CUA Düzen menüsünün pencere geçmişine bağlı kaldığını gösterdiği için Actions 38259271584 public yayından önce iptal edildi. Menü köprüsü düzeltmesi v0.2.83 içindedir.
 
