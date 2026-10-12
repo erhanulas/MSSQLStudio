@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.94",
+    "date": "2026-10-12",
+    "title": "Gelişmiş Activity Monitor ve DBA tanıları",
+    "changes": [
+      "Activity Monitor aktif işlem, bloklanma, yedekleme ve transaction kartları; bellek ve disk gecikmesi göstergeleriyle yenilendi. Açık ve koyu temada kompakt, uyarlanabilir yerleşim kullanılır.",
+      "Altı etkileşimli grafik CPU, bekleyen istek, I/O, batch, bloklanma ve bellek tahsislerini gösterir. Son değer, tepe değer ve örnek ayrıntıları 5 veya 15 dakikalık aralıkta incelenebilir; örnek tablosu korunur.",
+      "DBA sekmesinde bloklanan ve uzun süren sorgular ile yedekleme ilerlemesi izlenir. Kartlardan ilgili listeye geçilebilir; seçilen isteğin SQL metni, bekleme ve kaynak kullanımı salt okunur incelenip kopyalanabilir.",
+      "İzleme sorguları sınırlı ve görünürlük kontrollüdür. Eksik izin, bağlantı kopması ve eski örnekler açıkça belirtilir; CPU, transaction ve I/O hesapları sayaç sıfırlanması veya sunucu yeniden başlamasında yanıltıcı değer üretmez."
+    ]
+  },
+  {
     "version": "0.2.93",
     "date": "2026-10-12",
     "title": "Güvenilir DDL taşıması ve mevcut tablolarda sade ALTER",

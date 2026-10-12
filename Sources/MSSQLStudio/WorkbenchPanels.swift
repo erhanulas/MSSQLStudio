@@ -359,6 +359,7 @@ struct HistoryPanel: View {
   private var lastDark: Bool?
   override init(frame frameRect: NSRect) {
     super.init(frame:frameRect)
+    clipsToBounds=true
     preview.identifier=NSUserInterfaceItemIdentifier("sqlSourcePreview")
     preview.isEditable=false; preview.isSelectable=true
     preview.isHorizontallyResizable=true; preview.isVerticallyResizable=true
@@ -367,7 +368,7 @@ struct HistoryPanel: View {
     preview.setAccessibilityLabel("SQL önizleme editörü")
     documentView=preview; hasVerticalScroller=true; hasHorizontalScroller=true
     borderType = .noBorder
-    let ruler=SQLPreviewRuler(scrollView:self,orientation:.verticalRuler); ruler.ruleThickness=48
+    let ruler=SQLPreviewRuler(scrollView:self,orientation:.verticalRuler); ruler.ruleThickness=48;ruler.clipsToBounds=true
     verticalRulerView=ruler; hasVerticalRuler=true; rulersVisible=true
     NotificationCenter.default.addObserver(self,selector:#selector(themeChanged),name:StudioTheme.changed,object:nil)
   }

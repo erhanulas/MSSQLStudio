@@ -2226,7 +2226,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   @objc func activity() {if let server=selectedServer {showPerformanceMonitor(server)}}
   func showPerformanceMonitor(_ server:ConnectedServer) {
     present(ActivityMonitorPanel(server:server,openTable:{[weak self] in self?.createActivityTable(server)}),
-      title:"Activity Monitor · \(server.profile.name)",width:1080,height:780,minWidth:920,minHeight:700,identity:"activity|\(server.id)")
+      title:"Activity Monitor · \(server.profile.name)",width:1220,height:840,minWidth:920,minHeight:700,identity:"activity|\(server.id)")
   }
   @objc private func openActivityTable() {if let server=contextNode?.server ?? selectedServer {createActivityTable(server)}}
   private func createActivityTable(_ server:ConnectedServer) {

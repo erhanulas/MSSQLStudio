@@ -35,12 +35,155 @@ struct ActivityFavoriteTests {
     let invalid=try ActivityMonitoring.decode(e)
     #expect(invalid.cpu == nil && invalid.waiting == nil && invalid.bytes == nil && invalid.batches == nil)
   }
-  @Test func overviewKeepsIndependentMetricsAndCumulativeCounters() {
+  @Test func overviewKeepsIndependentMetricsAndCumulativeCounters() throws {
     let sql=ActivityMonitoring.overviewSQL
-    #expect(sql.contains("sys.dm_os_ring_buffers") && sql.contains("ProcessUtilization"))
+    #expect(sql.contains("process_kernel_time_ms") && sql.contains("process_user_time_ms") && sql.contains("cpu_count"))
+    #expect(!sql.contains("sys.dm_os_ring_buffers"))
     #expect(sql.contains("s.is_user_process=1") && sql.contains("w.session_id<>@@SPID"))
     #expect(sql.contains("sys.dm_io_virtual_file_stats") && sql.contains("cntr_type IN (272696320,272696576)"))
-    #expect(sql.components(separatedBy:"BEGIN CATCH").count == 6)
+    #expect(sql.components(separatedBy:"BEGIN CATCH").count == 10)
+    #expect(sql.contains("HAS_PERMS_BY_NAME(NULL,NULL,@monitorPermission)") && sql.contains("VIEW SERVER PERFORMANCE STATE") && sql.contains("VIEW SERVER STATE"))
+    #expect(sql.contains("ISNULL(r.wait_type,N'') NOT IN") && !sql.contains("last_wait_type"))
+    #expect(sql.contains("s.status=N'sleeping' THEN s.open_transaction_count"))
+    #expect(sql.contains("FROM sys.dm_exec_sessions s WHERE s.is_user_process=1 AND s.session_id<>@@SPID;"))
+    #expect(sql.contains("physical_memory_in_use_kb)/1024.0") && sql.contains("available_physical_memory_kb)/1024.0"))
+    #expect(sql.contains("grant_time IS NULL AND session_id<>@@SPID"))
+    if let directory=ProcessInfo.processInfo.environment["MSSQL_ACTIVITY_SQL_DUMP"] {
+      let url=URL(fileURLWithPath:directory,isDirectory:true)
+      try FileManager.default.createDirectory(at:url,withIntermediateDirectories:true)
+      try sql.write(to:url.appendingPathComponent("overview.sql"),atomically:true,encoding:.utf8)
+      try ActivityMonitoring.diagnosticsSQL.write(to:url.appendingPathComponent("diagnostics.sql"),atomically:true,encoding:.utf8)
+    }
+  }
+  func overviewExecution(_ health:[String?]=["4","1","2","8","3","20","8192.125","4096.5","1"],io:[String?]=["100","200","500","2000"],cpu:[String?]=["6000","8"]) -> Execution {
+    var result=Execution()
+    result.results=[Rows(values:[["2026-10-12T10:00:00.1234567Z","engine-start",nil,"3","9007199254740993","30"]+health+io+cpu]),Rows()]
+    return result
+  }
+  @Test func extendedOverviewPreservesCurrentHealthAndLargeCounters() throws {
+    let result=try ActivityMonitoring.decode(overviewExecution())
+    #expect(result.health == .init(activeRequests:4,blockedRequests:1,backupRequests:2,openTransactions:8,idleTransactions:3,userSessions:20,sqlMemoryMB:8192.125,availableMemoryMB:4096.5,memoryGrantsPending:1))
+    #expect(result.reads == 100 && result.writes == 200 && result.readStallMS == 500 && result.writeStallMS == 2000)
+    #expect(result.processCPUMS == 6000 && result.logicalCPUCount == 8 && result.cpu == nil)
+    #expect(result.bytes == 9_007_199_254_740_993)
+    #expect(ActivityMonitoring.sample(result,previous:nil).health == result.health)
+    #expect(ActivityMonitoring.sample(result,previous:nil).cpu == nil)
+  }
+  @Test func extendedOverviewDistinguishesUnavailableFromZeroAndRetainsOtherMetrics() throws {
+    var e=overviewExecution(["0",nil,"0",nil,"-1","overflow","NaN","inf",nil],io:[nil,"0","-1","oops"],cpu:[nil,"0"])
+    e.results[1]=Rows(values:[["İstekler","VIEW SERVER PERFORMANCE STATE izni gerekli."],["I/O","Dosya sayacı okunamadı."]])
+    let result=try ActivityMonitoring.decode(e)
+    #expect(result.health.activeRequests == 0 && result.health.backupRequests == 0 && result.health.blockedRequests == nil)
+    #expect(result.health.openTransactions == nil && result.health.idleTransactions == nil && result.health.userSessions == nil)
+    #expect(result.health.sqlMemoryMB == nil && result.health.availableMemoryMB == nil && result.health.memoryGrantsPending == nil)
+    #expect(result.reads == nil && result.writes == 0 && result.readStallMS == nil && result.writeStallMS == nil && result.logicalCPUCount == nil)
+    #expect(result.waiting == 3 && result.batches == 30 && result.issues.count == 2)
+  }
+  @Test func overviewRejectsTruncatedMissingExtraRowsAndWrongSchemas() throws {
+    let base=overviewExecution()
+    var variants:[Execution]=[]
+    var e=base;e.stoppedEarly=true;variants.append(e)
+    e=base;e.results[1].truncated=true;variants.append(e)
+    e=base;e.results.removeLast();variants.append(e)
+    e=base;e.results.append(Rows());variants.append(e)
+    e=base;e.results[0]=Rows(values:[Array(e.results[0].values[0].prefix(20))]);variants.append(e)
+    e=base;e.results[0]=Rows(values:[e.results[0].values[0],e.results[0].values[0]]);variants.append(e)
+    e=base;e.results[0].fields=[Field("wrong")];variants.append(e)
+    e=base;e.results[1]=Rows(values:[["missing-message"]]);variants.append(e)
+    for variant in variants {#expect(throws:SQLFailure.self) {try ActivityMonitoring.decode(variant)}}
+  }
+  @Test func cpuUsesProcessDeltaAndMachineLogicalCapacity() {
+    var old=snapshot(cpu:99);old.processCPUMS=100_000;old.logicalCPUCount=8
+    var current=snapshot(5,cpu:99);current.processCPUMS=110_000;current.logicalCPUCount=8
+    #expect(ActivityMonitoring.sample(old,previous:nil).cpu == nil)
+    #expect(ActivityMonitoring.sample(current,previous:old).cpu == 25)
+    current.processCPUMS=100_000;#expect(ActivityMonitoring.sample(current,previous:old).cpu == 0)
+    current.processCPUMS=200_000;#expect(ActivityMonitoring.sample(current,previous:old).cpu == 100)
+  }
+  @Test func cpuAndLatencyRejectRestartMissingResetAndTimeDiscontinuity() {
+    var old=snapshot();old.processCPUMS=100;old.logicalCPUCount=4;old.reads=100;old.readStallMS=500;old.writes=200;old.writeStallMS=1000
+    var current=snapshot(5);current.processCPUMS=200;current.logicalCPUCount=4;current.reads=110;current.readStallMS=550;current.writes=204;current.writeStallMS=1040
+    var variants:[ActivityMonitoring.Snapshot]=[]
+    var invalid=current;invalid.started="B";variants.append(invalid)
+    invalid=current;invalid.started=nil;variants.append(invalid)
+    for seconds in [0.0,-5,181] {invalid=current;invalid.time=old.time.addingTimeInterval(seconds);variants.append(invalid)}
+    for invalid in variants {
+      let sample=ActivityMonitoring.sample(invalid,previous:old)
+      #expect(sample.cpu == nil && sample.readLatencyMS == nil && sample.writeLatencyMS == nil && sample.beginsSequence)
+    }
+    current.processCPUMS=99;current.readStallMS=499;current.writes=199
+    let reset=ActivityMonitoring.sample(current,previous:old)
+    #expect(reset.cpu == nil && reset.readLatencyMS == nil && reset.writeLatencyMS == nil)
+    current.processCPUMS=200;current.logicalCPUCount=8;#expect(ActivityMonitoring.sample(current,previous:old).cpu == nil)
+    current.logicalCPUCount=nil;#expect(ActivityMonitoring.sample(current,previous:old).cpu == nil)
+    current.logicalCPUCount=4;current.processCPUMS=nil;#expect(ActivityMonitoring.sample(current,previous:old).cpu == nil)
+  }
+  @Test func latencyUsesPerIntervalOperationCountAndNoActivityIsUnavailable() {
+    var old=snapshot();old.reads=100;old.readStallMS=500;old.writes=200;old.writeStallMS=1000
+    var current=snapshot(5);current.reads=110;current.readStallMS=550;current.writes=204;current.writeStallMS=1040
+    let sample=ActivityMonitoring.sample(current,previous:old)
+    #expect(sample.readLatencyMS == 5 && sample.writeLatencyMS == 10)
+    #expect(ActivityMonitoring.sample(old,previous:nil).readLatencyMS == nil)
+    current.reads=100;current.readStallMS=500;current.writes=nil
+    let idle=ActivityMonitoring.sample(current,previous:old)
+    #expect(idle.readLatencyMS == nil && idle.writeLatencyMS == nil)
+    current.reads=101;#expect(ActivityMonitoring.sample(current,previous:old).readLatencyMS == 0)
+  }
+  @Test func unavailableEngineIdentityDisablesRatesWithoutBreakingIndependentGauges() {
+    let old=snapshot(start:nil,waiting:1,bytes:100,batches:100)
+    var current=snapshot(5,start:nil,waiting:2,bytes:200,batches:200)
+    current.health = .init(blockedRequests:2,memoryGrantsPending:1)
+    let sample=ActivityMonitoring.sample(current,previous:old)
+    #expect(!sample.beginsSequence && sample.waiting == 2 && sample.health.blockedRequests == 2)
+    #expect(sample.megabytesPerSecond == nil && sample.batchesPerSecond == nil)
+    #expect(ActivityMonitoring.sample(current,previous:nil).beginsSequence)
+  }
+  func diagnosticExecution() -> Execution {
+    var result=Execution()
+    result.results=[Rows(values:[["71","0","Sales","suspended","SELECT","60000","30","10","2","72","LCK_M_S","1",nil,nil,"SELECT N'İstanbul';"]]),Rows(values:[["71","1","Sales","running","SELECT","120000","500","30","0",nil,nil,"2",nil,nil,"SELECT 2;"]]),Rows(values:[["90","0","Sales","running","BACKUP DATABASE","100000","100","0","40",nil,"BACKUPIO","0","25.5",nil,"BACKUP DATABASE Sales TO DISK = N'backup.bak';"]]),Rows()]
+    return result
+  }
+  @Test func diagnosticsDecodeCategoriesRequestIdentityAndBackupProgress() throws {
+    let result=try ActivityMonitoring.decodeDiagnostics(diagnosticExecution())
+    #expect(result.blocked.count == 1 && result.longRunning.count == 1 && result.backups.count == 1)
+    #expect(result.blocked[0].id == "71:0" && result.longRunning[0].id == "71:1")
+    #expect(result.blocked[0].blocker == 72 && result.blocked[0].wait == "LCK_M_S" && result.blocked[0].sql == "SELECT N'İstanbul';")
+    #expect(result.longRunning[0].reads == 30 && result.longRunning[0].openTransactions == 2)
+    #expect(result.backups[0].percentComplete == 25.5 && result.backups[0].remainingMS == nil && result.backups[0].elapsedMS == 100000)
+  }
+  @Test func diagnosticsPreserveOtherCategoriesAndPermissionFailures() throws {
+    var e=diagnosticExecution();e.results[0]=Rows();e.results[3]=Rows(values:[["Bloklanan istekler","VIEW SERVER STATE izni gerekli."]])
+    let result=try ActivityMonitoring.decodeDiagnostics(e)
+    #expect(result.blocked.isEmpty && result.longRunning.count == 1 && result.backups.count == 1 && result.issues.count == 1)
+    e.results[2]=Rows(values:[["90","0",nil,nil,nil,"-1","NaN","overflow",nil,"-5",nil,"-2","101",nil,String(repeating:"🙂",count:2200)]])
+    let invalid=try ActivityMonitoring.decodeDiagnostics(e).backups[0]
+    #expect(invalid.elapsedMS == nil && invalid.cpuMS == nil && invalid.reads == nil && invalid.blocker == nil && invalid.openTransactions == nil && invalid.percentComplete == nil)
+    #expect(invalid.sql.count == 2000)
+  }
+  @Test func diagnosticsRejectPartialWrongSchemaDuplicateIdentityAndOversizedResults() throws {
+    let base=diagnosticExecution()
+    var variants:[Execution]=[]
+    var e=base;e.partial=true;variants.append(e)
+    e=base;e.stoppedEarly=true;variants.append(e)
+    e=base;e.results[2].truncated=true;variants.append(e)
+    e=base;e.results.removeLast();variants.append(e)
+    e=base;e.results.append(Rows());variants.append(e)
+    e=base;e.results[0].fields=[Field("wrong")];variants.append(e)
+    e=base;e.results[0]=Rows(values:[["1","0"]]);variants.append(e)
+    e=base;var row=e.results[0].values[0];row[0]="0";e.results[0]=Rows(values:[row]);variants.append(e)
+    e=base;e.results[0]=Rows(values:[e.results[0].values[0],e.results[0].values[0]]);variants.append(e)
+    e=base;e.results[1]=Rows(values:(0..<31).map {index in var row=e.results[1].values[0];row[1]=String(index);return row});variants.append(e)
+    for variant in variants {#expect(throws:SQLFailure.self) {try ActivityMonitoring.decodeDiagnostics(variant)}}
+  }
+  @Test func diagnosticsSQLUsesBoundedCurrentStatementReadsAndIndependentCategories() {
+    let sql=ActivityMonitoring.diagnosticsSQL
+    #expect(sql.components(separatedBy:"SELECT TOP(30)").count == 4 && sql.components(separatedBy:"BEGIN CATCH").count == 4)
+    #expect(sql.contains("r.total_elapsed_time>=30000") && sql.contains("r.blocking_session_id>0"))
+    #expect(sql.contains("IF @canMonitor=0 THROW") && !sql.contains("last_wait_type"))
+    #expect(sql.contains("SUBSTRING(CONVERT(varbinary(max),t.text),r.statement_start_offset+1") && sql.contains("r.statement_end_offset-r.statement_start_offset+2"))
+    #expect(sql.contains("COLLATE Latin1_General_100_CI_AS_SC,2000)") && sql.contains("sql_text nvarchar(4000)"))
+    #expect(sql.contains("r.reads,r.writes") && sql.contains("THEN r.percent_complete ELSE NULL END"))
+    #expect(!sql.contains("estimated_completion_time") && !sql.contains("dm_exec_query_plan") && !sql.contains("CREATE TABLE") && !sql.contains("KILL "))
   }
   @Test func favoritesMatchProfileIdentityAndExactDatabase() throws {
     let a=UUID(),b=UUID()

@@ -48,6 +48,26 @@ import Testing
     #expect(points.count == 2)
     model.breakSequence()
   }
+  @Test func activityWindowsStayScopedToTheirServerWithoutChangingTheQuery() throws {
+    _=NSApplication.shared
+    let state=StudioState();state.recoveryEnabled=false;state.historyEnabled=false
+    let a=ConnectedServer(profile:ServerProfile(name:"Monitor A"),password:"")
+    let b=ConnectedServer(profile:ServerProfile(name:"Monitor B"),password:"")
+    for server in [a,b] {server.online=false;server.catalogFixture=ObjectManagementUIFixture.catalog}
+    let document=QueryDocument(server:a,database:"DemoDB",title:"Keep this query")
+    document.sql="SELECT N'Existing query stays unchanged';";document.savedText=document.sql
+    state.servers=[a,b];state.documents=[document];state.active=document
+    let controller=WorkbenchController(state:state)
+    controller.showPerformanceMonitor(a)
+    let first=try #require(NSApp.windows.first {$0.identifier?.rawValue == "activity|\(a.id)" && $0.isVisible})
+    defer {for window in NSApp.windows where ["activity|\(a.id)","activity|\(b.id)"].contains(window.identifier?.rawValue ?? "") {window.close()}}
+    controller.showPerformanceMonitor(a);controller.showPerformanceMonitor(b)
+    let windows=NSApp.windows.filter {$0.isVisible && ($0.identifier?.rawValue.hasPrefix("activity|") ?? false)}
+    #expect(windows.filter {$0.identifier?.rawValue == "activity|\(a.id)"}.count == 1)
+    #expect(windows.contains {$0 === first} && windows.contains {$0.identifier?.rawValue == "activity|\(b.id)"})
+    #expect(state.documents.count == 1 && state.active === document)
+    #expect(document.sql == document.savedText && document.lastExecutedSQL == nil && document.database == "DemoDB")
+  }
   @Test func sharedPaginationMenuKeepsReadLimitSeparateAndNeverExecutes() throws {
     _=NSApplication.shared
     let doc=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Read prefs")
