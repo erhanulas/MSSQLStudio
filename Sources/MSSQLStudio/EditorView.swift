@@ -273,7 +273,11 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   }
   func didReplaceCharacters() {didChangeText()}
   override func validateUserInterfaceItem(_ item:any NSValidatedUserInterfaceItem)->Bool {
-    if item.action == #selector(performFindPanelAction(_:)),let action=NSTextFinder.Action(rawValue:item.tag) {return sqlFinder.validateAction(action)}
+    if item.action == #selector(performFindPanelAction(_:)),let action=NSTextFinder.Action(rawValue:item.tag) {
+      // Opening the bar must not depend on a previously initialized search session.
+      if action == .showFindInterface {return isSelectable && sqlFinder.findBarContainer != nil}
+      return sqlFinder.validateAction(action)
+    }
     return super.validateUserInterfaceItem(item)
   }
 
@@ -341,19 +345,22 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     if GridShortcuts.matches(.matchingPair,event) {jumpToMatchingPair?();return true}
     if GridShortcuts.matches(.parameterInfo,event) {requestParameterInfo?();return true}
     if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, event.charactersIgnoringModifiers?.lowercased() == "b" { navigateDefinition?(); return true }
-    if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control, event.charactersIgnoringModifiers?.lowercased() == "f" { showSelectionFind(); return true }
+    if isFindShortcut(event) {showSelectionFind();return true}
     return super.performKeyEquivalent(with:event)
   }
+  private func isFindShortcut(_ event:NSEvent)->Bool {
+    let modifiers=event.modifierFlags.intersection([.command,.control,.option,.shift])
+    return (modifiers == .command || modifiers == .control) && event.charactersIgnoringModifiers?.lowercased() == "f"
+  }
   func showSelectionFind() {
-    prepareEdit?()
     let item=NSMenuItem(); item.tag=NSTextFinder.Action.showFindInterface.rawValue
     performFindPanelAction(item)
   }
   override func performFindPanelAction(_ sender: Any?) {
     dismissSuggestions?()
-    if (sender as? NSValidatedUserInterfaceItem)?.tag == NSTextFinder.Action.showFindInterface.rawValue,
-      selectedRange().length > 0 {
-      sqlFinder.performAction(.setSearchString)
+    if (sender as? NSValidatedUserInterfaceItem)?.tag == NSTextFinder.Action.showFindInterface.rawValue {
+      prepareEdit?()
+      if selectedRange().length > 0 {sqlFinder.performAction(.setSearchString)}
     }
     if let item=sender as? NSValidatedUserInterfaceItem,let action=NSTextFinder.Action(rawValue:item.tag) {sqlFinder.performAction(action)}
   }
@@ -487,7 +494,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   override func keyDown(with event: NSEvent) {
     if GridShortcuts.matches(.matchingPair,event) {jumpToMatchingPair?();return}
     if GridShortcuts.matches(.parameterInfo,event) {requestParameterInfo?();return}
-    if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control, event.charactersIgnoringModifiers?.lowercased() == "f" { showSelectionFind(); return }
+    if isFindShortcut(event) {showSelectionFind();return}
     if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control, event.charactersIgnoringModifiers?.lowercased() == "a" { selectAll(nil); return }
     if suggestionKey?(event) == true { return }
     if event.keyCode == 49 && event.modifierFlags.contains(.control), let requestSuggestions { requestSuggestions(); return }

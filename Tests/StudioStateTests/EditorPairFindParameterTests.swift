@@ -18,6 +18,32 @@ import Testing
     #expect(editor.string == original && doc.sql == original && editor.textLayoutManager != nil)
     #expect(GridShortcuts.binding(.matchingPair).label == "⌃⇧M")
   }
+  @Test func commandFindOpensFromFreshMenuAndKeyboardRoutes() throws {
+    _=NSApplication.shared
+    let server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false
+    let doc=QueryDocument(server:server,database:"master",title:"Command Find")
+    let controller=EditorController(document:doc),editor=controller.editor
+    let item=NSMenuItem(title:"Bul…",action:#selector(NSTextView.performFindPanelAction(_:)),keyEquivalent:"f")
+    item.tag=NSTextFinder.Action.showFindInterface.rawValue
+    #expect(editor.validateUserInterfaceItem(item))
+    var prepared=0;editor.prepareEdit={prepared+=1}
+    editor.performFindPanelAction(item)
+    #expect(controller.scroll.isFindBarVisible && prepared == 1)
+    editor.sqlFinder.performAction(.hideFindInterface)
+    doc.sql="SELECT N'İstanbul'";controller.setText();editor.setSelectedRange(NSRange(location:0,length:6))
+    func key(_ flags:NSEvent.ModifierFlags)->NSEvent {
+      NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:flags,timestamp:0,windowNumber:0,context:nil,characters:"f",charactersIgnoringModifiers:"f",isARepeat:false,keyCode:3)!
+    }
+    #expect(editor.performKeyEquivalent(with:key(.command)))
+    #expect(controller.scroll.isFindBarVisible && prepared == 2 && NSPasteboard(name:.find).string(forType:.string) == "SELECT")
+    editor.sqlFinder.performAction(.hideFindInterface)
+    editor.keyDown(with:key(.command));#expect(controller.scroll.isFindBarVisible && prepared == 3)
+    editor.sqlFinder.performAction(.hideFindInterface)
+    #expect(editor.performKeyEquivalent(with:key([.control,.capsLock])))
+    #expect(controller.scroll.isFindBarVisible && !editor.sqlFinder.incrementalSearchingShouldDimContentView)
+    editor.sqlFinder.performAction(.hideFindInterface)
+    #expect(!editor.performKeyEquivalent(with:key([.command,.shift])))
+  }
   @Test func findDoesNotDimAndNativeReplaceRemainsUndoable() async throws {
     _=NSApplication.shared
     let server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false

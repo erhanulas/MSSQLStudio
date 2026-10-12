@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.80",
+    "date": "2026-10-12",
+    "title": "Command+F SQL editörü arama düzeltmesi",
+    "changes": [
+      "Command+F, SQL editöründe ilk kullanımdan itibaren arama çubuğunu açar. Düzen → Bul menüsünün etkinliği önceki arama durumuna bağlı kalmaz.",
+      "Command+F ve Ctrl+F aynı arama yolunu kullanır; seçili metin, katlanmış kaynak, SSMS renkleri ve griye dönmeyen editör zemini korunur. Command+Shift+F formatlama kısayolu ayrı kalır."
+    ]
+  },
+  {
     "version": "0.2.79",
     "date": "2026-10-12",
     "title": "SQL eşleşme gezinmesi, temiz arama ve parametre yardımı",

@@ -1,3 +1,9 @@
+## 12 Ekim 2026 — v0.2.80 / build 81: Command+F düzeltmesi
+
+- Önceki sürüm Ctrl+F'yi doğrudan açarken Command+F'yi menü responder/validateAction yoluna bırakıyordu. İlk search session öncesinde showFindInterface validation pasif kalabiliyordu. Menü açma doğrulaması selectable + findBarContainer üzerinden yapılır; Command+F ve Ctrl+F aynı helper ile performKeyEquivalent/keyDown yollarında açılır. Menü de önce fold projection'ı açar. Caps Lock yok sayılır; Command+Shift+F formatlama ayrı kalır.
+- Yeni native regresyon boş editörde ilk menü validation/açma, Command+F key equivalent/keyDown, seçili SELECT'in find pasteboard'a aktarılması, Ctrl+F + Caps Lock, no-dim ve Command+Shift+F ayrımını kapsar. `/tmp/mssql-080-tests.log`: **143 app + 149 core = 292 test; 267 geçti / 25 dış koşullu atlandı**; iki tamamlanmış özet ayrı doğrulandı. Release `/tmp/mssql-080-release.log`: **BUILD SUCCEEDED**; diff check temiz.
+- Son Release ile izole `/tmp/MSSQLStudio-080-ui/MSSQLStudio.app` CUA: boş editörde ilk Command+F Find çubuğunu açtı. Seçili SELECT ile Command+F iki eşleşme buldu; next + Done Ln1 Col29'a geçti. Düzen → Bul etkin görüldü ve menüden açıldı. Sentetik SQL kaydedilmeden kapatıldı; gerçek uygulama/DB/Keychain kullanılmadı. Dış koşullu canlı testler doğrulanmış sayılmaz.
+
 ## 12 Ekim 2026 — v0.2.79 / build 80: Eşleşme gezinmesi, temiz arama ve parametre yardımı
 
 - DataGrip'in [eşleşen ayırıcı](https://www.jetbrains.com/help/datagrip/code-editing.html), [matching brace navigation](https://www.jetbrains.com/help/datagrip/code-editor-navigation.html) ve [parametre bilgisi](https://www.jetbrains.com/help/datagrip/viewing-reference-information.html) davranışları resmî belgelerden incelendi. CASE/END ve nested parantezler lexer ile eşlenir; Ctrl+Shift+M iki yönde gider, gizli hedefi açar. Yorum/literal/quoted identifier/GO ve transaction/conversation ayrımı korunur; dekorasyon metne/SSMS foreground'a yazılmaz.
