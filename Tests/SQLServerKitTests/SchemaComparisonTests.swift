@@ -62,7 +62,7 @@ struct SchemaComparisonTests {
     #expect(try SchemaComparison.compare(source:source,target:.init(objects:[])).first?.status == .sourceOnly)
     #expect(try SchemaComparison.compare(source:.init(objects:[]),target:source).first?.status == .targetOnly)
     #expect(try SchemaComparison.compare(source:source,target:.init(objects:[object("T",type:"V")])).first?.status == .typeConflict)
-    let unavailable=try decoded(raw:nil,columnDigest:columns)
+    let unavailable=try decoded(raw:nil,columnDigest:columns,issue:"Tanım şifreli veya görünmüyor.")
     #expect(try SchemaComparison.compare(source:source,target:unavailable).first?.status == .unavailable)
     #expect(throws:SQLFailure.self) {try decoded(raw:rawA,columnDigest:nil)}
     #expect(throws:SQLFailure.self) {try decoded(raw:rawA,columnDigest:"invalid")}
@@ -76,6 +76,23 @@ struct SchemaComparisonTests {
     for excluded in ["dc.name","sys.indexes","sys.check_constraints","sys.foreign_keys","temporal_type","is_memory_optimized","lock_escalation","is_ansi_padded","is_filestream","encryption_type","is_not_for_replication","SELECT c.column_id"] {#expect(!projection.contains(excluded))}
     #expect(sql.contains("dc.name AS default_name") && sql.contains("sys.indexes") && sql.contains("sys.foreign_keys"))
     #expect(sql.contains("-- StudioSchemaInventory v2"))
+  }
+  @Test func emptyXMLMetadataIsCoalescedWithoutHidingUnreadableModuleDefinitions() throws {
+    func count(_ pattern:String,in sql:String) throws -> Int {try NSRegularExpression(pattern:pattern).numberOfMatches(in:sql,range:NSRange(location:0,length:(sql as NSString).length))}
+    for (sql,minimum) in [(SchemaComparison.inventory(),8),(SchemaComparison.refinementQuery([object("v",type:"V")]),2)] {
+      let serialized=try count(#"CONVERT\(nvarchar\(max\),\(\s*SELECT"#,in:sql)
+      let coalesced=try count(#"ISNULL\(CONVERT\(nvarchar\(max\),\(\s*SELECT"#,in:sql)
+      #expect(serialized>=minimum && serialized==coalesced)
+      #expect(sql.contains("FOR XML PATH('index'),TYPE"))
+      #expect(!sql.contains("ISNULL(CONVERT(nvarchar(max),m.definition)"))
+    }
+    let inventory=SchemaComparison.inventory()
+    #expect(inventory.contains("ELSE CONVERT(nvarchar(max),m.definition)+NCHAR(10)"))
+    var encrypted=Execution();encrypted.results=[Rows(values:[["1","A"]]),Rows(values:[["1","dbo","EncryptedView","V",nil,"Tanım şifreli veya görünmüyor.",nil]]),Rows()]
+    let snapshot=try SchemaComparison.decode(encrypted)
+    #expect(try SchemaComparison.compare(source:snapshot,target:snapshot).first?.status == .unavailable)
+    encrypted.results[1]=Rows(values:[["1","dbo","ReadableView","V",nil,"",nil]])
+    #expect(throws:SQLFailure.self) {try SchemaComparison.decode(encrypted)}
   }
   @Test func refinementIgnoresDeliveryHeaderButPreservesBodyLiteralsAndSettings() throws {
     let obj=object("renamed")
@@ -167,6 +184,35 @@ struct SchemaComparisonTests {
     #expect(query.contains("sys.columns") && query.contains("sys.indexes") && query.contains("o.type='V'"))
     #expect(query.contains("base.user_type_id=c.system_type_id") && query.contains("ISNULL(base.name,ty.name) AS base_type"))
   }
+  @Test func viewSelectProjectionAdditionSurvivesHeaderNormalizationAndEqualStoredColumnMetadata() throws {
+    let source=object("TEDARIK_FIYAT_FARKI_VW",type:"V",id:41)
+    let target=object("TEDARIK_FIYAT_FARKI_VW",type:"V",digest:String(repeating:"b",count:64),id:83)
+    // The reported difference is a SELECT projection after InvoiceDate. Stored
+    // view column metadata can be stale; code equality must not depend on it.
+    let targetSQL="""
+    CREATE VIEW [dbo].[TEDARIK_FIYAT_FARKI_VW]
+    AS
+    SELECT
+        C.TARIH AS InvoiceDate,
+        C.CARI_KODU AS SupplierCode
+    FROM dbo.TBLCASABIT AS C;
+    """
+    let sourceSQL=targetSQL.replacingOccurrences(of:"C.TARIH AS InvoiceDate,",with:"C.TARIH AS InvoiceDate,\n    C.INCKEYNO AS ExternalOrderId,")
+    let originalSource=try SchemaSnapshot(objects:[source]),originalTarget=try SchemaSnapshot(objects:[target])
+    #expect(try SchemaComparison.compare(source:originalSource,target:originalTarget).first?.status == .changed)
+    func refined(_ object:SchemaObject,_ sql:String) throws -> SchemaSnapshot {
+      var execution=Execution();execution.results=[Rows(values:[[String(object.objectID),sql,"1","1","0",nil,String(repeating:"c",count:64)]])]
+      return try SchemaComparison.refine(.init(objects:[object]),objects:[object],result:execution)
+    }
+    let a=try refined(source,sourceSQL),b=try refined(target,targetSQL)
+    let difference=try #require(SchemaComparison.compare(source:a,target:b).first)
+    #expect(difference.status == .changed && difference.canStage)
+    #expect(a.objects[source.key]?.comparisonDigest != b.objects[target.key]?.comparisonDigest)
+    #expect(a.objects[source.key]?.structuralDigest == b.objects[target.key]?.structuralDigest)
+    let deliveryOnly=try refined(target,sourceSQL.replacingOccurrences(of:"CREATE VIEW [dbo].[TEDARIK_FIYAT_FARKI_VW]",with:"ALTER VIEW oldName"))
+    #expect(try SchemaComparison.compare(source:a,target:deliveryOnly).first?.status == .equal)
+    #expect(try ExplorerScripts.module(sourceSQL,verb:"CREATE",qualified:source.key.qualified).contains("C.INCKEYNO AS ExternalOrderId,"))
+  }
   @Test func migrationOrdersDependenciesEscapesSQLAndNeverDropsModules() throws {
     let table=object("T",type:"U",id:10),view=object("v",type:"V",id:11),proc=object("p']\n--",id:12)
     let source=try SchemaSnapshot(objects:[table,view,proc],dependencies:[view.key:[table.key],proc.key:[view.key]])
@@ -220,6 +266,9 @@ struct SchemaComparisonTests {
       _=try await c.execute("BEGIN TRANSACTION; CREATE TABLE \(key.qualified) ([Id] int NOT NULL);")
       _=try await c.execute("CREATE VIEW \(view.qualified) AS SELECT [Id] FROM \(key.qualified);")
       let a=try SchemaComparison.decode(await c.execute(SchemaComparison.inventory(keys:[key,view]),limits:SchemaComparison.limits))
+      #expect(try #require(a.objects[key]?.digest).count==64)
+      #expect(try #require(a.objects[key]?.comparisonDigest).count==64)
+      #expect(try #require(a.objects[view]?.digest).count==64)
       _=try await c.execute("CREATE INDEX [IX_StudioCompare] ON \(key.qualified) ([Id]);")
       let indexOnly=try SchemaComparison.decode(await c.execute(SchemaComparison.inventory(keys:[key,view]),limits:SchemaComparison.limits))
       #expect(a.objects[key]?.digest != indexOnly.objects[key]?.digest)

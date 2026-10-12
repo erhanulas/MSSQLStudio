@@ -107,6 +107,43 @@ import SQLServerKit
     #expect(identical.sameCount==identical.differences.count-1)
     #expect(identical.sourceSnapshot != nil && identical.error.isEmpty)
   }
+  @Test func viewProjectionAdditionAppearsInFilteredListAndInlineCode() async throws {
+    let model=model(reader:{endpoint,sql in
+      var result=try SchemaComparisonUIFixture.catalog(endpoint.database,sql)
+      let definition="CREATE VIEW dbo.v_ActiveBalance AS\nSELECT A.CustomerID, C.InvoiceDate,\n"+(endpoint.database=="SourceDB" ? "    C.INCKEYNO AS ExternalOrderId,\n":"")+"    A.Amount\nFROM dbo.Customers A JOIN dbo.Orders C ON C.CustomerID=A.CustomerID;"
+      if sql.contains("StudioSchemaRefinement") {
+        var rows=Array(result.results[0].values)
+        for i in rows.indices where rows[i][0]=="109" {rows[i][1]=definition;rows[i][6]=String(repeating:"0",count:64)}
+        result.results[0]=Rows(values:rows)
+      } else if sql.contains("sys.sql_modules"),sql.contains("=109") {
+        result.results[0]=Rows(values:[[definition,"1","1","0",nil]])
+      }
+      return result
+    })
+    model.kind="View";await model.compare()
+    let row=try #require(model.visible.first {$0.key.name=="v_ActiveBalance"})
+    #expect(row.status == .changed && row.canStage)
+    #expect(!model.visible.contains {$0.key.name=="v_Balance"})
+    model.detailMode = .code;model.focused=row.key;await model.loadDetail()
+    #expect(model.sourceSQL.contains("C.INCKEYNO AS ExternalOrderId"))
+    #expect(!model.targetSQL.contains("ExternalOrderId") && !model.changedGroups.isEmpty)
+    #expect(model.detailMode == .code && model.error.isEmpty)
+  }
+  @Test func readableViewWithMissingServerHashReportsFailureInsteadOfAnEmptyDifferenceList() async throws {
+    let model=model(reader:{endpoint,sql in
+      var result=try SchemaComparisonUIFixture.catalog(endpoint.database,sql)
+      if sql.contains("StudioSchemaInventory") {
+        var rows=Array(result.results[1].values)
+        for i in rows.indices where rows[i][0]=="109" {rows[i][4]=nil}
+        result.results[1]=Rows(values:rows)
+      }
+      return result
+    })
+    model.kind="View";await model.compare()
+    #expect(model.error.contains("DDL özeti hesaplanamadı") && model.error.contains("v_ActiveBalance"))
+    #expect(model.visible.isEmpty && model.differences.isEmpty && model.sourceSnapshot==nil)
+    #expect(model.message=="Karşılaştırma tamamlanamadı." && !model.busy)
+  }
   @Test func detailModePersistsAcrossObjectsRecomparisonAndDelayedLoads() async throws {
     var delay=false
     let model=model(reader:{endpoint,sql in

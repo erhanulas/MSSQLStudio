@@ -218,6 +218,9 @@ public enum SchemaComparison {
       (SELECT c.name,ic.key_ordinal,ic.is_descending_key,ic.is_included_column FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id ORDER BY ic.index_column_id FOR XML PATH('column'),TYPE) AS columns
     FROM sys.indexes i LEFT JOIN sys.data_spaces ds ON ds.data_space_id=i.data_space_id WHERE i.object_id=o.object_id ORDER BY i.name FOR XML PATH('index'),TYPE
     """}
+  // SQL Server converts an empty typed FOR XML rowset to NULL. Empty optional
+  // metadata must contribute an empty string, otherwise + erases the whole hash.
+  private static func xmlText(_ query:String)->String {"ISNULL(CONVERT(nvarchar(max),(\(query))),N'')"}
   /// One bounded catalog round-trip, hashes computed on the server; no table data or full module bodies transferred.
   public static func inventory(keys:[SchemaObjectKey]?=nil) -> String {
     let filter=keys.map {keys in keys.isEmpty ? " AND 1=0" : " AND ("+keys.map {"(s.name="+SQL.literal($0.schema)+" AND o.name="+SQL.literal($0.name)+")"}.joined(separator:" OR ")+")"} ?? ""
@@ -259,15 +262,15 @@ public enum SchemaComparison {
           OR (c.default_object_id<>0 AND NOT EXISTS(SELECT 1 FROM sys.default_constraints d WHERE d.object_id=c.default_object_id))))
         OR EXISTS(SELECT 1 FROM sys.identity_columns ic WHERE ic.object_id=o.object_id AND ic.is_not_for_replication=1)
         OR EXISTS(SELECT 1 FROM sys.security_predicates sp WHERE sp.target_object_id=o.object_id)) THEN N'Özel tablo özellikleri için otomatik taşıma kapalı.' ELSE N'' END,
-      CASE WHEN o.type='U' THEN CONVERT(varchar(64),HASHBYTES('SHA2_256',CONVERT(varbinary(max),CONVERT(nvarchar(max),(\(columnComparisonXML))))),2) ELSE NULL END AS comparison_digest
+      CASE WHEN o.type='U' THEN CONVERT(varchar(64),HASHBYTES('SHA2_256',CONVERT(varbinary(max),\(xmlText(columnComparisonXML)))),2) ELSE NULL END AS comparison_digest
     FROM sys.objects o JOIN sys.schemas s ON s.schema_id=o.schema_id
     LEFT JOIN sys.sql_modules m ON m.object_id=o.object_id LEFT JOIN sys.tables tb ON tb.object_id=o.object_id
     LEFT JOIN sys.triggers tr ON tr.object_id=o.object_id LEFT JOIN sys.synonyms sn ON sn.object_id=o.object_id
-    CROSS APPLY (SELECT CASE WHEN o.type='U' THEN CONVERT(nvarchar(max),(\(columns)))+CONVERT(nvarchar(max),(\(indexes)))+CONVERT(nvarchar(max),(\(checks)))+CONVERT(nvarchar(max),(\(fks)))
-      +CONVERT(nvarchar(max),(SELECT tb.temporal_type,tb.is_memory_optimized,tb.is_filetable,tb.is_node,tb.is_edge,tb.lock_escalation FOR XML PATH('table'),TYPE))
+    CROSS APPLY (SELECT CASE WHEN o.type='U' THEN \(xmlText(columns))+\(xmlText(indexes))+\(xmlText(checks))+\(xmlText(fks))
+      +\(xmlText("SELECT tb.temporal_type,tb.is_memory_optimized,tb.is_filetable,tb.is_node,tb.is_edge,tb.lock_escalation FOR XML PATH('table'),TYPE"))
       WHEN o.type='SN' THEN CONVERT(nvarchar(max),sn.base_object_name)
       ELSE CONVERT(nvarchar(max),m.definition)+NCHAR(10)+CONVERT(nvarchar(1),m.uses_ansi_nulls)+CONVERT(nvarchar(1),m.uses_quoted_identifier)+ISNULL(CONVERT(nvarchar(1),tr.is_disabled),N'')
-        +ISNULL(OBJECT_SCHEMA_NAME(tr.parent_id)+N'.'+OBJECT_NAME(tr.parent_id),N'')+CASE WHEN o.type='V' THEN CONVERT(nvarchar(max),(\(columns)))+CONVERT(nvarchar(max),(\(indexes))) ELSE N'' END END AS value) payload
+        +ISNULL(OBJECT_SCHEMA_NAME(tr.parent_id)+N'.'+OBJECT_NAME(tr.parent_id),N'')+CASE WHEN o.type='V' THEN \(xmlText(columns))+\(xmlText(indexes)) ELSE N'' END END AS value) payload
     WHERE o.is_ms_shipped=0 AND o.type IN ('U','V','P','PC','FN','IF','TF','FS','FT','TR','TA','SN')\(filter)
     UNION ALL
     SELECT t.object_id,N'',t.name,'TRD',CONVERT(varchar(64),HASHBYTES('SHA2_256',CONVERT(varbinary(max),m.definition+NCHAR(10)+CONVERT(nvarchar(1),m.uses_ansi_nulls)+CONVERT(nvarchar(1),m.uses_quoted_identifier)+CONVERT(nvarchar(1),t.is_disabled))),2),CASE WHEN m.definition IS NULL THEN N'Tanım şifreli veya görünmüyor.' WHEN EXISTS(SELECT 1 FROM sys.crypt_properties cp WHERE cp.class=1 AND cp.major_id=t.object_id) OR EXISTS(SELECT 1 FROM sys.trigger_events te WHERE te.object_id=t.object_id AND (te.is_first=1 OR te.is_last=1)) THEN N'İmza / trigger çalışma sırası ayrıca taşınmalı.' WHEN m.execute_as_principal_id>=0 THEN N'EXECUTE AS principal eşlemesi gerekli.' ELSE N'' END,NULL FROM sys.triggers t LEFT JOIN sys.sql_modules m ON m.object_id=t.object_id WHERE t.parent_class=0 AND t.is_ms_shipped=0\(triggerFilter);
@@ -279,6 +282,7 @@ public enum SchemaComparison {
     let objects=try result.results[1].values.map {r -> SchemaObject in
       guard r.count==7,let rawID=r[0],let id=Int(rawID),id>0,let schema=r[1],let name=r[2],!name.isEmpty,let type=r[3],let issue=r[5] else {throw SQLFailure("Geçersiz DDL metadata satırı.")}
       if let digest=r[4],digest.range(of:"^[A-Fa-f0-9]{64}$",options:.regularExpression)==nil {throw SQLFailure("DDL özeti eksik veya geçersiz.")}
+      if r[4]==nil,issue.isEmpty {throw SQLFailure("DDL özeti hesaplanamadı: \(SQL.identifier(schema)).\(SQL.identifier(name)). Eksik karşılaştırma gösterilmedi; yeniden karşılaştırın.")}
       let comparisonDigest:String?
       if type=="U" {
         guard let value=r[6],value.range(of:"^[A-Fa-f0-9]{64}$",options:.regularExpression) != nil else {throw SQLFailure("Tablo kolon özeti eksik veya geçersiz; kısmi karşılaştırma yapılmadı.")}
@@ -454,7 +458,7 @@ extension SchemaComparison {
     return """
     -- StudioSchemaRefinement
     SELECT m.object_id,m.definition,m.uses_ansi_nulls,m.uses_quoted_identifier,ISNULL(t.is_disabled,0),CASE WHEN t.parent_class=0 THEN N'DATABASE' ELSE QUOTENAME(OBJECT_SCHEMA_NAME(t.parent_id))+N'.'+QUOTENAME(OBJECT_NAME(t.parent_id)) END,
-      CASE WHEN o.type='V' THEN CONVERT(varchar(64),HASHBYTES('SHA2_256',CONVERT(varbinary(max),CONVERT(nvarchar(max),(\(columnInventoryXML)))+CONVERT(nvarchar(max),(\(indexInventoryXML))))),2) ELSE NULL END
+      CASE WHEN o.type='V' THEN CONVERT(varchar(64),HASHBYTES('SHA2_256',CONVERT(varbinary(max),\(xmlText(columnInventoryXML))+\(xmlText(indexInventoryXML)))),2) ELSE NULL END
     FROM sys.sql_modules m LEFT JOIN sys.objects o ON o.object_id=m.object_id LEFT JOIN sys.triggers t ON t.object_id=m.object_id WHERE m.object_id IN (\(objects.map {String($0.objectID)}.joined(separator:",")));
     """
   }

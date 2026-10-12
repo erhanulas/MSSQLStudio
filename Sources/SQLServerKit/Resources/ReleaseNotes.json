@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.87",
+    "date": "2026-10-12",
+    "title": "İndekssiz view ve boş şema listelerinde DDL farkı düzeltmesi",
+    "changes": [
+      "İndeksi olmayan view’larda boş XML metadata sonucunun tüm nesne özetini NULL yapması düzeltildi. Okunabilir ve kodu farklı view’lar artık fark listesine gelir.",
+      "Aynı düzeltme indeks, foreign key veya check constraint listesi boş tablolara ve view kod doğrulamasına uygulandı. Gerçekten şifreli veya okunamayan tanımlar ayrıca belirtilmeye devam eder.",
+      "Okunabilir bir nesnenin sunucu özeti hesaplanamazsa artık nesne sessizce gizlenmez; karşılaştırma açık hata ile durur ve eksik sonuç gösterilmez.",
+      "SELECT listesine ExternalOrderId gibi yeni kolon eklenmesi kod farkı olarak korunur. Tablolarda kolon, view’larda kod farkı filtresi; Kod Farkı/Kolonlar tercihi ve taşıma güvenliği kontrolleri devam eder."
+    ]
+  },
+  {
     "version": "0.2.86",
     "date": "2026-10-12",
     "title": "Yalnız gerçek nesne farkları ve korunan karşılaştırma görünümü",
