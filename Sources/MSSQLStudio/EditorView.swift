@@ -234,6 +234,65 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   }
 }
 @MainActor final class SQLTextView: NSTextView {
+  private var quoteClosers:[Int:UInt16] = [:]
+  private var quoteSource=""
+  // Declared native edit ranges distinguish typing from replacing/pasting whole SQL.
+  // Programmatic replacements and undo without an input callback invalidate markers.
+  private func refreshQuoteClosers() {
+    if quoteSource != string || string.utf16.count > 250_000 {quoteClosers=[:]}
+    quoteSource=string
+  }
+  override func shouldChangeText(in range:NSRange,replacementString:String?) -> Bool {
+    refreshQuoteClosers()
+    guard super.shouldChangeText(in:range,replacementString:replacementString) else {return false}
+    guard !quoteClosers.isEmpty,let replacementString,range.location != NSNotFound,
+      NSMaxRange(range) <= (string as NSString).length else {quoteClosers=[:];return true}
+    let delta=(replacementString as NSString).length-range.length
+    quoteClosers=Dictionary(uniqueKeysWithValues:quoteClosers.compactMap {offset,quote in
+      if offset < range.location {return (offset,quote)}
+      if offset >= NSMaxRange(range) {return (offset+delta,quote)}
+      return nil
+    })
+    quoteSource=(string as NSString).replacingCharacters(in:range,with:replacementString)
+    return true
+  }
+  private func handleQuoteKey(_ event:NSEvent) -> Bool {
+    guard isEditable,!hasMarkedText(),selectedRanges.count == 1,
+      event.modifierFlags.intersection([.command,.control,.option]).isEmpty else {return false}
+    let quote=event.characters == "'" ? UInt16(39):event.characters == "\"" ? UInt16(34):nil
+    guard quote != nil || event.keyCode == 51 else {return false}
+    prepareEdit?()
+    refreshQuoteClosers()
+    let range=selectedRange(),source=string as NSString
+    let originalLength=source.length
+    guard range.location != NSNotFound,NSMaxRange(range) <= source.length else {return false}
+    if event.keyCode == 51 {
+      guard range.length == 0,range.location > 0,let closing=quoteClosers[range.location],
+        source.character(at:range.location-1) == closing else {return false}
+      insertText("",replacementRange:NSRange(location:range.location-1,length:2))
+      refreshQuoteClosers();return true
+    }
+    guard let quote else {return false}
+    if range.length == 0,quoteClosers[range.location] == quote {
+      quoteClosers.removeValue(forKey:range.location)
+      setSelectedRange(NSRange(location:range.location+1,length:0));return true
+    }
+    guard TSQL.allowsQuotePair(in:string,at:range.location) else {return false}
+    if range.length == 0,range.location < source.length {
+      let next=source.character(at:range.location)
+      // Do not manufacture a closer in the middle of existing text or escaped SQL.
+      guard [9,10,13,32,41,44,59,61,43,45,42,47,60,62,33].contains(next) else {return false}
+    }
+    let mark=String(UnicodeScalar(quote)!)
+    let selected=source.substring(with:range)
+    insertText(mark+selected+mark,replacementRange:range)
+    // A read-only delegate may reject the insertion.
+    guard (string as NSString).length == originalLength+2 else {return true}
+    refreshQuoteClosers()
+    quoteClosers[range.location+range.length+1]=quote;quoteSource=string
+    setSelectedRange(NSRange(location:range.location+1,length:range.length))
+    return true
+  }
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
     if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, event.charactersIgnoringModifiers?.lowercased() == "b" { navigateDefinition?(); return true }
     if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control, event.charactersIgnoringModifiers?.lowercased() == "f" { showSelectionFind(); return true }
@@ -384,6 +443,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     } else if event.keyCode == 53 || event.keyCode == 49 && event.modifierFlags.contains(.control) {
       dismissSuggestions?()
     } else {
+      if handleQuoteKey(event) {return}
       super.keyDown(with: event)
     }
   }
@@ -394,7 +454,10 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
 }
 @MainActor final class LineNumbers: NSView, NSViewToolTipOwner {
   weak var scrollView: NSScrollView?
-  var ruleThickness: CGFloat = 68
+  var ruleThickness: CGFloat = 44
+  static func width(lineCount:Int,font:NSFont) -> CGFloat {
+    max(44,ceil((String(max(1,lineCount)) as NSString).size(withAttributes:[.font:font]).width)+28)
+  }
   var sourceOffset: ((Int) -> Int)?
   var sourceText: (() -> String)?
   var lineNumber: ((Int) -> Int)?
@@ -534,6 +597,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   let editor = SQLTextView(usingTextLayoutManager: true)
   let occurrenceHighlights = OccurrenceHighlights()
   private let ruler: LineNumbers
+  private var rulerWidth:NSLayoutConstraint?
   private let document: QueryDocument
   var edited: (() -> Void)?
   var position: ((Int, Int) -> Void)?
@@ -639,13 +703,14 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     ruler.clipsToBounds = true
     ruler.layer?.masksToBounds = true
     ruler.editor = editor
-    ruler.ruleThickness = 68
+    ruler.ruleThickness = 44
     surface.wantsLayer = true; surface.clipsToBounds = true
     surface.addSubview(ruler); surface.addSubview(scroll)
     ruler.translatesAutoresizingMaskIntoConstraints = false; scroll.translatesAutoresizingMaskIntoConstraints = false
+    rulerWidth=ruler.widthAnchor.constraint(equalToConstant:44)
     NSLayoutConstraint.activate([
       ruler.leadingAnchor.constraint(equalTo:surface.leadingAnchor), ruler.topAnchor.constraint(equalTo:surface.topAnchor),
-      ruler.bottomAnchor.constraint(equalTo:surface.bottomAnchor), ruler.widthAnchor.constraint(equalToConstant:68),
+      ruler.bottomAnchor.constraint(equalTo:surface.bottomAnchor), rulerWidth!,
       scroll.leadingAnchor.constraint(equalTo:ruler.trailingAnchor), scroll.trailingAnchor.constraint(equalTo:surface.trailingAnchor),
       scroll.topAnchor.constraint(equalTo:surface.topAnchor), scroll.bottomAnchor.constraint(equalTo:surface.bottomAnchor)
     ])
@@ -721,6 +786,11 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     ruler.needsDisplay = true
   }
   func resizeToViewport() {
+    let gutterWidth=LineNumbers.width(lineCount:document.sql.utf16.reduce(1) {$1 == 10 ? $0+1:$0},font:StudioTheme.codeFont)
+    if rulerWidth?.constant != gutterWidth {
+      rulerWidth?.constant=gutterWidth;ruler.ruleThickness=gutterWidth
+      surface.layoutSubtreeIfNeeded()
+    }
     scroll.tile()
     let metrics: [NSAttributedString.Key:Any] = [.font:editor.font ?? StudioTheme.codeFont,.paragraphStyle:Self.codeParagraph()]
     let longest = document.sql.components(separatedBy:"\n").map { ($0 as NSString).size(withAttributes:metrics).width }.max() ?? 0

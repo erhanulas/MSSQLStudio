@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.76",
+    "date": "2026-10-12",
+    "title": "Kompakt sorgu alanı ve akıllı tırnak eşleme",
+    "changes": [
+      "SQL editörü ve sonuç tablosunun satır numarası alanları daha kompakt hale getirildi. Uzun satır numaraları ve düzenleme işaretleri için gereken genişlik otomatik ayrılır; sabit numaralar, kolon sabitleme ve blok katlama korunur.",
+      "Veritabanı seçimi, Explorer bilgisi, favori, gerçek plan, satır/kolon konumu ve sonuç görünürlüğü tek araç satırında birleştirildi. Sorgu sekmeleri arasında geçiş ve ayrılmış pencerelerde aynı kontroller korunur.",
+      "SQL kodunda yazılan tek veya çift tırnak otomatik kapanır; imleç çiftin içinde kalır. Üretilen kapanış tırnağını tekrar yazmak üzerinden geçer, boş çift Backspace ile birlikte silinir ve seçili metin tırnakla sarılabilir.",
+      "Yorumlar ve mevcut SQL metinleri içinde gereksiz tırnak üretilmez. Yapıştırılan SQL, Unicode metin, SQL çift apostrof kaçışları ve native geri alma/yineleme korunur."
+    ]
+  },
+  {
     "version": "0.2.75",
     "date": "2026-10-12",
     "title": "Boşluksuz SQL tamamlama ve Explorer’a özel arama kapsamı",

@@ -393,7 +393,7 @@ import Testing
     let controller = EditorController(document:doc)
     controller.surface.frame = NSRect(x:0,y:0,width:1000,height:600)
     controller.surface.layoutSubtreeIfNeeded(); controller.resizeToViewport()
-    #expect(controller.scroll.frame.minX >= 68)
+    #expect(controller.scroll.frame.minX == 44)
     #expect(controller.scroll.verticalRulerView == nil)
     let line = (doc.sql as NSString).lineRange(for:NSRange(location:0,length:0))
     controller.selectSourceLine(line)

@@ -99,7 +99,7 @@ import Testing
     #expect(grid.table.sortDescriptors.first?.ascending == false && grid.visibleIndices?.first == 159)
     #expect(grid.rowGutter.label?(0).0 == "150")
     grid.view.frame.size.width=600; grid.view.layoutSubtreeIfNeeded()
-    #expect(grid.frozenScroll.frame.width <= 380)
+    #expect(grid.frozenScroll.frame.width <= 600-grid.rowGutter.frame.width-160)
     #expect(grid.table.enclosingScrollView!.frame.width >= 160)
     #expect(grid.frozenTable.bounds.width > grid.frozenScroll.contentView.bounds.width)
     for theme in ["light","dark"] {

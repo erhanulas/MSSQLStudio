@@ -25,6 +25,29 @@ public struct CatalogSymbol: Sendable, Codable {
   }
 }
 public enum TSQL {
+  /// Quote pairing belongs to typed code, never to comments or existing literals.
+  /// Bound synchronous work on the editor's input path.
+  public static func allowsQuotePair(in source:String,at caret:Int) -> Bool {
+    let length=source.utf16.count
+    guard length <= 250_000, (0...length).contains(caret) else {return false}
+    guard let token=lex(source).first(where: {$0.range.location < caret && NSMaxRange($0.range) >= caret}) else {return true}
+    let quoted=token.kind == .string || token.kind == .word && (token.text.hasPrefix("[") || token.text.hasPrefix("\""))
+    if NSMaxRange(token.range) > caret {return token.kind != .comment && !quoted}
+    if token.kind == .comment {
+      if token.text.hasPrefix("--") {return false}
+      let units=Array(token.text.utf16);var depth=0,index=0
+      while index+1 < units.count {
+        if units[index] == 47 && units[index+1] == 42 {depth+=1;index+=2}
+        else if units[index] == 42 && units[index+1] == 47 {depth-=1;index+=2}
+        else {index+=1}
+      }
+      return depth == 0
+    }
+    if token.kind == .string {return token.text.utf16.filter {$0 == 39}.count.isMultiple(of:2)}
+    if token.text.hasPrefix("\"") {return token.text.utf16.filter {$0 == 34}.count.isMultiple(of:2)}
+    if token.text.hasPrefix("[") {return !token.text.utf16.filter {$0 == 93}.count.isMultiple(of:2)}
+    return true
+  }
   /// Conservative eligibility for unattended repetition; this is not a SQL authorization boundary.
   public static func canRepeatRead(_ sql: String) -> Bool {
     let tokens = lex(sql).filter { $0.kind != .space && $0.kind != .comment }

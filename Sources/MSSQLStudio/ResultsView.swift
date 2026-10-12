@@ -264,6 +264,13 @@ import SwiftUI
 /// A single painted gutter outside the horizontal clip view. The hidden synthetic
 /// table column keeps existing cell/ordinal mappings; no data cells or spool are duplicated.
 @MainActor final class ResultRowGutter: NSView {
+  static func width(maxRow:Int,editing:Bool,newRows:Bool) -> CGFloat {
+    let font=NSFont.monospacedDigitSystemFont(ofSize:11,weight:.semibold)
+    let label=(editing ? "✎ ":"")+String(max(1,maxRow))
+    let textWidth=(label as NSString).size(withAttributes:[.font:font]).width
+    let newWidth=newRows ? ("+ Yeni" as NSString).size(withAttributes:[.font:font]).width:0
+    return max(36,ceil(max(textWidth,newWidth))+12)
+  }
   weak var table: CopyTable?
   var label: ((Int) -> (String, NSColor))?
   override var isFlipped: Bool { true }
@@ -458,6 +465,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   let frozenScroll = NSScrollView()
   private(set) var pinnedColumns: [Int] = []
   private var frozenWidth: NSLayoutConstraint?
+  private var rowGutterWidth:NSLayoutConstraint?
   private var synchronizingSelection=false
   private var synchronizingScroll=false
   private var synchronizingColumns=false
@@ -530,7 +538,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   private func updateFrozenWidth() {
     let total=frozenTable.tableColumns.filter {!$0.isHidden}.reduce(CGFloat(0)) {$0+$1.width+frozenTable.intercellSpacing.width}
     // An oversized pinned group has its own horizontal scrollbar, keeping the other columns reachable.
-    let width=pinnedColumns.isEmpty ? 0:min(total,max(0,view.bounds.width-60-160))
+    let width=pinnedColumns.isEmpty ? 0:min(total,max(0,view.bounds.width-(rowGutterWidth?.constant ?? 36)-160))
     if frozenWidth?.constant != width {frozenWidth?.constant=width}
   }
   @objc private func gridBoundsChanged(_ notification:Notification) {
@@ -594,7 +602,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   private var generation = -1
   var requestEditing: ((Int, Int) -> Bool)?
   var editDefinition: TableDefinition? {
-    didSet {if isViewLoaded {refreshColumnHeaders()}}
+    didSet {if isViewLoaded {refreshColumnHeaders();updateRange()}}
   }
   var hasDraftChanges: Bool {
     for target in [table,frozenTable] {
@@ -861,6 +869,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     }
     chips.translatesAutoresizingMaskIntoConstraints = false
     frozenWidth=frozenScroll.widthAnchor.constraint(equalToConstant:0)
+    rowGutterWidth=rowGutter.widthAnchor.constraint(equalToConstant:36)
     chipsHeight = chipScroll.heightAnchor.constraint(equalToConstant: 0)
     NSLayoutConstraint.activate([
       chipsHeight!,
@@ -873,7 +882,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       rowGutter.leadingAnchor.constraint(equalTo:view.leadingAnchor),
       rowGutter.topAnchor.constraint(equalTo:scroll.topAnchor),
       rowGutter.bottomAnchor.constraint(equalTo:scroll.bottomAnchor),
-      rowGutter.widthAnchor.constraint(equalToConstant:60),
+      rowGutterWidth!,
       frozenScroll.leadingAnchor.constraint(equalTo:rowGutter.trailingAnchor),
       frozenScroll.topAnchor.constraint(equalTo:scroll.topAnchor),
       frozenScroll.bottomAnchor.constraint(equalTo:scroll.bottomAnchor),
@@ -910,6 +919,8 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     updateRange()
   }
   @objc private func updateRange() {
+    rowGutterWidth?.constant=ResultRowGutter.width(maxRow:result.values.count,editing:editDefinition != nil,newRows:!newRowOrder.isEmpty)
+    updateFrozenWidth()
     pageStart = pageSize == 0 || visibleCount == 0 ? 0 : min(((visibleCount - 1) / pageSize) * pageSize, pageStart)
     let label = (visibleCount == 0 ? "0 / 0" : "\(pageStart + 1)–\(pageStart + basePageCount) / \(visibleCount.formatted())\(partial ? "+" : "")") + (newRowOrder.isEmpty ? "" : " + \(newRowOrder.count) yeni")
     if rangeLabel.stringValue != label { rangeLabel.stringValue = label }
@@ -937,7 +948,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       n.headerCell = numberHeader
       let numberCell = GridDataCell(textCell:""); numberCell.alignment = .right; n.dataCell = numberCell
       n.title = "#"
-      n.width = 60
+      n.width = 36
       n.isHidden = true // Drawn in the fixed gutter; preserve the synthetic selection column.
       table.addTableColumn(n)
       for (i, f) in rows.fields.enumerated() {
@@ -1423,6 +1434,10 @@ private struct ColumnFilterPanel: View {
   private let messages = NSTextView()
   private let connectionBadge = NSTextField(labelWithString: "")
   private var editorHeader: NSStackView?
+  private let editorHeaderSlot=NSView()
+  private var editorHeaderHeight:NSLayoutConstraint?
+  private var editorHeaderConstraints:[NSLayoutConstraint]=[]
+  private weak var editorToolbarHost:NSView?
   private let compareModuleButton = NSButton()
   private let submitModuleButton = NSButton()
   private var checkingModuleSubmission = false
@@ -1527,20 +1542,23 @@ private struct ColumnFilterPanel: View {
     header.wantsLayer = true
     editorHeader = header
     header.edgeInsets = NSEdgeInsets(top: 1, left: 8, bottom: 1, right: 8)
-    editorPane.addSubview(header)
+    editorPane.addSubview(editorHeaderSlot)
+    editorHeaderSlot.translatesAutoresizingMaskIntoConstraints=false
     editorPane.addSubview(editor.surface)
     header.translatesAutoresizingMaskIntoConstraints = false
     editor.surface.translatesAutoresizingMaskIntoConstraints = false
+    editorHeaderHeight=editorHeaderSlot.heightAnchor.constraint(equalToConstant:28)
     NSLayoutConstraint.activate([
-      header.leadingAnchor.constraint(equalTo: editorPane.leadingAnchor),
-      header.trailingAnchor.constraint(equalTo: editorPane.trailingAnchor),
-      header.topAnchor.constraint(equalTo: editorPane.topAnchor),
-      header.heightAnchor.constraint(equalToConstant: 28),
+      editorHeaderSlot.leadingAnchor.constraint(equalTo:editorPane.leadingAnchor),
+      editorHeaderSlot.trailingAnchor.constraint(equalTo:editorPane.trailingAnchor),
+      editorHeaderSlot.topAnchor.constraint(equalTo:editorPane.topAnchor),
+      editorHeaderHeight!,
       editor.surface.leadingAnchor.constraint(equalTo: editorPane.leadingAnchor),
       editor.surface.trailingAnchor.constraint(equalTo: editorPane.trailingAnchor),
-      editor.surface.topAnchor.constraint(equalTo: header.bottomAnchor),
+      editor.surface.topAnchor.constraint(equalTo: editorHeaderSlot.bottomAnchor),
       editor.surface.bottomAnchor.constraint(equalTo: editorPane.bottomAnchor),
     ])
+    placeEditorToolbar(in:editorHeaderSlot)
     resultTabs.delegate = self
     resultTabs.tabViewType = .noTabsNoBorder
     resultTabs.setAccessibilityIdentifier("resultSelector")
@@ -1952,6 +1970,26 @@ private struct ColumnFilterPanel: View {
       controller.table.selectRowIndexes(selected, byExtendingSelection: false)
     }
     updateConnectionAppearance()
+  }
+  private func placeEditorToolbar(in host:NSView) {
+    guard let header=editorHeader else {return}
+    NSLayoutConstraint.deactivate(editorHeaderConstraints)
+    header.removeFromSuperview();host.addSubview(header)
+    editorHeaderConstraints=[
+      header.leadingAnchor.constraint(equalTo:host.leadingAnchor),
+      header.trailingAnchor.constraint(equalTo:host.trailingAnchor),
+      header.centerYAnchor.constraint(equalTo:host.centerYAnchor),
+      header.heightAnchor.constraint(equalToConstant:28)
+    ]
+    NSLayoutConstraint.activate(editorHeaderConstraints)
+  }
+  func hostEditorToolbar(in host:NSView?) {
+    _=view
+    guard editorToolbarHost !== host else {return}
+    editorToolbarHost=host
+    connectionBadge.isHidden=host != nil
+    editorHeaderHeight?.constant=host == nil ? 28:0
+    placeEditorToolbar(in:host ?? editorHeaderSlot)
   }
   func updateConnectionAppearance() {
     guard isViewLoaded else { return }

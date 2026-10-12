@@ -251,6 +251,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private let database = NSPopUpButton()
   private let status = NSTextField(labelWithString: "Bağlantı bekleniyor")
   private let context = NSTextField(labelWithString: "")
+  private let queryToolbarHost=NSView()
+  private weak var hostedQuery:QueryController?
   private var roots: [TreeNode] = []
   private var agentPolling: Task<Void,Never>?
   private var agentAutoRefresh = true
@@ -444,13 +446,17 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     context.font = .systemFont(ofSize: 11)
     context.textColor = .secondaryLabelColor
     context.lineBreakMode = .byTruncatingMiddle
+    context.setContentCompressionResistancePriority(.init(200),for:.horizontal)
     let databaseLabel = NSTextField(labelWithString: "Veritabanı:")
     databaseLabel.font = .systemFont(ofSize: 11)
     explorerToggle.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: "Object Explorer’ı Göster / Gizle")
     explorerToggle.target = self; explorerToggle.action = #selector(toggleExplorer)
     explorerToggle.bezelStyle = .inline; explorerToggle.isBordered = false
     explorerToggle.toolTip = "Object Explorer’ı Göster / Gizle"
-    let row = NSStackView(views: [explorerToggle, databaseLabel, database, context, NSView()])
+    queryToolbarHost.setAccessibilityIdentifier("queryToolbarHost")
+    queryToolbarHost.isHidden=true
+    let row = NSStackView(views: [explorerToggle, databaseLabel, database, context, queryToolbarHost])
+    row.setAccessibilityIdentifier("queryContextToolbar")
     StudioTheme.surface(row)
     row.orientation = .horizontal
     row.spacing = 8
@@ -479,6 +485,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       content.widthAnchor.constraint(equalTo: stack.widthAnchor),
       statusRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
       row.heightAnchor.constraint(equalToConstant: 30),
+      queryToolbarHost.heightAnchor.constraint(equalToConstant:28),
       statusRow.heightAnchor.constraint(equalToConstant: 26),
     ])
     content.setContentHuggingPriority(.init(1), for: .vertical)
@@ -690,7 +697,13 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         addChild(controller)
       }
       wanted = controller.view
+      if hostedQuery !== controller {
+        hostedQuery?.hostEditorToolbar(in:nil)
+        controller.hostEditorToolbar(in:queryToolbarHost);hostedQuery=controller
+        queryToolbarHost.isHidden=false
+      }
     } else {
+      hostedQuery?.hostEditorToolbar(in:nil);hostedQuery=nil;queryToolbarHost.isHidden=true
       if content.subviews.first?.identifier?.rawValue == "welcome" { return }
       let host = NSHostingView(
         rootView: WelcomeView(connect: { [weak self] in self?.showConnect() }))
@@ -723,7 +736,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       let badge = doc.server.profile.appearance?.badge ?? ""
       context.stringValue =
         (badge.isEmpty ? "" : "[\(badge)] ")
-        + "\(doc.server.profile.host),\(doc.server.profile.port)  •  \(doc.server.profile.login)"
+        + "\(doc.server.profile.name) · \(doc.server.profile.host),\(doc.server.profile.port)  •  \(doc.server.profile.login)"
+      context.toolTip=context.stringValue
       context.textColor = .secondaryLabelColor
       let phase: String
       switch doc.state {
@@ -2081,6 +2095,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     guard let doc = state.active, detached[doc.id] == nil else { return }
     renderActive()
     guard let controller = controllers[doc.id] else { return }
+    controller.hostEditorToolbar(in:nil)
+    if hostedQuery === controller {hostedQuery=nil;queryToolbarHost.isHidden=true}
     controller.view.removeFromSuperview()
     controller.removeFromParent()
     let owner = DetachedQueryWindow(query: controller)

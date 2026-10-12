@@ -157,7 +157,7 @@ import Testing
     let table=controller.table, gutter=controller.rowGutter
     let scroll=try #require(table.enclosingScrollView)
     let gutterFrame=controller.view.convert(gutter.bounds,from:gutter)
-    #expect(gutterFrame.minX == 0 && gutterFrame.width == 60)
+    #expect(gutterFrame.minX == 0 && gutterFrame.width == 36)
     #expect(table.tableColumns[0].isHidden && table.tableColumns[1].identifier.rawValue == "0")
     #expect(gutter.clipsToBounds && gutter.viewport.minY >= gutter.convert(table.headerView!.bounds,from:table.headerView!).maxY)
     scroll.contentView.scroll(to:NSPoint(x:600,y:300)); scroll.reflectScrolledClipView(scroll.contentView)
