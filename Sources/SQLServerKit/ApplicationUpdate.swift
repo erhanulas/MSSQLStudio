@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import Darwin
 
 /// Public Releases source. No GitHub credential is embedded in the application.
 public enum GitHubUpdateSource {
@@ -69,6 +70,33 @@ public actor ApplicationUpdate {
     guard let expected = defaults.string(forKey: "pendingInstallerVersion"),
       installationCompleted(expected: expected, runningVersion: runningVersion, bundleURL: bundleURL) else { return false }
     defaults.removeObject(forKey: "pendingInstallerVersion")
+    return true
+  }
+  /// A separate invocation of the signed app waits without creating NSApplication,
+  /// so Installer's must-close check can safely close the interactive application.
+  public func waitForInstallation(expected:String,parentProcess:Int32,timeout:Duration = .seconds(1800),target:URL = URL(fileURLWithPath:"/Applications/MSSQLStudio.app")) async -> Bool {
+    guard parentProcess > 1,Self.isNewer(expected,than:"0"),let identity=try? PersonalSigningIdentity.requirement() else {return false}
+    let clock=ContinuousClock(),deadline=ContinuousClock.now.advanced(by:timeout)
+    while clock.now < deadline {
+      if Task.isCancelled {return false}
+      if kill(parentProcess,0) == -1,errno == ESRCH,
+        (try? installedApplicationReady(at:target,expected:expected,identity:identity)) == true {return true}
+      do {try await clock.sleep(until:min(deadline,clock.now.advanced(by:.seconds(2))))}catch {return false}
+    }
+    return false
+  }
+  public func installedApplicationReady(at app:URL,expected:String) throws -> Bool {
+    try installedApplicationReady(at:app,expected:expected,identity:PersonalSigningIdentity.requirement())
+  }
+  private func installedApplicationReady(at app:URL,expected:String,identity:String) throws -> Bool {
+    // Read the plist from disk, bypassing Bundle's cached metadata during replacement.
+    guard let data=try? Data(contentsOf:app.appendingPathComponent("Contents/Info.plist")),
+      let info=try PropertyListSerialization.propertyList(from:data,format:nil) as? [String:Any],
+      info["CFBundleIdentifier"] as? String == "local.mssqlstudio.app",
+      info["CFBundleShortVersionString"] as? String == expected else {return false}
+    _ = try run("/usr/bin/codesign",["--verify","--deep","--strict","-R","="+identity,app.path])
+    let actual=try run("/usr/bin/codesign",["-d","-r-",app.path]).trimmingCharacters(in:.whitespacesAndNewlines)
+    guard actual == "designated => " + identity else {return false}
     return true
   }
   public init() {}

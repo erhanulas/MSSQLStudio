@@ -101,6 +101,22 @@ struct SQLIntelligenceTests {
     #expect(joins.contains {$0.text == "[dbo].[Other].[STOK_KODU]"})
     #expect(try complete("SELECT * FROM TBLSTSABIT T; SELECT * FROM TBLSTSABIT WHERE STOK_").suggestions.first?.text == "[STOK_KODU]")
   }
+  @Test func unseparatedSelectsAndUnionArmsDoNotLeakAliases() throws {
+    let catalog=SQLIntelligence.Catalog(snapshot:.init(symbols:[CatalogSymbol(schema:"dbo",name:"TBLSTSABIT",columns:["STOK_KODU"])]))
+    for separator in ["\n","\r\n"," ","; ","\nGO\n"," UNION ALL "," UNION "] {
+      for reverse in [false,true] {
+        let bare="SELECT * FROM TBLSTSABIT WHERE STOK_"
+        let aliased="SELECT * FROM TBLSTSABIT T WHERE [T].[STOK_KODU] = ''"
+        let sql=reverse ? bare+separator+aliased:aliased+separator+bare
+        let caret=NSMaxRange((sql as NSString).range(of:"WHERE STOK_"))
+        let result=try SQLIntelligence.analyze(source:sql,caret:caret,catalog:catalog,verified:true)
+        #expect(result.suggestions.first?.text == "[STOK_KODU]","\(separator) reverse=\(reverse)")
+      }
+    }
+    let sql="SELECT * FROM TBLSTSABIT WHERE [T].[STOK_KODU] = ''"
+    let result=try SQLIntelligence.analyze(source:sql,caret:(sql as NSString).range(of:"[STOK_KODU]").location+6,catalog:catalog,verified:true)
+    #expect(result.suggestions.isEmpty)
+  }
   @Test func localCTEAndTemporaryColumns() throws {
     let cte = "WITH q AS (SELECT CustomerID AS KeyID FROM dbo.Customers) SELECT q. FROM q;"
     #expect(try analyze(cte,caret:(cte as NSString).range(of:"q. FROM").location+2).suggestions.map(\.text) == ["[KeyID]"])

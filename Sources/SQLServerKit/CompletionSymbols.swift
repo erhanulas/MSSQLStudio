@@ -199,6 +199,9 @@ public enum SQLIntelligence {
       if tokens[i].text == "(" { stack.append(i) }
       if tokens[i].text == ")", let open = stack.popLast() { closes[open] = i }
     }
+    // SQL Server also permits consecutive SELECT statements without semicolons.
+    // Each SELECT arm owns its FROM bindings, including UNION and nested queries.
+    let selects=tokens.indices.filter {tokens[$0].text.uppercased() == "SELECT"}
     var starts = [Int](repeating:0,count:tokens.count), ends = [Int](repeating:original.length,count:tokens.count), start = 0
     for i in tokens.indices {
       starts[i] = start
@@ -209,8 +212,13 @@ public enum SQLIntelligence {
       if parents[i] == nil && [";","GO"].contains(tokens[i].text.uppercased()) { end = tokens[i].range.location }
       ends[i] = end
     }
+    for i in tokens.indices {
+      let peers=selects.filter {parents[$0] == parents[i] && $0 >= 0 && tokens[$0].range.location >= starts[i] && tokens[$0].range.location < ends[i]}
+      if let previous=peers.last(where:{$0 <= i}) {starts[i]=tokens[previous].range.location}
+      if let next=peers.first(where:{$0 > i}) {ends[i]=tokens[next].range.location}
+    }
     func scope(_ i: Int) -> NSRange {
-      if let open = parents[i], let close = closes[open] { return NSRange(location:NSMaxRange(tokens[open].range),length:max(0,tokens[close].range.location-NSMaxRange(tokens[open].range))) }
+      if let open = parents[i], let close = closes[open] { return NSIntersectionRange(NSRange(location:NSMaxRange(tokens[open].range),length:max(0,tokens[close].range.location-NSMaxRange(tokens[open].range))),NSRange(location:starts[i],length:max(0,ends[i]-starts[i]))) }
       return NSRange(location:starts[i],length:max(0,ends[i]-starts[i]))
     }
     func contains(_ range: NSRange, _ location: Int) -> Bool { location >= range.location && location <= NSMaxRange(range) }

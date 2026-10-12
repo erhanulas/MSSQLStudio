@@ -50,6 +50,25 @@ import UniformTypeIdentifiers
     if case .object(.jobs)=kind { return item?.name ?? title }
     return title
   }
+  var persistenceKey:String {
+    var parts:[String]=[];var cursor:TreeNode?=self
+    while let node=cursor {
+      let kind:String
+      switch node.kind {
+      case .server:kind="server"
+      case .group:kind="group"
+      case .database:kind="database"
+      case .favorites:kind="favorites:"+(node.favoriteScope?.rawValue ?? "root")
+      case .favorite:kind="favorite"
+      case .folder(let folder):kind="folder:"+folder.rawValue
+      case .object(let folder):kind="object:"+folder.rawValue
+      case .detail:kind="detail"
+      }
+      parts.insert(contentsOf:[kind,node.database,node.favorite?.id.uuidString ?? node.item.map {String($0.id)+":"+$0.schema+":"+$0.name} ?? (kind == "server" ? node.server.id.uuidString:node.title)],at:0)
+      cursor=node.parent
+    }
+    return String(decoding:try! JSONEncoder().encode(parts),as:UTF8.self)
+  }
   var triggerDisabled:Bool { item?.detail.contains("Disabled") == true }
   var ownerObject:TreeNode? {
     var node=parent
@@ -254,6 +273,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private let queryToolbarHost=NSView()
   private weak var hostedQuery:QueryController?
   private var roots: [TreeNode] = []
+  private var restoringTree=false
+  private weak var collapsingNode:TreeNode?
+  private var expansionState:[String:Bool] = [:]
   private var agentPolling: Task<Void,Never>?
   private var agentAutoRefresh = true
   private var tabSignature: [String]?
@@ -265,6 +287,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private var sidebar: NSSplitViewItem!
   init(state: StudioState) {
     self.state = state
+    expansionState=state.explorerTreeDefaults.dictionary(forKey:"explorerExpansionState") as? [String:Bool] ?? [:]
     explorerToggle.tracksActiveState=true
     super.init(nibName: nil, bundle: nil)
     NotificationCenter.default.addObserver(self,selector:#selector(explorerConnectionChanged(_:)),name:ConnectedServer.explorerConnectionChanged,object:nil)
@@ -576,10 +599,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     roots=state.servers.compactMap {server in roots.first {$0.server === server}}
     for root in roots {synchronizeFavorites(in:root)}
     rebuildSearchScopes()
-    outline.reloadData()
-    for root in roots where outline.row(forItem: root) >= 0 && !outline.isItemExpanded(root) {
-      outline.expandItem(root)
-    }
+    reloadExplorer()
+    restoreExplorerExpansion()
     if let selection {
       let row=outline.row(forItem:selection)
       if row >= 0 {outline.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)}
@@ -993,14 +1014,14 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
           node.children = serverTree(node.server).children
           synchronizeFavorites(in:node)
           node.loaded = true
-          outline.reloadItem(node, reloadChildren: true)
+          reloadExplorer(item:node,children:true)
           updateControls()
         } catch {
           guard token == node.server.generation, node.server.online,
             node.server.metadata === connection else { return }
           node.server.recordExplorerFailure(error)
           node.error = error.localizedDescription
-          outline.reloadItem(node)
+          reloadExplorer(item:node)
           updateControls()
         }
       }
@@ -1110,7 +1131,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
             }
             if node.children.count != previousCount {
               node.children.sort { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-              outline.reloadItem(node, reloadChildren: true)
+              reloadExplorer(item:node,children:true)
             }
           }
           if let item = node.item, case .object(let folder) = node.kind, folder == target.folder,
@@ -1124,7 +1145,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   @objc private func explorerConnectionChanged(_ notification:Notification) {
     guard isViewLoaded, let server=notification.object as? ConnectedServer else {return}
-    for root in roots where root.server === server {outline.reloadItem(root)}
+    for root in roots where root.server === server {reloadExplorer(item:root)}
     updateControls(); updateIndexStatus()
   }
   func checkExplorerConnections() async {
@@ -1137,7 +1158,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   @objc private func catalogIndexUpdated(_ notification: Notification) {
     lastIndexStatusCheck = .distantPast; updateIndexStatus()
     for row in 0..<outline.numberOfRows {
-      if let node=outline.item(atRow:row) as? TreeNode,case .database=node.kind {outline.reloadItem(node)}
+      if let node=outline.item(atRow:row) as? TreeNode,case .database=node.kind {reloadExplorer(item:node)}
     }
     if let server = notification.object as? ConnectedServer, let db = notification.userInfo?["database"] as? String, notification.userInfo?["error"] == nil {
       for doc in state.documents where doc.server === server && doc.database == db { Task { await doc.loadSymbols() } }
@@ -1303,9 +1324,12 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     showingSearch = show
     explorerTabs.selectedSegment = show ? 1 : 0
-    outline.reloadData()
+    reloadExplorer()
     if !show {
+      restoringTree=true
       for node in savedExpanded { outline.expandItem(node) }
+      restoringTree=false
+      restoreExplorerExpansion()
       if let node = savedTreeSelection {
         let row = outline.row(forItem:node)
         if row >= 0 { outline.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false) }
@@ -1370,11 +1394,11 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         searchResults = Array(matches.prefix(500))
         searchStatus.stringValue = "\(databases.count) veritabanı · \(searchResults!.count) sonuç" + (matches.count > 500 ? " · İlk 500" : "") + (pending > 0 ? " · \(pending) indeks hazırlanıyor" : "")
         searchStatus.toolTip = "Seçili veritabanlarının yerel disk indeksinde arama yapılır. Sonuçlar veritabanı sırasındadır; en fazla 500 sonuç gösterilir."
-        if showingSearch { outline.reloadData() }
+        if showingSearch { reloadExplorer() }
       } catch {
         guard token == searchToken else { return }
         searchResults = []; searchStatus.stringValue = "Arama başarısız: \(error.localizedDescription)"
-        if showingSearch { outline.reloadData() }
+        if showingSearch { reloadExplorer() }
       }
     }
   }
@@ -1417,6 +1441,44 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
     (item as? TreeNode)?.expandable ?? false
+  }
+  private func reloadExplorer(item:TreeNode?=nil,children:Bool=false) {
+    let previous=restoringTree;restoringTree=true
+    if let item {outline.reloadItem(item,reloadChildren:children)} else {outline.reloadData()}
+    restoringTree=previous
+    restoreExplorerExpansion()
+  }
+  func restoreExplorerExpansion() {
+    guard !showingSearch,!restoringTree else {return}
+    restoringTree=true;defer {restoringTree=false}
+    func restore(_ node:TreeNode,isRoot:Bool=false) {
+      guard node.expandable,outline.row(forItem:node)>=0 else {return}
+      let expanded=expansionState[node.persistenceKey] ?? isRoot
+      if expanded {
+        outline.expandItem(node)
+        for child in node.children {restore(child)}
+      } else {outline.collapseItem(node)}
+    }
+    for root in roots {restore(root,isRoot:true)}
+  }
+  private func recordExpansion(_ notification:Notification,expanded:Bool) {
+    guard !restoringTree,!showingSearch,let node=notification.userInfo?["NSObject"] as? TreeNode else {return}
+    expansionState[node.persistenceKey]=expanded
+    state.explorerTreeDefaults.set(expansionState,forKey:"explorerExpansionState")
+  }
+  func outlineViewItemDidExpand(_ notification:Notification) {recordExpansion(notification,expanded:true);restoreExplorerExpansion()}
+  func outlineViewItemWillCollapse(_ notification:Notification) {
+    guard !restoringTree,!showingSearch,collapsingNode == nil,let node=notification.userInfo?["NSObject"] as? TreeNode else {return}
+    collapsingNode=node
+  }
+  func outlineViewItemDidCollapse(_ notification:Notification) {
+    // AppKit emits descendant collapse notifications when an ancestor closes.
+    // Their remembered expansion remains intact for reopening that ancestor.
+    if let root=collapsingNode {
+      guard notification.userInfo?["NSObject"] as? TreeNode === root else {return}
+      collapsingNode=nil
+    }
+    recordExpansion(notification,expanded:false)
   }
   func outlineView(_ outlineView: NSOutlineView, shouldExpandItem item: Any) -> Bool {
     if let node = item as? TreeNode, !node.loaded { load(node) }
@@ -1506,7 +1568,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     let selection=selected
     for root in roots {
       let folder=synchronizeFavorites(in:root)
-      if !showingSearch {outline.reloadItem(folder,reloadChildren:true)}
+      if !showingSearch {reloadExplorer(item:folder,children:true)}
     }
     if !showingSearch,let selection {
       let row=outline.row(forItem:selection)
@@ -1641,7 +1703,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
             $0.rawValue, kind: .folder($0), server: node.server, database: node.database,
             item: node.item)
         }
-      outline.reloadItem(node, reloadChildren: true)
+      reloadExplorer(item:node,children:true)
       return
     }
     guard case .folder(let folder) = node.kind else {
@@ -1649,7 +1711,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       return
     }
     node.loading = true
-    outline.reloadItem(node)
+    reloadExplorer(item:node)
     Task { [weak self, weak node] in
       guard let self, let node else { return }
       do {
@@ -1675,7 +1737,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         ]
       }
       node.loading = false
-      outline.reloadItem(node, reloadChildren: true)
+      reloadExplorer(item:node,children:true)
     }
   }
   @objc private func openObject() {
@@ -2594,12 +2656,12 @@ extension WorkbenchController {
     guard !node.loading, !node.loaded, node.server.online || node.server.catalogFixture != nil else {return}
     if node.linked == nil, node.objectFolder == .linkedServers, let item=node.item {
       node.children=[linkedNode("Catalogs",branch:.catalogs(item.name),parent:node)]
-      node.loaded=true; outline.reloadItem(node,reloadChildren:true); return
+      node.loaded=true; reloadExplorer(item:node,children:true); return
     }
     guard let branch=node.linked else {return}
     if case .relation(let relation)=branch {
       node.children=[linkedNode("Columns",kind:.folder(.columns),branch:.columns(relation),parent:node)]
-      node.loaded=true; outline.reloadItem(node,reloadChildren:true); return
+      node.loaded=true; reloadExplorer(item:node,children:true); return
     }
     let sql:String
     switch branch {
@@ -2608,12 +2670,12 @@ extension WorkbenchController {
     case .columns(let relation): sql=LinkedCatalog.columnsSQL(relation)
     default: return
     }
-    node.loading=true; node.error=nil; outline.reloadItem(node)
+    node.loading=true; node.error=nil; reloadExplorer(item:node)
     let generation=node.server.generation
     let metadata=node.server.metadata
     Task { [weak self, weak node] in
       guard let self,let node else {return}
-      defer {node.loading=false; outline.reloadItem(node,reloadChildren:true)}
+      defer {node.loading=false; reloadExplorer(item:node,children:true)}
       do {
         var limits=Limits(); limits.rows=5000; limits.totalBytes=8_000_000; limits.timeout=30
         let result=try await node.server.catalog(sql,database:"master",limits:limits)
@@ -2710,7 +2772,7 @@ extension WorkbenchController {
           jobs.loading=true
           let token=root.server.generation
           let metadata=root.server.metadata
-          defer {jobs.loading=false;outline.reloadItem(jobs)}
+          defer {jobs.loading=false;reloadExplorer(item:jobs)}
           do {
             var limits=Limits();limits.rows=5000;limits.timeout=10
             let result=try await root.server.catalog(Catalog.objects(.jobs),database:"msdb",limits:limits)
@@ -2725,12 +2787,12 @@ extension WorkbenchController {
             jobs.error=result.partial ? "Kısmi job listesi; metadata sınırına ulaşıldı.":nil
             let selected=outline.item(atRow:outline.selectedRow) as? TreeNode
             let origin=outline.enclosingScrollView?.contentView.bounds.origin
-            outline.reloadItem(jobs,reloadChildren:true)
+            reloadExplorer(item:jobs,children:true)
             if let selected,outline.row(forItem:selected)>=0 {outline.selectRowIndexes(IndexSet(integer:outline.row(forItem:selected)),byExtendingSelection:false)}
             if let origin,let scroll=outline.enclosingScrollView {scroll.contentView.scroll(to:origin);scroll.reflectScrolledClipView(scroll.contentView)}
           } catch {
             guard root.server.generation == token else {continue}
-            jobs.error=error.localizedDescription;outline.reloadItem(jobs)
+            jobs.error=error.localizedDescription;reloadExplorer(item:jobs)
           }
         }
       }

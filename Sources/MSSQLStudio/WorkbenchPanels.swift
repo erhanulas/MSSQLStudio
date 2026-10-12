@@ -1283,12 +1283,22 @@ extension WorkbenchController {
         var installerOpened=false
         defer {if !installerOpened {try? FileManager.default.removeItem(at:prepared.directory)}}
         let alert=NSAlert();alert.messageText="MSSQL Studio \(prepared.version) kuruluma hazır"
-        alert.informativeText="macOS Kurulum penceresinde kurulumu tamamlayın, ardından MSSQL Studio’yu Uygulamalar’dan yeniden açın. Mevcut uygulama yerinde güncellenir; önceki sürüm saklanmaz. Kayıtlı bağlantılarınız korunur."
-        alert.addButton(withTitle:"Kurulum’u Aç ve Kapat");alert.addButton(withTitle:"Vazgeç")
-        guard alert.runModal() == .alertFirstButtonReturn, state.canQuit() else {return}
+        alert.informativeText="macOS Kurulum penceresinde kurulumu tamamlayın. Yeniden açmayı seçerseniz yeni sürüm doğrulandıktan sonra uygulama otomatik açılır; kurulum iptal edilirse açılmaz. Kayıtlı bağlantılarınız korunur."
+        alert.addButton(withTitle:"Güncelle ve Yeniden Aç")
+        alert.addButton(withTitle:"Güncelle ve Kapat")
+        alert.addButton(withTitle:"Vazgeç")
+        let response=alert.runModal()
+        guard response == .alertFirstButtonReturn || response == .alertSecondButtonReturn,state.canQuit() else {return}
         _ = try await NSWorkspace.shared.open([prepared.package],withApplicationAt:URL(fileURLWithPath:"/System/Library/CoreServices/Installer.app"),configuration:NSWorkspace.OpenConfiguration())
         installerOpened=true
         UserDefaults.standard.set(prepared.version,forKey:"pendingInstallerVersion")
+        if response == .alertFirstButtonReturn {
+          guard let executable=Bundle.main.executableURL else {throw SQLFailure("Yeniden açma bileşeni bulunamadı.")}
+          let watcher=Process();watcher.executableURL=executable
+          watcher.arguments=["--reopen-after-update",prepared.version,String(ProcessInfo.processInfo.processIdentifier)]
+          watcher.standardInput=FileHandle.nullDevice;watcher.standardOutput=FileHandle.nullDevice;watcher.standardError=FileHandle.nullDevice
+          try watcher.run()
+        }
         Application.updateTerminationApproved=true
         NSApp.terminate(nil)
       } catch { state.showError(error.localizedDescription) }

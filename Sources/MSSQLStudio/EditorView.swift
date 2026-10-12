@@ -872,6 +872,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     clearOccurrences()
     document.sql = editor.string
     highlightedSource=nil
+    if !editor.hasMarkedText() {highlight()}
     updateOutline(refreshRegions:false)
     regions = []
     resizeToViewport()
@@ -1209,6 +1210,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     return paragraph
   }
   private func highlight() {
+    guard !editor.hasMarkedText() else {return}
     guard let storage = editor.textContentStorage?.textStorage else { return }
     let source = editor.string
     let activeDiagnostics = cachedTokenSource == source && projection == nil ? diagnostics : []
@@ -1253,7 +1255,9 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     storage.endEditing()
     if editor.selectedRanges != selection { editor.selectedRanges = selection }
     decorateCollapsedRegions()
-    editor.typingAttributes[.foregroundColor] = StudioTheme.editorText
+    let caret=editor.selectedRange().location
+    let token=tokens.first {$0.range.location < caret && NSMaxRange($0.range) > caret}
+    editor.typingAttributes[.foregroundColor] = token.map {SQLSourceHighlighting.foreground($0,unused:false)} ?? StudioTheme.editorText
     scrolled()
     assert(editor.textLayoutManager != nil)
   }

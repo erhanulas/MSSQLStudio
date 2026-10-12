@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.77",
+    "date": "2026-10-12",
+    "title": "Kararlı SQL renkleri, Explorer görünümü ve seçilebilir yeniden açma",
+    "changes": [
+      "SQL tırnaklarının içindeki metin yazarken gecikmeli tamamlamayı beklemeden SSMS string renginde kalır. Unicode, SQL kaçışları, seçim ve geri alma/yineleme korunur.",
+      "Explorer dallarının açık/kapalı durumu bağlantı kimliğine göre saklanır ve uygulama açıldığında geri yüklenir. Üst dal kapatılırken alt dalların tercihleri kaybolmaz; ağaç yenilenmesi kullanıcı tercihini değiştirmez.",
+      "Noktalı virgül olmadan art arda yazılmış SELECT ifadeleri ve UNION kolları ayrı tamamlama kapsamları kullanır. Önceki sorgunun alias’ı alias’sız tablo kolonlarına eklenmez.",
+      "Güncellemede Güncelle ve Yeniden Aç veya Güncelle ve Kapat seçilebilir. Yeniden açma yalnız eski uygulama kapandıktan ve kurulan beklenen sürümün sabit imzası doğrulandıktan sonra yapılır; macOS Installer akışı korunur."
+    ]
+  },
+  {
     "version": "0.2.76",
     "date": "2026-10-12",
     "title": "Kompakt sorgu alanı ve akıllı tırnak eşleme",

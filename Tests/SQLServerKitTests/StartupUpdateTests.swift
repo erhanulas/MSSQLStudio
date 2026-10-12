@@ -142,3 +142,27 @@ extension StartupUpdateTests {
     #expect(throws: SQLFailure.self) { try agent.request("save", account: UUID(), data: Data("synthetic-only".utf8)) }
   }
 }
+
+@Suite struct UpdateReopenTests {
+  @Test func watcherRequiresExitedParentExactVersionAndValidSignature() async throws {
+    let updater=ApplicationUpdate()
+    let root=URL(fileURLWithPath:"/tmp/StudioReopen-"+UUID().uuidString)
+    defer {try? FileManager.default.removeItem(at:root)}
+    let app=root.appendingPathComponent("MSSQLStudio.app")
+    try FileManager.default.createDirectory(at:app.appendingPathComponent("Contents"),withIntermediateDirectories:true)
+    let info:[String:String]=["CFBundleIdentifier":"local.mssqlstudio.app","CFBundleShortVersionString":"999.0"]
+    try PropertyListSerialization.data(fromPropertyList:info,format:.xml,options:0).write(to:app.appendingPathComponent("Contents/Info.plist"))
+    #expect(try await !updater.installedApplicationReady(at:app,expected:"998.0"))
+    do {_ = try await updater.installedApplicationReady(at:app,expected:"999.0");Issue.record("Unsigned app accepted")}
+    catch is SQLFailure {}
+    #expect(await !updater.waitForInstallation(expected:"999.0",parentProcess:0,timeout:.zero,target:app))
+    #expect(await !updater.waitForInstallation(expected:"999.0",parentProcess:ProcessInfo.processInfo.processIdentifier,timeout:.milliseconds(1),target:app))
+    guard let zip=ProcessInfo.processInfo.environment["MSSQL_UPDATE_ZIP"] else {return}
+    let prepared=try await updater.prepare(zip:URL(fileURLWithPath:zip),target:app,currentVersion:"0")
+    let signed=prepared.stage.appendingPathComponent("MSSQLStudio.app")
+    defer {try? FileManager.default.removeItem(at:prepared.stage)}
+    #expect(try await updater.installedApplicationReady(at:signed,expected:prepared.version))
+    #expect(await updater.waitForInstallation(expected:prepared.version,parentProcess:Int32.max,timeout:.seconds(1),target:signed))
+    #expect(await !updater.waitForInstallation(expected:prepared.version,parentProcess:ProcessInfo.processInfo.processIdentifier,timeout:.milliseconds(1),target:signed))
+  }
+}

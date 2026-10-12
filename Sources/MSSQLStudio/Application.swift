@@ -8,6 +8,21 @@ import SwiftUI
   private let studio = StudioState()
   private var workbench: WorkbenchController!
   static func main() {
+    let arguments=ProcessInfo.processInfo.arguments
+    if arguments.dropFirst().first == "--reopen-after-update" {
+      guard arguments.count == 4,let parent=Int32(arguments[3]),parent > 1,
+        ApplicationUpdate.isNewer(arguments[2],than:"0") else {return}
+      Task {
+        if await ApplicationUpdate().waitForInstallation(expected:arguments[2],parentProcess:parent) {
+          let configuration=NSWorkspace.OpenConfiguration()
+          configuration.createsNewApplicationInstance=true
+          _ = try? await NSWorkspace.shared.openApplication(at:URL(fileURLWithPath:"/Applications/MSSQLStudio.app"),configuration:configuration)
+        }
+        exit(0)
+      }
+      RunLoop.main.run()
+      return
+    }
     let app = NSApplication.shared
     let delegate = Application()
     app.setActivationPolicy(.regular)

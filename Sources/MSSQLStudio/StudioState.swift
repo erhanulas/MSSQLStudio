@@ -408,6 +408,13 @@ struct ObjectEditorKey: Codable, Equatable {
   }
 }
 @MainActor final class StudioState {
+  var explorerTreeDefaults:UserDefaults = {
+    if Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" {return .standard}
+    if ProcessInfo.processInfo.arguments.contains(where:{$0.contains(".xctest")}) || ProcessInfo.processInfo.arguments.contains("--ui-smoke") {
+      return UserDefaults(suiteName:"local.mssqlstudio.tree-test-"+UUID().uuidString)!
+    }
+    return .standard
+  }()
   var explorerOrderDefaults=UserDefaults.standard
   @discardableResult func moveExplorer(_ id:UUID,to insertionIndex:Int) -> Bool {
     guard (0...servers.count).contains(insertionIndex),let old=servers.firstIndex(where:{$0.id == id}) else {return false}
