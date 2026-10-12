@@ -25,7 +25,7 @@ public struct ServerProfile: Codable, Sendable {
   public var id=UUID(uuidString:"11111111-2222-3333-4444-555555555555")!
   public var name="Synthetic signing fixture"
 }
-public struct SQLFailure: Error {public init(_ message:String) {}}
+public struct SQLFailure: Error {let message:String;public init(_ message:String) {self.message=message}}
 public enum PersonalSigningIdentity {
   public static func requirement() throws -> String { #"PINNED_REQUIREMENT"# }
 }
@@ -57,14 +57,16 @@ do {
   default: print("BUILD_MARKER");exit(0)
   }
   print(0)
-} catch {print(-1)}
+} catch { if let error=error as? SQLFailure {FileHandle.standardError.write(Data(error.message.utf8))}; print(-1)}
 '''.replace('AGENT_SOURCE',(Path(__file__).resolve().parent.parent/'Sources/SQLServerKit/CredentialAgent.swift').read_text()).replace('VAULT_SOURCE',VAULT_SOURCE).replace('PINNED_REQUIREMENT',requirement())
 
 
 
 def status(binary, service, operation, helper=False):
     result = subprocess.run([str(binary), service, operation, str(test_keychain), str(agent) if helper else "-"], capture_output=True, text=True, check=True, timeout=20)
-    return int(result.stdout.strip())
+    value=int(result.stdout.strip())
+    if value != 0: print("Synthetic fixture",operation,"rejected:",result.stderr.strip())
+    return value
 
 with tempfile.TemporaryDirectory(prefix='StudioSigningRegression-', dir='/tmp') as folder:
     root = Path(folder)
