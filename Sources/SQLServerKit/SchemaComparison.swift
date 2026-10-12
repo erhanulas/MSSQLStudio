@@ -202,6 +202,17 @@ public enum SchemaComparison {
       (SELECT SCHEMA_NAME(x.schema_id)+N'.'+x.name FROM sys.xml_schema_collections x WHERE x.xml_collection_id=c.xml_collection_id AND x.xml_collection_id<>0) AS xml_namespace
     FROM sys.columns c JOIN sys.types ty ON ty.user_type_id=c.user_type_id LEFT JOIN sys.types base ON base.user_type_id=c.system_type_id AND base.user_type_id=base.system_type_id LEFT JOIN sys.identity_columns ic ON ic.object_id=c.object_id AND ic.column_id=c.column_id LEFT JOIN sys.computed_columns cc ON cc.object_id=c.object_id AND cc.column_id=c.column_id LEFT JOIN sys.default_constraints dc ON dc.object_id=c.default_object_id WHERE c.object_id=o.object_id ORDER BY c.column_id FOR XML PATH('column'),TYPE
     """}
+  /// The object list follows the same column properties as compareColumns. Constraint
+  /// names, indexes and table options remain in the raw migration baseline only.
+  private static var columnComparisonXML: String {"""
+    SELECT c.name,SCHEMA_NAME(ty.schema_id) AS type_schema,ty.name AS type_name,ISNULL(base.name,ty.name) AS base_type,ty.is_user_defined,ty.is_assembly_type,c.max_length,c.precision,c.scale,c.is_nullable,c.collation_name,c.is_identity,
+      CONVERT(nvarchar(40),ic.seed_value) AS seed,CONVERT(nvarchar(40),ic.increment_value) AS increment,cc.definition AS computed,ISNULL(cc.is_persisted,0) AS persisted,dc.definition AS default_sql,c.is_sparse,c.is_rowguidcol,c.is_hidden,c.generated_always_type,
+      CASE WHEN xc.xml_collection_id IS NOT NULL THEN QUOTENAME(SCHEMA_NAME(xc.schema_id))+N'.'+QUOTENAME(xc.name) ELSE N'' END AS xml_namespace,c.is_xml_document
+    FROM sys.columns c JOIN sys.types ty ON ty.user_type_id=c.user_type_id LEFT JOIN sys.types base ON base.user_type_id=c.system_type_id AND base.user_type_id=base.system_type_id
+    LEFT JOIN sys.identity_columns ic ON ic.object_id=c.object_id AND ic.column_id=c.column_id LEFT JOIN sys.computed_columns cc ON cc.object_id=c.object_id AND cc.column_id=c.column_id LEFT JOIN sys.default_constraints dc ON dc.object_id=c.default_object_id
+    LEFT JOIN sys.xml_schema_collections xc ON xc.xml_collection_id=c.xml_collection_id AND xc.xml_collection_id<>0
+    WHERE c.object_id=o.object_id ORDER BY c.column_id FOR XML PATH('column'),TYPE
+    """}
   private static var indexInventoryXML: String {"""
     SELECT i.name,i.type,i.is_unique,i.is_primary_key,i.is_unique_constraint,i.has_filter,i.filter_definition,i.fill_factor,i.is_padded,i.ignore_dup_key,i.allow_row_locks,i.allow_page_locks,i.is_disabled,ds.name AS storage,
       (SELECT c.name,ic.key_ordinal,ic.is_descending_key,ic.is_included_column FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id ORDER BY ic.index_column_id FOR XML PATH('column'),TYPE) AS columns
@@ -229,7 +240,7 @@ public enum SchemaComparison {
     UNION SELECT OBJECT_SCHEMA_NAME(t.object_id),t.name,OBJECT_SCHEMA_NAME(t.parent_id),OBJECT_NAME(t.parent_id),0 FROM sys.triggers t WHERE t.parent_class=1 AND t.is_ms_shipped=0;
     """ : "SELECT CAST(NULL AS nvarchar(128)),CAST(NULL AS nvarchar(128)),CAST(NULL AS nvarchar(128)),CAST(NULL AS nvarchar(128)),0 WHERE 1=0;"
     return """
-    -- StudioSchemaInventory v1
+    -- StudioSchemaInventory v2
     IF TRY_CONVERT(int,SERVERPROPERTY('ProductMajorVersion'))<14 THROW 51000,N'DDL karşılaştırma SQL Server 2017 veya üstünü gerektirir.',1;
     SELECT HAS_PERMS_BY_NAME(DB_NAME(),N'DATABASE',N'VIEW DEFINITION'),DB_NAME();
     SELECT o.object_id,s.name,o.name,RTRIM(o.type),
@@ -247,7 +258,8 @@ public enum SchemaComparison {
         OR EXISTS(SELECT 1 FROM sys.columns c JOIN sys.types ty ON ty.user_type_id=c.user_type_id WHERE c.object_id=o.object_id AND (c.is_filestream=1 OR c.generated_always_type<>0 OR c.is_hidden=1 OR c.encryption_type IS NOT NULL OR c.xml_collection_id<>0 OR (c.system_type_id=62 AND c.precision<>53) OR c.rule_object_id<>0 OR ty.is_assembly_type=1 OR c.is_column_set=1 OR (c.system_type_id IN (165,167,173,175) AND c.is_ansi_padded=0)
           OR (c.default_object_id<>0 AND NOT EXISTS(SELECT 1 FROM sys.default_constraints d WHERE d.object_id=c.default_object_id))))
         OR EXISTS(SELECT 1 FROM sys.identity_columns ic WHERE ic.object_id=o.object_id AND ic.is_not_for_replication=1)
-        OR EXISTS(SELECT 1 FROM sys.security_predicates sp WHERE sp.target_object_id=o.object_id)) THEN N'Özel tablo özellikleri için otomatik taşıma kapalı.' ELSE N'' END
+        OR EXISTS(SELECT 1 FROM sys.security_predicates sp WHERE sp.target_object_id=o.object_id)) THEN N'Özel tablo özellikleri için otomatik taşıma kapalı.' ELSE N'' END,
+      CASE WHEN o.type='U' THEN CONVERT(varchar(64),HASHBYTES('SHA2_256',CONVERT(varbinary(max),CONVERT(nvarchar(max),(\(columnComparisonXML))))),2) ELSE NULL END AS comparison_digest
     FROM sys.objects o JOIN sys.schemas s ON s.schema_id=o.schema_id
     LEFT JOIN sys.sql_modules m ON m.object_id=o.object_id LEFT JOIN sys.tables tb ON tb.object_id=o.object_id
     LEFT JOIN sys.triggers tr ON tr.object_id=o.object_id LEFT JOIN sys.synonyms sn ON sn.object_id=o.object_id
@@ -258,16 +270,24 @@ public enum SchemaComparison {
         +ISNULL(OBJECT_SCHEMA_NAME(tr.parent_id)+N'.'+OBJECT_NAME(tr.parent_id),N'')+CASE WHEN o.type='V' THEN CONVERT(nvarchar(max),(\(columns)))+CONVERT(nvarchar(max),(\(indexes))) ELSE N'' END END AS value) payload
     WHERE o.is_ms_shipped=0 AND o.type IN ('U','V','P','PC','FN','IF','TF','FS','FT','TR','TA','SN')\(filter)
     UNION ALL
-    SELECT t.object_id,N'',t.name,'TRD',CONVERT(varchar(64),HASHBYTES('SHA2_256',CONVERT(varbinary(max),m.definition+NCHAR(10)+CONVERT(nvarchar(1),m.uses_ansi_nulls)+CONVERT(nvarchar(1),m.uses_quoted_identifier)+CONVERT(nvarchar(1),t.is_disabled))),2),CASE WHEN m.definition IS NULL THEN N'Tanım şifreli veya görünmüyor.' WHEN EXISTS(SELECT 1 FROM sys.crypt_properties cp WHERE cp.class=1 AND cp.major_id=t.object_id) OR EXISTS(SELECT 1 FROM sys.trigger_events te WHERE te.object_id=t.object_id AND (te.is_first=1 OR te.is_last=1)) THEN N'İmza / trigger çalışma sırası ayrıca taşınmalı.' WHEN m.execute_as_principal_id>=0 THEN N'EXECUTE AS principal eşlemesi gerekli.' ELSE N'' END FROM sys.triggers t LEFT JOIN sys.sql_modules m ON m.object_id=t.object_id WHERE t.parent_class=0 AND t.is_ms_shipped=0\(triggerFilter);
+    SELECT t.object_id,N'',t.name,'TRD',CONVERT(varchar(64),HASHBYTES('SHA2_256',CONVERT(varbinary(max),m.definition+NCHAR(10)+CONVERT(nvarchar(1),m.uses_ansi_nulls)+CONVERT(nvarchar(1),m.uses_quoted_identifier)+CONVERT(nvarchar(1),t.is_disabled))),2),CASE WHEN m.definition IS NULL THEN N'Tanım şifreli veya görünmüyor.' WHEN EXISTS(SELECT 1 FROM sys.crypt_properties cp WHERE cp.class=1 AND cp.major_id=t.object_id) OR EXISTS(SELECT 1 FROM sys.trigger_events te WHERE te.object_id=t.object_id AND (te.is_first=1 OR te.is_last=1)) THEN N'İmza / trigger çalışma sırası ayrıca taşınmalı.' WHEN m.execute_as_principal_id>=0 THEN N'EXECUTE AS principal eşlemesi gerekli.' ELSE N'' END,NULL FROM sys.triggers t LEFT JOIN sys.sql_modules m ON m.object_id=t.object_id WHERE t.parent_class=0 AND t.is_ms_shipped=0\(triggerFilter);
     \(dependencies)
     """
   }
   public static func decode(_ result:Execution) throws -> SchemaSnapshot {
     guard !result.partial,!result.stoppedEarly,result.results.count == 3,result.results.allSatisfy({!$0.truncated}),result.results[0].values.first?.first == "1" else {throw SQLFailure("Tam DDL listesi alınamadı. İki veritabanında da VIEW DEFINITION izni gerekli; kısmi sonuç karşılaştırılmaz.")}
     let objects=try result.results[1].values.map {r -> SchemaObject in
-      guard r.count==6,let rawID=r[0],let id=Int(rawID),id>0,let schema=r[1],let name=r[2],!name.isEmpty,let type=r[3],let issue=r[5] else {throw SQLFailure("Geçersiz DDL metadata satırı.")}
+      guard r.count==7,let rawID=r[0],let id=Int(rawID),id>0,let schema=r[1],let name=r[2],!name.isEmpty,let type=r[3],let issue=r[5] else {throw SQLFailure("Geçersiz DDL metadata satırı.")}
       if let digest=r[4],digest.range(of:"^[A-Fa-f0-9]{64}$",options:.regularExpression)==nil {throw SQLFailure("DDL özeti eksik veya geçersiz.")}
-      return SchemaObject(key:.init(schema:schema,name:name,databaseTrigger:type=="TRD"),objectID:id,type:type,digest:r[4],issue:issue)
+      let comparisonDigest:String?
+      if type=="U" {
+        guard let value=r[6],value.range(of:"^[A-Fa-f0-9]{64}$",options:.regularExpression) != nil else {throw SQLFailure("Tablo kolon özeti eksik veya geçersiz; kısmi karşılaştırma yapılmadı.")}
+        comparisonDigest=value.lowercased()
+      } else {
+        guard r[6]==nil else {throw SQLFailure("Beklenmeyen nesne karşılaştırma özeti.")}
+        comparisonDigest=nil
+      }
+      return SchemaObject(key:.init(schema:schema,name:name,databaseTrigger:type=="TRD"),objectID:id,type:type,digest:r[4],issue:issue,comparisonDigest:comparisonDigest)
     }
     var dependencies:[SchemaObjectKey:Set<SchemaObjectKey>]=[:]
     for r in result.results[2].values {
@@ -457,8 +477,9 @@ extension SchemaComparison {
       let canonical=content.sql+"\n--trigger-state:"+String(content.disabled)+"|"+content.triggerParent
       func hash(_ value:String)->String {SHA256.hash(data:Data(value.utf8)).map {String(format:"%02x",$0)}.joined()}
       let definitionDigest=hash(canonical)
-      let digest=structuralDigest.map {hash(canonical+"\n--view-structure:"+$0)} ?? definitionDigest
-      updated.objects[object.key]=SchemaObject(key:object.key,objectID:id,type:object.type,digest:object.digest,issue:object.issue,comparisonDigest:digest,definitionDigest:definitionDigest,structuralDigest:structuralDigest)
+      // Views enter the list for code changes only. Their output/index metadata still
+      // protects migration safety, and the complete raw digest remains the baseline.
+      updated.objects[object.key]=SchemaObject(key:object.key,objectID:id,type:object.type,digest:object.digest,issue:object.issue,comparisonDigest:definitionDigest,definitionDigest:definitionDigest,structuralDigest:structuralDigest)
     }
     guard seen.count==objects.count else {throw SQLFailure("Karşılaştırma sırasında nesne kaldırıldı; yeniden karşılaştırın.")}
     return updated

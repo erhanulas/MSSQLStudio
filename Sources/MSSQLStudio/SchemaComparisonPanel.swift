@@ -27,7 +27,6 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
   @Published private(set) var error=""
   @Published var search="" {didSet {filter()}}
   @Published var kind="Tüm türler" {didSet {filter()}}
-  @Published var onlyDifferences=true {didSet {filter()}}
   @Published var marked=Set<SchemaObjectKey>()
   @Published var focused: SchemaObjectKey?
   @Published private(set) var sourceSQL=""
@@ -40,16 +39,21 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
   @Published private(set) var columnsReady=false
   @Published private(set) var detailNotice=""
   @Published private(set) var diffTruncated=false
-  @Published var detailMode=SchemaDetailMode.code
+  @Published var detailMode=SchemaDetailMode.columns
   @Published var columnOnlyDifferences=true
   @Published var changeIndex=0
   var changedGroups:[Int] {detailComparison.map {SQLInlineDiffView.changeRows(in:$0)} ?? []}
   var visibleColumns:[SchemaColumnDifference] {columnOnlyDifferences ? columnDifferences.filter {!$0.isEqual}:columnDifferences}
   var hasColumns:Bool {["U","V"].contains((currentDifference?.source ?? currentDifference?.target)?.type ?? "")}
+  var effectiveDetailMode:SchemaDetailMode {hasColumns ? detailMode:.code}
   var columnChangeCount:Int {columnDifferences.filter {!$0.isEqual}.count}
   var columnSummary:String {columnsReady ? "\(columnDifferences.count) kolon · \(columnChangeCount) farklı":detailLoading ? "Kolonlar okunuyor…":"Kolonlar alınamadı"}
   var sameCount:Int {differences.filter {$0.status == .equal}.count}
-  var differentCount:Int {differences.count-sameCount}
+  var differentCount:Int {differences.filter(Self.isListedDifference).count}
+  var unavailableCount:Int {differences.filter {$0.status == .unavailable}.count}
+  private static func isListedDifference(_ row:SchemaDifference)->Bool {
+    switch row.status {case .changed,.sourceOnly,.targetOnly,.typeConflict:return true;case .equal,.unavailable:return false}
+  }
   func moveChange(_ offset:Int) {guard !changedGroups.isEmpty else {return};changeIndex=(changeIndex+offset+changedGroups.count)%changedGroups.count}
   private(set) var sourceSnapshot: SchemaSnapshot?
   private(set) var targetSnapshot: SchemaSnapshot?
@@ -82,7 +86,7 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
   func cancel() {guard !applying else {return};comparisonTask?.cancel();cancelOperation?();invalidate();busy=false;message="Karşılaştırma iptal edildi."}
   func filter() {
     let text=search.trimmingCharacters(in:.whitespacesAndNewlines)
-    visible=differences.filter {(!onlyDifferences || $0.status != .equal) && (kind=="Tüm türler" || ($0.source ?? $0.target)?.kind==kind) && (text.isEmpty || $0.key.qualified.localizedStandardContains(text))}
+    visible=differences.filter {Self.isListedDifference($0) && (kind=="Tüm türler" || ($0.source ?? $0.target)?.kind==kind) && (text.isEmpty || $0.key.qualified.localizedStandardContains(text))}
   }
   func compare() async {
     guard !busy,!applying,validPair,let source,let target else {return}
@@ -108,8 +112,8 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
       let final=try await Task.detached(priority:.userInitiated) {try SchemaComparison.compare(source:left,target:right)}.value
       guard token==revision,sg==source.server.generation,tg==target.server.generation else {return}
       sourceSnapshot=left;targetSnapshot=right;sourceGeneration=sg;targetGeneration=tg;differences=final;filter()
-      let count=differences.filter {$0.status != .equal}.count
-      message="\(differences.count) nesne · \(count) fark / incelenecek nesne · \(differences.count-count) aynı"
+      message="\(differences.count) nesne · \(differentCount) farklı · \(sameCount) aynı"
+      if unavailableCount>0 {message += " · \(unavailableCount) karşılaştırılamadı (tanım şifreli veya okunamıyor)"}
     } catch {
       guard token==revision else {return};self.error=error is CancellationError ? "İşlem iptal edildi.":error.localizedDescription;message="Karşılaştırma tamamlanamadı."
     }
@@ -157,7 +161,6 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
     guard contextCurrent else {detailSummary="Bağlantı değişti. Yeniden karşılaştırın.";return}
     detailLoading=true;detailSummary=difference.key.qualified;let context=revision
     let columnObject=["U","V"].contains((difference.source ?? difference.target)?.type ?? "")
-    detailMode=columnObject ? .columns:.code
     defer {if token==detailRevision {detailLoading=false}}
     do {
       var notices:[String]=[]
@@ -290,8 +293,9 @@ struct SchemaComparisonPanel: View {
       Text("DDL Karşılaştırma").font(.system(size:16,weight:.semibold))
       Spacer(minLength:12)
       if !model.differences.isEmpty {
-        metric("İncelenecek",count:model.differentCount,color:StudioTheme.warning)
+        metric("Farklı",count:model.differentCount,color:StudioTheme.warning)
         metric("Aynı",count:model.sameCount,color:StudioTheme.success)
+        if model.unavailableCount>0 {metric("Okunamadı",count:model.unavailableCount,color:StudioTheme.danger).help("Tanımı şifreli veya okunamayan nesnelerde fark doğrulanamaz; bu nesneler listelenmez.")}
       }
     }.frame(height:28)
   }
@@ -312,7 +316,7 @@ struct SchemaComparisonPanel: View {
     HStack(spacing:10) {
       TextField("Nesne veya şema ara…",text:$model.search).textFieldStyle(.roundedBorder).frame(minWidth:160,maxWidth:300).accessibilityIdentifier("schemaSearch")
       Picker("Nesne türü",selection:$model.kind) {ForEach(["Tüm türler","Tablo","View","Prosedür","Fonksiyon","Trigger","Synonym"],id:\.self) {Text($0)}}.labelsHidden().frame(width:145).accessibilityLabel("Nesne türü")
-      Toggle("Yalnız farklar",isOn:$model.onlyDifferences).toggleStyle(.checkbox)
+      Text("Tablo: kolonlar · View: kod").font(.caption).foregroundStyle(.secondary).help("Yalnız farklı nesneler listelenir. Tablolarda kolon özellikleri, view’larda SQL kodu karşılaştırılır; yalnız bir veritabanında bulunan nesneler de gösterilir.")
       Spacer(minLength:0)
       Text("\(model.visible.count) nesne · \(model.marked.count) seçili").font(.caption).foregroundStyle(.secondary).lineLimit(1)
       StudioActionButton("Görünen taşınabilir nesneleri seç",icon:"checkmark.square") {
@@ -337,7 +341,7 @@ struct SchemaComparisonPanel: View {
       }.width(min:160,ideal:190)
     }.accessibilityIdentifier("schemaDifferences")
       .overlay {if model.visible.isEmpty && !model.busy {
-        StudioEmptyState(title:model.differences.isEmpty ? "Karşılaştırmaya hazır":"Eşleşen nesne yok",icon:model.differences.isEmpty ? "arrow.triangle.branch":"line.3.horizontal.decrease",detail:model.differences.isEmpty ? "Kaynak ve hedefi seçip Karşılaştır’a basın.":"Aramayı veya filtreleri değiştirin.").padding(.top,28)
+        StudioEmptyState(title:model.sourceSnapshot == nil ? "Karşılaştırmaya hazır":model.differentCount==0 ? "Fark bulunan nesne yok":"Eşleşen nesne yok",icon:model.sourceSnapshot == nil ? "arrow.triangle.branch":model.differentCount==0 ? "checkmark.circle":"line.3.horizontal.decrease",detail:model.sourceSnapshot == nil ? "Kaynak ve hedefi seçip Karşılaştır’a basın.":model.differentCount==0 ? model.unavailableCount>0 ? "Okunamayan nesneler yukarıda ayrıca belirtilir.":"Karşılaştırılabilen nesnelerde fark yok.":"Aramayı veya tür filtresini değiştirin.").padding(.top,28)
       }}
   }
   private var details:some View {
@@ -351,7 +355,7 @@ struct SchemaComparisonPanel: View {
             ForEach(SchemaDetailMode.allCases,id:\.self) {Text($0.rawValue).tag($0)}
           }.pickerStyle(.segmented).labelsHidden().frame(width:180).accessibilityIdentifier("schemaDetailMode")
         }
-        if model.detailMode == .code,let comparison=model.detailComparison {
+        if model.effectiveDetailMode == .code,let comparison=model.detailComparison {
           Text("−\(comparison.removed)  +\(comparison.added)").monospacedDigit().font(.caption).foregroundStyle(.secondary)
           Text(model.changedGroups.isEmpty ? "Kod aynı":"\(model.changeIndex+1)/\(model.changedGroups.count)").font(.caption).foregroundStyle(.secondary)
           StudioActionButton("Önceki kod farkı",icon:"chevron.up") {model.moveChange(-1)}.labelStyle(.iconOnly).disabled(model.changedGroups.isEmpty).accessibilityIdentifier("schemaPreviousDifference")
@@ -361,7 +365,7 @@ struct SchemaComparisonPanel: View {
       if !model.detailNotice.isEmpty {
         Label(model.detailNotice,systemImage:"info.circle").font(.caption).foregroundStyle(.secondary).lineLimit(2).textSelection(.enabled).help(model.detailNotice)
       }
-      if model.detailMode == .columns,model.hasColumns {
+      if model.effectiveDetailMode == .columns {
         columns
       } else if let comparison=model.detailComparison {
         HStack(spacing:0) {
@@ -484,15 +488,21 @@ struct SchemaComparisonPanel: View {
   }
   static func catalog(_ database:String,_ sql:String) throws -> Execution {
     let source=database=="SourceDB"
-    let objects:[[String?]]=[
+    let rawObjects:[[String?]]=[
       ["101","dbo","usp_Customers","P",String(repeating:source ? "a":"b",count:64),""],
       ["102","dbo","v_Orders","V",String(repeating:"c",count:64),""],
       source ? ["103","dbo","ufn_Total","FN",String(repeating:"d",count:64),""]:["104","dbo","usp_Legacy","P",String(repeating:"e",count:64),""],
       ["105","dbo","usp_Encrypted","P",nil,"Tanım şifreli veya görünmüyor."],
       ["106","dbo","Customers","U",String(repeating:source ? "9":"8",count:64),""],
       ["107","dbo","CustomerHistory","U",String(repeating:source ? "7":"6",count:64),"Özel tablo özellikleri için otomatik taşıma kapalı."],
-      ["108","dbo","v_Balance","V",String(repeating:source ? "5":"4",count:64),""]]
-    func body(_ id:Int)->String {switch id {case 101:return "CREATE PROCEDURE [dbo].[usp_Customers]\nAS\nBEGIN\n    SET NOCOUNT ON;\n    SELECT [CustomerID], [Name]"+(source ? ", [City]":"")+"\n    FROM [dbo].[Customers];\nEND;";case 102:return "CREATE VIEW [dbo].[v_Orders] AS SELECT 1 AS [OrderID];";case 108:return "CREATE VIEW [dbo].[v_Balance] AS SELECT [CustomerID], [Amount] FROM [dbo].[Customers];";case 103:return "CREATE FUNCTION [dbo].[ufn_Total]() RETURNS int AS BEGIN RETURN 42; END;";default:return "CREATE PROCEDURE [dbo].[usp_Legacy] AS SELECT 1;"}}
+      ["108","dbo","v_Balance","V",String(repeating:source ? "5":"4",count:64),""],
+      ["109","dbo","v_ActiveBalance","V",String(repeating:source ? "3":"2",count:64),""],
+      ["110","dbo","CustomersIndexOnly","U",String(repeating:source ? "f":"e",count:64),""]]
+    let objects:[[String?]]=rawObjects.map {row in
+      let columns:String?=row[3]=="U" ? (row[0]=="110" ? String(repeating:"c",count:64):row[4]):nil
+      return row+[columns]
+    }
+    func body(_ id:Int)->String {switch id {case 101:return "CREATE PROCEDURE [dbo].[usp_Customers]\nAS\nBEGIN\n    SET NOCOUNT ON;\n    SELECT [CustomerID], [Name]"+(source ? ", [City]":"")+"\n    FROM [dbo].[Customers];\nEND;";case 102:return "CREATE VIEW [dbo].[v_Orders] AS SELECT 1 AS [OrderID];";case 108:return "CREATE VIEW [dbo].[v_Balance] AS SELECT [CustomerID], [Amount] FROM [dbo].[Customers];";case 109:return "CREATE VIEW [dbo].[v_ActiveBalance] AS\nSELECT [CustomerID], [Amount]\nFROM [dbo].[Customers]\nWHERE [Amount] "+(source ? "> 0;":">= 0;");case 103:return "CREATE FUNCTION [dbo].[ufn_Total]() RETURNS int AS BEGIN RETURN 42; END;";default:return "CREATE PROCEDURE [dbo].[usp_Legacy] AS SELECT 1;"}}
     var result=Execution()
     if sql.contains("StudioSchemaInventory") {
       result.results=[Rows(values:[["1",database]]),Rows(values:objects),Rows(values:[])]
@@ -501,21 +511,22 @@ struct SchemaComparisonPanel: View {
       let requested=list.prefix {$0 != ")"}
       let ids=requested.split(separator:",").compactMap {Int($0)}
       let rows:[[String?]]=ids.map {id in
-        let structure:String?=id==108 ? String(repeating:source ? "2":"1",count:64):id==102 ? String(repeating:"0",count:64):nil
+        let structure:String?=id==108 ? String(repeating:source ? "2":"1",count:64):[102,109].contains(id) ? String(repeating:"0",count:64):nil
         return [String(id),body(id),"1","1","0",nil,structure]
       }
       result.results=[Rows(values:rows)]
     } else if sql.contains("StudioSchemaColumns") {
-      let id=[102,106,107,108].first {sql.contains("=\($0)")} ?? 106
-      let type=id==102 || id==108 ? "V":"U"
+      let id=[102,106,107,108,109,110].first {sql.contains("=\($0)")} ?? 106
+      let type=[102,108,109].contains(id) ? "V":"U"
+      let columnSource=source && id != 110
       func column(_ n:Int,_ name:String,_ type:String,_ length:Int,_ precision:Int=0,_ scale:Int=0,_ nullable:Bool=true)->[String?] {
         [String(n),name,"sys",type,type,"0","0",String(length),String(precision),String(scale),nullable ? "1":"0",type=="nvarchar" ? "Latin1_General_100_CI_AS":nil,"0",nil,nil,nil,"0",nil,"0","0","0","0","","0"]
       }
       var columns=[column(1,id==102 ? "OrderID":"CustomerID","int",4,10,0,false)]
       if id != 102 {
-        if type=="U" {columns.append(column(2,"Name","nvarchar",source ? 200:100))}
-        columns.append(column(columns.count+1,"Amount","decimal",source ? 13:9,source ? 28:18,source ? 8:2,source))
-        if source,type=="U" {columns.append(column(4,"City","nvarchar",100))}
+        if type=="U" {columns.append(column(2,"Name","nvarchar",columnSource ? 200:100))}
+        columns.append(column(columns.count+1,"Amount","decimal",columnSource ? 13:9,columnSource ? 28:18,columnSource ? 8:2,columnSource))
+        if columnSource,type=="U" {columns.append(column(4,"City","nvarchar",100))}
       }
       result.results=[Rows(values:[[String(id),type,"1"]]),Rows(values:columns)]
     } else if sql.contains("sys.computed_columns") {
@@ -526,7 +537,7 @@ struct SchemaComparisonPanel: View {
         ["3","Amount",source ? "decimal(28,8)":"decimal(18,2)",source ? "1":"0","0",nil,nil,nil,nil,nil,nil,nil,"0","0","0"]]+(source ? [["4","City","nvarchar(50)","1","0",nil,nil,nil,nil,nil,nil,"Latin1_General_100_CI_AS","0","0","0"]]:[])
       result.results=[Rows(values:columns),Rows(),Rows(),Rows(),Rows(),Rows(),Rows(values:[[id==107 ? "1":"0",nil]])]
     } else if sql.contains("sys.sql_modules") {
-      let id=[101,102,103,104,108].first {sql.contains("=\($0)")} ?? 101
+      let id=[101,102,103,104,108,109].first {sql.contains("=\($0)")} ?? 101
       result.results=[Rows(values:[[body(id),"1","1","0",nil]])]
     } else {throw SQLFailure("Çevrimdışı DDL fixture bu sorguyu desteklemiyor.")}
     return result

@@ -25,11 +25,11 @@ struct SchemaComparisonTests {
     #expect(Date().timeIntervalSince(start)<5)
   }
   @Test func inventoryRejectsPartialInvisibleMalformedAndHashesAllSupportedMetadata() throws {
-    var execution=Execution();execution.results=[Rows(values:[["1","A"]]),Rows(values:[["1","dbo","p","P",String(repeating:"a",count:64),""]]),Rows()]
+    var execution=Execution();execution.results=[Rows(values:[["1","A"]]),Rows(values:[["1","dbo","p","P",String(repeating:"a",count:64),"",nil]]),Rows()]
     #expect(try SchemaComparison.decode(execution).objects.count==1)
     execution.partial=true;#expect(throws:SQLFailure.self) {try SchemaComparison.decode(execution)}
     execution.partial=false;execution.results[0]=Rows(values:[["0","A"]]);#expect(throws:SQLFailure.self) {try SchemaComparison.decode(execution)}
-    execution.results[0]=Rows(values:[["1","A"]]);execution.results[1]=Rows(values:[["1","dbo","p","P","bad",""]]);#expect(throws:SQLFailure.self) {try SchemaComparison.decode(execution)}
+    execution.results[0]=Rows(values:[["1","A"]]);execution.results[1]=Rows(values:[["1","dbo","p","P","bad","",nil]]);#expect(throws:SQLFailure.self) {try SchemaComparison.decode(execution)}
     let sql=SchemaComparison.inventory(keys:[.init(schema:"odd']",name:"x'y")])
     for token in ["SHA2_256","sys.columns","base.user_type_id=c.system_type_id","ISNULL(base.name,ty.name) AS base_type","sys.index_columns","sys.foreign_key_columns","sys.check_constraints","uses_quoted_identifier","parent_class=0","VIEW DEFINITION","N'odd'']'"] {#expect(sql.contains(token))}
     #expect(!sql.contains("SELECT * FROM"))
@@ -39,6 +39,43 @@ struct SchemaComparisonTests {
       try SchemaComparison.refinementQuery([object("p")]).write(toFile:path+".refine.sql",atomically:true,encoding:.utf8)
       try SchemaComparison.columnsQuery(object("T",type:"U")).write(toFile:path+".columns.sql",atomically:true,encoding:.utf8)
     }
+  }
+  @Test func tableListUsesColumnDigestWhileFullBaselineProtectsEveryDDLChange() throws {
+    let rawA=String(repeating:"a",count:64),rawB=String(repeating:"b",count:64),columns=String(repeating:"c",count:64),changedColumns=String(repeating:"d",count:64)
+    func decoded(raw:String?,columnDigest:String?,issue:String="",name:String="T") throws -> SchemaSnapshot {
+      var execution=Execution();execution.results=[Rows(values:[["1","A"]]),Rows(values:[["1","dbo",name,"U",raw,issue,columnDigest]]),Rows()]
+      return try SchemaComparison.decode(execution)
+    }
+    let source=try decoded(raw:rawA,columnDigest:columns.uppercased())
+    let indexOnly=try decoded(raw:rawB,columnDigest:columns)
+    let key=SchemaObjectKey(schema:"dbo",name:"T")
+    let equal=try #require(SchemaComparison.compare(source:source,target:indexOnly).first)
+    #expect(equal.status == .equal && !equal.canStage)
+    #expect(source.objects[key]?.digest==rawA && indexOnly.objects[key]?.digest==rawB)
+    #expect(source.objects[key]?.comparisonDigest==columns)
+    #expect(throws:SQLFailure.self) {try SchemaMigration.validateBaseline(source,current:indexOnly,keys:[key])}
+    let changed=try decoded(raw:rawB,columnDigest:changedColumns)
+    #expect(try SchemaComparison.compare(source:source,target:changed).first?.status == .changed)
+    let special=try decoded(raw:rawB,columnDigest:changedColumns,issue:"Özel tablo özellikleri için otomatik taşıma kapalı.")
+    let specialDifference=try #require(SchemaComparison.compare(source:source,target:special).first)
+    #expect(specialDifference.status == .changed && !specialDifference.canStage)
+    #expect(try SchemaComparison.compare(source:source,target:.init(objects:[])).first?.status == .sourceOnly)
+    #expect(try SchemaComparison.compare(source:.init(objects:[]),target:source).first?.status == .targetOnly)
+    #expect(try SchemaComparison.compare(source:source,target:.init(objects:[object("T",type:"V")])).first?.status == .typeConflict)
+    let unavailable=try decoded(raw:nil,columnDigest:columns)
+    #expect(try SchemaComparison.compare(source:source,target:unavailable).first?.status == .unavailable)
+    #expect(throws:SQLFailure.self) {try decoded(raw:rawA,columnDigest:nil)}
+    #expect(throws:SQLFailure.self) {try decoded(raw:rawA,columnDigest:"invalid")}
+  }
+  @Test func tableComparisonHashContainsOnlyDisplayedColumnPropertiesInOneInventoryRequest() throws {
+    let sql=SchemaComparison.inventory()
+    let start=try #require(sql.range(of:"CASE WHEN o.type='U' THEN CONVERT(varchar(64),HASHBYTES"))
+    let end=try #require(sql.range(of:"AS comparison_digest",range:start.lowerBound..<sql.endIndex))
+    let projection=String(sql[start.lowerBound..<end.upperBound])
+    for token in ["c.name","type_schema","type_name","base_type","is_user_defined","is_assembly_type","max_length","precision","scale","is_nullable","collation_name","is_identity","seed_value","increment_value","computed","is_persisted","default_sql","is_sparse","is_rowguidcol","is_hidden","generated_always_type","xml_namespace","is_xml_document","ORDER BY c.column_id"] {#expect(projection.contains(token))}
+    for excluded in ["dc.name","sys.indexes","sys.check_constraints","sys.foreign_keys","temporal_type","is_memory_optimized","lock_escalation","is_ansi_padded","is_filestream","encryption_type","is_not_for_replication","SELECT c.column_id"] {#expect(!projection.contains(excluded))}
+    #expect(sql.contains("dc.name AS default_name") && sql.contains("sys.indexes") && sql.contains("sys.foreign_keys"))
+    #expect(sql.contains("-- StudioSchemaInventory v2"))
   }
   @Test func refinementIgnoresDeliveryHeaderButPreservesBodyLiteralsAndSettings() throws {
     let obj=object("renamed")
@@ -104,7 +141,7 @@ struct SchemaComparisonTests {
     result=columnExecution(obj,rows:[row]);result.stoppedEarly=true;#expect(throws:SQLFailure.self) {try SchemaComparison.decodeColumns(result,object:obj)}
     result=columnExecution(obj,rows:[row]);result.results[1].truncated=true;#expect(throws:SQLFailure.self) {try SchemaComparison.decodeColumns(result,object:obj)}
   }
-  @Test func viewRefinementPreservesOutputTypeAndIndexDifferencesWithSameDefinition() throws {
+  @Test func viewListUsesOnlyCanonicalCodeWhileStructureStillGuardsMigration() throws {
     let source=object("v",type:"V"),target=object("v",type:"V",digest:String(repeating:"b",count:64),id:2)
     func refine(_ object:SchemaObject,sql:String,structure:String?) throws -> SchemaSnapshot {
       var result=Execution();result.results=[Rows(values:[[String(object.objectID),sql,"1","1","0",nil,structure]])]
@@ -113,8 +150,12 @@ struct SchemaComparisonTests {
     let a=try refine(source,sql:"CREATE VIEW old AS SELECT Code FROM dbo.T;",structure:String(repeating:"c",count:64))
     let b=try refine(target,sql:"ALTER VIEW dbo.v AS SELECT Code FROM dbo.T;",structure:String(repeating:"d",count:64))
     let difference=try #require(SchemaComparison.compare(source:a,target:b).first)
-    #expect(difference.status == .changed && !difference.canStage)
+    #expect(difference.status == .equal && !difference.canStage)
     #expect(a.objects[source.key]?.definitionDigest==b.objects[target.key]?.definitionDigest)
+    #expect(a.objects[source.key]?.comparisonDigest==b.objects[target.key]?.comparisonDigest)
+    #expect(a.objects[source.key]?.structuralDigest != b.objects[target.key]?.structuralDigest)
+    #expect(a.objects[source.key]?.digest==source.digest && b.objects[target.key]?.digest==target.digest)
+    #expect(throws:SQLFailure.self) {try SchemaMigration.validateBaseline(a,current:b,keys:[source.key])}
     #expect(difference.migrationIssue.contains("bağımlı"))
     #expect(throws:SQLFailure.self) {try SchemaMigration.orderedKeys([source.key],source:a,target:b)}
     let same=try refine(target,sql:"ALTER VIEW dbo.v AS SELECT Code FROM dbo.T;",structure:String(repeating:"C",count:64))
@@ -179,6 +220,12 @@ struct SchemaComparisonTests {
       _=try await c.execute("BEGIN TRANSACTION; CREATE TABLE \(key.qualified) ([Id] int NOT NULL);")
       _=try await c.execute("CREATE VIEW \(view.qualified) AS SELECT [Id] FROM \(key.qualified);")
       let a=try SchemaComparison.decode(await c.execute(SchemaComparison.inventory(keys:[key,view]),limits:SchemaComparison.limits))
+      _=try await c.execute("CREATE INDEX [IX_StudioCompare] ON \(key.qualified) ([Id]);")
+      let indexOnly=try SchemaComparison.decode(await c.execute(SchemaComparison.inventory(keys:[key,view]),limits:SchemaComparison.limits))
+      #expect(a.objects[key]?.digest != indexOnly.objects[key]?.digest)
+      #expect(try SchemaComparison.compare(source:a,target:indexOnly).allSatisfy {$0.status == .equal})
+      #expect(throws:SQLFailure.self) {try SchemaMigration.validateBaseline(a,current:indexOnly,keys:[key])}
+      _=try await c.execute("DROP INDEX [IX_StudioCompare] ON \(key.qualified);")
       let viewBefore=try #require(a.objects[view])
       let refinedBefore=try SchemaComparison.refine(a,objects:[viewBefore],result:await c.execute(SchemaComparison.refinementQuery([viewBefore]),limits:SchemaComparison.limits))
       _=try await c.execute("ALTER TABLE \(key.qualified) ADD [Code] decimal(28,8) NULL;")
@@ -187,7 +234,8 @@ struct SchemaComparisonTests {
       let b=try SchemaComparison.decode(await c.execute(SchemaComparison.inventory(keys:[key,view]),limits:SchemaComparison.limits))
       let viewAfter=try #require(b.objects[view])
       let refinedAfter=try SchemaComparison.refine(b,objects:[viewAfter],result:await c.execute(SchemaComparison.refinementQuery([viewAfter]),limits:SchemaComparison.limits))
-      #expect(try SchemaComparison.compare(source:refinedBefore,target:refinedAfter).allSatisfy {$0.status == .changed})
+      #expect(try SchemaComparison.compare(source:refinedBefore,target:refinedAfter).first(where:{$0.key==key})?.status == .changed)
+      #expect(try SchemaComparison.compare(source:refinedBefore,target:refinedAfter).first(where:{$0.key==view})?.status == .equal)
       #expect(try SchemaComparison.compare(source:refinedBefore,target:refinedAfter).first(where:{$0.key==view})?.canStage == false)
       let columns=try SchemaComparison.decodeColumns(await c.execute(SchemaComparison.columnsQuery(viewAfter),limits:SchemaComparison.limits),object:viewAfter)
       #expect(columns.first?.dataType=="bigint" && columns.first?.nullable==false)

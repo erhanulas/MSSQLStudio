@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.86",
+    "date": "2026-10-12",
+    "title": "Yalnız gerçek nesne farkları ve korunan karşılaştırma görünümü",
+    "changes": [
+      "DDL üst nesne listesi her zaman yalnız fark bulunan nesneleri gösterir; Yalnız farklar seçeneği kaldırıldı. Aynı nesneler ve okunamayan tanımlar listeyi doldurmaz; okunamayanlar ayrı sayılır.",
+      "Tablolar yalnız kolon özelliklerinde fark varsa, view’lar yalnız SQL kodunda fark varsa listelenir. Yalnız indeks/constraint farkı olan tablolar ve kodu aynı olup çıktı kolonları farklı view’lar listelenmez; tek tarafta bulunan nesneler görünmeye devam eder.",
+      "Kod Farkı / Kolonlar için son seçiminiz nesne değiştirirken ve yeniden karşılaştırırken korunur. Prosedürlerde kod gösterimi Kolonlar tercihini değiştirmez.",
+      "Taşıma önizlemesi ve gönderim öncesinde nesnenin tam metadata özeti, bağlantı ve nesne kimliği yeniden doğrulanmaya devam eder."
+    ]
+  },
+  {
     "version": "0.2.85",
     "date": "2026-10-12",
     "title": "Kompakt DDL karşılaştırma, doğrudan kod farkları ve kolon karşılaştırması",

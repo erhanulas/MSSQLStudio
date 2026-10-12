@@ -13,14 +13,17 @@ import SQLServerKit
     var calls:[String]=[]
     let model=model(reader:{endpoint,sql in calls.append(sql);return try SchemaComparisonUIFixture.catalog(endpoint.database,sql)})
     await model.compare()
-    #expect(model.differences.count==8 && model.visible.count==7)
+    #expect(model.differences.count==10 && model.visible.count==6)
+    #expect(model.differentCount==6 && model.sameCount==3 && model.unavailableCount==1)
+    #expect(model.message.contains("1 karşılaştırılamadı"))
     #expect(calls.filter {$0.contains("StudioSchemaInventory")}.count==2)
     #expect(calls.filter {$0.contains("StudioSchemaRefinement")}.count==2)
     #expect(!model.detailReady && !model.busy && model.error.isEmpty)
     model.search="Total";#expect(model.visible.count==1 && model.visible.first?.status == .sourceOnly)
     model.search="";model.kind="View";#expect(model.visible.count==1)
-    model.onlyDifferences=false;#expect(model.visible.count==2)
-    model.kind="Tüm türler";model.onlyDifferences=true
+    #expect(model.visible.first?.key.name=="v_ActiveBalance")
+    model.kind="Tablo";#expect(Set(model.visible.map(\.key.name))==["Customers","CustomerHistory"])
+    model.kind="Tüm türler"
     let row=try #require(model.differences.first {$0.key.name=="usp_Customers"})
     model.focused=row.key;await model.loadDetail()
     #expect(model.detailReady && model.sourceSQL.contains("[City]") && !model.targetSQL.contains("[City]"))
@@ -85,11 +88,56 @@ import SQLServerKit
     #expect(model.columnsReady && model.detailReady && model.columnChangeCount==3)
     #expect(model.detailComparison==nil && model.detailNotice.localizedCaseInsensitiveContains("özel tablo"))
     let view=try #require(model.differences.first {$0.key.name=="v_Balance"})
-    #expect(view.status == .changed && !view.canStage && !view.migrationIssue.isEmpty)
+    #expect(view.status == .equal && !view.canStage && !view.migrationIssue.isEmpty)
     model.focused=view.key;await model.loadDetail()
     #expect(model.columnsReady && model.columnChangeCount==1)
     #expect(model.detailComparison?.added==0 && model.detailComparison?.removed==0)
     #expect(model.detailMode == .columns && model.detailNotice.contains("View kodu aynı"))
+  }
+  @Test func onlyVerifiedDifferencesAreListedEvenAfterChangingFiltersOrRecomparing() async throws {
+    let model=model();await model.compare()
+    let excluded:Set<String>=["v_Balance","v_Orders","CustomersIndexOnly","usp_Encrypted"]
+    #expect(model.visible.allSatisfy {!excluded.contains($0.key.name)})
+    model.search="IndexOnly";#expect(model.visible.isEmpty)
+    model.search="";model.kind="View";#expect(model.visible.map(\.key.name)==["v_ActiveBalance"])
+    await model.compare();#expect(model.visible.map(\.key.name)==["v_ActiveBalance"])
+    let identical=self.model(reader:{_,sql in try SchemaComparisonUIFixture.catalog("SourceDB",sql)})
+    await identical.compare()
+    #expect(identical.visible.isEmpty && identical.differentCount==0 && identical.unavailableCount==1)
+    #expect(identical.sameCount==identical.differences.count-1)
+    #expect(identical.sourceSnapshot != nil && identical.error.isEmpty)
+  }
+  @Test func detailModePersistsAcrossObjectsRecomparisonAndDelayedLoads() async throws {
+    var delay=false
+    let model=model(reader:{endpoint,sql in
+      if delay,sql.contains("StudioSchemaColumns") {try await Task.sleep(for:.milliseconds(40))}
+      return try SchemaComparisonUIFixture.catalog(endpoint.database,sql)
+    })
+    await model.compare()
+    let table=try #require(model.visible.first {$0.key.name=="Customers"}).key
+    let special=try #require(model.visible.first {$0.key.name=="CustomerHistory"}).key
+    let view=try #require(model.visible.first {$0.key.name=="v_ActiveBalance"}).key
+    let procedure=try #require(model.visible.first {$0.key.name=="usp_Customers"}).key
+    model.detailMode = .code
+    for key in [table,view,procedure,table] {
+      model.focused=key;await model.loadDetail()
+      #expect(model.detailMode == .code && model.effectiveDetailMode == .code)
+    }
+    model.detailMode = .columns
+    model.focused=procedure;await model.loadDetail()
+    #expect(model.detailMode == .columns && model.effectiveDetailMode == .code && model.detailComparison != nil)
+    model.focused=view;await model.loadDetail()
+    #expect(model.detailMode == .columns && model.effectiveDetailMode == .columns && model.columnsReady)
+    await model.compare()
+    #expect(model.detailMode == .columns)
+    delay=true;model.focused=special
+    let loading=Task {await model.loadDetail()};try await Task.sleep(for:.milliseconds(10))
+    #expect(model.detailLoading)
+    model.detailMode = .code;await loading.value
+    #expect(model.detailMode == .code && model.effectiveDetailMode == .code)
+    model.focused=nil;await model.loadDetail()
+    #expect(model.detailMode == .code)
+    model.invalidate();#expect(model.detailMode == .code)
   }
   @Test func clearingSelectionAndChangingConnectionDuringDetailNeverPublishesStalePreview() async throws {
     let model=model(reader:{endpoint,sql in
@@ -118,7 +166,7 @@ import SQLServerKit
       if sql.contains("StudioSchemaColumns") {result.partial=true}
       return result
     })
-    await model.compare();model.focused=model.differences.first {$0.key.name=="v_Balance"}?.key
+    await model.compare();model.focused=model.visible.first {$0.key.name=="v_ActiveBalance"}?.key
     await model.loadDetail()
     #expect(!model.columnsReady && model.columnDifferences.isEmpty && model.columnSummary=="Kolonlar alınamadı")
     #expect(model.detailComparison != nil && model.detailReady && model.detailNotice.contains("Kolonlar:"))
