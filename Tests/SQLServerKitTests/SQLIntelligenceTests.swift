@@ -7,6 +7,20 @@ struct SQLIntelligenceTests {
     try SQLIntelligence.analyze(source:source,caret:caret ?? (source as NSString).length,catalog:.init(snapshot:.init(symbols:symbols,synchronizedAt:date)),verified:verified,automaticAliases:aliases)
   }
   func marked(_ sql: String) throws -> [String] { let value = try analyze(sql); return value.diagnostics.map { (sql as NSString).substring(with:$0.range) } }
+  @Test func typedPresentationMetadataNeverChangesCompletionSQL() throws {
+    let table=try #require(analyze("SELECT * FROM Cus").suggestions.first)
+    #expect(table.kind == .table && table.label == "[dbo].[Customers]")
+    #expect(table.text == "[dbo].[Customers] AS C" && table.detail == table.text)
+    let view=try #require(analyze("SELECT * FROM report.Cus").suggestions.first)
+    #expect(view.kind == .view && view.text == "[CustomerSummary] AS CS")
+    let procedure=try #require(analyze("EXEC Customers").suggestions.first)
+    #expect(procedure.kind == .procedure && procedure.text == "[dbo].[GetCustomers]")
+    let source="SELECT c.Na FROM dbo.Customers c"
+    let column=try #require(analyze(source,caret:NSMaxRange((source as NSString).range(of:"c.Na"))).suggestions.first)
+    #expect(column.kind == .column && column.text == "[Name]" && column.detail == "dbo.Customers")
+    #expect(try analyze("SEL").suggestions.first {$0.text == "SELECT"}?.kind == .keyword)
+    #expect(try analyze("COU").suggestions.first {$0.text == "COUNT"}?.kind == .function)
+  }
   @Test func missingObjectsAndColumns() throws {
     #expect(try marked("SELECT c.Name, c.NotAColumn FROM dbo.Customers AS c; ") == ["NotAColumn"])
     #expect(try marked("SELECT * FROM dbo.DoesNotExist; ") == ["dbo.DoesNotExist"])

@@ -85,7 +85,16 @@ enum CompletionSymbols {
 
 public enum SQLIntelligence {
   public struct Diagnostic: Equatable, Sendable { public let range: NSRange; public let message: String }
-  public struct Suggestion: Equatable, Sendable { public let text: String; public let label: String }
+  public struct Suggestion: Equatable, Sendable {
+    public enum Kind: Sendable { case table, view, procedure, synonym, column, keyword, function }
+    public let text: String
+    public let label: String
+    public let kind: Kind
+    public let detail: String
+    public init(text: String, label: String, kind: Kind = .keyword, detail: String = "") {
+      self.text = text; self.label = label; self.kind = kind; self.detail = detail
+    }
+  }
   public struct Analysis: Sendable {
     public let tokens: [Lexeme]
     public let diagnostics: [Diagnostic]
@@ -340,23 +349,24 @@ public enum SQLIntelligence {
           if automaticAliases && isRelation && !alreadyAliased && ["FROM","JOIN"].contains(context.last?.text.uppercased() ?? "") { text += " AS "+alias(for:item.name,occupied:occupied)
             if automaticNoLock && nextToken?.text.uppercased() != "WITH" { text += " WITH(NOLOCK)" }
           }
-          suggestions.append(Suggestion(text:text,label:text+"  · "+item.kind))
+          let kind: Suggestion.Kind = item.kind.contains("PROCEDURE") ? .procedure : item.kind == "VIEW" ? .view : item.kind == "SYNONYM" ? .synonym : .table
+          suggestions.append(Suggestion(text:text,label:SQL.identifier(item.schema)+"."+SQL.identifier(item.name),kind:kind,detail:text))
         }
       } else if let qualifier {
         if let binding = visible.first(where: { $0.alias.lowercased() == qualifier.lowercased() }) {
-          suggestions = (binding.columns ?? []).filter { $0.lowercased().hasPrefix(prefix.lowercased()) }.prefix(100).map { Suggestion(text:SQL.identifier($0),label:qualifier+"."+SQL.identifier($0)) }
+          suggestions = (binding.columns ?? []).filter { $0.lowercased().hasPrefix(prefix.lowercased()) }.prefix(100).map { Suggestion(text:SQL.identifier($0),label:qualifier+"."+SQL.identifier($0),kind:.column,detail:binding.parts.joined(separator:".")) }
         }
       } else {
         for binding in visible {
           for column in binding.columns ?? [] where column.lowercased().hasPrefix(prefix.lowercased()) {
             let text = SQL.identifier(binding.alias)+"."+SQL.identifier(column)
-            suggestions.append(Suggestion(text:text,label:text))
+            suggestions.append(Suggestion(text:text,label:text,kind:.column,detail:binding.parts.joined(separator:".")))
             if suggestions.count >= 100 { break }
           }
           if suggestions.count >= 100 { break }
         }
         if suggestions.count < 100 {
-          suggestions += (Array(TSQL.keywords)+TSQL.functions).sorted().filter { $0.lowercased().hasPrefix(prefix.lowercased()) }.prefix(100-suggestions.count).map { Suggestion(text:$0,label:$0) }
+          suggestions += (Array(TSQL.keywords)+TSQL.functions).sorted().filter { $0.lowercased().hasPrefix(prefix.lowercased()) }.prefix(100-suggestions.count).map { Suggestion(text:$0,label:$0,kind:TSQL.functions.contains($0) ? .function : .keyword) }
         }
       }
     }

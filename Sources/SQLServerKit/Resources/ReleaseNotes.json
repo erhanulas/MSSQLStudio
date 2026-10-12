@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.70",
+    "date": "2026-10-12",
+    "title": "Şık SQL tamamlama ve sabit satır numaraları",
+    "changes": [
+      "SQL tamamlama listesi açık/koyu temaya uyumlu simgeler, nesne türleri, eşleşme vurgusu ve görünür klavye ipuçlarıyla yenilendi.",
+      "Tablo, görünüm, prosedür, kolon, fonksiyon ve anahtar sözcük önerileri birbirinden ayrılır; Tab/Enter ile ekleme, Escape ile kapatma ve editör odağı korunur.",
+      "Sonuç tablosundaki satır numaraları yatay kaydırmada solda sabit kalır. Satır ve aralık seçimi, kopyalama, filtreleme, sıralama ve sayfalama korunur.",
+      "Sabit satır alanı düzenlenen, silinecek ve yeni satır işaretlerini gösterir; numaralar veri kopyalarına ve dışa aktarıma eklenmez."
+    ]
+  },
+  {
     "version": "0.2.69",
     "date": "2026-10-12",
     "title": "Güncellemelerde parola erişimi ve sessiz kurulum",

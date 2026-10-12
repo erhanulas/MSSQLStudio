@@ -12,13 +12,15 @@ import Testing
     defer { window.close() }
     window.contentViewController = controller
     controller.update(Rows(fields: [Field("ID", type: 4), Field("Şehir", type: -9, size: 50)], values: [["1", "İstanbul"], ["2", nil]]))
+    controller.view.frame=NSRect(x:0,y:0,width:1000,height:500)
     controller.view.layoutSubtreeIfNeeded()
     let table = controller.table
     func click(_ row: Int, _ column: Int, shift: Bool = false) throws {
-      let rect = table.frameOfCell(atColumn: column, row: row)
-      let point = table.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
+      let target:NSView = column == 0 ? controller.rowGutter:table
+      let rect = column == 0 ? controller.rowGutter.rowRect(row):table.frameOfCell(atColumn: column, row: row)
+      let point = target.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
       let event = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: shift ? [.shift] : [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
-      table.mouseDown(with: event)
+      target.mouseDown(with: event)
     }
     try click(0, 2)
     table.copySelection()
