@@ -193,26 +193,41 @@ import UniformTypeIdentifiers
 @MainActor final class QueryTabSurface: NSStackView {
   weak var primaryButton: DocumentButton?
   private let activeIndicator = CALayer()
+  private var hoverArea: NSTrackingArea?
+  private var hovered = false
   private(set) var isActiveTab = false
-  func configure(active: Bool, connectionColor: NSColor?) {
+  func configure(active: Bool) {
     isActiveTab = active
     wantsLayer = true
-    layer?.cornerRadius = 6
+    layer?.cornerRadius = 8
     layer?.masksToBounds = true
-    layer?.backgroundColor = (active ? StudioTheme.selection : StudioTheme.panel).cgColor
-    layer?.borderWidth = active ? 1.5 : connectionColor == nil ? 0 : 1
-    layer?.borderColor = (active ? StudioTheme.accent.withAlphaComponent(0.75) : connectionColor ?? StudioTheme.border).cgColor
+    layer?.borderWidth = 0
     if activeIndicator.superlayer == nil { layer?.addSublayer(activeIndicator) }
-    activeIndicator.backgroundColor = StudioTheme.accent.cgColor
-    activeIndicator.cornerRadius = 1.5
+    activeIndicator.backgroundColor = StudioTheme.accent.withAlphaComponent(0.85).cgColor
+    activeIndicator.cornerRadius = 1
     activeIndicator.isHidden = !active
     setAccessibilitySelected(active)
+    refreshSurface()
     needsLayout = true
   }
+  private func refreshSurface() {
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    let selected = StudioTheme.selection.blended(withFraction: 0.55, of: StudioTheme.canvas) ?? StudioTheme.selection
+    layer?.backgroundColor = (isActiveTab ? selected : hovered ? StudioTheme.panel : .clear).cgColor
+    CATransaction.commit()
+  }
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    if let hoverArea { removeTrackingArea(hoverArea) }
+    let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
+    addTrackingArea(area); hoverArea = area
+  }
+  override func mouseEntered(with event: NSEvent) { hovered = true; refreshSurface() }
+  override func mouseExited(with event: NSEvent) { hovered = false; refreshSurface() }
   override func layout() {
     super.layout()
     CATransaction.begin(); CATransaction.setDisableActions(true)
-    activeIndicator.frame = NSRect(x: 8, y: isFlipped ? 1 : max(1, bounds.height-4), width: max(0, bounds.width-16), height: 3)
+    activeIndicator.frame = NSRect(x: 10, y: isFlipped ? max(0, bounds.height-2) : 0, width: max(0, bounds.width-20), height: 2)
     CATransaction.commit()
   }
   // Padding and the document icon belong to the same draggable/selectable tab.
@@ -677,10 +692,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       let group = QueryTabSurface(views: [button, close])
       group.primaryButton = button
       group.identifier = NSUserInterfaceItemIdentifier("connectionAccent")
-      let connectionColor = doc.server.profile.appearance.flatMap { $0.isMarked ? $0.color : nil }
-      group.configure(active: state.active === doc, connectionColor: connectionColor)
+      group.configure(active: state.active === doc)
       button.contentTintColor = state.active === doc ? StudioTheme.accent : StudioTheme.muted
-      button.font = .systemFont(ofSize: 12, weight: state.active === doc ? .semibold : .regular)
+      button.font = .systemFont(ofSize: 12, weight: state.active === doc ? .medium : .regular)
       button.attributedTitle = NSAttributedString(
         string: button.title,
         attributes: [
@@ -1121,8 +1135,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     Task {[weak self] in await self?.refreshComparedObject(server:server,database:db,key:key,type:type)}
   }
   func refreshComparedObject(server:ConnectedServer,database:String,key:SchemaObjectKey,type:String,indexService:CatalogIndexService = .shared,catalogService:SQLCatalogService = .shared) async {
-    guard server.online else {return}
-    let generation=server.generation
+    guard server.online,server.allowsCatalogIndex(database) else {return}
+    let generation=server.generation,revision=server.catalogIndexRevision
     let folder:Folder
     switch type {case "U":folder = .tables;case "V":folder = .views;case "P","PC":folder = .procedures;case "FN","IF","TF","FS","FT":folder = .functions;case "SN":folder = .synonyms;case "TR","TRD":folder = .triggers;default:return}
     let sql:String
@@ -1135,7 +1149,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     do {
       let result=try await server.catalog(sql,database:database,limits:SchemaComparison.limits)
-      guard generation==server.generation,server.online else {return}
+      guard generation==server.generation,server.online,server.catalogIndexRevision==revision,server.allowsCatalogIndex(database) else {return}
       guard !result.partial,!result.stoppedEarly,result.results.count==1,!result.results.contains(where:\.truncated) else {throw SQLFailure("Nesne yenilemesi kısmi geldi.")}
       let values=Array(result.results.first?.values ?? [])
       guard values.count<=30_000,values.allSatisfy({$0.count>=6 && $0[0].flatMap(Int.init).map {$0>0}==true && $0[0]==values.first?[0] && $0[1]==key.name && $0[2]==key.schema && $0[3] != nil}) else {throw SQLFailure("Nesne yenileme yanıtı doğrulanamadı.")}
@@ -1144,16 +1158,16 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       if folder != .triggers {
         let rows=item.map {[$0]} ?? []
         try await indexService.replaceTarget(profile:server.profile,database:database,name:key.schema+"."+key.name,folder:folder,items:rows)
-        guard generation==server.generation,server.online else {return}
+        guard generation==server.generation,server.online,server.catalogIndexRevision==revision,server.allowsCatalogIndex(database) else {return}
         let symbol=item.map {CatalogSymbol(schema:$0.schema,name:$0.name,columns:values.compactMap {$0[4]},kind:$0.detail)}
         let catalog=try await catalogService.replaceTarget(profile:server.profile,database:database,schema:key.schema,name:key.name,symbol:symbol)
-        guard generation==server.generation,server.online else {return}
+        guard generation==server.generation,server.online,server.catalogIndexRevision==revision,server.allowsCatalogIndex(database) else {return}
         if let catalog {for document in state.documents where document.server === server && document.database==database {document.applyTargetedCatalog(catalog,database:database,generation:generation)}}
       }
       var queue=roots.filter {$0.server === server},visited=0
       while let node=queue.popLast() {
         visited+=1;if visited%200==0 {await Task.yield()}
-        guard generation==server.generation,server.online else {return}
+        guard generation==server.generation,server.online,server.catalogIndexRevision==revision,server.allowsCatalogIndex(database) else {return}
         queue.append(contentsOf:node.children)
         guard node.database==database else {continue}
         if case .folder(let category)=node.kind,category==folder,node.loaded,
@@ -1173,7 +1187,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       }
       if searchScope?.server === server,searchScope.map({searchDatabases($0).contains(database)})==true,!explorerSearch.stringValue.isEmpty {filterExplorer()}
     } catch {
-      guard generation==server.generation else {return}
+      guard generation==server.generation,server.catalogIndexRevision==revision,server.allowsCatalogIndex(database) else {return}
       searchStatus.stringValue="Nesne uygulandı; yerel katalog yenilenemedi."
       searchStatus.toolTip=error.localizedDescription
     }
@@ -1182,18 +1196,23 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     guard let doc = notification.object as? QueryDocument else { return }
     let targets = ModuleEditing.changedObjects(doc.lastExecutedSQL ?? "")
     let db = doc.database, server = doc.server
+    let revision=server.catalogIndexRevision
     Task { [weak self] in
       guard let self else { return }
       for target in targets {
+        guard server.catalogIndexRevision==revision,server.allowsCatalogIndex(db) else {return}
         guard let result = try? await server.catalog(Catalog.searchObjects(target.name, operation: 1, folder: target.folder), database: db) else { continue }
+        guard server.catalogIndexRevision==revision,server.allowsCatalogIndex(db) else {return}
         let rows = Catalog.rows(result)
         do {
           try await CatalogIndexService.shared.replaceTarget(profile: server.profile, database: db, name: target.name, folder: target.folder, items: rows)
         } catch { searchStatus.stringValue = "Disk indeksi güncellenemedi; indeksi yenileyin." }
+        guard server.catalogIndexRevision==revision,server.allowsCatalogIndex(db) else {return}
         var queue = roots.filter { $0.server === server }, visited = 0
         while let node = queue.popLast() {
           visited += 1
           if visited % 200 == 0 { await Task.yield() }
+          guard server.catalogIndexRevision==revision,server.allowsCatalogIndex(db) else {return}
           queue.append(contentsOf: node.children)
           guard node.database == db else { continue }
           if case .folder(let folder) = node.kind, folder == target.folder, node.item == nil, node.loaded {
@@ -1238,7 +1257,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     for row in 0..<outline.numberOfRows {
       if let node=outline.item(atRow:row) as? TreeNode,case .database=node.kind {reloadExplorer(item:node)}
     }
-    if let server = notification.object as? ConnectedServer, let db = notification.userInfo?["database"] as? String, notification.userInfo?["error"] == nil {
+    if let server = notification.object as? ConnectedServer, let db = notification.userInfo?["database"] as? String, notification.userInfo?["error"] == nil,notification.userInfo?["excluded"] as? Bool != true,server.allowsCatalogIndex(db) {
       for doc in state.documents where doc.server === server && doc.database == db { Task { await doc.loadSymbols() } }
     }
     guard let server = notification.object as? ConnectedServer,
@@ -1251,21 +1270,26 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     } else { filterExplorer() }
   }
   private func refreshIndexInBackground(server: ConnectedServer, database: String, force: Bool = false) {
-    guard server.online, !server.indexingDatabases.contains(database) else {return}
+    guard server.online,server.allowsCatalogIndex(database), !server.indexingDatabases.contains(database) else {return}
+    let revision=server.catalogIndexRevision
     server.indexingDatabases.insert(database)
     NotificationCenter.default.post(name:.init("catalogIndexUpdated"),object:server,userInfo:["database":database])
     lastIndexStatusCheck = .distantPast; updateIndexStatus()
     Task {
       defer {
-        server.indexingDatabases.remove(database)
-        NotificationCenter.default.post(name:.init("catalogIndexUpdated"),object:server,userInfo:["database":database])
-        lastIndexStatusCheck = .distantPast; updateIndexStatus()
+        if server.catalogIndexRevision==revision,server.allowsCatalogIndex(database) {
+          server.indexingDatabases.remove(database)
+          NotificationCenter.default.post(name:.init("catalogIndexUpdated"),object:server,userInfo:["database":database])
+          lastIndexStatusCheck = .distantPast; updateIndexStatus()
+        }
       }
       do {
         let key = CatalogDiskIndex.scope(profile: server.profile, database: database)
         let before = try await CatalogDiskIndex.shared.status(scope: key)
         let after = try await CatalogIndexService.shared.refresh(profile: server.profile, password: server.password, database: database, force: force)
+        guard server.catalogIndexRevision==revision,server.allowsCatalogIndex(database) else {return}
         _ = try await SQLCatalogService.shared.refresh(profile:server.profile,password:server.password,database:database,force:force)
+        guard server.catalogIndexRevision==revision,server.allowsCatalogIndex(database) else {return}
         if force && (searchScope ?? selected ?? roots.first)?.server === server {
           searchStatus.stringValue = "\(database) · Disk indeksi hazır · \(after.count) nesne"
         }
@@ -1273,6 +1297,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         if !force && before?.synchronizedAt == after.synchronizedAt { return }
         NotificationCenter.default.post(name: .init("catalogIndexUpdated"), object: server, userInfo: ["database": database])
       } catch {
+        guard !(error is CancellationError),server.catalogIndexRevision==revision,server.allowsCatalogIndex(database) else {return}
         server.indexErrors[database]=error.localizedDescription
         if force { searchStatus.stringValue = "Disk indeksi eşitlenemedi"; searchStatus.toolTip = error.localizedDescription }
         NotificationCenter.default.post(name: .init("catalogIndexUpdated"), object: server, userInfo: ["database": database, "error": error.localizedDescription])

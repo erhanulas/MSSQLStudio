@@ -81,7 +81,13 @@ public enum TSQL {
   }
   /// Conservative eligibility for unattended repetition; this is not a SQL authorization boundary.
   public static func canRepeatRead(_ sql: String) -> Bool {
-    let tokens = lex(sql).filter { $0.kind != .space && $0.kind != .comment }
+    let allTokens = lex(sql).filter { $0.kind != .space && $0.kind != .comment }
+    // Monitoring scripts often start with local filter parameters. Parse only
+    // built-in scalar declarations with literal/NULL initializers, then apply
+    // the existing read-only policy to the complete remaining script. Merely
+    // removing DECLARE from the forbidden words would also admit table/cursor
+    // variables, executable expressions and arbitrary user-defined types.
+    guard let tokens = repeatReadBody(afterParameters: allTokens) else { return false }
     let forbidden = Set("KILL SHUTDOWN RECONFIGURE BULK RECEIVE SEND MOVE PRINT THROW RAISERROR DECLARE INSERT UPDATE DELETE MERGE INTO EXEC EXECUTE CREATE ALTER DROP TRUNCATE GRANT REVOKE DENY BACKUP RESTORE DBCC USE SET BEGIN COMMIT ROLLBACK SAVE TRAN TRANSACTION WAITFOR GO OPENROWSET OPENQUERY OPENDATASOURCE NEXT UPDLOCK XLOCK HOLDLOCK TABLOCKX".split(separator: " ").map(String.init))
     guard !tokens.contains(where: { token in
       token.kind != .string && forbidden.contains(token.text.uppercased())
@@ -106,6 +112,73 @@ public enum TSQL {
       if token.text.uppercased() == "SELECT" { hasSelect = true; anySelect = true }
     }
     return depth == 0 && anySelect && (starting || hasSelect)
+  }
+
+  private static func repeatReadBody(afterParameters tokens: [Lexeme]) -> ArraySlice<Lexeme>? {
+    let scalarTypes = Set("BIT TINYINT SMALLINT INT INTEGER BIGINT MONEY SMALLMONEY REAL DATE DATETIME SMALLDATETIME UNIQUEIDENTIFIER SYSNAME SQL_VARIANT BINARY VARBINARY CHAR VARCHAR NCHAR NVARCHAR DEC DECIMAL NUMERIC FLOAT TIME DATETIME2 DATETIMEOFFSET".split(separator: " ").map(String.init))
+    var i = 0
+    func text(_ index: Int) -> String { index < tokens.count ? tokens[index].text.uppercased() : "" }
+    func validTypeArguments(_ type: String, _ arguments: [String]) -> Bool {
+      switch type {
+      case "DEC", "DECIMAL", "NUMERIC":
+        guard (1...2).contains(arguments.count), let precision = Int(arguments[0]), (1...38).contains(precision) else { return false }
+        return arguments.count == 1 || Int(arguments[1]).map { (0...precision).contains($0) } == true
+      case "FLOAT": return arguments.count == 1 && Int(arguments[0]).map { (1...53).contains($0) } == true
+      case "TIME", "DATETIME2", "DATETIMEOFFSET": return arguments.count == 1 && Int(arguments[0]).map { (0...7).contains($0) } == true
+      case "BINARY", "VARBINARY", "CHAR", "VARCHAR", "NCHAR", "NVARCHAR":
+        guard arguments.count == 1 else { return false }
+        if arguments[0] == "MAX" { return ["VARBINARY", "VARCHAR", "NVARCHAR"].contains(type) }
+        return Int(arguments[0]).map { (1...(["NCHAR", "NVARCHAR"].contains(type) ? 4000 : 8000)).contains($0) } == true
+      default: return false
+      }
+    }
+    while true {
+      while text(i) == ";" { i += 1 }
+      guard text(i) == "DECLARE" else { return tokens[i...] }
+      i += 1
+      while true {
+        guard i < tokens.count, tokens[i].kind == .variable,
+          !tokens[i].text.hasPrefix("@@"), tokens[i].text.count > 1 else { return nil }
+        i += 1
+        if text(i) == "AS" { i += 1 }
+        let type = text(i)
+        guard scalarTypes.contains(type) else { return nil }
+        i += 1
+        if text(i) == "(" {
+          i += 1
+          var arguments: [String] = []
+          while true {
+            guard i < tokens.count, tokens[i].kind == .number || text(i) == "MAX" else { return nil }
+            arguments.append(text(i)); i += 1
+            if text(i) != "," { break }
+            i += 1
+          }
+          guard text(i) == ")", validTypeArguments(type, arguments) else { return nil }
+          i += 1
+        }
+        if text(i) == "=" {
+          i += 1
+          guard i < tokens.count else { return nil }
+          if tokens[i].kind == .string {
+            // Reject an unterminated literal; embedded quotes remain untouched.
+            guard tokens[i].text.range(of: #"(?is)^N?'(?:[^']|'')*'$"#, options: .regularExpression) != nil else { return nil }
+            i += 1
+          } else if text(i) == "NULL" {
+            i += 1
+          } else {
+            let first = i
+            while i < tokens.count, ![",", ";", "DECLARE", "SELECT", "WITH"].contains(text(i)) { i += 1 }
+            let literal = tokens[first..<i].map(\.text).joined()
+            // Deliberately no variable, function, subquery or expression calls.
+            guard literal.range(of: #"^(?:0[xX][0-9A-Fa-f]*|[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)$"#, options: .regularExpression) != nil else { return nil }
+          }
+        }
+        if text(i) == "," { i += 1; continue }
+        // SQL Server permits an omitted terminator before the next statement.
+        guard i == tokens.count || [";", "DECLARE", "SELECT", "WITH"].contains(text(i)) else { return nil }
+        break
+      }
+    }
   }
 
   public static let keywords = Set(

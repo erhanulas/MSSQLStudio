@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.96",
+    "date": "2026-10-13",
+    "title": "Daha sakin sekmeler, yenilenen Ayarlar ve güvenilir indeks temizliği",
+    "changes": [
+      "Aktif sorgu sekmesi kalın çerçeve yerine hafif tonlu zemin, ince alt çizgi ve dengeli başlıkla vurgulanır. Pasif sekmeler sade kalır; üzerine gelindiğinde hafif geri bildirim verir.",
+      "Sorgu başındaki sabit veya NULL değerli scalar DECLARE parametreleri desteklenir. Parametreli CTE izleme sorguları Sonuçları Yenile ile tekrar okunabilir; çalıştırılmış SQL ve limitler korunur, yazma ve çalıştırılabilir başlangıç ifadeleri kapsam dışında kalır.",
+      "Explorer’dan hariç bırakılan veritabanının yerel nesne, tamamlama ve düzenleme metadata indeksleri temizlenir. Devam eden indeks işleri iptal edilir; eski yanıtlar silinen indeksi geri oluşturamaz. Diğer veritabanları ve açık sorgu oturumları korunur.",
+      "Ayarlar kompakt başlıklar, gruplanmış kartlar, hizalı anahtarlar ve yerel tema önizlemesiyle yenilendi. Altı native sekme, kaydedilmemiş tercihler ve sabit Uygula/geri bildirim alanı korunur."
+    ]
+  },
+  {
     "version": "0.2.95",
     "date": "2026-10-12",
     "title": "Bloklanma zinciri, dosya izleme ve sorgu deneyimi",

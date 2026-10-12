@@ -16,7 +16,36 @@ public actor CatalogDiskIndex {
   public static let shared = CatalogDiskIndex(url: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("MSSQLStudio/CatalogIndex/catalog-v1.sqlite"))
   private let url: URL
   private var handle: CatalogSQLiteHandle?
+  private var excludedScopes = Set<String>()
+  private var generations: [String: UUID] = [:]
   public init(url: URL) { self.url = url }
+  /// Excluding an Explorer database removes only its derived local records.
+  /// The generation also revokes writes already waiting on network metadata.
+  public func setExcluded(_ excluded: Bool, scope: String) throws {
+    if !excluded {
+      if excludedScopes.remove(scope) != nil { generations[scope] = UUID() }
+      return
+    }
+    excludedScopes.insert(scope); generations[scope] = UUID()
+    guard handle != nil || FileManager.default.fileExists(atPath: url.path) else { return }
+    try execute("BEGIN IMMEDIATE")
+    do {
+      try write("DELETE FROM objects WHERE scope=? OR substr(scope,1,length(?)+1)=?||':'",[scope,scope,scope])
+      try write("DELETE FROM builds WHERE staging=? OR substr(staging,1,length(?)+1)=?||':'",[scope,scope,scope])
+      try write("DELETE FROM scopes WHERE scope=?",[scope])
+      try write("DELETE FROM editing_metadata WHERE scope=?",[scope])
+      try write("DELETE FROM completion_snapshots WHERE scope=?",[scope])
+      try execute("COMMIT")
+    } catch { try? execute("ROLLBACK"); throw error }
+  }
+  public func generation(scope: String) throws -> UUID {
+    try validate(scope: scope)
+    if let value=generations[scope] { return value }
+    let value=UUID(); generations[scope]=value; return value
+  }
+  private func validate(scope: String, generation: UUID? = nil) throws {
+    guard !excludedScopes.contains(scope), generation == nil || generations[scope] == generation else { throw CancellationError() }
+  }
   public nonisolated static func scope(profile: ServerProfile, database: String) -> String {
     // JSON preserves field boundaries. Passwords and SQL definitions never enter the file.
     let fields = [profile.id.uuidString, profile.host, String(profile.port), profile.login, String(profile.kerberos), database]
@@ -41,6 +70,7 @@ public actor CatalogDiskIndex {
     try execute("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-4096; PRAGMA temp_store=FILE;")
     try execute("CREATE TABLE IF NOT EXISTS scopes(scope TEXT PRIMARY KEY, synced REAL NOT NULL, count INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS builds(staging TEXT PRIMARY KEY, created REAL NOT NULL); CREATE TABLE IF NOT EXISTS objects(scope TEXT NOT NULL, id INTEGER NOT NULL, name TEXT NOT NULL, schema_name TEXT NOT NULL, kind TEXT NOT NULL, folded_name TEXT NOT NULL, folded_qualified TEXT NOT NULL, PRIMARY KEY(scope,id)) WITHOUT ROWID; CREATE INDEX IF NOT EXISTS catalog_name ON objects(scope,folded_name); CREATE INDEX IF NOT EXISTS catalog_qualified ON objects(scope,folded_qualified); CREATE INDEX IF NOT EXISTS catalog_kind ON objects(scope,kind);")
     try execute("CREATE TABLE IF NOT EXISTS editing_metadata(scope TEXT NOT NULL, fingerprint TEXT NOT NULL, saved REAL NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(scope,fingerprint)) WITHOUT ROWID;")
+    try execute("CREATE TABLE IF NOT EXISTS completion_snapshots(scope TEXT PRIMARY KEY,payload TEXT NOT NULL)")
     try execute("DELETE FROM objects WHERE scope IN (SELECT staging FROM builds WHERE created<CAST(strftime('%s','now') AS REAL)-86400); DELETE FROM builds WHERE created<CAST(strftime('%s','now') AS REAL)-86400;")
     return raw
   }
@@ -71,12 +101,14 @@ public actor CatalogDiskIndex {
     try write("DELETE FROM editing_metadata WHERE scope=?",[scope])
   }
   public func editingMetadata(scope: String, fingerprint: String, now: Date = Date()) throws -> ResultEditingSnapshot? {
+    guard !excludedScopes.contains(scope) else { return nil }
     let s = try statement("SELECT payload FROM editing_metadata WHERE scope=? AND fingerprint=? AND saved>=?",[scope,fingerprint,String(now.timeIntervalSince1970-86400)])
     defer { sqlite3_finalize(s) }
     guard sqlite3_step(s) == SQLITE_ROW, let raw = sqlite3_column_text(s,0) else { return nil }
     return try JSONDecoder().decode(ResultEditingSnapshot.self,from:Data(String(cString:raw).utf8))
   }
-  public func saveEditingMetadata(_ snapshot: ResultEditingSnapshot, scope: String, fingerprint: String, now: Date = Date()) throws {
+  public func saveEditingMetadata(_ snapshot: ResultEditingSnapshot, scope: String, fingerprint: String, now: Date = Date(), generation: UUID? = nil) throws {
+    try validate(scope:scope,generation:generation)
     let payload = String(decoding:try JSONEncoder().encode(snapshot),as:UTF8.self)
     guard payload.utf8.count <= 1_048_576 else { return }
     try write("INSERT OR REPLACE INTO editing_metadata VALUES(?,?,?,?)",[scope,fingerprint,String(now.timeIntervalSince1970),payload])
@@ -86,13 +118,15 @@ public actor CatalogDiskIndex {
     try execute("DELETE FROM editing_metadata WHERE (scope,fingerprint) IN (SELECT scope,fingerprint FROM (SELECT scope,fingerprint,SUM(length(CAST(payload AS BLOB))) OVER(ORDER BY saved DESC,scope,fingerprint) AS bytes FROM editing_metadata) WHERE bytes>16777216)")
   }
   public func status(scope: String) throws -> CatalogIndexStatus? {
+    guard !excludedScopes.contains(scope) else { return nil }
     let s = try statement("SELECT synced,count FROM scopes WHERE scope=?",[scope]); defer { sqlite3_finalize(s) }
     let code = sqlite3_step(s)
     if code == SQLITE_DONE { return nil }
     guard code == SQLITE_ROW else { throw SQLFailure("Yerel katalog durumu okunamadı.") }
     return CatalogIndexStatus(synchronizedAt: Date(timeIntervalSince1970: sqlite3_column_double(s,0)), count: Int(sqlite3_column_int64(s,1)))
   }
-  public func append(scope: String, items: [CatalogItem]) throws {
+  public func append(scope: String, items: [CatalogItem], targetScope: String? = nil, generation: UUID? = nil) throws {
+    try validate(scope:targetScope ?? scope,generation:generation)
     try execute("BEGIN IMMEDIATE")
     do {
       try write("INSERT OR IGNORE INTO builds VALUES(?,?)",[scope,String(Date().timeIntervalSince1970)])
@@ -109,7 +143,8 @@ public actor CatalogDiskIndex {
       try execute("COMMIT")
     } catch { try? execute("ROLLBACK"); throw error }
   }
-  public func finishBuild(staging: String, scope: String, at: Date = Date()) throws {
+  public func finishBuild(staging: String, scope: String, at: Date = Date(), generation: UUID? = nil) throws {
+    try validate(scope:scope,generation:generation)
     try execute("BEGIN IMMEDIATE")
     do {
       try write("DELETE FROM editing_metadata WHERE scope=?",[scope])
@@ -124,7 +159,8 @@ public actor CatalogDiskIndex {
     try write("DELETE FROM objects WHERE scope=?",[staging])
     try write("DELETE FROM builds WHERE staging=?",[staging])
   }
-  public func replaceTarget(scope: String, name: String, kind: Folder, items: [CatalogItem]) throws {
+  public func replaceTarget(scope: String, name: String, kind: Folder, items: [CatalogItem], generation: UUID? = nil) throws {
+    try validate(scope:scope,generation:generation)
     // Exact target replacement also removes dropped objects. Other records stay untouched.
     let kinds = Self.kinds(kind)
     try execute("BEGIN IMMEDIATE")
@@ -150,6 +186,7 @@ public actor CatalogDiskIndex {
     }
   }
   public func search(scope: String, text: String, operation: Int, folder: Folder?, limit: Int = 501) throws -> [CatalogItem] {
+    guard !excludedScopes.contains(scope) else { return [] }
     try Task.checkCancellation()
     let folded = Self.fold(text), predicate: String, args: [String]
     switch operation {
@@ -182,13 +219,26 @@ public actor CatalogDiskIndex {
 public actor CatalogIndexService {
   public static let shared = CatalogIndexService(index: .shared)
   private let index: CatalogDiskIndex
-  private var builds: [String: Task<Void, Error>] = [:]
+  private struct Build { let id:UUID; let task:Task<Void,Error> }
+  private var builds: [String: Build] = [:]
   private var lastAttempt: [String: Date] = [:]
-  public init(index: CatalogDiskIndex) { self.index = index }
+  private let refreshFixture:(@Sendable (ServerProfile,String,String) async throws -> [CatalogItem])?
+  private let exclusionFixture:(@Sendable () async -> Void)?
+  public init(index: CatalogDiskIndex) { self.index = index; refreshFixture=nil;exclusionFixture=nil }
+  init(index: CatalogDiskIndex, refreshFixture:@escaping @Sendable (ServerProfile,String,String) async throws -> [CatalogItem],exclusionFixture:(@Sendable () async -> Void)? = nil) {self.index=index;self.refreshFixture=refreshFixture;self.exclusionFixture=exclusionFixture}
+  public func exclude(profile:ServerProfile,database:String) async throws {
+    if let exclusionFixture {await exclusionFixture()}
+    let scope=CatalogDiskIndex.scope(profile:profile,database:database)
+    builds.removeValue(forKey:scope)?.task.cancel();lastAttempt[scope]=nil
+    try await index.setExcluded(true,scope:scope)
+  }
   @discardableResult public func refresh(profile: ServerProfile, password: String, database: String, force: Bool = false) async throws -> CatalogIndexStatus {
+    guard profile.visibleDatabases?.contains(database) != false else {throw CancellationError()}
     let scope = CatalogDiskIndex.scope(profile: profile, database: database)
+    let generation=try await index.generation(scope:scope)
     if let build = builds[scope] {
-      try await build.value
+      try await build.task.value
+      guard try await index.generation(scope:scope)==generation else {throw CancellationError()}
       guard let status = try await index.status(scope: scope) else { throw SQLFailure("Katalog indeksi tamamlanmadı.") }
       return status
     }
@@ -196,26 +246,34 @@ public actor CatalogIndexService {
       Date().timeIntervalSince(status.synchronizedAt) < 300 || Date().timeIntervalSince(lastAttempt[scope] ?? .distantPast) < 60 { return status }
     lastAttempt[scope] = Date()
     let index = self.index
+    let refreshFixture=self.refreshFixture
     let build = Task {
       let connection = ODBCConnection()
       var profile = profile; profile.database = database
       let staging = scope + ":" + UUID().uuidString
       do {
+        if let refreshFixture {
+          let items=try await refreshFixture(profile,password,database)
+          try Task.checkCancellation()
+          try await index.append(scope:staging,items:items,targetScope:scope,generation:generation)
+          try await index.finishBuild(staging:staging,scope:scope,generation:generation)
+          return
+        }
         try await connection.connect(profile,password: password)
         var after = 0
         while true {
           try Task.checkCancellation()
-          let output = try await connection.execute(Catalog.indexPage(after: after))
+          let output = try await withTaskCancellationHandler {try await connection.execute(Catalog.indexPage(after: after))} onCancel: {connection.cancel()}
           guard !output.partial else { throw SQLFailure("Katalog kısmi geldi; eski disk indeksi korundu.") }
           let items = Catalog.rows(output)
           if items.isEmpty { break }
           guard let last = items.last, last.id > after else { throw SQLFailure("Katalog sayfalaması ilerlemedi.") }
-          try await index.append(scope: staging,items: items)
+          try await index.append(scope: staging,items: items,targetScope:scope,generation:generation)
           after = last.id
           if items.count < 1000 { break }
         }
         try Task.checkCancellation()
-        try await index.finishBuild(staging: staging,scope: scope)
+        try await index.finishBuild(staging: staging,scope: scope,generation:generation)
         await connection.disconnect()
       } catch {
         try? await index.discard(staging: staging)
@@ -223,19 +281,24 @@ public actor CatalogIndexService {
         throw error
       }
     }
-    builds[scope] = build
+    let job=Build(id:UUID(),task:build)
+    builds[scope] = job
     do {
-      try await build.value; builds[scope] = nil
+      try await build.value
+      if builds[scope]?.id==job.id {builds[scope] = nil}
+      guard try await index.generation(scope:scope)==generation else {throw CancellationError()}
       guard let status = try await index.status(scope: scope) else { throw SQLFailure("Katalog indeksi tamamlanmadı.") }
       return status
-    } catch { builds[scope] = nil; throw error }
+    } catch { if builds[scope]?.id==job.id {builds[scope] = nil}; throw error }
   }
   public func replaceTarget(profile: ServerProfile, database: String, name: String, folder: Folder, items: [CatalogItem]) async throws {
+    guard profile.visibleDatabases?.contains(database) != false else {return}
     let scope = CatalogDiskIndex.scope(profile: profile,database: database)
+    let generation=try await index.generation(scope:scope)
     // Publish targeted DDL after an in-flight full build, avoiding lost local updates.
-    if let build = builds[scope] { _ = try? await build.value }
+    if let build = builds[scope] { _ = try? await build.task.value }
     guard try await index.status(scope: scope) != nil else { return }
-    try await index.replaceTarget(scope: scope,name: name,kind: folder,items: items)
+    try await index.replaceTarget(scope: scope,name: name,kind: folder,items: items,generation:generation)
   }
 }
 
@@ -246,12 +309,14 @@ public struct SQLCatalogSnapshot: Codable, Sendable {
 }
 extension CatalogDiskIndex {
   public func completionSnapshot(scope: String) throws -> SQLCatalogSnapshot? {
+    guard !excludedScopes.contains(scope) else { return nil }
     try execute("CREATE TABLE IF NOT EXISTS completion_snapshots(scope TEXT PRIMARY KEY,payload TEXT NOT NULL)")
     let s = try statement("SELECT payload FROM completion_snapshots WHERE scope=?",[scope]); defer { sqlite3_finalize(s) }
     guard sqlite3_step(s) == SQLITE_ROW, let value = sqlite3_column_text(s,0) else { return nil }
     return try JSONDecoder().decode(SQLCatalogSnapshot.self,from:Data(String(cString:value).utf8))
   }
-  public func saveCompletionSnapshot(scope: String, snapshot: SQLCatalogSnapshot) throws {
+  public func saveCompletionSnapshot(scope: String, snapshot: SQLCatalogSnapshot, generation: UUID? = nil) throws {
+    try validate(scope:scope,generation:generation)
     try execute("CREATE TABLE IF NOT EXISTS completion_snapshots(scope TEXT PRIMARY KEY,payload TEXT NOT NULL)")
     let payload = String(decoding:try JSONEncoder().encode(snapshot),as:UTF8.self)
     try write("INSERT OR REPLACE INTO completion_snapshots VALUES(?,?)",[scope,payload])
@@ -275,40 +340,56 @@ public actor SQLCatalogService {
   private let refreshFixture:(@Sendable (ServerProfile,String,String) async throws -> SQLCatalogSnapshot)?
   public init(index: CatalogDiskIndex) { self.index = index;refreshFixture=nil }
   init(index:CatalogDiskIndex,refreshFixture:@escaping @Sendable (ServerProfile,String,String) async throws -> SQLCatalogSnapshot) {self.index=index;self.refreshFixture=refreshFixture}
+  func hasPendingTarget(profile:ServerProfile,database:String)->Bool {targets[CatalogDiskIndex.scope(profile:profile,database:database)] != nil}
   private func remember(_ value: SQLIntelligence.Catalog, scope: String) {
     if memory[scope] == nil && memory.count >= 8, let oldest = memory.min(by: { $0.value.snapshot.synchronizedAt < $1.value.snapshot.synchronizedAt })?.key { memory[oldest] = nil }
     memory[scope] = value
   }
+  public func exclude(profile:ServerProfile,database:String) async throws {
+    let scope=CatalogDiskIndex.scope(profile:profile,database:database)
+    jobs.removeValue(forKey:scope)?.task.cancel()
+    targets.removeValue(forKey:scope)?.task.cancel()
+    memory[scope]=nil
+    try await index.setExcluded(true,scope:scope)
+  }
   public func cached(profile: ServerProfile, database: String) async throws -> SQLIntelligence.Catalog? {
+    guard profile.visibleDatabases?.contains(database) != false else {return nil}
     let scope = CatalogDiskIndex.scope(profile:profile,database:database)
+    let generation=try await index.generation(scope:scope)
     if let value = memory[scope] { return value }
     if let snapshot = try await index.completionSnapshot(scope:scope) {
+      guard try await index.generation(scope:scope)==generation else {throw CancellationError()}
       if let value=memory[scope] {return value}
       let value = SQLIntelligence.Catalog(snapshot:snapshot); remember(value,scope:scope); return value
     }
     return nil
   }
-  private func finish(_ job:RefreshJob,scope:String,value:SQLIntelligence.Catalog)->SQLIntelligence.Catalog {
+  private func finish(_ job:RefreshJob,scope:String,value:SQLIntelligence.Catalog) throws -> SQLIntelligence.Catalog {
     // Every waiter can finalize the same full refresh. A late waiter must not
     // overwrite a scoped update that already followed the completed refresh.
-    if jobs[scope]?.id==job.id {remember(value,scope:scope);jobs[scope]=nil}
-    return memory[scope] ?? value
+    if jobs[scope]?.id==job.id {remember(value,scope:scope);jobs[scope]=nil;return value}
+    if let value=memory[scope] {return value}
+    throw CancellationError()
   }
   /// Updates one already cached completion object without a connection or a
   /// whole-catalog freshness change. Names are exact, including case/Unicode.
   public func replaceTarget(profile:ServerProfile,database:String,schema:String,name:String,symbol:CatalogSymbol?) async throws -> SQLIntelligence.Catalog? {
+    guard profile.visibleDatabases?.contains(database) != false else {return nil}
     func valid(_ text:String,empty:Bool=false)->Bool {(empty || !text.isEmpty) && text.utf16.count<=128 && !text.utf16.contains(0)}
     guard valid(database),valid(schema,empty:true),valid(name),symbol.map({
       $0.schema.utf8.elementsEqual(schema.utf8) && $0.name.utf8.elementsEqual(name.utf8) && valid($0.kind) && $0.columns.count<=250_000 && $0.columns.allSatisfy {valid($0)}
     }) ?? true else {throw SQLFailure("Hedef kolon indeksi bilgisi geçersiz veya boyut sınırını aşıyor.")}
-    let scope=CatalogDiskIndex.scope(profile:profile,database:database),previous=targets[scope]
+    let scope=CatalogDiskIndex.scope(profile:profile,database:database)
+    let generation=try await index.generation(scope:scope)
+    let previous=targets[scope]
     let id=UUID()
     let task=Task<SQLIntelligence.Catalog?,Error> {
       // Different DDL notifications for the same database preserve each
       // other's symbols, even while persistence suspends this actor.
       if let previous {_ = try? await previous.task.value}
+      try Task.checkCancellation()
       if let job=jobs[scope] {
-        do {_ = finish(job,scope:scope,value:try await job.task.value)}
+        do {_ = try finish(job,scope:scope,value:try await job.task.value)}
         catch {if jobs[scope]?.id==job.id {jobs[scope]=nil}}
       }
       guard let value=try await cached(profile:profile,database:database) else {return nil}
@@ -320,7 +401,9 @@ public actor SQLCatalogService {
       } else if let symbol {symbols.append(symbol)}
       guard symbols.count<=50_000,symbols.reduce(0,{$0+max(1,$1.columns.count)})<=250_000 else {throw SQLFailure("Akıllı editör indeks boyutu sınırına ulaştı; son tamamlanan indeks korundu.")}
       let snapshot=SQLCatalogSnapshot(symbols:symbols,synchronizedAt:value.snapshot.synchronizedAt)
-      try await index.saveCompletionSnapshot(scope:scope,snapshot:snapshot)
+      try Task.checkCancellation()
+      try await index.saveCompletionSnapshot(scope:scope,snapshot:snapshot,generation:generation)
+      try Task.checkCancellation()
       let updated=SQLIntelligence.Catalog(snapshot:snapshot)
       remember(updated,scope:scope)
       return updated
@@ -330,14 +413,16 @@ public actor SQLCatalogService {
     catch {if targets[scope]?.id==id {targets[scope]=nil};throw error}
   }
   public func refresh(profile: ServerProfile, password: String, database: String, force: Bool = false) async throws -> SQLIntelligence.Catalog {
+    guard profile.visibleDatabases?.contains(database) != false else {throw CancellationError()}
     let scope = CatalogDiskIndex.scope(profile:profile,database:database)
+    let generation=try await index.generation(scope:scope)
     while true {
       while let target=targets[scope] {
         _ = try? await target.task.value
         if targets[scope]?.id==target.id {targets[scope]=nil}
       }
       if let job = jobs[scope] {
-        do {return finish(job,scope:scope,value:try await job.task.value)}
+        do {return try finish(job,scope:scope,value:try await job.task.value)}
         catch {if jobs[scope]?.id==job.id {jobs[scope]=nil};throw error}
       }
       if force {break}
@@ -353,7 +438,9 @@ public actor SQLCatalogService {
     let job = Task<SQLIntelligence.Catalog,Error> {
       if let refreshFixture {
         let snapshot=try await refreshFixture(profile,password,database)
-        try await index.saveCompletionSnapshot(scope:scope,snapshot:snapshot)
+        try Task.checkCancellation()
+        try await index.saveCompletionSnapshot(scope:scope,snapshot:snapshot,generation:generation)
+        try Task.checkCancellation()
         return SQLIntelligence.Catalog(snapshot:snapshot)
       }
       let connection = ODBCConnection()
@@ -365,7 +452,7 @@ public actor SQLCatalogService {
         while true {
           try Task.checkCancellation()
           let sql = "SELECT TOP (2000) o.object_id,s.name,o.name,o.type_desc,ISNULL(c.column_id,0),c.name FROM sys.objects o JOIN sys.schemas s ON s.schema_id=o.schema_id LEFT JOIN sys.columns c ON c.object_id=o.object_id WHERE o.is_ms_shipped=0 AND o.type IN ('U','V','P','PC','FN','IF','TF','FS','FT','SN') AND (o.object_id>\(objectID) OR (o.object_id=\(objectID) AND ISNULL(c.column_id,0)>\(columnID))) ORDER BY o.object_id,ISNULL(c.column_id,0);"
-          let result = try await connection.execute(sql)
+          let result = try await withTaskCancellationHandler {try await connection.execute(sql)} onCancel: {connection.cancel()}
           guard !result.partial else { throw SQLFailure("Kolon indeksi kısmi geldi; son tamamlanan indeks korundu.") }
           let values = result.results.first?.values ?? []
           for row in values {
@@ -378,14 +465,16 @@ public actor SQLCatalogService {
           if values.count < 2000 { break }
         }
         let snapshot = SQLCatalogSnapshot(symbols:objects.values.map { CatalogSymbol(schema:$0.0,name:$0.1,columns:$0.3,kind:$0.2) })
-        try await index.saveCompletionSnapshot(scope:scope,snapshot:snapshot)
+        try Task.checkCancellation()
+        try await index.saveCompletionSnapshot(scope:scope,snapshot:snapshot,generation:generation)
+        try Task.checkCancellation()
         await connection.disconnect()
         return SQLIntelligence.Catalog(snapshot:snapshot)
       } catch { await connection.disconnect(); throw error }
     }
     let refresh=RefreshJob(id:UUID(),task:job)
     jobs[scope] = refresh
-    do {return finish(refresh,scope:scope,value:try await job.value)}
+    do {return try finish(refresh,scope:scope,value:try await job.value)}
     catch {if jobs[scope]?.id==refresh.id {jobs[scope]=nil};throw error}
   }
 }

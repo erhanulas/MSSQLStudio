@@ -145,6 +145,9 @@ import SwiftUI
         if studio.servers.isEmpty {studio.servers.append(server)}
         workbench.showDatabaseFiles(server)
       }
+      if Bundle.main.object(forInfoDictionaryKey:"StudioSettingsSmoke") as? Bool == true {
+        workbench.showSettingsWindow()
+      }
       return
     }
     studio.loadHistory()

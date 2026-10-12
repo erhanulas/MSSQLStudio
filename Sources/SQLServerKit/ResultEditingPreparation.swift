@@ -38,8 +38,9 @@ public enum ResultEditingPreparation {
     // Retain the same eligibility checks even on a cache hit.
     let provenanceSQL = try ResultEditSource.metadata(sql)
     let scope = CatalogDiskIndex.scope(profile:profile,database:database)
+    let generation=profile.visibleDatabases?.contains(database) != false ? try? await index.generation(scope:scope):nil
     let fingerprint = CatalogDiskIndex.editingFingerprint(sql:sql,fields:fields)
-    if let cached = try? await index.editingMetadata(scope:scope,fingerprint:fingerprint),
+    if generation != nil,let cached = try? await index.editingMetadata(scope:scope,fingerprint:fingerprint),
        cached.columns.count == fields.count, !cached.primaryKey.isEmpty {
       return (cached,true)
     }
@@ -48,7 +49,7 @@ public enum ResultEditingPreparation {
     guard !identity.partial, let id = identity.results.first?.values.first?.first.flatMap({ $0 }).flatMap(Int.init) else { throw SQLFailure("Kaynak bir yerel kullanıcı tablosu değil.") }
     let table = try source.projected(ObjectMetadata.decode(await fetch(ObjectMetadata.table(id)),schema:source.schema,name:source.table))
     let snapshot = ResultEditingSnapshot(objectID:id,table:table)
-    try? await index.saveEditingMetadata(snapshot,scope:scope,fingerprint:fingerprint)
+    if let generation {try? await index.saveEditingMetadata(snapshot,scope:scope,fingerprint:fingerprint,generation:generation)}
     return (snapshot,false)
   }
 }

@@ -27,6 +27,10 @@ import Testing
     defer { first?.close() }
     #expect((first?.contentView?.bounds.width ?? 0) >= 780)
     #expect((first?.contentView?.bounds.height ?? 0) >= 600)
+    if let first {
+      let minimumContent = first.contentRect(forFrameRect: NSRect(origin: .zero, size: first.minSize)).size
+      #expect(minimumContent.width >= 780 && minimumContent.height >= 600)
+    }
     controller.showSettingsWindow()
     let windows = NSApp.windows.filter { $0.identifier?.rawValue == "studio.settings" && $0.isVisible }
     #expect(windows.count == 1)

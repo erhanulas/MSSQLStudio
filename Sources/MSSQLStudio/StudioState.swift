@@ -51,30 +51,92 @@ import SQLServerKit
   var indexingDatabases = Set<String>()
   var indexErrors: [String:String] = [:]
   private var indexPreparation: Task<Void, Never>?
+  private var indexPreparationID=UUID()
+  private(set) var catalogIndexRevision=UUID()
+  private var visibilityApplication:(revision:UUID,task:Task<Void,Never>)?
+  private let diskIndex:CatalogDiskIndex
+  private let objectIndexService:CatalogIndexService
+  private let completionIndexService:SQLCatalogService
+  func allowsCatalogIndex(_ database:String) -> Bool {profile.visibleDatabases?.contains(database) != false}
+  func cachedCompletionCatalog(database:String) async throws -> SQLIntelligence.Catalog? {
+    if let application=visibilityApplication {await application.task.value}
+    return try await completionIndexService.cached(profile:profile,database:database)
+  }
+  func refreshCompletionCatalog(database:String,force:Bool) async throws -> SQLIntelligence.Catalog {
+    if let application=visibilityApplication {await application.task.value}
+    return try await completionIndexService.refresh(profile:profile,password:password,database:database,force:force)
+  }
+  /// Called with the full accessible list, before starting any background work.
+  /// This also cleans old hidden scopes after restoring a persisted profile.
+  func synchronizeCatalogVisibility(available:[CatalogItem],previousProfile:ServerProfile?=nil,previousDatabases:[CatalogItem]=[]) async {
+    indexPreparation?.cancel();indexPreparationID=UUID();catalogIndexRevision=UUID()
+    let profile=profile,revision=catalogIndexRevision
+    let known=Set(available.map(\.name)).union(previousDatabases.map(\.name)).union(previousProfile?.visibleDatabases ?? [])
+    let previous=visibilityApplication?.task
+    // MainActor isolation does not order calls across service/index actor hops.
+    // Finish every prior eviction before allowing the next snapshot to reinclude
+    // a scope, even when the caller has already changed the visible profile.
+    let application=Task { [weak self] in
+      if let previous {await previous.value}
+      guard let self else {return}
+      await applyCatalogVisibility(profile:profile,known:known,revision:revision)
+    }
+    visibilityApplication=(revision,application)
+    await application.value
+    if visibilityApplication?.revision==revision {visibilityApplication=nil}
+  }
+  private func applyCatalogVisibility(profile:ServerProfile,known:Set<String>,revision:UUID) async {
+    let excluded=known.filter {profile.visibleDatabases?.contains($0) == false}
+    for database in excluded.sorted() {
+      if catalogIndexRevision==revision {indexingDatabases.remove(database);indexErrors[database]=nil}
+      var failure:String?
+      do {try await objectIndexService.exclude(profile:profile,database:database)}
+      catch {failure=error.localizedDescription}
+      // A failed disk deletion must not leave the other service's jobs or
+      // completion memory alive. Both evictions finish before the successor.
+      do {try await completionIndexService.exclude(profile:profile,database:database)}
+      catch {failure=error.localizedDescription}
+      if catalogIndexRevision==revision {
+        indexErrors[database]=failure
+        NotificationCenter.default.post(name:.init("catalogIndexUpdated"),object:self,userInfo:["database":database,"excluded":true])
+      }
+    }
+    for database in known where profile.visibleDatabases?.contains(database) != false {
+      do {try await diskIndex.setExcluded(false,scope:CatalogDiskIndex.scope(profile:profile,database:database))}
+      catch {if catalogIndexRevision==revision {indexErrors[database]=error.localizedDescription}}
+    }
+  }
   func prepareCatalogIndexes(force: Bool = false) {
+    guard visibilityApplication == nil else {return}
     indexPreparation?.cancel()
+    let preparationID=UUID();indexPreparationID=preparationID
     let profile = profile, password = password, databases = databases.map(\.name)
     indexPreparation = Task { [weak self] in
       for database in databases {
-        guard !Task.isCancelled, let self, self.online else { return }
+        guard !Task.isCancelled, let self, self.online,self.indexPreparationID==preparationID else { return }
+        guard self.allowsCatalogIndex(database) else {continue}
         indexingDatabases.insert(database); indexErrors[database] = nil
         NotificationCenter.default.post(name:.init("catalogIndexUpdated"),object:self,userInfo:["database":database])
         do {
-          _ = try await CatalogIndexService.shared.refresh(profile: profile, password: password, database: database, force: force)
-          _ = try await SQLCatalogService.shared.refresh(profile:profile,password:password,database:database,force:force)
+          _ = try await objectIndexService.refresh(profile: profile, password: password, database: database, force: force)
+          guard !Task.isCancelled,indexPreparationID==preparationID,allowsCatalogIndex(database) else {return}
+          _ = try await completionIndexService.refresh(profile:profile,password:password,database:database,force:force)
+          guard !Task.isCancelled,indexPreparationID==preparationID,allowsCatalogIndex(database) else {return}
           indexingDatabases.remove(database)
           NotificationCenter.default.post(name: .init("catalogIndexUpdated"), object: self, userInfo: ["database": database])
         } catch {
+          guard !Task.isCancelled,indexPreparationID==preparationID,allowsCatalogIndex(database) else {return}
           indexingDatabases.remove(database); indexErrors[database] = error.localizedDescription
           NotificationCenter.default.post(name: .init("catalogIndexUpdated"), object: self, userInfo: ["database": database, "error": error.localizedDescription])
         }
       }
     }
   }
-  init(profile: ServerProfile, password: String) {
+  init(profile: ServerProfile, password: String,diskIndex:CatalogDiskIndex = .shared,objectIndexService:CatalogIndexService = .shared,completionIndexService:SQLCatalogService = .shared) {
     self.id = profile.id
     self.profile = profile
     self.password = password
+    self.diskIndex=diskIndex;self.objectIndexService=objectIndexService;self.completionIndexService=completionIndexService
   }
   func catalog(_ sql: String, database: String, limits: Limits = Limits()) async throws -> Execution {
     if let asyncCatalogFixture {return try await asyncCatalogFixture(sql)}
@@ -156,7 +218,7 @@ struct ObjectEditorKey: Codable, Equatable {
   var openDefinition: ((CatalogSymbol) -> Void)?
   private var lastCatalogCheck = Date.distantPast
   func ensureCatalogFresh() {
-    guard intelligenceCatalog?.fresh != true, Date().timeIntervalSince(lastCatalogCheck) > 30, server.online else { return }
+    guard intelligenceCatalog?.fresh != true, Date().timeIntervalSince(lastCatalogCheck) > 30, server.online,server.allowsCatalogIndex(database) else { return }
     lastCatalogCheck = Date()
     Task { [weak self] in await self?.loadSymbols() }
   }
@@ -166,7 +228,7 @@ struct ObjectEditorKey: Codable, Equatable {
     NotificationCenter.default.post(name:.init("sqlCatalogChanged"),object:self)
   }
   func applyTargetedCatalog(_ catalog:SQLIntelligence.Catalog,database:String,generation:UUID) {
-    guard self.database==database,server.generation==generation else {return}
+    guard self.database==database,server.generation==generation,server.allowsCatalogIndex(database) else {return}
     symbolRequest=UUID()
     intelligenceCatalog=catalog;catalogDatabase=database;symbols=catalog.snapshot.symbols
     // A scoped change does not verify or extend the age of the whole catalog.
@@ -237,22 +299,23 @@ struct ObjectEditorKey: Codable, Equatable {
     }
   }
   func loadSymbols(force: Bool = false) async {
-    let database = self.database, generation = server.generation, request = UUID()
+    guard server.allowsCatalogIndex(database) else {clearSymbols();catalogError=nil;return}
+    let database = self.database, generation = server.generation, request = UUID(),indexRevision=server.catalogIndexRevision
     symbolRequest = request
-    let profile = server.profile, password = server.password
     func publish(_ catalog: SQLIntelligence.Catalog, verified: Bool) {
-      guard self.database == database, server.generation == generation, symbolRequest == request else { return }
+      guard self.database == database, server.generation == generation, symbolRequest == request,server.catalogIndexRevision==indexRevision,server.allowsCatalogIndex(database) else { return }
       intelligenceCatalog = catalog; catalogDatabase = database; catalogVerified = verified; catalogError = nil
       symbols = catalog.snapshot.symbols
       NotificationCenter.default.post(name:.init("sqlCatalogChanged"),object:self)
       changed?()
     }
     do {
-      if let cached = try await SQLCatalogService.shared.cached(profile:profile,database:database) { publish(cached,verified:!force && cached.fresh) }
-      let catalog = try await SQLCatalogService.shared.refresh(profile:profile,password:password,database:database,force:force)
+      if let cached = try await server.cachedCompletionCatalog(database:database) { publish(cached,verified:!force && cached.fresh) }
+      guard server.catalogIndexRevision==indexRevision,server.allowsCatalogIndex(database) else {return}
+      let catalog = try await server.refreshCompletionCatalog(database:database,force:force)
       publish(catalog,verified:true)
     } catch {
-      guard symbolRequest == request else { return }
+      guard symbolRequest == request,server.generation==generation,server.catalogIndexRevision==indexRevision,server.allowsCatalogIndex(database) else { return }
       catalogVerified = false; catalogError = error.localizedDescription
       NotificationCenter.default.post(name:.init("sqlCatalogChanged"),object:self)
     }
@@ -467,6 +530,7 @@ struct ObjectEditorKey: Codable, Equatable {
     -> ConnectedServer
   {
     if let old = servers.first(where: { $0.id == profile.id }) {
+      let previousProfile=old.profile,previousDatabases=old.databases
       let reconnect =
         !old.profile.hasSameConnectionSettings(as: profile) || old.password != password
       func checkSessions() throws {
@@ -524,6 +588,7 @@ struct ObjectEditorKey: Codable, Equatable {
           await previous.disconnect()
         }
         old.databases = profile.visibleItems(from: items)
+        await old.synchronizeCatalogVisibility(available:items,previousProfile:previousProfile,previousDatabases:previousDatabases)
         old.online = true; old.startupError = nil
         old.prepareCatalogIndexes()
         if save || old.remembered { rememberExplorer(profile.id, selected: true) }
@@ -538,8 +603,9 @@ struct ObjectEditorKey: Codable, Equatable {
     let server = ConnectedServer(profile: profile, password: password)
     do {
       try await server.metadata.connect(profile, password: password)
-      server.databases = profile.visibleItems(
-        from: Catalog.rows(try await server.metadata.execute(Catalog.databases)))
+      let available=Catalog.rows(try await server.metadata.execute(Catalog.databases))
+      server.databases = profile.visibleItems(from:available)
+      await server.synchronizeCatalogVisibility(available:available)
       if save { try ServerVault().save(profile, password: profile.kerberos ? "" : password) }
       server.remembered = save
       if save { UserDefaults.standard.set(profile.id.uuidString, forKey: "lastSavedServer") }
@@ -618,7 +684,9 @@ struct ObjectEditorKey: Codable, Equatable {
       for server in servers where !server.online {
         do {
           try await server.metadata.connect(server.profile,password:server.password)
-          server.databases = server.profile.visibleItems(from: Catalog.rows(try await server.metadata.execute(Catalog.databases)))
+          let available=Catalog.rows(try await server.metadata.execute(Catalog.databases))
+          server.databases = server.profile.visibleItems(from:available)
+          await server.synchronizeCatalogVisibility(available:available)
           server.online = true; server.startupError = nil; server.generation = UUID()
           server.prepareCatalogIndexes()
           changed?()
