@@ -1,3 +1,14 @@
+## 12 Ekim 2026 — v0.2.79 / build 80: Eşleşme gezinmesi, temiz arama ve parametre yardımı
+
+- DataGrip'in [eşleşen ayırıcı](https://www.jetbrains.com/help/datagrip/code-editing.html), [matching brace navigation](https://www.jetbrains.com/help/datagrip/code-editor-navigation.html) ve [parametre bilgisi](https://www.jetbrains.com/help/datagrip/viewing-reference-information.html) davranışları resmî belgelerden incelendi. CASE/END ve nested parantezler lexer ile eşlenir; Ctrl+Shift+M iki yönde gider, gizli hedefi açar. Yorum/literal/quoted identifier/GO ve transaction/conversation ayrımı korunur; dekorasyon metne/SSMS foreground'a yazılmaz.
+- Ctrl+F/Command+F gri zemin nedeni native incremental finder'ın varsayılan içerik dim ayarıdır. Public NSTextFinderClient bağlantısı ve incrementalSearchingShouldDimContentView=false ile giderildi; native arama/replace/undo ve TextKit 2 korunur. [Apple API](https://developer.apple.com/documentation/appkit/nstextfinder). Native test arama çubuğu, renk zemini ve Unicode replacement/undo'yu kontrol eder. Offscreen test runner'da nextMatch validation false kaldığından bu etkileşim için başarılı test iddiası yoktur; gerçek native arayüzde ileri/geri seçimi ayrıca doğrulandı.
+- Parametre bağlamı EXEC/EXECUTE/return/named arg ve bilinen nested fonksiyonları kapsar; metadata ayrı bağlantıdan sınırlı, iptal edilebilir ve bellek cache'li okunur. Ordinal/tür/OUTPUT/READONLY, aktif argüman ve yükleme/hata durumları gösterilir. Dinamik/cross-DB ve katalogda bilinmeyen nesneler tahmin edilmez; defaults/requiredness iddiası yoktur. Gecikmeli ve iptali dikkate almayan fixture yanıtının yeni SQL'e uygulanmaması sınandı.
+- Son yerel tam koşu `/tmp/mssql-079-tests-final.log`: **142 app + 149 core = 291 test; 266 geçti / 25 dış koşullu atlandı**. İki hedefin tamamlanmış başarılı özeti ayrı doğrulandı. Önceki derleme sözdizimi ve headless nextMatch denemeleri başarı sayılmadı. Release `/tmp/mssql-079-release-final.log`: **BUILD SUCCEEDED**; git diff --check temiz.
+- Son Release ile izole `/tmp/MSSQLStudio-079-ui/MSSQLStudio.app` CUA: CASE başlangıç → END → başlangıç (Ln2 Col8/39), dış parantez → kapanış → başlangıç (Ln2 Col18/24), SSMS renkleri ve sarı çift vurgusu görüldü. Ctrl+F SELECT için üç eşleşme buldu; next/previous ardından Done ile Ln1 Col29/1 seçimleri ve griye dönmeyen zemin doğrulandı. Offline EXEC usp_GetCustomerDetails popup'ında sıralı @City nvarchar(50), @Count int OUTPUT; isimli @Count vurgusu, Escape kapama ve Ctrl+P yeniden açma geçti. Sentetik SQL kaydedilmeden test app'i kapandı.
+- Canlı SQL Server metadata/izin/kesinti senaryoları ve gerçek Installer güncellemesi denenmedi. Kullanıcı uygulaması, açık SQL, DB ve Keychain değiştirilmedi.
+- [Public latest v0.2.79](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.79), kaynak/tag `735d6e3f50d9503d532d4a8d786106452fb8a21f`; [Actions 38253581092](https://github.com/erhanulas/MSSQLStudio/actions/runs/38253581092) bütün adımlarıyla başarılı. Gerçek yayın paketleriyle CI **142 app + 149 core = 291 test; 266 geçti / 25 dış koşullu atlandı**. İki hedefin tamamlanmış özeti `/tmp/mssql-079-ci-tests.log` içinde ayrı doğrulandı.
+- İndirilen ZIP/PKG/update.json/frozen archive GitHub digest ve public manifest ile eşleşti. Build 80, sabit DR/sertifika, iki paketin strict app/helper imzaları ve executable/metadata/notlar eşitliği doğrulandı (`/tmp/mssql-079-public-verification.log`, `/tmp/MSSQLStudio-0.2.79-verify`). ZIP SHA-256 `4706c2daa53657a6c72cdf32cd9f98c4c872ad8a28299d0cb3aabfd41cf63536`; PKG `8a25575ba671a44f10afe28eb0c937015f82afd9b6b9f5205efc4f5886b0df59`; update.json `bc360982eadf6438cce918698380e73347d671a1289ddfa8d99d591fc369ca00`. Helper archive/binary v0.2.69’dan byte-for-byte aynı; helper yeniden derlenmedi/imzalanmadı. Tag taşınmadan yayın kanıtı main'e ayrı belge commit'iyle kaydedilir.
+
 ## 12 Ekim 2026 — v0.2.78 / build 79: görünür bekleme ve SQL blok eşleme
 
 - Güncelleme kontrolü ağ isteğinden önce single-flight native pencere açar; spinner/kontrol, indirme ve doğrulama aşamaları görünürdür. Güncel/hata aynı yüzeyde kalır; paket doğrulanınca mevcut kurulum seçim akışına geçilir. İşlem sürerken Kapat ve menüden tekrar kontrol pasiftir; diğer sorgu pencereleri kullanılabilir.
@@ -9,15 +20,6 @@
 
 - [Public latest v0.2.78](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.78), kaynak/tag `f8cbf226f83aba11c6af5f8397589c3e95325c35`; [Actions 38250568386](https://github.com/erhanulas/MSSQLStudio/actions/runs/38250568386) bütün adımlarıyla başarılı. CI gerçek yayın paketleriyle **138 app + 146 core = 284 test; 259 geçti / 25 dış koşullu atlandı**. İki hedefin tamamlanmış özeti `/tmp/mssql-078-ci-tests.log` içinde doğrulandı.
 - İndirilen ZIP/PKG/update.json/frozen archive GitHub digest + public manifest SHA-256 ile eşleşti. Build 79, sabit DR/sertifika, iki paketin strict app/helper imzası ve executable/metadata/notlar eşitliği doğrulandı (`/tmp/mssql-078-public-verification.log`, `/tmp/MSSQLStudio-0.2.78-verify`). ZIP `fb1d60f7574fbc9c7a1792863a5c37c9286d73d288f434063b6bdf7f01969a4e`; PKG `33b73c59667e54b3f2d522508078ea57b1491e913a9d51c39d2c0122a5a16142`; update.json `d3575d4533fb41ae6beb0690e41a599d75416b335106ddb9740a58c969b1ebec`. Credential archive/binary v0.2.69’dan byte-for-byte aynı; helper yeniden derlenmedi veya imzalanmadı.
-
-## 12 Ekim 2026 — v0.2.79 / build 80: Eşleşme gezinmesi, temiz arama ve parametre yardımı
-
-- DataGrip'in [eşleşen ayırıcı](https://www.jetbrains.com/help/datagrip/code-editing.html), [matching brace navigation](https://www.jetbrains.com/help/datagrip/code-editor-navigation.html) ve [parametre bilgisi](https://www.jetbrains.com/help/datagrip/viewing-reference-information.html) davranışları resmî belgelerden incelendi. CASE/END ve nested parantezler lexer ile eşlenir; Ctrl+Shift+M iki yönde gider, gizli hedefi açar. Yorum/literal/quoted identifier/GO ve transaction/conversation ayrımı korunur; dekorasyon metne/SSMS foreground'a yazılmaz.
-- Ctrl+F/Command+F gri zemin nedeni native incremental finder'ın varsayılan içerik dim ayarıdır. Public NSTextFinderClient bağlantısı ve incrementalSearchingShouldDimContentView=false ile giderildi; native arama/replace/undo ve TextKit 2 korunur. [Apple API](https://developer.apple.com/documentation/appkit/nstextfinder). Native test arama çubuğu, renk zemini ve Unicode replacement/undo'yu kontrol eder. Offscreen test runner'da nextMatch validation false kaldığından bu etkileşim için başarılı test iddiası yoktur; gerçek native arayüzde ileri/geri seçimi ayrıca doğrulandı.
-- Parametre bağlamı EXEC/EXECUTE/return/named arg ve bilinen nested fonksiyonları kapsar; metadata ayrı bağlantıdan sınırlı, iptal edilebilir ve bellek cache'li okunur. Ordinal/tür/OUTPUT/READONLY, aktif argüman ve yükleme/hata durumları gösterilir. Dinamik/cross-DB ve katalogda bilinmeyen nesneler tahmin edilmez; defaults/requiredness iddiası yoktur. Gecikmeli ve iptali dikkate almayan fixture yanıtının yeni SQL'e uygulanmaması sınandı.
-- Son yerel tam koşu `/tmp/mssql-079-tests-final.log`: **142 app + 149 core = 291 test; 266 geçti / 25 dış koşullu atlandı**. İki hedefin tamamlanmış başarılı özeti ayrı doğrulandı. Önceki derleme sözdizimi ve headless nextMatch denemeleri başarı sayılmadı. Release `/tmp/mssql-079-release-final.log`: **BUILD SUCCEEDED**; git diff --check temiz.
-- Son Release ile izole `/tmp/MSSQLStudio-079-ui/MSSQLStudio.app` CUA: CASE başlangıç → END → başlangıç (Ln2 Col8/39), dış parantez → kapanış → başlangıç (Ln2 Col18/24), SSMS renkleri ve sarı çift vurgusu görüldü. Ctrl+F SELECT için üç eşleşme buldu; next/previous ardından Done ile Ln1 Col29/1 seçimleri ve griye dönmeyen zemin doğrulandı. Offline EXEC usp_GetCustomerDetails popup'ında sıralı @City nvarchar(50), @Count int OUTPUT; isimli @Count vurgusu, Escape kapama ve Ctrl+P yeniden açma geçti. Sentetik SQL kaydedilmeden test app'i kapandı.
-- Canlı SQL Server metadata/izin/kesinti senaryoları ve gerçek Installer güncellemesi denenmedi. Kullanıcı uygulaması, açık SQL, DB ve Keychain değiştirilmedi. Yayın ve public paket doğrulaması aşağıya eklenecek.
 
 ## 12 Ekim 2026 — v0.2.77 / build 78: SQL renkleri, Explorer durumu ve güncellemede yeniden açma
 
@@ -979,7 +981,6 @@ Bu rapor tam SSMS eşdeğerliği veya üretim olgunluğu iddia etmez.
 
 Sonraki geliştirme, bu çalışan native çalışma alanını temel almalı; bu sınırlar arayüzde hazır özellikler gibi gösterilmemeli.
 
-
 ## 0.2.3 tema doğrulaması
 
 - Release build ve ZIP'ten çıkarılan uygulamanın kod imzası doğrulandı.
@@ -991,7 +992,6 @@ Sonraki geliştirme, bu çalışan native çalışma alanını temel almalı; bu
 
 Son paket kontrolü: 0.2.3 ZIP tekrar `/tmp` altında çıkarıldı, strict kod imzası doğrulandı. Paketlenmiş uygulamada bağlantı testi ve master seçimi tamamlandı; DB_NAME / @@SPID / SYSDATETIME sorgusu bir satır döndürdü.
 
-
 ## 0.2.4 kompakt yerleşim
 
 Başlık/tab/durum satırlarının sabit yüksekliği toplam 165 → 124 pt oldu. Sonuç seçimi ayrı native sekme şeridinden aynı araç satırına taşındı. Fontlar küçültülmeden editör satır aralığı, ağaç/grid satırları ve kenar boşlukları sıkılaştırıldı.
@@ -1001,7 +1001,6 @@ Native UI kontrolü: yerel bağlantı testi, listeleme ve yalnızca master seçi
 Otomatik yerleşim testi iki sonuç kümesi/Messages seçimini, sonuç gizleme ile editöre alan açılmasını, açılışta ayırıcı oranının geri gelmesini, SQL ve sonuçların korunmasını denetler. Derleme, tüm testler ve ZIP imza kontrolü tamamlandı. Mevcut kullanıcı tablolarına yazılmadı.
 
 Son paket kontrolü: TextKit 2 gerçek fragment/baseline konumlarıyla satır numaraları, sondaki boş satır dahil 1–4 olarak görsel doğrulandı. Son Release ZIP strict imza kontrolünden geçti; yerel bağlantı ve iki SELECT çalıştı. Son editör değişikliğinden sonra ilgili 2 native test tekrar geçti.
-
 
 ## 0.2.5 bağlantı ve büyük veritabanı listesi
 
@@ -1014,7 +1013,6 @@ Son paket kontrolü: TextKit 2 gerçek fragment/baseline konumlarıyla satır nu
 - İlk UI denemesinde SwiftUI List'in native NSTableView yerleşiminde exception gözlendi. Kontrol ScrollView/LazyVStack ile değiştirildi; filtreleme, toplu seçim, yeniden test, yenileme ve bağlantı akışları yeniden tamamlandı. Büyük listenin görünmeyen satırları gerektiğinde oluşturulur.
 - Ortam panelini açmanın kendiliğinden özel renk işareti oluşturması engellendi; son pakette panel açılırken “Ortam işareti yok” korundu. Önceki ortam/renk özellikleri korunur. Yerel TLS güveni önceden verilen onayla kullanıldı; şifreleme açık, gerçek parola Keychain'e kaydedilmedi. GUI testleri mevcut kullanıcı tablolarına yazmadı.
 
-
 ## 0.2.6 birleştirilmiş bağlantı ayarları
 
 - Release derlemesi, son kaynaklarla 34 test / 7 suite (11 canlı test), biçim denetimi ve ZIP çıkarıldıktan sonra strict kod imzası başarılı.
@@ -1024,7 +1022,6 @@ Son paket kontrolü: TextKit 2 gerçek fragment/baseline konumlarıyla satır nu
 - 940 × 680 pt form görsel olarak doğrulandı: Ortam seçicisi, renk seçimi/RGB kodu, Varsayılan ve İşareti Kaldır doğrudan görünür. Ortam popover düğmesi yoktur. Normal ayar akışında tüm alanlar ve Uygula düğmesi form kaydırılmadan görünür.
 - Aynı ekranda Test ortamı ve tempdb ek seçimi uygulandı. Ağaç/başlık ortamı güncellendi, açık sorgunun metni ve sonucu korundu. Tekrar SELECT aynı SPID'yi döndürdü. Ayarlar tekrar açılıp Vazgeç ile kapatıldı; aktif çalışma alanı korundu.
 - Test hataları ve kimlik/endpoint değişiminde mevcut oturumun korunması otomatik bağlantı düzenleme testinde yeniden sınandı. Gerçek sunucu erişimi başarısızken otomatik açılış testi başarılı olarak işaretlenmez. Mevcut kullanıcı tablolarına yazılmadı.
-
 
 ## 0.2.7 grid / büyük sonuç doğrulaması
 
@@ -1079,7 +1076,6 @@ Release derlemesi, ZIP çıkarıldıktan sonra ve kalıcı kurulumdan sonra stri
 
 0.2.15 uygulama kodu değişmedi; önceki 77 test sonucu geçerlidir, bu paketleme değişikliğinde yeniden çalıştırılmadı. pkgbuild/productbuild başarılı. pkgutil --expand-full ile paket açıldı; payload uygulaması codesign --verify --deep --strict denetimini geçti. Distribution sadece CurrentUserHomeDirectory alanını etkinleştiriyor; Installer -dominfo ile doğrulandı. Bundle yolu Applications/MSSQLStudio.app, relocation false, version 0.2.15 ve must-close bundle ID doğrulandı. Payload yalnızca uygulama içeriyor, AppleDouble yan dosyaları yok. Paket imzasızdır (bu Mac'te geçerli dağıtım sertifikası bulunmadı). Açık kullanıcı oturumu korunması için gerçek kurulum/reinstall ve Installer GUI akışı çalıştırılmadı. Sonuçlar Validation/pkg.json dosyasında.
 
-
 ## 0.2.16 — Explorer arama ve SQL editörü
 
 - Nesneler/Arama sekmeleri: aramayı temizleme açık dalları, seçili nesneyi ve kaydırma konumunu geri getiriyor. Native arayüzde doğrulandı.
@@ -1091,7 +1087,6 @@ Release derlemesi, ZIP çıkarıldıktan sonra ve kalıcı kurulumdan sonra stri
 
 Son test turu: 26 uygulama testi ve 54 çekirdek testi raporu başarılı; 15 localhost SQL Server testi etkin. İki isteğe bağlı test (assistantTransportAndRedirect, keychainLifecycle) atlandı.
 
-
 ## 0.2.17 — Editör girişi ve güvenli UI testleri
 
 SQLTextView düzenlenebilir/seçilebilir olarak açıkça yapılandırılır; ilk tıklama editörü odaklar. Arama alanından boş editöre tıklayıp normal klavyeyle SELECT 1; yazılması native arayüzde doğrulandı. 26 uygulama + 54 çekirdek test raporu başarılı; bu tur canlı DB testleri etkinleştirilmedi.
@@ -1099,7 +1094,6 @@ SQLTextView düzenlenebilir/seçilebilir olarak açıkça yapılandırılır; il
 Başlangıçta ServerVault.list ana UI iş parçacığında çalışmaz. Anahtar Zinciri izni beklenirken uygulamanın ana olay döngüsü açık kalır. Görsel test hazırlama scripti ayrı local.mssqlstudio.uitest kimliği kullanır; bu kimlikle başlatılan uygulama kayıtlı bağlantıları, parolaları ve kullanıcı sunucularını okumaz, bağlantısız bir sorgu açar. --ui-smoke argümanı da aynı davranışı sağlar. Test modu bağlantı kaydetme gibi işlemleri test etme yetkisi vermez.
 
 Mevcut dağıtım ad-hoc imzalıdır; Developer ID imzalama kimliği bulunmadı. Kullanıcının daha önce verdiği Keychain izninin farklı derlemelerde otomatik korunacağı garanti edilmez. ACL'ler gevşetilmedi, parolalar düz metne taşınmadı. Kalıcı sürüm kimliği için aynı Developer ID ile imzalama gerekir.
-
 
 ## 0.2.18 — İlk açılan boş SQL belgesi
 
@@ -1110,7 +1104,6 @@ EditorController artık ilk metin atamasını belge boşken de yapar; sonraki e�
 0.2.18 kontrolünde yalnızca ilk boş string atamasının yeterli olmadığı görüldü. SQLEditorScrollView artık boş metnin hit bölgesi oluşmamış olsa da belge viewport içindeki tıklamayı SQLTextView'a yönlendirir; ruler ve scroller bölgelerini korur. Boş native hit bölgesini taklit eden regresyon testi eklendi.
 
 Son native kontrol başarılı: yeni test uygulaması ilk açılışta tamamen boş sorguyla başladı; hiçbir ön metin ataması olmadan editöre tıklayıp SELECT 1; yazıldı. Undo ile boşaltılıp arama alanına geçildi; editöre tekrar tıklayıp yorum yazıldı. Odağın sqlEditor'da ve metnin sorguda olduğu AX ile doğrulandı. Test metni geri alındı ve test uygulaması kapatıldı. 27 uygulama + 54 çekirdek test raporu başarılı; canlı SQL Server testleri bu tur etkin değildi.
-
 
 ## 0.2.19 — Sabit satır alanı ve blok daraltma
 
@@ -1128,7 +1121,6 @@ Native 0.2.19 doğrulaması: boş editöre normal klavyeyle yazıldı, satır nu
 
 Son test raporu: 31 uygulama testi + 54 çekirdek testi raporu başarılı. 15 canlı SQL Server testi ve iki isteğe bağlı entegrasyon testi bu tur devre dışı. Release imza/PKG doğrulaması ayrı raporlanır; Installer ile kurulum bu tur çalıştırılmaz.
 
-
 ## 0.2.20 — DDL kolon indeksi ve editör zekâsı
 
 Son koşu: uygulama hedefi 33 test / 9 suite; çekirdek 63 test / 10 suite raporu başarılı. Bu raporlardaki 17 koşullu test devre dışı bırakıldı (Keychain/AI ve diğer canlı senaryolar); kaynakta atlanan testler başarıyla çalıştırılmış sayılmaz. Ayrıca yalnızca `liveReadOnlyCatalogSnapshotAndWarmDisk` etkinleştirilerek localhost SQL Server üzerinde **1 canlı salt okunur test geçti**. Bu test ayrı bağlantıda master metadata snapshot'ı üretir, SQLite dosyasını yeni servisle açar, kolon dizilerini karşılaştırır ve başka veritabanı kapsamına sızmadığını doğrular. Kullanıcı verisinde değişiklik yapılmadı.
@@ -1143,7 +1135,6 @@ Release ARM64 build başarılı. Uygulama ad-hoc imzalı; ZIP ve PKG payload'ın
 
 Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görüldü. Popup konumu TextKit 2 selection segment geometrisine ve pencere content-view koordinatlarına geçirildi; sıfır genişlikli caret rect en az 1 puntoya genişletildi; imleç için yerel rect doğrulayan regresyon testi eklendi. Son paketin görsel kontrolü bu düzeltmeyle tekrarlandı.
 
-
 ## 10 Ekim 2026 — sonuç grid’i doğrudan düzenleme ve bekleyen SQL akışı
 
 - DataGrip resmi Cells ve Submit changes dokümanları incelendi: hücrede yerel değişiklik, Enter/Escape, bekleyen DML önizlemesi ve ayrı gönderme. Kaynaklar: https://www.jetbrains.com/help/datagrip/cells.html ve https://www.jetbrains.com/help/datagrip/submitting-and-reverting-changes.html .
@@ -1155,7 +1146,6 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Ara kontrolde testin doğrudan NSTextView cancelOperation çağrısı geçersiz selector üretti; gerçek Escape tuş olayı kullanıldı. Bu yol taslak durumunun açık kaldığını ortaya çıkardı; native komut/abortEditing düzeltmesi sonrası son tam test geçti.
 - Canlı SQL yazma testi yapılmadı; kullanıcı uygulaması/Keychain/veritabanına dokunulmadı. Bu çalışma henüz yayımlanmadı.
 
-
 ## 10 Ekim 2026 — v0.2.55 yayın öncesi kolon/checkbox doğrulaması
 
 - Kolon başlıkları gerçek native font ölçümü + 80 pt ikon/kenar payıyla boyutlandırılır. Örnek değer ölçümü başlık genişliğini azaltmaz; uzun başlık sabit 420/600 pt sınıra takılmaz. Manuel daraltma ve tam ad tooltip’i korunur.
@@ -1166,7 +1156,6 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Public latest v0.2.55; ZIP/PKG/update.json erişilebilir. İndirilen ZIP SHA-256 `0617bf453026aff44300dad504e356b7434f9b0e0dabc6cfb5224268ccec25b1`, PKG `a10259c1eb48e962f19511d06262c90598755fa048acd9b6a9b16215f045d91a`; manifest ve GitHub digest ile eşleşiyor.
 - `/tmp/mssql-v55-verify/extracted/MSSQLStudio.app` strict/deep codesign doğrulamasından geçti; version/build 0.2.55/56, sabit DR `identifier "local.mssqlstudio.app" and certificate leaf = H"adce16b1a3567d8c5fe2ed261e89493611cb7b9d"` doğrulandı. Gerçek kullanıcı uygulaması yüklenmedi/değiştirilmedi.
 
-
 ## 10 Ekim 2026 — SQL alias veri tiplerinde hücre düzenleme
 
 - `[dbo].[TDBGRUPKOD]` gibi alias tipler artık genel UDT engeline takılmaz. sys.types.system_type_id üzerinden temel tip, kolon uzunluğu (Unicode için bayt/2), precision/scale çözülür. CLR/table türleri ve çözülemeyen metadata salt okunur kalır.
@@ -1175,13 +1164,11 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Son test: 79 uygulama + 108 core = 187 test, 164 geçti, 23 dış koşullu test atlandı. `/tmp/mssql-alias-final-tests.log`. Metadata decode/orijinal DDL tipi, alias anahtar UPDATE/eski değer, decimal(28,8), binary hex doğrulama, NULL/INSERT ve grid hücre düzenlenebilirliği sınandı. Bilinmeyen CLR/spatial türlerin salt okunur kalması doğrulandı.
 - Release derlemesi başarılı: `/tmp/mssql-alias-build.log`; `git diff --check` temiz. Kullanıcının gerçek tipi veya canlı DB yazımı test edilmedi; kullanıcı uygulamasına/Keychain’e dokunulmadı. Henüz yayımlanmadı.
 
-
 ## 10 Ekim 2026 — v0.2.56 yayın doğrulaması
 
 - Alias veri tipi düzeltmesi v0.2.56 / build 57 olarak yayımlandı: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.56 . Kaynak `ca3a9daf103a7f436996e92e8aa9c422c15b268b`; Actions `38052622305` başarılı (sabit imza/izole Keychain fixture, imzalı uygulama/installer, manifest ve yayın paketi testleri).
 - Public latest v0.2.56; ZIP, PKG ve update.json doğrulandı. İndirilen ZIP SHA-256 `c1c46a853208f3a58637dd76cd41be3d306a61b9163b71e8235fa1f27d88fdf8`, PKG `578c9bf2bafdc8ee14159543683b0ebaf19d0377478b9fe622cdc3a431d0bb43`; manifest ve GitHub digest eşleşiyor.
 - `/tmp/mssql-v56-verify/extracted/MSSQLStudio.app` strict/deep codesign doğrulamasından geçti. Sürüm/build 0.2.56/57, sabit DR `identifier "local.mssqlstudio.app" and certificate leaf = H"adce16b1a3567d8c5fe2ed261e89493611cb7b9d"` doğrulandı. Gerçek kullanıcı app’i yüklenmedi/değiştirilmedi; canlı DB yazımı test edilmedi.
-
 
 ## 10 Ekim 2026 — diskten düzenleme hazırlığı ve sonuç görünümü
 
@@ -1195,7 +1182,6 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Release build başarılı: `/tmp/mssql-premium-release-ready-build.log`. `git diff --check` temiz. `/tmp/mssql-data-preview-ui.png`, `/tmp/mssql-grid-direct-ui.png`, `/tmp/mssql-premium-loading.png`, `/tmp/mssql-premium-columns.png` görsel olarak incelendi; renk, satır numarası, hizalama ve kompakt panel yerleşimi uygun.
 - Ara testte eski İngilizce menü başlığı beklentisi Türkçe yeni etikete uyarlandı. Bir tam test çalışması NSTextFinderIndicatorManager._delayedUpdate içinde SIGSEGV ile kesildi; eski find testi pencereyi gecikmiş native gösterge güncellemesi bitmeden serbest bırakıyordu. Test artık find arayüzünü kapatıp client’ı 400 ms tutuyor. Son tam çalışma başarılı; çökme olan ara çalışma başarı sayılmadı. Ara Release kontrolünde eşzamanlı kaynak/API derlemesi tutarsızlığı son kaynakla yeniden derlenerek giderildi.
 - Canlı SQL yazımı ve uzak sunucu süre karşılaştırması yapılmadı; hız kazanımı fixture’da ağ çağrılarının sıfırlanmasıyla doğrulandı. Gerçek kullanıcı uygulaması/Keychain/DB değiştirilmedi. Henüz yayımlanmadı.
-
 
 ## 10 Ekim 2026 — v0.2.57 yayın doğrulaması
 
@@ -1217,14 +1203,12 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Son tam test çalışması başarılı: 84 native uygulama + 114 core = 198 test; 174 geçti, 24 dış koşullu test atlandı. Yeni üç core testi ve native grid/edit testi geçti; yeni canlı ODBC testi atlandı. Log: `/tmp/mssql-numeric-final-tests.log`. Native pencere/field editor smoke otomatik test içinde çalıştı; ayrıca manuel ekran görüntüsü incelemesi yapılmadı.
 - Xcode Release derlemesi başarılı (`CODE_SIGNING_ALLOWED=NO`, `/tmp/MSSQLStudio-numeric-check`); log `/tmp/mssql-numeric-build.log`. `git diff --check` temiz. Mevcut Keychain deprecation ve GutterAction actor-isolation derleyici uyarıları bu değişikliğin dışında kaldı. Kaynaklar yerelde düzeltildi; sürüm yayımlanmadı, kurulu kullanıcı uygulaması ve gerçek DB değiştirilmedi.
 
-
 ## 10 Ekim 2026 — v0.2.58 yayın doğrulaması
 
 - Sayısal sonuçlarda baştaki sıfır düzeltmesi v0.2.58 / build 59 olarak yayımlandı: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.58 . Kaynak `c24bec21c9792d93b983816980347b7a3f6bfddb`; Actions `38056058720` başarılı. Sabit imza/izole Keychain, imzalı uygulama ve installer, manifest doğrulaması ve yayın paketiyle test adımları geçti; geçici imza kimliği temizlendi.
 - Public latest v0.2.58; ZIP, PKG ve update.json indirildi. ZIP SHA-256 `1a566f8cd724b86e1bb14cf0bcd2bc5cd43f8ae24884133daf96ea7ebc4d37dd`; PKG SHA-256 `baeb39a961bb8d2cb32505fa1b41dc99e51051cb74172e090e96fc242e63ffbe`. İki hash yayın manifesti ve GitHub asset digest ile eşleşti; manifestin tamamı yeniden üretilen manifestle eşleşti.
 - İndirilen ZIP ve açılmış PKG payload uygulamalarında strict/deep codesign ve sabit designated requirement doğrulandı. ZIP/PKG uygulama binary, Info.plist ve bundled ReleaseNotes.json içerikleri eşleşti; sürüm/build 0.2.58/59, bundle ID local.mssqlstudio.app. GitHub sürüm notları paket içindeki notlarla eşleşti.
 - Doğrulama çıktısı `/tmp/mssql-v58-verification.log`; dosyalar `/tmp/mssql-v58-verify`, çıkarılmış ZIP uygulaması `/tmp/mssql-v58-verify/extracted/MSSQLStudio.app`. Kurulu kullanıcı uygulaması/Keychain/gerçek veritabanı değiştirilmedi. Canlı SQL Server regresyonu için bağlantı bilgisi bulunmadığına ilişkin önceki sınırlama devam ediyor.
-
 
 ## 12 Ekim 2026 — v0.2.72 geliştirme doğrulaması
 
@@ -1234,7 +1218,6 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Release build başarılı: `/tmp/mssql-072-release.log`. İzole `/tmp/MSSQLStudio-072-ui/MSSQLStudio.app` (local.mssqlstudio.uitest) CUA kontrolünde 100 önerinin 16 kompakt satırı, ekran altındaki caret için yukarı açılış, End ile son öneri/Home-Down-Tab ile `[Name]` ekleme ve Explorer bağlantı menüsü gözlendi. Gerçek kullanıcı app’i, Keychain ve SQL oturumları değiştirilmedi; test app’i kapatıldı.
 - Canlı SQL Server ağ kesintisi/yeniden bağlantısı bu ortamda doğrulanmadı; sentetik kontrol canlı ağ kanıtı değildir. Frozen credential helper kaynak/binary/hash değişmedi.
 - v0.2.72 Actions `38235910774` imzalı paketleri hazırladı fakat uygulama testlerinde favori ağacı seçimi kontrolü başarısız oldu (264 test: 238 geçti / 25 dış koşullu atlandı / 1 hata). Yayın açılmadı; etiket korunur. Başka native testlerden gelen tema bildiriminin reloadData sırasında Explorer seçimini düşürdüğü belirlendi. Tema bildirimiyle deterministik regresyon kontrolü eklendi, çalışma alanı yenilemesi mevcut node seçimini geri yükleyecek şekilde düzeltildi. Sonraki yayın adayı v0.2.73/build 74.
-
 
 ## 12 Ekim 2026 — v0.2.73 geliştirme doğrulaması
 
