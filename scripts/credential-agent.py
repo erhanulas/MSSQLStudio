@@ -33,7 +33,7 @@ def prepare(output):
                 raise ValueError('Frozen credential archive digest mismatch')
             archive.write_bytes(data)
         else:
-            if os.environ.get('RELEASE_TAG') != config['originTag']:
+            if os.environ.get('RELEASE_TAG') != config['originTag'] or os.environ.get('GITHUB_ACTIONS') != 'true':
                 raise ValueError('Unpinned credential agent may bootstrap only on its original release tag')
             with tempfile.TemporaryDirectory(prefix='StudioCredentialBootstrap-', dir='/tmp') as folder:
                 executable = Path(folder) / NAME

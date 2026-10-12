@@ -11,9 +11,9 @@ from signing import sign, verify, requirement
 
 _spec=importlib.util.spec_from_file_location('credential_agent',Path(__file__).parent/'credential-agent.py')
 _agent=importlib.util.module_from_spec(_spec);_spec.loader.exec_module(_agent)
-if not os.environ.get('RUNNER_TEMP'):
+if not os.environ.get('RUNNER_TEMP') or os.environ.get('GITHUB_ACTIONS') != 'true' or not os.environ.get('GITHUB_RUN_ID', '').isdigit():
     raise RuntimeError('Partition audit runs only in disposable CI; never use the real user login keychain')
-agent, agent_archive = _agent.prepare(Path(os.environ['RUNNER_TEMP'])/'MSSQLStudio-credential-v1')
+agent, agent_archive = _agent.prepare(Path(os.environ['RUNNER_TEMP'])/('MSSQLStudio-credential-v1-'+os.environ['GITHUB_RUN_ID']))
 unauthorized = subprocess.run([str(agent)],input=b'{}',capture_output=True,timeout=20)
 assert unauthorized.returncode == 77 and not unauthorized.stdout, 'Helper accepted an unauthorized launcher'
 

@@ -7,7 +7,7 @@ trap 'rm -rf "$build_dir"' EXIT
 mkdir -p "$output_dir"
 xcodebuild -project "$project_dir/MSSQLStudio.xcodeproj" -scheme MSSQLStudio -configuration Release -derivedDataPath "$build_dir" "MSSQL_UPDATE_FEED_URL=${MSSQL_UPDATE_FEED_URL:-https://github.com/erhanulas/MSSQLStudio/releases/latest/download/update.json}" build
 app_path="$build_dir/Build/Products/Release/MSSQLStudio.app"
-credential_dir="${RUNNER_TEMP:-$build_dir}/MSSQLStudio-credential-v1"
+credential_dir="${RUNNER_TEMP:-$build_dir}/MSSQLStudio-credential-v1-${GITHUB_RUN_ID:-local}"
 python3 "$project_dir/scripts/credential-agent.py" --output "$credential_dir" --app "$app_path"
 cp "$credential_dir/MSSQLStudio-CredentialAgent-v1.zip" "$output_dir/"
 python3 "$project_dir/scripts/signing.py" sign "$app_path"
