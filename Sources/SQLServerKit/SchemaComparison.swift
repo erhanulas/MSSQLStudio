@@ -18,7 +18,9 @@ public struct SchemaObject: Identifiable, Equatable, Sendable {
   public let digest: String?
   public let issue: String
   public let comparisonDigest: String?
-  public init(key:SchemaObjectKey,objectID:Int,type:String,digest:String?,issue:String="",comparisonDigest:String?=nil) {self.key=key;self.objectID=objectID;self.type=type;self.digest=digest;self.issue=issue;self.comparisonDigest=comparisonDigest}
+  public let definitionDigest: String?
+  public let structuralDigest: String?
+  public init(key:SchemaObjectKey,objectID:Int,type:String,digest:String?,issue:String="",comparisonDigest:String?=nil,definitionDigest:String?=nil,structuralDigest:String?=nil) {self.key=key;self.objectID=objectID;self.type=type;self.digest=digest;self.issue=issue;self.comparisonDigest=comparisonDigest;self.definitionDigest=definitionDigest;self.structuralDigest=structuralDigest}
   public var kind: String {switch type {case "U":return "Tablo";case "V":return "View";case "P","PC":return "Prosedür";case "FN","IF","TF","FS","FT":return "Fonksiyon";case "TR","TA","TRD":return "Trigger";case "SN":return "Synonym";default:return type}}
 }
 public struct SchemaSnapshot: Sendable {
@@ -37,11 +39,87 @@ public struct SchemaDifference: Identifiable, Sendable {
   public let target: SchemaObject?
   public var status: Status {
     if let source,let target,source.type != target.type {return .typeConflict}
-    if [source,target].compactMap({$0}).contains(where:{$0.digest == nil || !$0.issue.isEmpty}) {return .unavailable}
+    if [source,target].compactMap({$0}).contains(where:{$0.digest == nil}) {return .unavailable}
     guard let source else {return .targetOnly};guard let target else {return .sourceOnly}
     return (source.comparisonDigest ?? source.digest) == (target.comparisonDigest ?? target.digest) ? .equal:.changed
   }
-  public var canStage: Bool {status == .changed || status == .sourceOnly}
+  public var migrationIssue: String {
+    if let issue=[source,target].compactMap({$0}).first(where:{!$0.issue.isEmpty})?.issue {return issue}
+    if let source,let target,source.type=="V",source.definitionDigest != nil,source.definitionDigest==target.definitionDigest,source.structuralDigest != target.structuralDigest {
+      return "View kodu aynı; kolon farkı bağımlı nesnelerden veya saklanan view metadata’sından geliyor. Önce bağımlı tablo/view farklarını çözün; aynı kodu taşımak kolon tipini eşitlemez."
+    }
+    return ""
+  }
+  public var canStage: Bool {(status == .changed || status == .sourceOnly) && migrationIssue.isEmpty}
+}
+
+/// Column metadata is independent of table scripting: special tables remain inspectable.
+/// maxLength is the SQL Server byte length; dataType handles Unicode character lengths.
+public struct SchemaColumn: Identifiable, Equatable, Sendable {
+  public var id: String {name}
+  public let ordinal: Int
+  public let name: String
+  public let typeSchema: String
+  public let typeName: String
+  public let baseType: String
+  public let userDefined: Bool
+  public let assemblyType: Bool
+  public let maxLength: Int
+  public let precision: Int
+  public let scale: Int
+  public let nullable: Bool
+  public let collation: String
+  public let identity: Bool
+  public let identitySeed: String
+  public let identityIncrement: String
+  public let computed: String
+  public let persisted: Bool
+  public let defaultSQL: String
+  public let sparse: Bool
+  public let rowGUID: Bool
+  public let hidden: Bool
+  public let generatedAlways: Int
+  public let xmlCollection: String
+  public let xmlDocument: Bool
+  public init(ordinal:Int,name:String,typeSchema:String="sys",typeName:String,baseType:String="",userDefined:Bool=false,assemblyType:Bool=false,maxLength:Int=0,precision:Int=0,scale:Int=0,nullable:Bool=true,collation:String="",identity:Bool=false,identitySeed:String="",identityIncrement:String="",computed:String="",persisted:Bool=false,defaultSQL:String="",sparse:Bool=false,rowGUID:Bool=false,hidden:Bool=false,generatedAlways:Int=0,xmlCollection:String="",xmlDocument:Bool=false) {
+    self.ordinal=ordinal;self.name=name;self.typeSchema=typeSchema;self.typeName=typeName;self.baseType=baseType.isEmpty ? typeName:baseType;self.userDefined=userDefined;self.assemblyType=assemblyType;self.maxLength=maxLength;self.precision=precision;self.scale=scale;self.nullable=nullable;self.collation=collation;self.identity=identity;self.identitySeed=identitySeed;self.identityIncrement=identityIncrement;self.computed=computed;self.persisted=persisted;self.defaultSQL=defaultSQL;self.sparse=sparse;self.rowGUID=rowGUID;self.hidden=hidden;self.generatedAlways=generatedAlways;self.xmlCollection=xmlCollection;self.xmlDocument=xmlDocument
+  }
+  public var dataType: String {
+    if userDefined || assemblyType {return SQL.identifier(typeSchema)+"."+SQL.identifier(typeName)}
+    if typeName.lowercased()=="sysname" {return typeName}
+    return baseDataType
+  }
+  public var baseDataType: String {
+    let type=baseType.lowercased()
+    switch type {
+    case "nvarchar","nchar":return type+"("+(maxLength == -1 ? "max":String(maxLength/2))+")"
+    case "varchar","char","varbinary","binary":return type+"("+(maxLength == -1 ? "max":String(maxLength))+")"
+    case "decimal","numeric":return "\(type)(\(precision),\(scale))"
+    case "datetime2","datetimeoffset","time":return "\(type)(\(scale))"
+    case "float":return "float(\(precision))"
+    case "xml" where !xmlCollection.isEmpty:return "xml(\(xmlDocument ? "DOCUMENT":"CONTENT") \(xmlCollection))"
+    default:return baseType
+    }
+  }
+  public var attributes: String {
+    var values:[String]=[]
+    if identity {values.append("IDENTITY(\(identitySeed),\(identityIncrement))")}
+    if !computed.isEmpty {values.append("AS \(computed)\(persisted ? " PERSISTED":"")")}
+    if !defaultSQL.isEmpty {values.append("DEFAULT \(defaultSQL)")}
+    if sparse {values.append("SPARSE")};if rowGUID {values.append("ROWGUIDCOL")};if hidden {values.append("HIDDEN")}
+    if generatedAlways != 0 {values.append("GENERATED ALWAYS (\(generatedAlways))")}
+    return values.joined(separator:" · ")
+  }
+}
+public struct SchemaColumnDifference: Identifiable, Sendable {
+  public enum Change: String, CaseIterable, Sendable {case added="Yalnız kaynakta",removed="Yalnız hedefte",dataType="Veri tipi",nullability="NULL",order="Sıra",collation="Collation",identity="Identity",computed="Hesaplama",defaultValue="Varsayılan",attributes="Özellikler"}
+  public var id: String {name}
+  public let name: String
+  public let source: SchemaColumn?
+  public let target: SchemaColumn?
+  public let changes: Set<Change>
+  public var isEqual: Bool {changes.isEmpty}
+  public var summary: String {isEqual ? "Aynı":Change.allCases.filter {changes.contains($0)}.map(\.rawValue).joined(separator:", ")}
 }
 public struct SchemaObjectContent: Sendable {
   public let object: SchemaObject
@@ -62,22 +140,80 @@ public enum SchemaComparison {
     return try keys.map {key in try Task.checkCancellation();return SchemaDifference(key:key,source:source.objects[key],target:target.objects[key])}
   }
   public static var limits: Limits {var l=Limits();l.rows=50_001;l.totalBytes=64*1024*1024;l.cellBytes=4*1024*1024;l.timeout=90;return l}
+  /// A lazy, read-only metadata request, including tables that cannot be scripted safely.
+  public static func columnsQuery(_ object:SchemaObject)->String {
+    guard ["U","V"].contains(object.type) else {return "-- StudioSchemaColumns\nSELECT 1 WHERE 1=0; SELECT 1 WHERE 1=0;"}
+    return """
+    -- StudioSchemaColumns
+    SELECT o.object_id,RTRIM(o.type),HAS_PERMS_BY_NAME(DB_NAME(),N'DATABASE',N'VIEW DEFINITION') FROM sys.objects o WHERE o.object_id=\(object.objectID) AND o.type IN ('U','V') AND o.is_ms_shipped=0;
+    SELECT TOP (30001) ROW_NUMBER() OVER(ORDER BY c.column_id),c.name,SCHEMA_NAME(ty.schema_id),ty.name,ISNULL(base.name,ty.name),ty.is_user_defined,ty.is_assembly_type,c.max_length,c.precision,c.scale,c.is_nullable,c.collation_name,c.is_identity,
+      CONVERT(nvarchar(40),ic.seed_value),CONVERT(nvarchar(40),ic.increment_value),cc.definition,ISNULL(cc.is_persisted,0),dc.definition,c.is_sparse,c.is_rowguidcol,c.is_hidden,c.generated_always_type,
+      CASE WHEN xc.xml_collection_id IS NOT NULL THEN QUOTENAME(SCHEMA_NAME(xc.schema_id))+N'.'+QUOTENAME(xc.name) ELSE N'' END,c.is_xml_document
+    FROM sys.columns c JOIN sys.types ty ON ty.user_type_id=c.user_type_id LEFT JOIN sys.types base ON base.user_type_id=c.system_type_id AND base.user_type_id=base.system_type_id
+    LEFT JOIN sys.identity_columns ic ON ic.object_id=c.object_id AND ic.column_id=c.column_id
+    LEFT JOIN sys.computed_columns cc ON cc.object_id=c.object_id AND cc.column_id=c.column_id
+    LEFT JOIN sys.default_constraints dc ON dc.object_id=c.default_object_id
+    LEFT JOIN sys.xml_schema_collections xc ON xc.xml_collection_id=c.xml_collection_id AND xc.xml_collection_id<>0
+    WHERE c.object_id=\(object.objectID) ORDER BY c.column_id;
+    """
+  }
+  public static func decodeColumns(_ result:Execution,object:SchemaObject) throws -> [SchemaColumn] {
+    guard ["U","V"].contains(object.type),!result.partial,!result.stoppedEarly,result.results.count==2,result.results.allSatisfy({!$0.truncated}),
+      result.results[0].values.count==1,let header=result.results[0].values.first,header.count==3,header[0]==String(object.objectID),header[1]==object.type,header[2]=="1",result.results[1].values.count<=30_000 else {throw SQLFailure("Kolon listesi eksik veya nesne değişti. VIEW DEFINITION iznini kontrol edip yeniden karşılaştırın.")}
+    var names=Set<String>(),ordinals=Set<Int>()
+    let columns=try result.results[1].values.map {r -> SchemaColumn in
+      try Task.checkCancellation()
+      guard r.count==24,let ordinal=Int(r[0] ?? ""),ordinal>0,let name=r[1],!name.isEmpty,names.insert(name).inserted,ordinals.insert(ordinal).inserted,
+        let schema=r[2],!schema.isEmpty,let type=r[3],!type.isEmpty,let base=r[4],!base.isEmpty,
+        let length=Int(r[7] ?? ""),length >= -1,let precision=Int(r[8] ?? ""),(0...53).contains(precision),let scale=Int(r[9] ?? ""),(0...38).contains(scale),
+        let generated=Int(r[21] ?? ""),(0...255).contains(generated),[5,6,10,12,16,18,19,20,23].allSatisfy({["0","1"].contains(r[$0] ?? "")}) else {throw SQLFailure("Geçersiz veya yinelenen kolon metadata’sı; kısmi kolon farkı gösterilmedi.")}
+      return SchemaColumn(ordinal:ordinal,name:name,typeSchema:schema,typeName:type,baseType:base,userDefined:r[5]=="1",assemblyType:r[6]=="1",maxLength:length,precision:precision,scale:scale,nullable:r[10]=="1",collation:r[11] ?? "",identity:r[12]=="1",identitySeed:r[13] ?? "",identityIncrement:r[14] ?? "",computed:r[15] ?? "",persisted:r[16]=="1",defaultSQL:r[17] ?? "",sparse:r[18]=="1",rowGUID:r[19]=="1",hidden:r[20]=="1",generatedAlways:generated,xmlCollection:r[22] ?? "",xmlDocument:r[23]=="1")
+    }
+    guard !columns.isEmpty,ordinals==Set(1...columns.count) else {throw SQLFailure("Tam kolon sırası alınamadı; boş/kısmi liste karşılaştırılmadı.")}
+    return columns.sorted {$0.ordinal<$1.ordinal}
+  }
+  public static func compareColumns(source:[SchemaColumn],target:[SchemaColumn]) throws -> [SchemaColumnDifference] {
+    guard source.count<=30_000,target.count<=30_000,Set(source.map(\.name)).count==source.count,Set(target.map(\.name)).count==target.count else {throw SQLFailure("Kolon karşılaştırması çok büyük veya yinelenen kolon adı içeriyor.")}
+    let a=Dictionary(uniqueKeysWithValues:source.map {($0.name,$0)}),b=Dictionary(uniqueKeysWithValues:target.map {($0.name,$0)})
+    // Source order is the desired order; target-only columns follow in their existing order.
+    let names=source.sorted {$0.ordinal<$1.ordinal}.map(\.name)+target.sorted {$0.ordinal<$1.ordinal}.filter {a[$0.name]==nil}.map(\.name)
+    return try names.map {name in
+      try Task.checkCancellation()
+      let source=a[name],target=b[name]
+      var changes=Set<SchemaColumnDifference.Change>()
+      if source==nil {changes.insert(.removed)}
+      else if target==nil {changes.insert(.added)}
+      else if let source,let target {
+        if source.typeSchema != target.typeSchema || source.typeName != target.typeName || source.baseType != target.baseType || source.userDefined != target.userDefined || source.assemblyType != target.assemblyType || source.maxLength != target.maxLength || source.precision != target.precision || source.scale != target.scale || source.xmlCollection != target.xmlCollection || source.xmlDocument != target.xmlDocument {changes.insert(.dataType)}
+        if source.nullable != target.nullable {changes.insert(.nullability)}
+        if source.ordinal != target.ordinal {changes.insert(.order)}
+        if source.collation != target.collation {changes.insert(.collation)}
+        if source.identity != target.identity || source.identitySeed != target.identitySeed || source.identityIncrement != target.identityIncrement {changes.insert(.identity)}
+        if source.computed != target.computed || source.persisted != target.persisted {changes.insert(.computed)}
+        if source.defaultSQL != target.defaultSQL {changes.insert(.defaultValue)}
+        if source.sparse != target.sparse || source.rowGUID != target.rowGUID || source.hidden != target.hidden || source.generatedAlways != target.generatedAlways {changes.insert(.attributes)}
+      }
+      return SchemaColumnDifference(name:name,source:source,target:target,changes:changes)
+    }
+  }
+  private static var columnInventoryXML: String {"""
+    SELECT c.name,SCHEMA_NAME(ty.schema_id) AS type_schema,ty.name AS type_name,ISNULL(base.name,ty.name) AS base_type,ty.is_user_defined,ty.is_assembly_type,c.max_length,c.precision,c.scale,c.is_nullable,c.collation_name,c.is_identity,c.is_sparse,c.is_rowguidcol,c.is_ansi_padded,c.is_filestream,c.generated_always_type,c.is_hidden,c.encryption_type,c.is_xml_document,
+      ic.is_not_for_replication,CONVERT(nvarchar(40),ic.seed_value) AS seed,CONVERT(nvarchar(40),ic.increment_value) AS increment,cc.definition AS computed,cc.is_persisted,dc.name AS default_name,dc.definition AS default_sql,
+      (SELECT SCHEMA_NAME(x.schema_id)+N'.'+x.name FROM sys.xml_schema_collections x WHERE x.xml_collection_id=c.xml_collection_id AND x.xml_collection_id<>0) AS xml_namespace
+    FROM sys.columns c JOIN sys.types ty ON ty.user_type_id=c.user_type_id LEFT JOIN sys.types base ON base.user_type_id=c.system_type_id AND base.user_type_id=base.system_type_id LEFT JOIN sys.identity_columns ic ON ic.object_id=c.object_id AND ic.column_id=c.column_id LEFT JOIN sys.computed_columns cc ON cc.object_id=c.object_id AND cc.column_id=c.column_id LEFT JOIN sys.default_constraints dc ON dc.object_id=c.default_object_id WHERE c.object_id=o.object_id ORDER BY c.column_id FOR XML PATH('column'),TYPE
+    """}
+  private static var indexInventoryXML: String {"""
+    SELECT i.name,i.type,i.is_unique,i.is_primary_key,i.is_unique_constraint,i.has_filter,i.filter_definition,i.fill_factor,i.is_padded,i.ignore_dup_key,i.allow_row_locks,i.allow_page_locks,i.is_disabled,ds.name AS storage,
+      (SELECT c.name,ic.key_ordinal,ic.is_descending_key,ic.is_included_column FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id ORDER BY ic.index_column_id FOR XML PATH('column'),TYPE) AS columns
+    FROM sys.indexes i LEFT JOIN sys.data_spaces ds ON ds.data_space_id=i.data_space_id WHERE i.object_id=o.object_id ORDER BY i.name FOR XML PATH('index'),TYPE
+    """}
   /// One bounded catalog round-trip, hashes computed on the server; no table data or full module bodies transferred.
   public static func inventory(keys:[SchemaObjectKey]?=nil) -> String {
     let filter=keys.map {keys in keys.isEmpty ? " AND 1=0" : " AND ("+keys.map {"(s.name="+SQL.literal($0.schema)+" AND o.name="+SQL.literal($0.name)+")"}.joined(separator:" OR ")+")"} ?? ""
     let triggerFilter=keys.map {keys in " AND t.name IN ("+(keys.filter(\.databaseTrigger).map {SQL.literal($0.name)}.isEmpty ? "N''":keys.filter(\.databaseTrigger).map {SQL.literal($0.name)}.joined(separator:","))+")"} ?? ""
     // Explicit ordered metadata avoids object IDs / modification dates / identity current values.
-    let columns="""
-    SELECT c.name,SCHEMA_NAME(ty.schema_id) AS type_schema,ty.name AS type_name,c.max_length,c.precision,c.scale,c.is_nullable,c.collation_name,c.is_identity,c.is_sparse,c.is_rowguidcol,c.is_ansi_padded,c.is_filestream,c.generated_always_type,c.is_hidden,c.encryption_type,
-      ic.is_not_for_replication,CONVERT(nvarchar(40),ic.seed_value) AS seed,CONVERT(nvarchar(40),ic.increment_value) AS increment,cc.definition AS computed,cc.is_persisted,dc.name AS default_name,dc.definition AS default_sql,
-      (SELECT SCHEMA_NAME(x.schema_id)+N'.'+x.name FROM sys.xml_schema_collections x WHERE x.xml_collection_id=c.xml_collection_id AND x.xml_collection_id<>0) AS xml_namespace
-    FROM sys.columns c JOIN sys.types ty ON ty.user_type_id=c.user_type_id LEFT JOIN sys.identity_columns ic ON ic.object_id=c.object_id AND ic.column_id=c.column_id LEFT JOIN sys.computed_columns cc ON cc.object_id=c.object_id AND cc.column_id=c.column_id LEFT JOIN sys.default_constraints dc ON dc.object_id=c.default_object_id WHERE c.object_id=o.object_id ORDER BY c.column_id FOR XML PATH('column'),TYPE
-    """
-    let indexes="""
-    SELECT i.name,i.type,i.is_unique,i.is_primary_key,i.is_unique_constraint,i.has_filter,i.filter_definition,i.fill_factor,i.is_padded,i.ignore_dup_key,i.allow_row_locks,i.allow_page_locks,i.is_disabled,ds.name AS storage,
-      (SELECT c.name,ic.key_ordinal,ic.is_descending_key,ic.is_included_column FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id ORDER BY ic.index_column_id FOR XML PATH('column'),TYPE) AS columns
-    FROM sys.indexes i LEFT JOIN sys.data_spaces ds ON ds.data_space_id=i.data_space_id WHERE i.object_id=o.object_id ORDER BY i.name FOR XML PATH('index'),TYPE
-    """
+    let columns=columnInventoryXML
+    let indexes=indexInventoryXML
     let checks="SELECT c.name,c.definition,c.is_disabled,c.is_not_trusted,c.is_not_for_replication FROM sys.check_constraints c WHERE c.parent_object_id=o.object_id ORDER BY c.name FOR XML PATH('check'),TYPE"
     let fks="""
     SELECT f.name,OBJECT_SCHEMA_NAME(f.referenced_object_id) AS target_schema,OBJECT_NAME(f.referenced_object_id) AS target_table,f.delete_referential_action,f.update_referential_action,f.is_disabled,f.is_not_trusted,f.is_not_for_replication,
@@ -119,7 +255,7 @@ public enum SchemaComparison {
       +CONVERT(nvarchar(max),(SELECT tb.temporal_type,tb.is_memory_optimized,tb.is_filetable,tb.is_node,tb.is_edge,tb.lock_escalation FOR XML PATH('table'),TYPE))
       WHEN o.type='SN' THEN CONVERT(nvarchar(max),sn.base_object_name)
       ELSE CONVERT(nvarchar(max),m.definition)+NCHAR(10)+CONVERT(nvarchar(1),m.uses_ansi_nulls)+CONVERT(nvarchar(1),m.uses_quoted_identifier)+ISNULL(CONVERT(nvarchar(1),tr.is_disabled),N'')
-        +ISNULL(OBJECT_SCHEMA_NAME(tr.parent_id)+N'.'+OBJECT_NAME(tr.parent_id),N'')+CASE WHEN o.type='V' THEN CONVERT(nvarchar(max),(\(indexes))) ELSE N'' END END AS value) payload
+        +ISNULL(OBJECT_SCHEMA_NAME(tr.parent_id)+N'.'+OBJECT_NAME(tr.parent_id),N'')+CASE WHEN o.type='V' THEN CONVERT(nvarchar(max),(\(columns)))+CONVERT(nvarchar(max),(\(indexes))) ELSE N'' END END AS value) payload
     WHERE o.is_ms_shipped=0 AND o.type IN ('U','V','P','PC','FN','IF','TF','FS','FT','TR','TA','SN')\(filter)
     UNION ALL
     SELECT t.object_id,N'',t.name,'TRD',CONVERT(varchar(64),HASHBYTES('SHA2_256',CONVERT(varbinary(max),m.definition+NCHAR(10)+CONVERT(nvarchar(1),m.uses_ansi_nulls)+CONVERT(nvarchar(1),m.uses_quoted_identifier)+CONVERT(nvarchar(1),t.is_disabled))),2),CASE WHEN m.definition IS NULL THEN N'Tanım şifreli veya görünmüyor.' WHEN EXISTS(SELECT 1 FROM sys.crypt_properties cp WHERE cp.class=1 AND cp.major_id=t.object_id) OR EXISTS(SELECT 1 FROM sys.trigger_events te WHERE te.object_id=t.object_id AND (te.is_first=1 OR te.is_last=1)) THEN N'İmza / trigger çalışma sırası ayrıca taşınmalı.' WHEN m.execute_as_principal_id>=0 THEN N'EXECUTE AS principal eşlemesi gerekli.' ELSE N'' END FROM sys.triggers t LEFT JOIN sys.sql_modules m ON m.object_id=t.object_id WHERE t.parent_class=0 AND t.is_ms_shipped=0\(triggerFilter);
@@ -188,6 +324,8 @@ public enum SchemaMigration {
       guard !visiting.contains(key) else {throw SQLFailure("Bağımlılık döngüsü: \(key.qualified). Nesneleri ayrı adımlarda uygulayın.")}
       guard let object=source.objects[key],object.digest != nil,object.issue.isEmpty else {throw SQLFailure("\(key.qualified) taşınabilir bir kaynak tanımı değil.")}
       if let old=target.objects[key],old.type != object.type || !old.issue.isEmpty || old.digest == nil {throw SQLFailure("\(key.qualified) hedef türü/özellikleri otomatik değiştirilemez.")}
+      let difference=SchemaDifference(key:key,source:object,target:target.objects[key])
+      guard difference.migrationIssue.isEmpty else {throw SQLFailure("\(key.qualified): \(difference.migrationIssue)")}
       visiting.insert(key)
       for dependency in (source.dependencies[key] ?? []).sorted() {
         if selected.contains(dependency) {try visit(dependency)}
@@ -244,8 +382,9 @@ public enum SchemaMigration {
     guard !commands.isEmpty else {throw SQLFailure("Seçilen nesnelerde uygulanacak fark yok.")}
     let sql=ObjectScripts.transaction(commands.joined(separator:"\n\n"))
     guard sql.utf8.count<=8*1024*1024 else {throw SQLFailure("Taşıma SQL'i 8 MB sınırını aşıyor; daha az nesne seçin.")}
-    let before=keys.map {"-- "+$0.qualified.replacingOccurrences(of:"\n",with:" ")+"\n"+(targetContent[$0]?.sql ?? "-- Hedefte yok.")}.joined(separator:"\n\n")
-    let after=keys.map {sourceContent[$0]?.sql ?? ""}.joined(separator:"\n\n")
+    func heading(_ key:SchemaObjectKey)->String {"-- "+key.qualified.replacingOccurrences(of:"\n",with:" ").replacingOccurrences(of:"\r",with:" ")+"\n"}
+    let before=keys.map {heading($0)+(targetContent[$0]?.sql ?? "-- Hedefte yok.")}.joined(separator:"\n\n")
+    let after=keys.map {heading($0)+(sourceContent[$0]?.sql ?? "")}.joined(separator:"\n\n")
     guard max(sql.utf16.count,before.utf16.count,after.utf16.count)<=900_000 else {throw SQLFailure("Taşıma önizlemesi büyük; daha az nesne seçin (900.000 karakter sınırı).")}
     return SchemaMigrationPlan(keys:keys,sql:sql,source:source,target:target,warnings:warnings.sorted(),originalSQL:before,desiredSQL:after)
   }
@@ -266,6 +405,7 @@ public enum SchemaMigration {
     }
     for (index,old) in target.columns.enumerated() {
       let c=source.columns[index]
+      if c.type==old.type,(c.type.hasPrefix("[") || c.type.lowercased()=="sysname"),c.valueType != old.valueType {throw SQLFailure("\(c.name) kolonunun özel veri tipi \(c.type) iki veritabanında farklı temel tipe sahip. Önce veri tipi tanımlarını eşitleyin; tablo ALTER işlemi özel tip tanımını değiştirmez.")}
       guard c.identity==old.identity,c.seed==old.seed,c.increment==old.increment,c.computed==old.computed,c.persisted==old.persisted,c.sparse==old.sparse,c.rowGUID==old.rowGUID else {throw SQLFailure("Identity/computed/sparse/ROWGUID değişikliği otomatik uygulanamaz: \(c.name)")}
       let defaultChanged=c.defaultSQL != old.defaultSQL || c.defaultName != old.defaultName
       if defaultChanged,!old.defaultSQL.isEmpty {
@@ -290,21 +430,35 @@ public enum SchemaMigration {
 extension SchemaComparison {
   /// Only modules whose raw server hashes differ need a body read; page the read, never N+1.
   public static func refinementQuery(_ objects:[SchemaObject])->String {
-    "-- StudioSchemaRefinement\nSELECT m.object_id,m.definition,m.uses_ansi_nulls,m.uses_quoted_identifier,ISNULL(t.is_disabled,0),CASE WHEN t.parent_class=0 THEN N'DATABASE' ELSE QUOTENAME(OBJECT_SCHEMA_NAME(t.parent_id))+N'.'+QUOTENAME(OBJECT_NAME(t.parent_id)) END FROM sys.sql_modules m LEFT JOIN sys.triggers t ON t.object_id=m.object_id WHERE m.object_id IN ("+objects.map {String($0.objectID)}.joined(separator:",")+");"
+    guard !objects.isEmpty else {return "-- StudioSchemaRefinement\nSELECT 1 WHERE 1=0;"}
+    return """
+    -- StudioSchemaRefinement
+    SELECT m.object_id,m.definition,m.uses_ansi_nulls,m.uses_quoted_identifier,ISNULL(t.is_disabled,0),CASE WHEN t.parent_class=0 THEN N'DATABASE' ELSE QUOTENAME(OBJECT_SCHEMA_NAME(t.parent_id))+N'.'+QUOTENAME(OBJECT_NAME(t.parent_id)) END,
+      CASE WHEN o.type='V' THEN CONVERT(varchar(64),HASHBYTES('SHA2_256',CONVERT(varbinary(max),CONVERT(nvarchar(max),(\(columnInventoryXML)))+CONVERT(nvarchar(max),(\(indexInventoryXML))))),2) ELSE NULL END
+    FROM sys.sql_modules m LEFT JOIN sys.objects o ON o.object_id=m.object_id LEFT JOIN sys.triggers t ON t.object_id=m.object_id WHERE m.object_id IN (\(objects.map {String($0.objectID)}.joined(separator:",")));
+    """
   }
   public static func refine(_ snapshot:SchemaSnapshot,objects:[SchemaObject],result:Execution) throws -> SchemaSnapshot {
     guard !result.partial,!result.stoppedEarly,result.results.count==1,result.results.first?.truncated==false else {throw SQLFailure("Farklı modüllerin tanımları kısmi; karşılaştırma tamamlanmadı.")}
     var updated=snapshot,seen=Set<Int>()
+    guard Set(objects.map(\.objectID)).count==objects.count else {throw SQLFailure("Yinelenen modül kimliği.")}
     let indexed=Dictionary(uniqueKeysWithValues:objects.map {($0.objectID,$0)})
     for row in result.results[0].values {
-      guard row.count==6,let id=Int(row[0] ?? ""),let object=indexed[id],seen.insert(id).inserted else {throw SQLFailure("Farklı modül tanımı eksik veya yinelenmiş.")}
-      var execution=Execution();execution.results=[Rows(values:[Array(row.dropFirst())])]
+      guard [6,7].contains(row.count),let id=Int(row[0] ?? ""),let object=indexed[id],seen.insert(id).inserted else {throw SQLFailure("Farklı modül tanımı eksik veya yinelenmiş.")}
+      let structuralDigest:String?
+      if object.type=="V" {
+        guard row.count==7,let value=row[6],value.range(of:"^[A-Fa-f0-9]{64}$",options:.regularExpression) != nil else {throw SQLFailure("View kolon/indeks özeti eksik; karşılaştırma tamamlanmadı.")}
+        structuralDigest=value.lowercased()
+      } else {structuralDigest=nil}
+      var execution=Execution();execution.results=[Rows(values:[Array(row[1...5])])]
       let content=try decodeContent(execution,object:object)
       // CREATE / ALTER and stale names retained by sp_rename are delivery details.
       // Preserve all body whitespace, comments, literal text and case exactly.
       let canonical=content.sql+"\n--trigger-state:"+String(content.disabled)+"|"+content.triggerParent
-      let digest=SHA256.hash(data:Data(canonical.utf8)).map {String(format:"%02x",$0)}.joined()
-      updated.objects[object.key]=SchemaObject(key:object.key,objectID:id,type:object.type,digest:object.digest,issue:object.issue,comparisonDigest:digest)
+      func hash(_ value:String)->String {SHA256.hash(data:Data(value.utf8)).map {String(format:"%02x",$0)}.joined()}
+      let definitionDigest=hash(canonical)
+      let digest=structuralDigest.map {hash(canonical+"\n--view-structure:"+$0)} ?? definitionDigest
+      updated.objects[object.key]=SchemaObject(key:object.key,objectID:id,type:object.type,digest:object.digest,issue:object.issue,comparisonDigest:digest,definitionDigest:definitionDigest,structuralDigest:structuralDigest)
     }
     guard seen.count==objects.count else {throw SQLFailure("Karşılaştırma sırasında nesne kaldırıldı; yeniden karşılaştırın.")}
     return updated

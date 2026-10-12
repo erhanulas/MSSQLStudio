@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.85",
+    "date": "2026-10-12",
+    "title": "Kompakt DDL karşılaştırma, doğrudan kod farkları ve kolon karşılaştırması",
+    "changes": [
+      "DDL karşılaştırma ekranı kompakt başlık, aynı satırda kaynak/hedef seçimi, kısa filtre araçları ve daha geniş alt inceleme alanıyla yenilendi. İkonların açıklamaları ve erişilebilir adları korunur.",
+      "Satır farkları ayrı pencere açmadan alt panelde doğrudan gösterilir. Kırmızı/yeşil satır ve metin vurguları, eşzamanlı dikey kaydırma, önceki/sonraki fark ve SSMS renkleri vardır.",
+      "Tablo ve view için bağımsız Kolonlar görünümü: eksik/fazla kolon, veri tipi ve alias temel tipi, uzunluk/MAX, precision/scale, NULL, sıra, collation, identity, computed ve diğer kolon özellikleri karşılaştırılır.",
+      "Aynı SQL koduna sahip view’ların farklı çıktı kolonları da tespit edilir. Özel tabloların okunabilir kolonları otomatik taşıma desteğinden bağımsız incelenebilir; aynı view kodunu taşımak veya farklı alias temel tipini yok saymak yapıyı eşitlemeyecekse taşıma engellenir.",
+      "Detay yüklemesinde seçim temizleme/bağlantı değişimi eski önizleme bırakmaz. Sınırlı lazy metadata ve önbellek, taşıma önizlemesi, hedef doğrulaması ve transaction korumaları devam eder."
+    ]
+  },
+  {
     "version": "0.2.84",
     "date": "2026-10-12",
     "title": "Veritabanları arasında DDL karşılaştırma ve seçili nesneleri taşıma",

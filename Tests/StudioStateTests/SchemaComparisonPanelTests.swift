@@ -13,13 +13,13 @@ import SQLServerKit
     var calls:[String]=[]
     let model=model(reader:{endpoint,sql in calls.append(sql);return try SchemaComparisonUIFixture.catalog(endpoint.database,sql)})
     await model.compare()
-    #expect(model.differences.count==5 && model.visible.count==4)
+    #expect(model.differences.count==8 && model.visible.count==7)
     #expect(calls.filter {$0.contains("StudioSchemaInventory")}.count==2)
     #expect(calls.filter {$0.contains("StudioSchemaRefinement")}.count==2)
     #expect(!model.detailReady && !model.busy && model.error.isEmpty)
     model.search="Total";#expect(model.visible.count==1 && model.visible.first?.status == .sourceOnly)
-    model.search="";model.kind="View";#expect(model.visible.isEmpty)
-    model.onlyDifferences=false;#expect(model.visible.count==1)
+    model.search="";model.kind="View";#expect(model.visible.count==1)
+    model.onlyDifferences=false;#expect(model.visible.count==2)
     model.kind="Tüm türler";model.onlyDifferences=true
     let row=try #require(model.differences.first {$0.key.name=="usp_Customers"})
     model.focused=row.key;await model.loadDetail()
@@ -65,6 +65,64 @@ import SQLServerKit
     await model.apply(plan,sourceID:oldSource,targetID:oldTarget)
     #expect(model.error.contains("bağlamı değişti"))
   }
+  @Test func tableAndViewColumnsAreLazyAndIndependentOfSafeMigrationScripting() async throws {
+    var queries:[String]=[]
+    let model=model(reader:{endpoint,sql in queries.append(sql);return try SchemaComparisonUIFixture.catalog(endpoint.database,sql)})
+    await model.compare()
+    #expect(!queries.contains {$0.contains("StudioSchemaColumns")})
+    let table=try #require(model.differences.first {$0.key.name=="Customers"})
+    model.focused=table.key;await model.loadDetail()
+    #expect(model.columnsReady && model.detailMode == .columns && model.columnChangeCount==3)
+    let amount=try #require(model.columnDifferences.first {$0.name=="Amount"})
+    #expect(amount.source?.dataType=="decimal(28,8)" && amount.target?.dataType=="decimal(18,2)")
+    #expect(amount.changes.contains(.dataType) && amount.changes.contains(.nullability))
+    #expect(model.columnDifferences.first {$0.name=="City"}?.changes.contains(.added)==true)
+    #expect(model.detailComparison != nil && model.sourceSQL.contains("decimal(28,8)"))
+    let reads=queries.count;await model.loadDetail();#expect(queries.count==reads)
+    let special=try #require(model.differences.first {$0.key.name=="CustomerHistory"})
+    #expect(special.status == .changed && !special.canStage)
+    model.focused=special.key;await model.loadDetail()
+    #expect(model.columnsReady && model.detailReady && model.columnChangeCount==3)
+    #expect(model.detailComparison==nil && model.detailNotice.localizedCaseInsensitiveContains("özel tablo"))
+    let view=try #require(model.differences.first {$0.key.name=="v_Balance"})
+    #expect(view.status == .changed && !view.canStage && !view.migrationIssue.isEmpty)
+    model.focused=view.key;await model.loadDetail()
+    #expect(model.columnsReady && model.columnChangeCount==1)
+    #expect(model.detailComparison?.added==0 && model.detailComparison?.removed==0)
+    #expect(model.detailMode == .columns && model.detailNotice.contains("View kodu aynı"))
+  }
+  @Test func clearingSelectionAndChangingConnectionDuringDetailNeverPublishesStalePreview() async throws {
+    let model=model(reader:{endpoint,sql in
+      if !sql.contains("StudioSchemaInventory") && !sql.contains("StudioSchemaRefinement") {try await Task.sleep(for:.milliseconds(40))}
+      return try SchemaComparisonUIFixture.catalog(endpoint.database,sql)
+    })
+    await model.compare();model.focused=model.differences.first {$0.key.name=="usp_Customers"}?.key
+    let delayed=Task {await model.loadDetail()}
+    try await Task.sleep(for:.milliseconds(10))
+    #expect(model.detailLoading)
+    model.focused=nil;await model.loadDetail();await delayed.value
+    #expect(!model.detailLoading && !model.detailReady && model.sourceSQL.isEmpty && model.detailComparison==nil)
+    model.focused=model.differences.first {$0.key.name=="Customers"}?.key
+    let stale=Task {await model.loadDetail()};try await Task.sleep(for:.milliseconds(10))
+    model.source?.server.generation=UUID();await stale.value
+    #expect(!model.detailLoading && !model.detailReady && !model.columnsReady)
+    #expect(model.sourceSQL.isEmpty && model.columnDifferences.isEmpty && model.detailNotice.contains("Bağlantı değişti"))
+    await model.compare();model.marked=[try #require(model.differences.first {$0.key.name=="usp_Customers"}).key]
+    let preview=Task {await model.preparePlan()};try await Task.sleep(for:.milliseconds(10))
+    model.target?.server.generation=UUID()
+    #expect(await preview.value==nil && model.error.contains("Bağlantı değişti"))
+  }
+  @Test func partialColumnMetadataDoesNotHideReadableViewCodeOrClaimEqualColumns() async throws {
+    let model=model(reader:{endpoint,sql in
+      var result=try SchemaComparisonUIFixture.catalog(endpoint.database,sql)
+      if sql.contains("StudioSchemaColumns") {result.partial=true}
+      return result
+    })
+    await model.compare();model.focused=model.differences.first {$0.key.name=="v_Balance"}?.key
+    await model.loadDetail()
+    #expect(!model.columnsReady && model.columnDifferences.isEmpty && model.columnSummary=="Kolonlar alınamadı")
+    #expect(model.detailComparison != nil && model.detailReady && model.detailNotice.contains("Kolonlar:"))
+  }
   @Test func explorerSelectsTwoDatabaseNodesAndRejectsMixedSelection() throws {
     _=NSApplication.shared
     let state=StudioState(),server=SchemaComparisonUIFixture.server();server.online=false;state.servers=[server]
@@ -90,12 +148,19 @@ import SQLServerKit
   @Test func panelHasBoundedNativeLayoutAndAccessibleActions() async throws {
     _=NSApplication.shared
     let model=model();await model.compare()
-    let panel=SchemaComparisonPanel(model:model,review:{_,_,_,_ in},preview:{},openSQL:{_ in})
+    model.focused=model.differences.first {$0.key.name=="usp_Customers"}?.key;await model.loadDetail()
+    let panel=SchemaComparisonPanel(model:model,preview:{},openSQL:{_ in})
     let hosting=NSHostingView(rootView:panel)
-    let window=NSWindow(contentRect:NSRect(x:-1800,y:-1800,width:1080,height:760),styleMask:[.titled,.resizable],backing:.buffered,defer:false)
-    window.contentView=hosting;hosting.frame=NSRect(x:0,y:0,width:1080,height:760);hosting.layoutSubtreeIfNeeded()
-    #expect(hosting.fittingSize.width<=1080)
-    #expect(window.contentView?.bounds.height==760)
+    let window=NSWindow(contentRect:NSRect(x:-1800,y:-1800,width:1000,height:680),styleMask:[.titled,.resizable],backing:.buffered,defer:false)
+    window.contentView=hosting;hosting.frame=NSRect(x:0,y:0,width:1000,height:680);hosting.layoutSubtreeIfNeeded()
+    #expect(hosting.fittingSize.width<=1000)
+    #expect(window.contentView?.bounds.height==680)
+    try await Task.sleep(for:.milliseconds(50));hosting.layoutSubtreeIfNeeded()
+    func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+    let inline=try #require(descendants(hosting).compactMap {$0 as? SQLInlineDiffView}.first)
+    let frame=hosting.convert(inline.bounds,from:inline)
+    #expect(frame.minX>=0 && frame.maxX<=1000 && frame.minY>=0 && frame.maxY<=680)
+    #expect(inline.leftText.string.contains("SELECT") && inline.rightText.string.contains("[City]"))
     window.contentView=nil
     let controller=SchemaComparisonWindow(model:model,openSQL:{_,_ in})
     let comparison=try #require(controller.window)

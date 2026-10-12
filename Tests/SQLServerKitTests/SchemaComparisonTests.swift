@@ -4,6 +4,12 @@ import Testing
 
 struct SchemaComparisonTests {
   private func object(_ name:String,type:String="P",digest:String?=String(repeating:"a",count:64),id:Int=1,issue:String="",schema:String="dbo")->SchemaObject {.init(key:.init(schema:schema,name:name),objectID:id,type:type,digest:digest,issue:issue)}
+  private func columnExecution(_ object:SchemaObject,rows:[[String?]]) -> Execution {
+    var result=Execution();result.results=[Rows(values:[[String(object.objectID),object.type,"1"]]),Rows(values:rows)];return result
+  }
+  private func columnRow(_ name:String,ordinal:Int=1,type:String="int",base:String="int",schema:String="sys",alias:Bool=false,length:Int=4,precision:Int=10,scale:Int=0,nullable:Bool=true)->[String?] {
+    [String(ordinal),name,schema,type,base,alias ? "1":"0","0",String(length),String(precision),String(scale),nullable ? "1":"0",nil,"0",nil,nil,nil,"0",nil,"0","0","0","0","","0"]
+  }
   @Test func statusesExactIdentityAndLargeInventory() throws {
     let a=try SchemaSnapshot(objects:[object("same"),object("changed"),object("new"),object("encrypted",digest:nil),object("kind"),object("Name"),object("name")])
     let b=try SchemaSnapshot(objects:[object("same",id:50),object("changed",digest:String(repeating:"b",count:64)),object("old"),object("encrypted",digest:nil),object("kind",type:"V")])
@@ -25,12 +31,13 @@ struct SchemaComparisonTests {
     execution.partial=false;execution.results[0]=Rows(values:[["0","A"]]);#expect(throws:SQLFailure.self) {try SchemaComparison.decode(execution)}
     execution.results[0]=Rows(values:[["1","A"]]);execution.results[1]=Rows(values:[["1","dbo","p","P","bad",""]]);#expect(throws:SQLFailure.self) {try SchemaComparison.decode(execution)}
     let sql=SchemaComparison.inventory(keys:[.init(schema:"odd']",name:"x'y")])
-    for token in ["SHA2_256","sys.columns","sys.index_columns","sys.foreign_key_columns","sys.check_constraints","uses_quoted_identifier","parent_class=0","VIEW DEFINITION","N'odd'']'"] {#expect(sql.contains(token))}
+    for token in ["SHA2_256","sys.columns","base.user_type_id=c.system_type_id","ISNULL(base.name,ty.name) AS base_type","sys.index_columns","sys.foreign_key_columns","sys.check_constraints","uses_quoted_identifier","parent_class=0","VIEW DEFINITION","N'odd'']'"] {#expect(sql.contains(token))}
     #expect(!sql.contains("SELECT * FROM"))
     if let path=ProcessInfo.processInfo.environment["MSSQL_SCHEMA_SQL_DUMP"] {
       try SchemaComparison.inventory().write(toFile:path,atomically:true,encoding:.utf8)
       try sql.write(toFile:path+".filtered.sql",atomically:true,encoding:.utf8)
       try SchemaComparison.refinementQuery([object("p")]).write(toFile:path+".refine.sql",atomically:true,encoding:.utf8)
+      try SchemaComparison.columnsQuery(object("T",type:"U")).write(toFile:path+".columns.sql",atomically:true,encoding:.utf8)
     }
   }
   @Test func refinementIgnoresDeliveryHeaderButPreservesBodyLiteralsAndSettings() throws {
@@ -46,6 +53,78 @@ struct SchemaComparisonTests {
     #expect(try refined("ALTER PROC dbo.renamed AS SELECT N'ALTER x';").comparisonDigest != a.comparisonDigest)
     #expect(try refined("ALTER PROC dbo.renamed AS SELECT N'ALTER  x';","0").comparisonDigest != a.comparisonDigest)
     try SchemaMigration.validateBaseline(try .init(objects:[a]),current:snapshot,keys:[obj.key])
+  }
+  @Test func independentColumnsPreserveAliasBaseTypesUnicodeMaxAndSpecialTableMetadata() throws {
+    let obj=object("SpecialTable",type:"U",issue:"Özel tablo özellikleri için otomatik taşıma kapalı.")
+    var alias=columnRow("Amount",ordinal:1,type:"TDBFLOAT",base:"decimal",schema:"custom]schema",alias:true,length:13,precision:28,scale:8,nullable:false)
+    alias[11]="Turkish_100_CI_AS";alias[12]="1";alias[13]="-1000000000000000000000000000";alias[14]="2";alias[18]="1";alias[20]="1";alias[21]="1"
+    var computed=columnRow("Total",ordinal:4,type:"numeric",base:"numeric",length:17,precision:38,scale:12)
+    computed[15]="([Amount]*(2))";computed[16]="1";computed[17]="((0))"
+    let rows=[alias,columnRow("Title",ordinal:2,type:"nvarchar",base:"nvarchar",length:200,precision:0),columnRow("Notes",ordinal:3,type:"nvarchar",base:"nvarchar",length:-1,precision:0),computed]
+    let columns=try SchemaComparison.decodeColumns(columnExecution(obj,rows:rows),object:obj)
+    #expect(columns[0].dataType=="[custom]]schema].[TDBFLOAT]")
+    #expect(columns[0].baseDataType=="decimal(28,8)" && !columns[0].nullable)
+    #expect(columns[0].identitySeed=="-1000000000000000000000000000" && columns[0].attributes.contains("HIDDEN"))
+    #expect(columns[1].dataType=="nvarchar(100)" && columns[2].dataType=="nvarchar(max)")
+    #expect(columns[3].dataType=="numeric(38,12)" && columns[3].attributes.contains("PERSISTED") && columns[3].defaultSQL=="((0))")
+    #expect(SchemaColumn(ordinal:1,name:"B",typeName:"varbinary",maxLength:-1).dataType=="varbinary(max)")
+    #expect(SchemaColumn(ordinal:1,name:"T",typeName:"datetime2",scale:7).dataType=="datetime2(7)")
+    #expect(SchemaColumn(ordinal:1,name:"F",typeName:"float",precision:24).dataType=="float(24)")
+    #expect(SchemaColumn(ordinal:1,name:"M",typeName:"money",precision:19,scale:4).dataType=="money")
+    #expect(SchemaColumn(ordinal:1,name:"X",typeName:"xml",xmlCollection:"[dbo].[Doc]",xmlDocument:true).dataType=="xml(DOCUMENT [dbo].[Doc])")
+    let other=object("SpecialTable",type:"U",digest:String(repeating:"b",count:64),issue:obj.issue)
+    let diff=try #require(SchemaComparison.compare(source:.init(objects:[obj]),target:.init(objects:[other])).first)
+    #expect(diff.status == .changed && !diff.canStage && !diff.migrationIssue.isEmpty)
+  }
+  @Test func columnComparisonMatchesExactNamesAndExplainsEveryChangedProperty() throws {
+    let source=[SchemaColumn(ordinal:1,name:"Code",typeName:"TDBFLOAT",baseType:"decimal",userDefined:true,maxLength:13,precision:28,scale:8,nullable:false,collation:"Turkish_100_CI_AS",identity:true,identitySeed:"1",identityIncrement:"2",computed:"([Id]+(1))",persisted:true,defaultSQL:"(1)",sparse:true),SchemaColumn(ordinal:2,name:"Added",typeName:"int"),SchemaColumn(ordinal:3,name:"same",typeName:"int")]
+    let target=[SchemaColumn(ordinal:1,name:"Missing",typeName:"int"),SchemaColumn(ordinal:2,name:"Code",typeName:"TDBFLOAT",baseType:"decimal",userDefined:true,maxLength:13,precision:28,scale:6),SchemaColumn(ordinal:3,name:"same",typeName:"int")]
+    let differences=try SchemaComparison.compareColumns(source:source,target:target)
+    #expect(differences.map(\.name)==["Code","Added","same","Missing"])
+    #expect(differences[0].changes==[.dataType,.nullability,.order,.collation,.identity,.computed,.defaultValue,.attributes])
+    #expect(differences[1].changes==[.added] && differences[2].isEqual && differences[3].changes==[.removed])
+    #expect(differences[0].summary.contains("Veri tipi") && differences[2].summary=="Aynı")
+    #expect(try SchemaComparison.compareColumns(source:[.init(ordinal:1,name:"Name",typeName:"int")],target:[.init(ordinal:1,name:"name",typeName:"int")]).count==2)
+    #expect(throws:SQLFailure.self) {try SchemaComparison.compareColumns(source:[source[0],source[0]],target:[])}
+    let decimalAlias=SchemaColumn(ordinal:1,name:"Amount",typeSchema:"dbo",typeName:"TDBFLOAT",baseType:"decimal",userDefined:true,maxLength:13,precision:28,scale:8)
+    let numericAlias=SchemaColumn(ordinal:1,name:"Amount",typeSchema:"dbo",typeName:"TDBFLOAT",baseType:"numeric",userDefined:true,maxLength:13,precision:28,scale:8)
+    #expect(decimalAlias.dataType==numericAlias.dataType)
+    #expect(try SchemaComparison.compareColumns(source:[decimalAlias],target:[numericAlias]).first?.changes==[.dataType])
+  }
+  @Test func columnDecoderRejectsIncompleteInvisibleDuplicateAndMalformedRows() throws {
+    let obj=object("v",type:"V"),row=columnRow("Id")
+    var result=columnExecution(obj,rows:[row])
+    #expect(try SchemaComparison.decodeColumns(result,object:obj).count==1)
+    result.partial=true;#expect(throws:SQLFailure.self) {try SchemaComparison.decodeColumns(result,object:obj)}
+    result=columnExecution(obj,rows:[row]);result.results[0]=Rows(values:[["1","V","0"]]);#expect(throws:SQLFailure.self) {try SchemaComparison.decodeColumns(result,object:obj)}
+    result=columnExecution(obj,rows:[row,row]);#expect(throws:SQLFailure.self) {try SchemaComparison.decodeColumns(result,object:obj)}
+    var malformed=row;malformed[8]="100";result=columnExecution(obj,rows:[malformed]);#expect(throws:SQLFailure.self) {try SchemaComparison.decodeColumns(result,object:obj)}
+    malformed=row;malformed[0]="2";result=columnExecution(obj,rows:[malformed]);#expect(throws:SQLFailure.self) {try SchemaComparison.decodeColumns(result,object:obj)}
+    result=columnExecution(obj,rows:[]);#expect(throws:SQLFailure.self) {try SchemaComparison.decodeColumns(result,object:obj)}
+    result=columnExecution(obj,rows:[row]);result.stoppedEarly=true;#expect(throws:SQLFailure.self) {try SchemaComparison.decodeColumns(result,object:obj)}
+    result=columnExecution(obj,rows:[row]);result.results[1].truncated=true;#expect(throws:SQLFailure.self) {try SchemaComparison.decodeColumns(result,object:obj)}
+  }
+  @Test func viewRefinementPreservesOutputTypeAndIndexDifferencesWithSameDefinition() throws {
+    let source=object("v",type:"V"),target=object("v",type:"V",digest:String(repeating:"b",count:64),id:2)
+    func refine(_ object:SchemaObject,sql:String,structure:String?) throws -> SchemaSnapshot {
+      var result=Execution();result.results=[Rows(values:[[String(object.objectID),sql,"1","1","0",nil,structure]])]
+      return try SchemaComparison.refine(.init(objects:[object]),objects:[object],result:result)
+    }
+    let a=try refine(source,sql:"CREATE VIEW old AS SELECT Code FROM dbo.T;",structure:String(repeating:"c",count:64))
+    let b=try refine(target,sql:"ALTER VIEW dbo.v AS SELECT Code FROM dbo.T;",structure:String(repeating:"d",count:64))
+    let difference=try #require(SchemaComparison.compare(source:a,target:b).first)
+    #expect(difference.status == .changed && !difference.canStage)
+    #expect(a.objects[source.key]?.definitionDigest==b.objects[target.key]?.definitionDigest)
+    #expect(difference.migrationIssue.contains("bağımlı"))
+    #expect(throws:SQLFailure.self) {try SchemaMigration.orderedKeys([source.key],source:a,target:b)}
+    let same=try refine(target,sql:"ALTER VIEW dbo.v AS SELECT Code FROM dbo.T;",structure:String(repeating:"C",count:64))
+    #expect(try SchemaComparison.compare(source:a,target:same).first?.status == .equal)
+    let codeDifferent=try refine(target,sql:"ALTER VIEW dbo.v AS SELECT Other FROM dbo.T;",structure:String(repeating:"d",count:64))
+    #expect(try SchemaComparison.compare(source:a,target:codeDifferent).first?.canStage == true)
+    #expect(throws:SQLFailure.self) {try refine(source,sql:"CREATE VIEW dbo.v AS SELECT 1 AS Code;",structure:nil)}
+    let query=SchemaComparison.refinementQuery([source])
+    #expect(query.contains("sys.columns") && query.contains("sys.indexes") && query.contains("o.type='V'"))
+    #expect(query.contains("base.user_type_id=c.system_type_id") && query.contains("ISNULL(base.name,ty.name) AS base_type"))
   }
   @Test func migrationOrdersDependenciesEscapesSQLAndNeverDropsModules() throws {
     let table=object("T",type:"U",id:10),view=object("v",type:"V",id:11),proc=object("p']\n--",id:12)
@@ -71,6 +150,7 @@ struct SchemaComparisonTests {
     let plan=try SchemaMigration.plan(selected:[obj.key],source:a,target:b,sourceContent:[obj.key:content],targetContent:[old.key:.init(object:old,sql:"old")])
     #expect(plan.sql.contains("ALTER TRIGGER") && plan.sql.contains("DISABLE TRIGGER [dbo].[tr] ON [dbo].[T]"))
     #expect(plan.sql.contains("<> 9") && plan.sql.contains("SCHEMA_ID"))
+    #expect(plan.originalSQL.hasPrefix("-- [dbo].[tr]\n") && plan.desiredSQL.hasPrefix("-- [dbo].[tr]\n"))
     #expect(throws:SQLFailure.self) {try SchemaMigration.validateBaseline(b,current:a,keys:[obj.key])}
     let unsupported=try SchemaSnapshot(objects:[object("tr",type:"TR",issue:"indexed")])
     #expect(throws:SQLFailure.self) {try SchemaMigration.orderedKeys([obj.key],source:unsupported,target:b)}
@@ -85,18 +165,32 @@ struct SchemaComparisonTests {
     #expect(try #require(sql.range(of:"ADD CONSTRAINT [PK_T]")).lowerBound < #require(sql.range(of:"ADD CONSTRAINT [FK_T]")).lowerBound)
     source.columns.removeFirst();#expect(throws:SQLFailure.self) {try SchemaMigration.tableChanges(source:source,target:target)}
     source=target;source.columns[0].identity=true;#expect(throws:SQLFailure.self) {try SchemaMigration.tableChanges(source:source,target:target)}
+    let aliasTarget=TableDefinition(schema:"dbo",name:"T",columns:[.init(id:1,name:"Amount",type:"[dbo].[TDBFLOAT]",baseType:"decimal(28,4)")])
+    var aliasSource=aliasTarget;aliasSource.columns[0].baseType="decimal(28,8)";aliasSource.columns.append(.init(id:2,name:"NewColumn",type:"int"))
+    #expect(throws:SQLFailure.self) {try SchemaMigration.tableChanges(source:aliasSource,target:aliasTarget)}
   }
   @Test(.enabled(if:ProcessInfo.processInfo.environment["MSSQL_TEST_PASSWORD"] != nil))
   func liveInventoryUsesCompleteServerHashesAndDetectsDDLChangeWithRollback() async throws {
     let password=try #require(ProcessInfo.processInfo.environment["MSSQL_TEST_PASSWORD"])
     let c=ODBCConnection();try await c.connect(ServerProfile(trustCertificate:true),password:password)
     let key=SchemaObjectKey(schema:"dbo",name:"StudioCompare_"+UUID().uuidString.replacingOccurrences(of:"-",with:""))
+    let view=SchemaObjectKey(schema:"dbo",name:"StudioView_"+UUID().uuidString.replacingOccurrences(of:"-",with:""))
     do {
       _=try await c.execute("BEGIN TRANSACTION; CREATE TABLE \(key.qualified) ([Id] int NOT NULL);")
-      let a=try SchemaComparison.decode(await c.execute(SchemaComparison.inventory(keys:[key]),limits:SchemaComparison.limits))
+      _=try await c.execute("CREATE VIEW \(view.qualified) AS SELECT [Id] FROM \(key.qualified);")
+      let a=try SchemaComparison.decode(await c.execute(SchemaComparison.inventory(keys:[key,view]),limits:SchemaComparison.limits))
+      let viewBefore=try #require(a.objects[view])
+      let refinedBefore=try SchemaComparison.refine(a,objects:[viewBefore],result:await c.execute(SchemaComparison.refinementQuery([viewBefore]),limits:SchemaComparison.limits))
       _=try await c.execute("ALTER TABLE \(key.qualified) ADD [Code] decimal(28,8) NULL;")
-      let b=try SchemaComparison.decode(await c.execute(SchemaComparison.inventory(keys:[key]),limits:SchemaComparison.limits))
-      #expect(try SchemaComparison.compare(source:a,target:b).first?.status == .changed)
+      _=try await c.execute("ALTER TABLE \(key.qualified) ALTER COLUMN [Id] bigint NOT NULL;")
+      _=try await c.execute("EXEC sys.sp_refreshview \(SQL.literal(view.qualified));")
+      let b=try SchemaComparison.decode(await c.execute(SchemaComparison.inventory(keys:[key,view]),limits:SchemaComparison.limits))
+      let viewAfter=try #require(b.objects[view])
+      let refinedAfter=try SchemaComparison.refine(b,objects:[viewAfter],result:await c.execute(SchemaComparison.refinementQuery([viewAfter]),limits:SchemaComparison.limits))
+      #expect(try SchemaComparison.compare(source:refinedBefore,target:refinedAfter).allSatisfy {$0.status == .changed})
+      #expect(try SchemaComparison.compare(source:refinedBefore,target:refinedAfter).first(where:{$0.key==view})?.canStage == false)
+      let columns=try SchemaComparison.decodeColumns(await c.execute(SchemaComparison.columnsQuery(viewAfter),limits:SchemaComparison.limits),object:viewAfter)
+      #expect(columns.first?.dataType=="bigint" && columns.first?.nullable==false)
       _=try await c.execute("ROLLBACK TRANSACTION;");await c.disconnect()
     } catch {_=try? await c.execute("IF @@TRANCOUNT>0 ROLLBACK TRANSACTION;");await c.disconnect();throw error}
   }
