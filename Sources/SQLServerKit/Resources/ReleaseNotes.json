@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.90",
+    "date": "2026-10-12",
+    "title": "Kompakt DDL karşılaştırma ve tek nesnede hızlı taşıma",
+    "changes": [
+      "Kaynak, hedef, karşılaştırma, nesne/şema arama ve tür filtresi tek kompakt satırda toplandı. Hedef veritabanı boş açılır; karşılaştırmadan önce açıkça seçilmesi gerekir.",
+      "Taşıma toplu seçim yerine seçilen tek nesne için hazırlanır. SQL modülü taşıma önizlemesinde satır kaymaları ve biçim farkları bütün kodu değişmiş göstermez; gerçek değişiklikler hizalı olarak vurgulanır.",
+      "Taşıma sonrasında yalnız ilgili DDL yeniden okunup karşılaştırılır. Diğer nesneler, arama/tür filtreleri ve Kod Farkı/Kolonlar tercihi korunur; tüm liste yeniden yüklenmez.",
+      "Explorer ve mevcut tamamlama önbelleğinde yalnız değişen nesne güncellenir. Gönderim öncesinde güncel bağımlılıklar ve nesne kimliği doğrulanır; belirsiz sonuçlarda taşıma otomatik tekrarlanmaz."
+    ]
+  },
+  {
     "version": "0.2.89",
     "date": "2026-10-12",
     "title": "Tüm SQL modüllerinde temiz kod farkları ve daha doğru satır eşleme",

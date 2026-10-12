@@ -261,9 +261,20 @@ extension CatalogDiskIndex {
 public actor SQLCatalogService {
   public static let shared = SQLCatalogService(index:.shared)
   private let index: CatalogDiskIndex
-  private var jobs: [String:Task<SQLIntelligence.Catalog,Error>] = [:]
+  private struct RefreshJob {
+    let id:UUID
+    let task:Task<SQLIntelligence.Catalog,Error>
+  }
+  private struct TargetJob {
+    let id:UUID
+    let task:Task<SQLIntelligence.Catalog?,Error>
+  }
+  private var jobs: [String:RefreshJob] = [:]
+  private var targets: [String:TargetJob] = [:]
   private var memory: [String:SQLIntelligence.Catalog] = [:]
-  public init(index: CatalogDiskIndex) { self.index = index }
+  private let refreshFixture:(@Sendable (ServerProfile,String,String) async throws -> SQLCatalogSnapshot)?
+  public init(index: CatalogDiskIndex) { self.index = index;refreshFixture=nil }
+  init(index:CatalogDiskIndex,refreshFixture:@escaping @Sendable (ServerProfile,String,String) async throws -> SQLCatalogSnapshot) {self.index=index;self.refreshFixture=refreshFixture}
   private func remember(_ value: SQLIntelligence.Catalog, scope: String) {
     if memory[scope] == nil && memory.count >= 8, let oldest = memory.min(by: { $0.value.snapshot.synchronizedAt < $1.value.snapshot.synchronizedAt })?.key { memory[oldest] = nil }
     memory[scope] = value
@@ -272,16 +283,79 @@ public actor SQLCatalogService {
     let scope = CatalogDiskIndex.scope(profile:profile,database:database)
     if let value = memory[scope] { return value }
     if let snapshot = try await index.completionSnapshot(scope:scope) {
+      if let value=memory[scope] {return value}
       let value = SQLIntelligence.Catalog(snapshot:snapshot); remember(value,scope:scope); return value
     }
     return nil
   }
+  private func finish(_ job:RefreshJob,scope:String,value:SQLIntelligence.Catalog)->SQLIntelligence.Catalog {
+    // Every waiter can finalize the same full refresh. A late waiter must not
+    // overwrite a scoped update that already followed the completed refresh.
+    if jobs[scope]?.id==job.id {remember(value,scope:scope);jobs[scope]=nil}
+    return memory[scope] ?? value
+  }
+  /// Updates one already cached completion object without a connection or a
+  /// whole-catalog freshness change. Names are exact, including case/Unicode.
+  public func replaceTarget(profile:ServerProfile,database:String,schema:String,name:String,symbol:CatalogSymbol?) async throws -> SQLIntelligence.Catalog? {
+    func valid(_ text:String,empty:Bool=false)->Bool {(empty || !text.isEmpty) && text.utf16.count<=128 && !text.utf16.contains(0)}
+    guard valid(database),valid(schema,empty:true),valid(name),symbol.map({
+      $0.schema.utf8.elementsEqual(schema.utf8) && $0.name.utf8.elementsEqual(name.utf8) && valid($0.kind) && $0.columns.count<=250_000 && $0.columns.allSatisfy {valid($0)}
+    }) ?? true else {throw SQLFailure("Hedef kolon indeksi bilgisi geçersiz veya boyut sınırını aşıyor.")}
+    let scope=CatalogDiskIndex.scope(profile:profile,database:database),previous=targets[scope]
+    let id=UUID()
+    let task=Task<SQLIntelligence.Catalog?,Error> {
+      // Different DDL notifications for the same database preserve each
+      // other's symbols, even while persistence suspends this actor.
+      if let previous {_ = try? await previous.task.value}
+      if let job=jobs[scope] {
+        do {_ = finish(job,scope:scope,value:try await job.task.value)}
+        catch {if jobs[scope]?.id==job.id {jobs[scope]=nil}}
+      }
+      guard let value=try await cached(profile:profile,database:database) else {return nil}
+      var symbols=value.snapshot.symbols
+      let matches:(CatalogSymbol)->Bool = {$0.schema.utf8.elementsEqual(schema.utf8) && $0.name.utf8.elementsEqual(name.utf8)}
+      if let position=symbols.firstIndex(where:matches) {
+        symbols.removeAll(where:matches)
+        if let symbol {symbols.insert(symbol,at:position)}
+      } else if let symbol {symbols.append(symbol)}
+      guard symbols.count<=50_000,symbols.reduce(0,{$0+max(1,$1.columns.count)})<=250_000 else {throw SQLFailure("Akıllı editör indeks boyutu sınırına ulaştı; son tamamlanan indeks korundu.")}
+      let snapshot=SQLCatalogSnapshot(symbols:symbols,synchronizedAt:value.snapshot.synchronizedAt)
+      try await index.saveCompletionSnapshot(scope:scope,snapshot:snapshot)
+      let updated=SQLIntelligence.Catalog(snapshot:snapshot)
+      remember(updated,scope:scope)
+      return updated
+    }
+    targets[scope]=TargetJob(id:id,task:task)
+    do {let value=try await task.value;if targets[scope]?.id==id {targets[scope]=nil};return value}
+    catch {if targets[scope]?.id==id {targets[scope]=nil};throw error}
+  }
   public func refresh(profile: ServerProfile, password: String, database: String, force: Bool = false) async throws -> SQLIntelligence.Catalog {
     let scope = CatalogDiskIndex.scope(profile:profile,database:database)
-    if let job = jobs[scope] { return try await job.value }
-    if !force, let value = try await cached(profile:profile,database:database), value.fresh { return value }
+    while true {
+      while let target=targets[scope] {
+        _ = try? await target.task.value
+        if targets[scope]?.id==target.id {targets[scope]=nil}
+      }
+      if let job = jobs[scope] {
+        do {return finish(job,scope:scope,value:try await job.task.value)}
+        catch {if jobs[scope]?.id==job.id {jobs[scope]=nil};throw error}
+      }
+      if force {break}
+      let value=try await cached(profile:profile,database:database)
+      // Reading a cold disk snapshot suspends the actor; another operation may
+      // have established a full refresh or scoped update during that read.
+      if targets[scope] != nil || jobs[scope] != nil {continue}
+      if let value,value.fresh {return value}
+      break
+    }
     let index = self.index
+    let refreshFixture=self.refreshFixture
     let job = Task<SQLIntelligence.Catalog,Error> {
+      if let refreshFixture {
+        let snapshot=try await refreshFixture(profile,password,database)
+        try await index.saveCompletionSnapshot(scope:scope,snapshot:snapshot)
+        return SQLIntelligence.Catalog(snapshot:snapshot)
+      }
       let connection = ODBCConnection()
       var profile = profile; profile.database = database
       do {
@@ -309,8 +383,9 @@ public actor SQLCatalogService {
         return SQLIntelligence.Catalog(snapshot:snapshot)
       } catch { await connection.disconnect(); throw error }
     }
-    jobs[scope] = job
-    do { let value = try await job.value; remember(value,scope:scope); jobs[scope] = nil; return value }
-    catch { jobs[scope] = nil; throw error }
+    let refresh=RefreshJob(id:UUID(),task:job)
+    jobs[scope] = refresh
+    do {return finish(refresh,scope:scope,value:try await job.value)}
+    catch {if jobs[scope]?.id==refresh.id {jobs[scope]=nil};throw error}
   }
 }

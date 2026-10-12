@@ -27,7 +27,6 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
   @Published private(set) var error=""
   @Published var search="" {didSet {filter()}}
   @Published var kind="Tüm türler" {didSet {filter()}}
-  @Published var marked=Set<SchemaObjectKey>()
   @Published var focused: SchemaObjectKey?
   @Published private(set) var sourceSQL=""
   @Published private(set) var targetSQL=""
@@ -58,10 +57,15 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
   private(set) var sourceSnapshot: SchemaSnapshot?
   private(set) var targetSnapshot: SchemaSnapshot?
   private var sourceGeneration:UUID?,targetGeneration:UUID?
-  private var contextCurrent:Bool {sourceGeneration != nil && targetGeneration != nil && sourceGeneration==source?.server.generation && targetGeneration==target?.server.generation}
+  private var sourceContextID:String?,targetContextID:String?
+  private var contextCurrent:Bool {
+    sourceContextID==sourceID && targetContextID==targetID && sourceGeneration != nil && targetGeneration != nil &&
+      sourceGeneration==source?.server.generation && targetGeneration==target?.server.generation &&
+      source?.server.online==true && target?.server.online==true
+  }
   private var cache: [String:SchemaObjectContent]=[:]
   private var columnCache:[String:[SchemaColumn]]=[:]
-  private var revision=UUID(),detailRevision=UUID()
+  private var revision=UUID(),detailRevision=UUID(),cacheRevision=UUID()
   static private(set) var activeApplications=0
   var cancelOperation:(()->Void)?
   private var comparisonTask:Task<Void,Never>?
@@ -72,7 +76,7 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
     self.endpoints=endpoints
     let initialSource=sourceID ?? endpoints.first?.id ?? ""
     self.sourceID=initialSource
-    self.targetID=targetID ?? endpoints.first(where:{$0.id != initialSource})?.id ?? ""
+    self.targetID=targetID ?? ""
     self.reader=reader ?? {endpoint,sql in if let fixture=endpoint.server.schemaComparisonFixture {return try fixture(endpoint.database,sql)};return try await endpoint.server.catalog(sql,database:endpoint.database,limits:SchemaComparison.limits)}
     self.writer=writer ?? {endpoint,sql in guard endpoint.server.schemaComparisonFixture == nil else {throw SQLFailure("Çevrimdışı önizleme; SQL gönderilmez.")};var l=SchemaComparison.limits;l.timeout=120;return try await endpoint.server.catalog(sql,database:endpoint.database,limits:l)}
   }
@@ -80,8 +84,12 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
   var target: SchemaEndpoint? {endpoints.first {$0.id==targetID}}
   var validPair: Bool {guard let source,let target else {return false};return source.server.online && target.server.online && !source.sameDatabase(as:target)}
   var currentDifference: SchemaDifference? {differences.first {$0.key==focused}}
+  var canPreparePlan:Bool {!busy && !applying && validPair && contextCurrent && currentDifference?.canStage==true}
   func invalidate() {
-    revision=UUID();detailRevision=UUID();sourceGeneration=nil;targetGeneration=nil;differences=[];visible=[];marked=[];focused=nil;sourceSnapshot=nil;targetSnapshot=nil;cache=[:];columnCache=[:];sourceSQL="";targetSQL="";detailReady=false;detailLoading=false;detailComparison=nil;columnDifferences=[];columnsReady=false;detailNotice="";diffTruncated=false;changeIndex=0;error="";message="Seçim değişti. Yeniden karşılaştırın."
+    revision=UUID();detailRevision=UUID();cacheRevision=UUID();sourceGeneration=nil;targetGeneration=nil;sourceContextID=nil;targetContextID=nil;differences=[];visible=[];focused=nil;sourceSnapshot=nil;targetSnapshot=nil;cache=[:];columnCache=[:];clearDetail();error="";message="Seçim değişti. Yeniden karşılaştırın."
+  }
+  private func clearDetail() {
+    sourceSQL="";targetSQL="";detailReady=false;detailLoading=false;detailComparison=nil;columnDifferences=[];columnsReady=false;detailNotice="";diffTruncated=false;changeIndex=0
   }
   func cancel() {guard !applying else {return};comparisonTask?.cancel();cancelOperation?();invalidate();busy=false;message="Karşılaştırma iptal edildi."}
   func filter() {
@@ -111,12 +119,16 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
       guard token==revision,sg==source.server.generation,tg==target.server.generation else {return}
       let final=try await Task.detached(priority:.userInitiated) {try SchemaComparison.compare(source:left,target:right)}.value
       guard token==revision,sg==source.server.generation,tg==target.server.generation else {return}
-      sourceSnapshot=left;targetSnapshot=right;sourceGeneration=sg;targetGeneration=tg;differences=final;filter()
-      message="\(differences.count) nesne · \(differentCount) farklı · \(sameCount) aynı"
-      if unavailableCount>0 {message += " · \(unavailableCount) karşılaştırılamadı (tanım şifreli veya okunamıyor)"}
+      sourceSnapshot=left;targetSnapshot=right;sourceGeneration=sg;targetGeneration=tg;sourceContextID=source.id;targetContextID=target.id;differences=final;filter()
+      message=comparisonSummary
     } catch {
       guard token==revision else {return};self.error=error is CancellationError ? "İşlem iptal edildi.":error.localizedDescription;message="Karşılaştırma tamamlanamadı."
     }
+  }
+  private var comparisonSummary:String {
+    var text="\(differences.count) nesne · \(differentCount) farklı · \(sameCount) aynı"
+    if unavailableCount>0 {text += " · \(unavailableCount) karşılaştırılamadı (tanım şifreli veya okunamıyor)"}
+    return text
   }
   private func refine(_ snapshot:SchemaSnapshot,keys:[SchemaObjectKey],endpoint:SchemaEndpoint) async throws -> SchemaSnapshot {
     var result=snapshot
@@ -132,22 +144,26 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
   private func readContent(_ object:SchemaObject,endpoint:SchemaEndpoint,expected:SchemaSnapshot,fresh:Bool=false) async throws -> SchemaObjectContent {
     let key=endpoint.id+"|"+String(object.objectID)+"|"+(object.digest ?? "")
     if !fresh,let hit=cache[key] {return hit}
+    let cacheToken=cacheRevision,generation=endpoint.server.generation
     let result=try await reader(endpoint,SchemaComparison.contentQuery(object))
     let snapshot=try SchemaComparison.decode(await reader(endpoint,SchemaComparison.inventory(keys:[object.key])))
+    guard generation==endpoint.server.generation,endpoint.server.online else {throw SQLFailure("Bağlantı değişti. Yeniden karşılaştırın.")}
     try SchemaMigration.validateBaseline(expected,current:snapshot,keys:[object.key])
     let content=try await Task.detached(priority:.userInitiated) {try SchemaComparison.decodeContent(result,object:object)}.value
-    if content.sql.utf8.count<2*1024*1024 {if cache.count>=24 {cache.removeAll()};cache[key]=content}
+    if cacheToken==cacheRevision,content.sql.utf8.count<2*1024*1024 {if cache.count>=24 {cache.removeAll()};cache[key]=content}
     return content
   }
   private func readColumns(_ object:SchemaObject,endpoint:SchemaEndpoint,expected:SchemaSnapshot) async throws -> [SchemaColumn] {
     let key=endpoint.id+"|"+String(object.objectID)+"|"+(object.digest ?? "")
     if let hit=columnCache[key] {return hit}
+    let cacheToken=cacheRevision,generation=endpoint.server.generation
     let result=try await reader(endpoint,SchemaComparison.columnsQuery(object))
     let snapshot=try SchemaComparison.decode(await reader(endpoint,SchemaComparison.inventory(keys:[object.key])))
+    guard generation==endpoint.server.generation,endpoint.server.online else {throw SQLFailure("Bağlantı değişti. Yeniden karşılaştırın.")}
     try SchemaMigration.validateBaseline(expected,current:snapshot,keys:[object.key])
     let columns=try await Task.detached(priority:.userInitiated) {try SchemaComparison.decodeColumns(result,object:object)}.value
     let bytes=columns.reduce(0) {$0+$1.name.utf8.count+$1.dataType.utf8.count+$1.attributes.utf8.count+$1.collation.utf8.count+128}
-    if bytes<2*1024*1024 {if columnCache.count>=24 {columnCache.removeAll()};columnCache[key]=columns}
+    if cacheToken==cacheRevision,bytes<2*1024*1024 {if columnCache.count>=24 {columnCache.removeAll()};columnCache[key]=columns}
     return columns
   }
   private func columnsIfPresent(_ object:SchemaObject?,endpoint:SchemaEndpoint,expected:SchemaSnapshot) async throws -> [SchemaColumn] {
@@ -219,8 +235,9 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
   func preparePlan() async -> SchemaMigrationPlan? {
     guard !busy,!applying,validPair,let source,let target,let a=sourceSnapshot,let b=targetSnapshot else {return nil}
     guard contextCurrent else {error="Bağlantı değişti. Yeniden karşılaştırın.";return nil}
-    busy=true;error="";message="Seçilen nesnelerin taşıma önizlemesi hazırlanıyor…"
-    let token=revision,selection=marked
+    guard let difference=currentDifference,difference.canStage else {error="Taşımak için uygun bir nesne seçin.";return nil}
+    busy=true;error="";message="Seçilen nesnenin taşıma önizlemesi hazırlanıyor…"
+    let token=revision,key=difference.key,selection:Set<SchemaObjectKey>=[difference.key]
     defer {if token==revision {busy=false}}
     do {
       let keys=try SchemaMigration.orderedKeys(selection,source:a,target:b)
@@ -233,38 +250,111 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
       }
       let plan=try await Task.detached(priority:.userInitiated) {try SchemaMigration.plan(selected:selection,source:a,target:b,sourceContent:left,targetContent:right)}.value
       guard token==revision else {return nil}
+      guard focused==key else {throw SQLFailure("Seçim değişti. Taşınacak nesneyi yeniden önizleyin.")}
       guard contextCurrent else {throw SQLFailure("Bağlantı değişti. Yeniden karşılaştırın.")}
+      guard plan.keys==[key] else {throw SQLFailure("Her taşıma işleminde yalnız bir nesne uygulanabilir.")}
       try Task.checkCancellation()
       message="\(keys.count) nesne · Hedef: \(target.title) · Henüz gönderilmedi"
       return plan
     } catch {guard token==revision else {return nil};self.error=error.localizedDescription;message="Önizleme oluşturulamadı.";return nil}
   }
   func apply(_ plan:SchemaMigrationPlan,sourceID:String,targetID:String) async {
+    guard plan.keys.count==1,let key=plan.keys.first else {error="Her taşıma işleminde yalnız bir nesne uygulanabilir. Nesneleri tek tek önizleyin.";return}
     guard !busy,!applying,self.sourceID==sourceID,self.targetID==targetID,validPair,let source,let target,
       let a=sourceSnapshot,let b=targetSnapshot else {error="Karşılaştırma bağlamı değişti; yeniden önizleyin.";return}
     guard contextCurrent else {error="Bağlantı değişti. Yeniden karşılaştırın.";return}
-    applying=true;Self.activeApplications+=1;var holdsApplication=true;defer {if holdsApplication {Self.activeApplications-=1}};error="";message="Hedef doğrulanıyor ve değişiklikler uygulanıyor…"
-    let sg=source.server.generation,tg=target.server.generation
+    applying=true;Self.activeApplications+=1
+    defer {applying=false;Self.activeApplications-=1}
+    error="";message="Hedef doğrulanıyor ve değişiklik uygulanıyor…"
+    let token=revision,sg=source.server.generation,tg=target.server.generation
+    var committed=false,writeAttempted=false
+    func validateContext() throws {
+      try Task.checkCancellation()
+      guard token==revision,self.sourceID==sourceID,self.targetID==targetID,
+        sg==source.server.generation,tg==target.server.generation,source.server.online,target.server.online else {throw SQLFailure("Bağlantı veya karşılaştırma seçimi değişti; yeniden karşılaştırın.")}
+    }
     do {
       try SchemaMigration.validateBaseline(plan.source,current:a,keys:plan.keys)
       try SchemaMigration.validateBaseline(plan.target,current:b,keys:plan.keys)
-      async let ar=reader(source,SchemaComparison.inventory())
-      async let br=reader(target,SchemaComparison.inventory())
-      let (freshA,freshB)=try await (ar,br)
-      let currentA=try SchemaComparison.decode(freshA),currentB=try SchemaComparison.decode(freshB)
+      // Read the selected owner first: dependency resolution may change after the
+      // preview even while its definition bytes stay unchanged (for example rename).
+      let currentA=try await readInventory(source,keys:plan.keys)
+      try validateContext()
       try SchemaMigration.validateBaseline(plan.source,current:currentA,keys:plan.keys)
+      let targetKeys=Set(plan.keys).union(currentA.dependencies[key] ?? []).sorted()
+      let currentB=try await readInventory(target,keys:targetKeys)
+      try validateContext()
       try SchemaMigration.validateBaseline(plan.target,current:currentB,keys:plan.keys)
       _=try SchemaMigration.orderedKeys(Set(plan.keys),source:currentA,target:currentB)
-      guard sg==source.server.generation,tg==target.server.generation,source.server.online,target.server.online else {throw SQLFailure("Bağlantı değişti; yeniden karşılaştırın.")}
+      try validateContext()
+      writeAttempted=true
       let result=try await writer(target,plan.sql)
       guard !result.partial,!result.stoppedEarly else {throw SQLFailure("Gönderim sonucu tamamlanmadı. Otomatik tekrar yapılmadı; hedefi yeniden karşılaştırın.")}
-      NotificationCenter.default.post(name:.init("studioSchemaComparedApplied"),object:target.server,userInfo:["database":target.database])
-      applying=false;Self.activeApplications-=1;holdsApplication=false
-      await compare()
-      message="\(plan.keys.count) nesne hedefe uygulandı. "+message
+      committed=true
+      NotificationCenter.default.post(name:.init("studioSchemaComparedApplied"),object:target.server,userInfo:["database":target.database,"key":key,"type":plan.source.objects[key]?.type ?? ""])
+      try validateContext()
+      evictCaches(for:key,source:source,target:target,sourceSnapshot:a,targetSnapshot:b)
+      if focused==key {detailRevision=UUID();clearDetail()}
+      message="Nesne hedefe uygulandı; güncel farkı kontrol ediliyor…"
+      async let ar=readInventory(source,keys:[key])
+      async let br=readInventory(target,keys:[key])
+      let (freshA,freshB)=try await (ar,br)
+      try validateContext()
+      let preliminary=try SchemaComparison.compare(source:freshA,target:freshB)
+      let refinementKeys=preliminary.filter {$0.status == .changed && $0.source?.type != "U" && $0.source?.type != "SN"}.map(\.key)
+      async let refinedA=refine(freshA,keys:refinementKeys,endpoint:source)
+      async let refinedB=refine(freshB,keys:refinementKeys,endpoint:target)
+      let (left,right)=try await (refinedA,refinedB)
+      try validateContext()
+      let row=try SchemaComparison.compare(source:left,target:right).first
+      sourceSnapshot=merging(left,into:a,key:key);targetSnapshot=merging(right,into:b,key:key)
+      if let index=differences.firstIndex(where:{$0.key==key}) {
+        if let row {differences[index]=row} else {differences.remove(at:index)}
+      }
+      filter()
+      if focused==key {
+        if let row,Self.isListedDifference(row) {await loadDetail()}
+        else {focused=nil;clearDetail();detailSummary="\(key.qualified) güncellendi. Başka bir nesne seçin."}
+      }
+      message="\(key.qualified) hedefe uygulandı. "+comparisonSummary
     } catch {
-      applying=false;self.error=error.localizedDescription+"\nOtomatik tekrar yapılmadı. Ağ kesildiyse sonucu hedefte yeniden karşılaştırın.";message="Taşıma tamamlanamadı."
+      if writeAttempted,token==revision,self.sourceID==sourceID,self.targetID==targetID {
+        evictCaches(for:key,source:source,target:target,sourceSnapshot:a,targetSnapshot:b)
+        sourceSnapshot?.objects.removeValue(forKey:key);sourceSnapshot?.dependencies.removeValue(forKey:key)
+        targetSnapshot?.objects.removeValue(forKey:key);targetSnapshot?.dependencies.removeValue(forKey:key)
+        differences.removeAll {$0.key==key};filter()
+        if focused==key {focused=nil;detailRevision=UUID();clearDetail();detailSummary=key.qualified}
+      }
+      if committed {
+        // A committed write is never reported as a failed/retryable migration.
+        // Remove only the unverified row; leaving its old digest would advertise
+        // stale metadata as a current, actionable comparison.
+        self.error="Nesne hedefe uygulandı, ancak güncel karşılaştırması alınamadı: "+error.localizedDescription+"\nTaşıma tekrar gönderilmedi. Güncel liste için yeniden karşılaştırın."
+        message="\(key.qualified) hedefe uygulandı; güncel farkı doğrulanamadı."
+      } else {
+        self.error=error.localizedDescription+"\nOtomatik tekrar yapılmadı. Ağ kesildiyse sonucu hedefte yeniden karşılaştırın."
+        message=writeAttempted ? "Taşıma sonucu doğrulanamadı.":"Taşıma tamamlanamadı."
+      }
     }
+  }
+  private func readInventory(_ endpoint:SchemaEndpoint,keys:[SchemaObjectKey]) async throws -> SchemaSnapshot {
+    let result=try await reader(endpoint,SchemaComparison.inventory(keys:keys))
+    let snapshot=try await Task.detached(priority:.userInitiated) {try SchemaComparison.decode(result)}.value
+    let requested=Set(keys)
+    guard Set(snapshot.objects.keys).isSubset(of:requested),Set(snapshot.dependencies.keys).isSubset(of:requested) else {throw SQLFailure("Seçilen nesnenin kapsamı dışında DDL metadata’sı alındı.")}
+    return snapshot
+  }
+  private func merging(_ update:SchemaSnapshot,into snapshot:SchemaSnapshot,key:SchemaObjectKey)->SchemaSnapshot {
+    var result=snapshot
+    result.objects[key]=update.objects[key]
+    result.dependencies[key]=update.dependencies[key]
+    return result
+  }
+  private func evictCaches(for key:SchemaObjectKey,source:SchemaEndpoint,target:SchemaEndpoint,sourceSnapshot:SchemaSnapshot,targetSnapshot:SchemaSnapshot) {
+    cacheRevision=UUID()
+    let prefixes=[(source,sourceSnapshot.objects[key]),(target,targetSnapshot.objects[key])].compactMap {endpoint,object in object.map {endpoint.id+"|"+String($0.objectID)+"|"}}
+    cache=cache.filter {entry in !prefixes.contains {entry.key.hasPrefix($0)}}
+    columnCache=columnCache.filter {entry in !prefixes.contains {entry.key.hasPrefix($0)}}
   }
 }
 
@@ -273,16 +363,14 @@ struct SchemaComparisonPanel: View {
   let preview: () -> Void
   let openSQL: (String) -> Void
   var body: some View {
-    VStack(alignment:.leading,spacing:10) {
-      heading
-      endpoints
-      filters
+    VStack(alignment:.leading,spacing:8) {
+      controls
       if !model.error.isEmpty {
         Label(model.error,systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(Color(nsColor:StudioTheme.danger)).textSelection(.enabled).lineLimit(3)
       }
       VSplitView {
-        objects.frame(minHeight:140,idealHeight:230)
-        details.frame(minHeight:250,idealHeight:420)
+        objects.frame(minHeight:120,idealHeight:180)
+        details.frame(minHeight:370,idealHeight:500)
       }
       footer
     }.padding(14).studioPanel().controlSize(.small)
@@ -290,50 +378,24 @@ struct SchemaComparisonPanel: View {
       .onChange(of:model.targetID) {_,_ in model.invalidate()}
       .task(id:model.focused) {await model.loadDetail()}
   }
-  private var heading:some View {
-    HStack(spacing:9) {
-      Image(systemName:"arrow.left.arrow.right.square").font(.system(size:19,weight:.medium)).foregroundStyle(Color(nsColor:StudioTheme.accent))
-      Text("DDL Karşılaştırma").font(.system(size:16,weight:.semibold))
-      Spacer(minLength:12)
-      if !model.differences.isEmpty {
-        metric("Farklı",count:model.differentCount,color:StudioTheme.warning)
-        metric("Aynı",count:model.sameCount,color:StudioTheme.success)
-        if model.unavailableCount>0 {metric("Okunamadı",count:model.unavailableCount,color:StudioTheme.danger).help("Tanımı şifreli veya okunamayan nesnelerde fark doğrulanamaz; bu nesneler listelenmez.")}
-      }
-    }.frame(height:28)
-  }
-  private var endpoints:some View {
-    HStack(spacing:10) {
+  private var controls:some View {
+    HStack(spacing:8) {
       endpoint("Kaynak",icon:"arrow.up.forward",selection:$model.sourceID)
       StudioActionButton("Kaynak ve hedefi değiştir",icon:"arrow.left.arrow.right") {
         let old=model.sourceID;model.sourceID=model.targetID;model.targetID=old;model.invalidate()
-      }.labelStyle(.iconOnly).disabled(model.busy || model.applying).accessibilityIdentifier("schemaSwap")
+      }.labelStyle(.iconOnly).disabled(model.source == nil || model.target == nil || model.busy || model.applying).accessibilityIdentifier("schemaSwap")
       endpoint("Hedef",icon:"arrow.down.forward",selection:$model.targetID)
       if model.busy {ProgressView().controlSize(.small)}
       StudioActionButton(model.busy ? "İptal":"Karşılaştır",icon:model.busy ? "xmark":"arrow.triangle.branch",tint:Color(nsColor:model.busy ? StudioTheme.warning:StudioTheme.success)) {
         if model.busy {model.cancel()} else {model.startComparison()}
       }.disabled((!model.validPair && !model.busy) || model.applying).accessibilityIdentifier("schemaCompare")
-    }.studioCard(padding:10)
-  }
-  private var filters:some View {
-    HStack(spacing:10) {
-      TextField("Nesne veya şema ara…",text:$model.search).textFieldStyle(.roundedBorder).frame(minWidth:160,maxWidth:300).accessibilityIdentifier("schemaSearch")
-      Picker("Nesne türü",selection:$model.kind) {ForEach(["Tüm türler","Tablo","View","Prosedür","Fonksiyon","Trigger","Synonym"],id:\.self) {Text($0)}}.labelsHidden().frame(width:145).accessibilityLabel("Nesne türü")
-      Text("Tablo: kolonlar · View: kod").font(.caption).foregroundStyle(.secondary).help("Yalnız farklı nesneler listelenir. Tablolarda kolon özellikleri, view’larda SQL kodu karşılaştırılır; yalnız bir veritabanında bulunan nesneler de gösterilir.")
-      Spacer(minLength:0)
-      Text("\(model.visible.count) nesne · \(model.marked.count) seçili").font(.caption).foregroundStyle(.secondary).lineLimit(1)
-      StudioActionButton("Görünen taşınabilir nesneleri seç",icon:"checkmark.square") {
-        model.marked.formUnion(model.visible.filter {$0.canStage && !model.marked.contains($0.key)}.prefix(max(0,100-model.marked.count)).map(\.key))
-      }.labelStyle(.iconOnly).disabled(model.busy || model.applying).accessibilityIdentifier("schemaSelectVisible")
-      StudioActionButton("Seçimi temizle",icon:"minus.square") {model.marked=[]}.labelStyle(.iconOnly).disabled(model.marked.isEmpty || model.applying).accessibilityIdentifier("schemaClearSelection")
-    }
+      Divider().frame(height:22)
+      TextField("Nesne veya şema ara…",text:$model.search).textFieldStyle(.roundedBorder).frame(minWidth:140,idealWidth:190,maxWidth:260).accessibilityLabel("Nesne veya şema ara").accessibilityIdentifier("schemaSearch")
+      Picker("Nesne türü",selection:$model.kind) {ForEach(["Tüm türler","Tablo","View","Prosedür","Fonksiyon","Trigger","Synonym"],id:\.self) {Text($0)}}.labelsHidden().frame(width:110).accessibilityLabel("Nesne türü").accessibilityIdentifier("schemaKind")
+    }.studioCard(padding:8)
   }
   private var objects:some View {
     Table(model.visible,selection:$model.focused) {
-      TableColumn("Taşı") {row in
-        Toggle("\(row.key.qualified) taşıma için seç",isOn:Binding(get:{model.marked.contains(row.key)},set:{if $0 {if model.marked.count<100 {model.marked.insert(row.key)}} else {model.marked.remove(row.key)};model.focused=row.key}))
-          .labelsHidden().toggleStyle(.checkbox).disabled(!row.canStage || model.applying || model.busy).help(row.migrationIssue.isEmpty ? "Taşıma önizlemesine ekle":row.migrationIssue)
-      }.width(36)
       TableColumn("Nesne") {row in Label(row.key.qualified,systemImage:symbol(row)).lineLimit(1).help(row.key.qualified)}.width(min:200,ideal:440)
       TableColumn("Tür") {Text(($0.source ?? $0.target)?.kind ?? "")}.width(90)
       TableColumn("Durum") {row in
@@ -342,7 +404,7 @@ struct SchemaComparisonPanel: View {
           else {Label(row.status.rawValue,systemImage:statusSymbol(row.status)).foregroundStyle(Color(nsColor:tone(row.status)))}
         }.help(row.migrationIssue)
       }.width(min:160,ideal:190)
-    }.accessibilityIdentifier("schemaDifferences")
+    }.disabled(model.applying).accessibilityIdentifier("schemaDifferences")
       .overlay {if model.visible.isEmpty && !model.busy {
         StudioEmptyState(title:model.sourceSnapshot == nil ? "Karşılaştırmaya hazır":model.differentCount==0 ? "Fark bulunan nesne yok":"Eşleşen nesne yok",icon:model.sourceSnapshot == nil ? "arrow.triangle.branch":model.differentCount==0 ? "checkmark.circle":"line.3.horizontal.decrease",detail:model.sourceSnapshot == nil ? "Kaynak ve hedefi seçip Karşılaştır’a basın.":model.differentCount==0 ? model.unavailableCount>0 ? "Okunamayan nesneler yukarıda ayrıca belirtilir.":"Karşılaştırılabilen nesnelerde fark yok.":"Aramayı veya tür filtresini değiştirin.").padding(.top,28)
       }}
@@ -406,21 +468,25 @@ struct SchemaComparisonPanel: View {
     HStack(spacing:10) {
       VStack(alignment:.leading,spacing:3) {
         Text(model.message).font(.caption).lineLimit(1).help(model.message)
-        Text("Taşıma yalnız şemayı değiştirir.").font(.caption2).foregroundStyle(.secondary).help("Veri, izin, sahiplik ve extended properties taşınmaz. Mevcut tablo silinmez veya yeniden oluşturulmaz.")
+        Text("Taşıma için bir nesne seçin").font(.caption2).foregroundStyle(.secondary).lineLimit(1).help("Tablo: kolonlar · SQL modülü: kod. Yalnız doğrulanmış farklar listelenir. Taşıma yalnız şemayı değiştirir; veri, izin ve sahiplik taşınmaz.")
+      }.frame(minWidth:0,maxWidth:.infinity,alignment:.leading).layoutPriority(-1)
+      if !model.differences.isEmpty {
+        metric("Farklı",count:model.differentCount,color:StudioTheme.warning)
+        metric("Aynı",count:model.sameCount,color:StudioTheme.success)
+        if model.unavailableCount>0 {metric("Okunamadı",count:model.unavailableCount,color:StudioTheme.danger).help("Tanımı şifreli veya okunamayan nesneler listelenmez.")}
       }
-      Spacer(minLength:8)
       if model.applying {ProgressView().controlSize(.small)}
       StudioActionButton("Kaynak SQL’i hedef sekmede aç",icon:"doc.text") {openSQL(model.sourceSQL)}.labelStyle(.iconOnly)
         .disabled(model.detailComparison == nil || model.currentDifference?.source == nil || model.sourceSQL.isEmpty || model.applying).accessibilityIdentifier("schemaOpenSQL")
       StudioActionButton("Taşıma Önizlemesi",icon:"paperplane") {preview()}.buttonStyle(StudioPrimaryButton())
-        .disabled(model.marked.isEmpty || model.marked.count>100 || model.busy || model.applying).accessibilityIdentifier("schemaMigrationPreview")
+        .disabled(!model.canPreparePlan).accessibilityIdentifier("schemaMigrationPreview")
     }
   }
   private func endpoint(_ title:String,icon:String,selection:Binding<String>)->some View {
     HStack(spacing:7) {
       Label(title,systemImage:icon).font(.caption).foregroundStyle(.secondary)
-      Picker(title,selection:selection) {Text("Veritabanı seçin").tag("");ForEach(model.endpoints,id:\.id) {Text($0.title).tag($0.id)}}.labelsHidden().accessibilityLabel(title+" veritabanı")
-    }.frame(maxWidth:.infinity).disabled(model.busy || model.applying)
+      Picker(title,selection:selection) {Text("Veritabanı seçin").tag("");ForEach(model.endpoints,id:\.id) {Text($0.title).tag($0.id)}}.labelsHidden().frame(minWidth:105,maxWidth:.infinity).accessibilityLabel(title+" veritabanı").accessibilityIdentifier(title=="Kaynak" ? "schemaSource":"schemaTarget").help(selection.wrappedValue.isEmpty ? title+" veritabanını seçin":model.endpoints.first {$0.id==selection.wrappedValue}?.title ?? title)
+    }.frame(minWidth:170,idealWidth:220,maxWidth:330).disabled(model.busy || model.applying)
   }
   private func metric(_ title:String,count:Int,color:NSColor)->some View {
     HStack(spacing:5) {Circle().fill(Color(nsColor:color)).frame(width:5,height:5);Text("\(count) \(title)").font(.caption).monospacedDigit()}
@@ -470,14 +536,15 @@ struct SchemaComparisonPanel: View {
     operation=Task {[weak self] in
       guard let self,let plan=await model.preparePlan(),!Task.isCancelled else {return}
       let target=model.target?.title ?? "",sourceID=model.sourceID,targetID=model.targetID
-      showReview(title:"\(model.source?.title ?? "") → \(target) · \(plan.keys.count) nesne\n"+plan.warnings.joined(separator:"\n"),old:plan.originalSQL,new:plan.desiredSQL,sql:plan.sql,approve:{[weak self] in
+      let moduleCode=plan.keys.first.flatMap {plan.source.objects[$0]}?.usesSQLCodeComparison==true
+      showReview(title:"\(model.source?.title ?? "") → \(target) · \(plan.keys.first?.qualified ?? "")\n"+plan.warnings.joined(separator:"\n"),old:plan.originalSQL,new:plan.desiredSQL,sql:plan.sql,ignoringSQLWhitespace:moduleCode,approve:{[weak self] in
         guard let self else {return};operation=Task {await self.model.apply(plan,sourceID:sourceID,targetID:targetID)}
       })
     }
   }
-  private func showReview(title:String,old:String,new:String,sql:String?,approve:(()->Void)?=nil) {
+  private func showReview(title:String,old:String,new:String,sql:String?,ignoringSQLWhitespace:Bool,approve:(()->Void)?=nil) {
     guard let window,review==nil else {return}
-    review=ModuleReviewController(parent:window,title:title,original:old,edited:new,canApply:approve != nil,leftTitle:model.target?.title ?? "Hedef",rightTitle:model.source?.title ?? "Kaynak",executionSQL:sql,approved:{approve?()},finished:{[weak self] in self?.review=nil})
+    review=ModuleReviewController(parent:window,title:title,original:old,edited:new,canApply:approve != nil,leftTitle:model.target?.title ?? "Hedef",rightTitle:model.source?.title ?? "Kaynak",executionSQL:sql,ignoringSQLWhitespace:ignoringSQLWhitespace,approved:{approve?()},finished:{[weak self] in self?.review=nil})
   }
   func windowShouldClose(_ sender:NSWindow)->Bool {if model.applying {NSSound.beep();return false};operation?.cancel();model.cancel();return true}
 }
@@ -526,7 +593,13 @@ struct SchemaComparisonPanel: View {
     }}
     var result=Execution()
     if sql.contains("StudioSchemaInventory") {
-      result.results=[Rows(values:[["1",database]]),Rows(values:objects),Rows(values:[])]
+      let objectLine=sql.components(separatedBy:"\n").first {$0.contains("WHERE o.is_ms_shipped=0 AND o.type IN (")} ?? ""
+      let scoped=objectLine.contains(") AND ")
+      let selected=scoped ? objects.filter {row in
+        guard let schema=row[1],let name=row[2] else {return false}
+        return objectLine.contains("(s.name="+SQL.literal(schema)+" AND o.name="+SQL.literal(name)+")")
+      }:objects
+      result.results=[Rows(values:[["1",database]]),Rows(values:selected),Rows(values:[])]
     } else if sql.contains("StudioSchemaRefinement") {
       let list=sql.components(separatedBy:"IN (").last ?? ""
       let requested=list.prefix {$0 != ")"}

@@ -8,6 +8,8 @@ import SwiftUI
   private let body=NSView(),summary=NSTextField(labelWithString:"Farklar hazırlanıyor…")
   private let tabs=NSSegmentedControl(labels:["Yan yana farklar","Çalıştırılacak SQL"],trackingMode:.selectOne,target:nil,action:nil)
   private let split=NSSplitView()
+  private var diffContent:NSView?
+  private var inlinePreview:SQLInlineDiffView?
   private let apply=StudioToolbarButton(symbol:"paperplane.fill",label:"Veritabanına Gönder",tone:.accent,title:"Veritabanına Gönder",width:175,prominent:true)
   private var syncing=false
   private var task:Task<Void,Never>?
@@ -15,7 +17,7 @@ import SwiftUI
   private var approved: (() -> Void)?
   private var finished: (() -> Void)?
   private var observers:[NSObjectProtocol]=[]
-  init(parent:NSWindow,title:String,original:String,edited:String,canApply:Bool,leftTitle:String="Açılan tanım",rightTitle:String="Düzenlenen tanım",executionSQL:String?=nil,approved:@escaping () -> Void,finished:@escaping () -> Void) {
+  init(parent:NSWindow,title:String,original:String,edited:String,canApply:Bool,leftTitle:String="Açılan tanım",rightTitle:String="Düzenlenen tanım",executionSQL:String?=nil,ignoringSQLWhitespace:Bool=false,approved:@escaping () -> Void,finished:@escaping () -> Void) {
     super.init()
     self.approved=approved;self.finished=finished
     panel.title="Nesne değişikliklerini incele";panel.minSize=NSSize(width:960,height:600);panel.delegate=self
@@ -28,20 +30,39 @@ import SwiftUI
     let top=NSStackView(views:[heading,summary,tabs]);top.orientation = .vertical;top.alignment = .leading;top.spacing=8
     top.edgeInsets=NSEdgeInsets(top:16,left:18,bottom:12,right:18)
     tabs.selectedSegment=0;tabs.target=self;tabs.action=#selector(changeTab)
-    split.isVertical=true;split.dividerStyle = .thin
-    for (scroll,label) in [(left,leftTitle),(right,rightTitle)] {
-      configure(scroll,text:"")
-      let caption=NSTextField(labelWithString:label);caption.font = .systemFont(ofSize:12,weight:.semibold)
-      let column=NSStackView(views:[caption,scroll]);column.orientation = .vertical;column.spacing=8;column.edgeInsets=NSEdgeInsets(top:10,left:12,bottom:10,right:12)
-      scroll.widthAnchor.constraint(equalTo:column.widthAnchor,constant:-24).isActive=true
-      split.addArrangedSubview(column)
+    let diff:NSView
+    if ignoringSQLWhitespace {
+      // DDL migration previews share the same token ranges, aligned physical
+      // rows and exact-source copy mapping as the comparison's lower panes.
+      let preview=SQLInlineDiffView(frame:.zero);inlinePreview=preview
+      preview.leftText.setAccessibilityLabel(leftTitle+" SQL farkları")
+      preview.rightText.setAccessibilityLabel(rightTitle+" SQL farkları")
+      let captions=NSStackView(views:[leftTitle,rightTitle].map {title in
+        let caption=NSTextField(labelWithString:title);caption.font = .systemFont(ofSize:12,weight:.semibold)
+        return caption
+      })
+      captions.distribution = .fillEqually;captions.spacing=1;captions.edgeInsets=NSEdgeInsets(top:10,left:12,bottom:8,right:12)
+      let column=NSStackView(views:[captions,preview]);column.orientation = .vertical;column.spacing=0
+      for view in [captions,preview] {view.widthAnchor.constraint(equalTo:column.widthAnchor).isActive=true}
+      diff=column
+    } else {
+      split.isVertical=true;split.dividerStyle = .thin
+      for (scroll,label) in [(left,leftTitle),(right,rightTitle)] {
+        configure(scroll,text:"")
+        let caption=NSTextField(labelWithString:label);caption.font = .systemFont(ofSize:12,weight:.semibold)
+        let column=NSStackView(views:[caption,scroll]);column.orientation = .vertical;column.spacing=8;column.edgeInsets=NSEdgeInsets(top:10,left:12,bottom:10,right:12)
+        scroll.widthAnchor.constraint(equalTo:column.widthAnchor,constant:-24).isActive=true
+        split.addArrangedSubview(column)
+      }
+      diff=split
     }
+    diffContent=diff
     let oversized=original.utf16.count>1_000_000 || edited.utf16.count>1_000_000 || (executionSQL?.utf16.count ?? 0)>1_000_000
     let previewOriginal=oversized ? String(original.prefix(200_000)):original
     let previewEdited=oversized ? String(edited.prefix(200_000)):edited
     let execution=executionSQL ?? previewEdited
     configure(script,text:String(execution.prefix(1_000_000)))
-    for view in [split,script] {embed(view,in:body)}
+    for view in [diff,script] {embed(view,in:body)}
     script.isHidden=true
     let cancel=StudioToolbarButton(symbol:"xmark",label:canApply ? "Vazgeç":"Kapat",tone:.neutral,title:canApply ? "Vazgeç":"Kapat",width:80);cancel.target=self;cancel.action=#selector(closeReview);cancel.keyEquivalent="\u{1b}"
     apply.target=self;apply.action=#selector(submit);apply.bezelStyle = .rounded;apply.isHidden = !canApply;apply.isEnabled=false
@@ -51,7 +72,7 @@ import SwiftUI
     embed(stack,in:host)
     for view in [top,body,footer] {view.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true}
     body.setContentHuggingPriority(.init(1),for:.vertical)
-    for scroll in [left,right] {
+    for scroll in inlinePreview == nil ? [left,right]:[] {
       scroll.contentView.postsBoundsChangedNotifications=true
       observers.append(NotificationCenter.default.addObserver(forName:NSView.boundsDidChangeNotification,object:scroll.contentView,queue:.main) { [weak self,weak scroll] _ in
         MainActor.assumeIsolated {guard let self,let scroll,!self.syncing else {return};self.syncing=true
@@ -64,15 +85,18 @@ import SwiftUI
     })
     parent.beginSheet(panel)
     task=Task { [weak self] in
-      let comparison=await Task.detached(priority:.userInitiated) {SQLTextDiff.compare(previewOriginal,previewEdited)}.value
+      let comparison=await Task.detached(priority:.userInitiated) {
+        ignoringSQLWhitespace ? SQLTextDiff.compareIgnoringSQLWhitespace(previewOriginal,previewEdited):SQLTextDiff.compare(previewOriginal,previewEdited)
+      }.value
       guard let self,!Task.isCancelled else {return}
       self.comparison=comparison
-      render(comparison,to:left,old:true,source:previewOriginal);render(comparison,to:right,old:false,source:previewEdited)
+      if let inlinePreview {inlinePreview.display(comparison:comparison,original:previewOriginal,edited:previewEdited,changeIndex:-1)}
+      else {render(comparison,to:left,old:true,source:previewOriginal);render(comparison,to:right,old:false,source:previewEdited)}
       summary.stringValue="−\(comparison.removed) kaldırılan  ·  +\(comparison.added) eklenen satır"+(comparison.simplified ? "  ·  Büyük değişiklik için blok karşılaştırması":"")
-      let truncated=oversized || comparison.lines.count>10_000
+      let truncated=oversized || comparison.lines.count>10_000 || inlinePreview?.truncated == true
       if truncated {summary.stringValue="Büyük tanım: kısmi önizleme (en çok 10.000 satır). Buradan uygulanamaz; tam SQL sorgu sekmesindedir."}
       apply.isEnabled=canApply && !truncated && (executionSQL != nil || (comparison.added+comparison.removed)>0)
-      split.setPosition(split.bounds.width/2,ofDividerAt:0)
+      if inlinePreview == nil {split.setPosition(split.bounds.width/2,ofDividerAt:0)}
     }
   }
   private func embed(_ child:NSView,in parent:NSView) {
@@ -100,7 +124,7 @@ import SwiftUI
     for scroll in [left,right,script] {
       (scroll.documentView as? NSTextView)?.backgroundColor=StudioTheme.editorCanvas
     }
-    if let comparison {
+    if inlinePreview == nil,let comparison {
       render(comparison,to:left,old:true,source:original,revealChange:false)
       render(comparison,to:right,old:false,source:edited,revealChange:false)
     }
@@ -152,7 +176,7 @@ import SwiftUI
     else {view.setSelectedRange(selection);scroll.contentView.scroll(to:viewport)}
     scroll.reflectScrolledClipView(scroll.contentView)
   }
-  @objc private func changeTab() {split.isHidden=tabs.selectedSegment != 0;script.isHidden=tabs.selectedSegment == 0}
+  @objc private func changeTab() {diffContent?.isHidden=tabs.selectedSegment != 0;script.isHidden=tabs.selectedSegment == 0}
   @objc private func submit() {guard apply.isEnabled else {return};let action=approved;dismiss();action?()}
   @objc private func closeReview() {dismiss()}
   private func dismiss() {

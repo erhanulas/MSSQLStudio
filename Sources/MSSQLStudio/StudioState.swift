@@ -163,6 +163,15 @@ struct ObjectEditorKey: Codable, Equatable {
     symbols = []; intelligenceCatalog = nil; catalogDatabase = nil; catalogVerified = false; symbolRequest = UUID()
     NotificationCenter.default.post(name:.init("sqlCatalogChanged"),object:self)
   }
+  func applyTargetedCatalog(_ catalog:SQLIntelligence.Catalog,database:String,generation:UUID) {
+    guard self.database==database,server.generation==generation else {return}
+    symbolRequest=UUID()
+    intelligenceCatalog=catalog;catalogDatabase=database;symbols=catalog.snapshot.symbols
+    // A scoped change does not verify or extend the age of the whole catalog.
+    catalogVerified=catalogVerified && catalog.fresh
+    NotificationCenter.default.post(name:.init("sqlCatalogChanged"),object:self)
+    changed?()
+  }
   var elapsed = 0.0
   var rowCount = 0
   var partial = false

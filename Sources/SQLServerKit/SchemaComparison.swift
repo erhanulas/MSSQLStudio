@@ -237,14 +237,28 @@ public enum SchemaComparison {
       (SELECT pc.name AS parent_column,rc.name AS target_column FROM sys.foreign_key_columns k JOIN sys.columns pc ON pc.object_id=k.parent_object_id AND pc.column_id=k.parent_column_id JOIN sys.columns rc ON rc.object_id=k.referenced_object_id AND rc.column_id=k.referenced_column_id WHERE k.constraint_object_id=f.object_id ORDER BY k.constraint_column_id FOR XML PATH('column'),TYPE) AS columns
     FROM sys.foreign_keys f WHERE f.parent_object_id=o.object_id ORDER BY f.name FOR XML PATH('fk'),TYPE
     """
-    let dependencies=keys == nil ? """
-    SELECT OBJECT_SCHEMA_NAME(owner.object_id),OBJECT_NAME(owner.object_id),OBJECT_SCHEMA_NAME(d.referenced_id),OBJECT_NAME(d.referenced_id),CASE WHEN EXISTS(SELECT 1 FROM sys.triggers t WHERE t.object_id=d.referencing_id AND t.parent_class=0) THEN 1 ELSE 0 END
-    FROM sys.sql_expression_dependencies d LEFT JOIN sys.objects referencing ON referencing.object_id=d.referencing_id
-    CROSS APPLY (SELECT CASE WHEN referencing.type IN ('D','C') AND referencing.parent_object_id>0 THEN referencing.parent_object_id ELSE d.referencing_id END AS object_id) owner
-    JOIN sys.objects ref ON ref.object_id=d.referenced_id AND ref.is_ms_shipped=0 WHERE d.referenced_class=1 AND d.referenced_database_name IS NULL AND d.referenced_server_name IS NULL
-    UNION SELECT OBJECT_SCHEMA_NAME(f.parent_object_id),OBJECT_NAME(f.parent_object_id),OBJECT_SCHEMA_NAME(f.referenced_object_id),OBJECT_NAME(f.referenced_object_id),0 FROM sys.foreign_keys f
-    UNION SELECT OBJECT_SCHEMA_NAME(t.object_id),t.name,OBJECT_SCHEMA_NAME(t.parent_id),OBJECT_NAME(t.parent_id),0 FROM sys.triggers t WHERE t.parent_class=1 AND t.is_ms_shipped=0;
-    """ : "SELECT CAST(NULL AS nvarchar(128)),CAST(NULL AS nvarchar(128)),CAST(NULL AS nvarchar(128)),CAST(NULL AS nvarchar(128)),0 WHERE 1=0;"
+    // A scoped inventory still needs the requested owners' direct dependencies:
+    // migration revalidation must not reuse stale edges or fetch every DDL body.
+    // Database triggers are outside sys.objects, so their name comes from
+    // sys.triggers rather than OBJECT_NAME and their identity stays distinct.
+    let dependencyFilter=keys.map {keys in keys.isEmpty ? " WHERE 1=0" : " WHERE ("+keys.map {
+      "(dependency.owner_schema="+SQL.literal($0.schema)+" AND dependency.owner_name="+SQL.literal($0.name)+" AND dependency.database_trigger="+($0.databaseTrigger ? "1":"0")+")"
+    }.joined(separator:" OR ")+")"} ?? ""
+    let dependencies="""
+    SELECT dependency.owner_schema,dependency.owner_name,dependency.referenced_schema,dependency.referenced_name,dependency.database_trigger
+    FROM (
+      SELECT CASE WHEN db_trigger.object_id IS NOT NULL THEN N'' ELSE OBJECT_SCHEMA_NAME(owner.object_id) END AS owner_schema,
+        CASE WHEN db_trigger.object_id IS NOT NULL THEN db_trigger.name ELSE OBJECT_NAME(owner.object_id) END AS owner_name,
+        OBJECT_SCHEMA_NAME(d.referenced_id) AS referenced_schema,OBJECT_NAME(d.referenced_id) AS referenced_name,
+        CASE WHEN db_trigger.object_id IS NOT NULL THEN 1 ELSE 0 END AS database_trigger
+      FROM sys.sql_expression_dependencies d LEFT JOIN sys.objects referencing ON referencing.object_id=d.referencing_id
+      LEFT JOIN sys.triggers db_trigger ON db_trigger.object_id=d.referencing_id AND db_trigger.parent_class=0
+      CROSS APPLY (SELECT CASE WHEN referencing.type IN ('D','C') AND referencing.parent_object_id>0 THEN referencing.parent_object_id ELSE d.referencing_id END AS object_id) owner
+      JOIN sys.objects ref ON ref.object_id=d.referenced_id AND ref.is_ms_shipped=0 WHERE d.referenced_class=1 AND d.referenced_database_name IS NULL AND d.referenced_server_name IS NULL
+      UNION SELECT OBJECT_SCHEMA_NAME(f.parent_object_id),OBJECT_NAME(f.parent_object_id),OBJECT_SCHEMA_NAME(f.referenced_object_id),OBJECT_NAME(f.referenced_object_id),0 FROM sys.foreign_keys f
+      UNION SELECT OBJECT_SCHEMA_NAME(t.object_id),t.name,OBJECT_SCHEMA_NAME(t.parent_id),OBJECT_NAME(t.parent_id),0 FROM sys.triggers t WHERE t.parent_class=1 AND t.is_ms_shipped=0
+    ) dependency\(dependencyFilter);
+    """
     return """
     -- StudioSchemaInventory v2
     IF TRY_CONVERT(int,SERVERPROPERTY('ProductMajorVersion'))<14 THROW 51000,N'DDL karşılaştırma SQL Server 2017 veya üstünü gerektirir.',1;
@@ -356,7 +370,7 @@ public enum SchemaMigration {
       visiting.insert(key)
       for dependency in (source.dependencies[key] ?? []).sorted() {
         if selected.contains(dependency) {try visit(dependency)}
-        else if target.objects[dependency] == nil {throw SQLFailure("\(key.qualified) için \(dependency.qualified) hedefte yok. Bağımlı nesneyi de seçin.")}
+        else if target.objects[dependency] == nil {throw SQLFailure("\(key.qualified) için \(dependency.qualified) hedefte yok. Önce bağımlı nesneyi ayrı bir adımda taşıyın.")}
       }
       visiting.remove(key);done.insert(key);ordered.append(key)
     }

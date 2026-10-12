@@ -7,7 +7,193 @@ import SQLServerKit
 @MainActor struct SchemaComparisonPanelTests {
   private func model(reader:SchemaComparisonModel.Reader?=nil,writer:SchemaComparisonModel.Reader?=nil)->SchemaComparisonModel {
     let server=SchemaComparisonUIFixture.server()
-    return .init(endpoints:[.init(server:server,database:"SourceDB"),.init(server:server,database:"TargetDB")],reader:reader,writer:writer)
+    let result=SchemaComparisonModel(endpoints:[.init(server:server,database:"SourceDB"),.init(server:server,database:"TargetDB")],reader:reader,writer:writer)
+    result.targetID=result.endpoints[1].id // Tests consciously select the target after the blank initial state.
+    return result
+  }
+  @Test func targetStartsBlankAndOnlyTheFocusedEligibleObjectCanBePrepared() async throws {
+    let server=SchemaComparisonUIFixture.server()
+    let endpoints=[SchemaEndpoint(server:server,database:"SourceDB"),SchemaEndpoint(server:server,database:"TargetDB")]
+    var reads=0
+    let model=SchemaComparisonModel(endpoints:endpoints,sourceID:endpoints[0].id,reader:{endpoint,sql in reads+=1;return try SchemaComparisonUIFixture.catalog(endpoint.database,sql)})
+    #expect(model.sourceID==endpoints[0].id && model.targetID.isEmpty && model.target==nil)
+    #expect(!model.validPair && !model.canPreparePlan)
+    await model.compare();#expect(reads==0 && model.differences.isEmpty)
+    model.targetID=endpoints[1].id;await model.compare()
+    let none=await model.preparePlan();#expect(!model.canPreparePlan && none==nil)
+    model.focused=model.visible.first {$0.key.name=="usp_Legacy"}?.key
+    let ineligible=await model.preparePlan();#expect(!model.canPreparePlan && ineligible==nil)
+    let procedure=try #require(model.visible.first {$0.key.name=="usp_Customers"}).key
+    model.focused=procedure;#expect(model.canPreparePlan)
+    let plan=try #require(await model.preparePlan());#expect(plan.keys==[procedure])
+    model.focused=model.visible.first {$0.key.name=="ufn_Total"}?.key
+    let function=try #require(await model.preparePlan())
+    #expect(function.keys.count==1 && function.keys[0].name=="ufn_Total" && !function.keys.contains(procedure))
+    model.targetID="" // A programmatic context change is guarded even before the view invalidates.
+    #expect(!model.canPreparePlan)
+  }
+  @Test func focusChangesWhilePreparingCannotPresentThePreviousObjectsPlan() async throws {
+    let model=model(reader:{endpoint,sql in
+      if !sql.contains("StudioSchemaInventory") && !sql.contains("StudioSchemaRefinement") {try await Task.sleep(for:.milliseconds(40))}
+      return try SchemaComparisonUIFixture.catalog(endpoint.database,sql)
+    })
+    await model.compare()
+    model.focused=try #require(model.visible.first {$0.key.name=="usp_Customers"}).key
+    let task=Task {await model.preparePlan()}
+    try await Task.sleep(for:.milliseconds(10));#expect(model.busy)
+    model.focused=try #require(model.visible.first {$0.key.name=="ufn_Total"}).key
+    #expect(await task.value==nil && !model.busy && model.error.contains("Seçim değişti"))
+  }
+  @Test func externallyPreparedMultipleObjectMigrationIsRejectedBeforeAnyWrite() async throws {
+    var writes=0
+    let model=model(writer:{_,_ in writes+=1;return Execution()})
+    await model.compare()
+    let source=try #require(model.sourceSnapshot),target=try #require(model.targetSnapshot)
+    let keys=Set(model.visible.filter {["usp_Customers","ufn_Total"].contains($0.key.name)}.map(\.key))
+    var left:[SchemaObjectKey:SchemaObjectContent]=[:],right:[SchemaObjectKey:SchemaObjectContent]=[:]
+    for key in keys {
+      let object=try #require(source.objects[key])
+      left[key]=try SchemaComparison.decodeContent(SchemaComparisonUIFixture.catalog("SourceDB",SchemaComparison.contentQuery(object)),object:object)
+      if let old=target.objects[key] {right[key]=try SchemaComparison.decodeContent(SchemaComparisonUIFixture.catalog("TargetDB",SchemaComparison.contentQuery(old)),object:old)}
+    }
+    let plan=try SchemaMigration.plan(selected:keys,source:source,target:target,sourceContent:left,targetContent:right)
+    #expect(plan.keys.count==2)
+    await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID)
+    #expect(writes==0 && model.error.contains("yalnız bir nesne") && !model.applying)
+    #expect(SchemaComparisonModel.activeApplications==0)
+  }
+  @Test func successfulApplyReconcilesOnlySelectedObjectAndPreservesOtherRowsFiltersAndCaches() async throws {
+    var committed=false,writes=0,calls:[(String,String)]=[]
+    let model=model(reader:{endpoint,sql in
+      calls.append((endpoint.database,sql))
+      var result=try SchemaComparisonUIFixture.catalog(committed && endpoint.database=="TargetDB" ? "SourceDB":endpoint.database,sql)
+      if sql.contains("StudioSchemaInventory") {
+        result.results[2]=Rows(values:result.results[1].values.compactMap {row -> [String?]? in
+          guard ["usp_Customers","v_ActiveBalance"].contains(row[2] ?? "") else {return nil}
+          return ["dbo",row[2],"dbo","Customers","0"]
+        })
+      }
+      return result
+    },writer:{endpoint,_ in #expect(endpoint.database=="TargetDB");writes+=1;committed=true;return Execution()})
+    await model.compare()
+    let other=try #require(model.visible.first {$0.key.name=="v_ActiveBalance"}).key
+    model.focused=other;await model.loadDetail() // Both content and column caches must survive an unrelated write.
+    let selected=try #require(model.visible.first {$0.key.name=="usp_Customers"}).key
+    model.focused=selected;await model.loadDetail()
+    model.search="dbo";model.detailMode = .code
+    let beforeSource=try #require(model.sourceSnapshot),beforeTarget=try #require(model.targetSnapshot)
+    let statuses=Dictionary(uniqueKeysWithValues:model.differences.filter {$0.key != selected}.map {($0.key,$0.status)})
+    let plan=try #require(await model.preparePlan()),start=calls.count
+    await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID)
+    let after=Array(calls.dropFirst(start)),inventories=after.filter {$0.1.contains("StudioSchemaInventory")}
+    #expect(writes==1 && model.error.isEmpty && !model.applying && !model.busy)
+    #expect(inventories.count==4 && after.count==4) // Preflight and reconciliation, no full compare/refinement needed.
+    #expect(inventories.allSatisfy {$0.1.contains("(s.name=N'dbo' AND o.name=N'usp_Customers')")})
+    #expect(model.differences.count==10 && model.differentCount==5 && model.sameCount==4)
+    #expect(model.differences.first {$0.key==selected}?.status == .equal && !model.visible.contains {$0.key==selected})
+    #expect(model.focused==nil && model.search=="dbo" && model.kind=="Tüm türler" && model.detailMode == .code)
+    #expect(model.message.contains("usp_Customers") && model.message.contains("hedefe uygulandı"))
+    for key in statuses.keys {
+      #expect(model.sourceSnapshot?.objects[key]==beforeSource.objects[key])
+      #expect(model.targetSnapshot?.objects[key]==beforeTarget.objects[key])
+      #expect(model.sourceSnapshot?.dependencies[key]==beforeSource.dependencies[key])
+      #expect(model.targetSnapshot?.dependencies[key]==beforeTarget.dependencies[key])
+      #expect(model.differences.first {$0.key==key}?.status==statuses[key])
+    }
+    let cachedReads=calls.count
+    model.focused=other;await model.loadDetail()
+    #expect(calls.count==cachedReads && model.columnsReady && model.detailReady)
+    #expect(SchemaComparisonModel.activeApplications==0)
+  }
+  @Test func creatingSourceOnlyObjectMergesItsFreshTargetIdentityWithoutReplacingUnrelatedTargetObjects() async throws {
+    var committed=false,writes=0
+    let selected=SchemaObjectKey(schema:"dbo",name:"ufn_Total")
+    let model=model(reader:{endpoint,sql in
+      var result=try SchemaComparisonUIFixture.catalog(committed && endpoint.database=="TargetDB" ? "SourceDB":endpoint.database,sql)
+      if committed,endpoint.database=="TargetDB",sql.contains("StudioSchemaInventory") {
+        var rows=Array(result.results[1].values)
+        for i in rows.indices where rows[i][2]==selected.name {rows[i][0]="903"}
+        result.results[1]=Rows(values:rows)
+      }
+      return result
+    },writer:{_,_ in writes+=1;committed=true;return Execution()})
+    await model.compare();model.focused=selected
+    let original=try #require(model.targetSnapshot),plan=try #require(await model.preparePlan())
+    #expect(plan.target.objects[selected]==nil && plan.keys==[selected])
+    await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID)
+    #expect(writes==1 && model.error.isEmpty && model.targetSnapshot?.objects[selected]?.objectID==903)
+    #expect(model.differences.first {$0.key==selected}?.status == .equal && model.focused==nil)
+    #expect(model.targetSnapshot?.objects.count==original.objects.count+1)
+    for (key,object) in original.objects {#expect(model.targetSnapshot?.objects[key]==object)}
+    #expect(model.targetSnapshot?.objects.keys.contains { $0.name=="usp_Legacy" }==true)
+  }
+  @Test(arguments:[false,true]) func preflightChecksFreshDirectDependenciesWithoutReloadingTheWholeCatalog(renamed:Bool) async throws {
+    var changed=false,writes=0,calls:[(String,String)]=[]
+    let selected=SchemaObjectKey(schema:"dbo",name:"usp_Customers")
+    let dependency=SchemaObjectKey(schema:"dbo",name:renamed ? "CustomerHistory":"Customers")
+    let model=model(reader:{endpoint,sql in
+      calls.append((endpoint.database,sql))
+      var result=try SchemaComparisonUIFixture.catalog(endpoint.database,sql)
+      if sql.contains("StudioSchemaInventory") {
+        if endpoint.database=="SourceDB",result.results[1].values.contains(where:{$0[2]==selected.name}) {
+          result.results[2]=Rows(values:[["dbo",selected.name,"dbo",changed ? dependency.name:"Customers","0"]])
+        } else if endpoint.database=="TargetDB",changed {
+          result.results[1]=Rows(values:result.results[1].values.filter {$0[2] != dependency.name})
+        }
+      }
+      return result
+    },writer:{_,_ in writes+=1;return Execution()})
+    await model.compare();model.focused=selected
+    let plan=try #require(await model.preparePlan()),start=calls.count
+    changed=true;await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID)
+    let scoped=Array(calls.dropFirst(start))
+    #expect(writes==0 && model.error.contains(dependency.qualified) && model.error.contains("hedefte yok"))
+    #expect(scoped.count==2 && scoped.allSatisfy {$0.1.contains("StudioSchemaInventory")})
+    #expect(scoped[0].0=="SourceDB" && scoped[0].1.contains("o.name=N'usp_Customers'"))
+    #expect(scoped[1].0=="TargetDB" && scoped[1].1.contains("o.name="+SQL.literal(dependency.name)))
+    #expect(model.visible.contains {$0.key==selected} && model.differences.count==10)
+    #expect(!model.applying && SchemaComparisonModel.activeApplications==0)
+  }
+  @Test func committedWriteWithFailedReconciliationKeepsOtherRowsAndNeverAdvertisesTheOldRowAsCurrent() async throws {
+    var committed=false,writes=0,calls:[String]=[]
+    let model=model(reader:{endpoint,sql in
+      calls.append(sql)
+      if committed,endpoint.database=="TargetDB",sql.contains("StudioSchemaInventory") {throw SQLFailure("Yeniden okuma başarısız.")}
+      return try SchemaComparisonUIFixture.catalog(endpoint.database,sql)
+    },writer:{_,_ in writes+=1;committed=true;return Execution()})
+    await model.compare()
+    let selected=try #require(model.visible.first {$0.key.name=="usp_Customers"}).key
+    model.focused=selected;await model.loadDetail();model.search="dbo";model.detailMode = .code
+    let others=model.differences.filter {$0.key != selected}.map(\.key)
+    let plan=try #require(await model.preparePlan()),start=calls.count
+    await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID)
+    #expect(writes==1 && model.message.contains("hedefe uygulandı") && !model.message.contains("tamamlanamadı"))
+    #expect(model.error.contains("hedefe uygulandı") && model.error.contains("tekrar gönderilmedi"))
+    #expect(model.differences.map(\.key)==others && model.sourceSnapshot?.objects[selected]==nil && model.targetSnapshot?.objects[selected]==nil)
+    #expect(model.focused==nil && !model.detailReady && model.sourceSQL.isEmpty && !model.canPreparePlan)
+    #expect(model.search=="dbo" && model.detailMode == .code && !model.applying && SchemaComparisonModel.activeApplications==0)
+    #expect(calls.dropFirst(start).count==4 && calls.dropFirst(start).allSatisfy {$0.contains("o.name=N'usp_Customers'")})
+    #expect(await model.preparePlan()==nil && writes==1)
+  }
+  @Test(arguments:["partial","generation","offline"]) func uncertainOrDisconnectedApplyCannotReuseAStaleSelectedComparison(outcome:String) async throws {
+    var writes=0
+    let model=model(writer:{endpoint,_ in
+      writes+=1
+      var result=Execution()
+      if outcome=="partial" {result.partial=true}
+      if outcome=="generation" {endpoint.server.generation=UUID()}
+      if outcome=="offline" {endpoint.server.online=false}
+      return result
+    })
+    await model.compare()
+    let selected=try #require(model.visible.first {$0.key.name=="usp_Customers"}).key
+    model.focused=selected;let plan=try #require(await model.preparePlan())
+    await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID)
+    #expect(writes==1 && !model.error.isEmpty && !model.applying && SchemaComparisonModel.activeApplications==0)
+    #expect(!model.differences.contains {$0.key==selected} && model.focused==nil && !model.canPreparePlan)
+    #expect(model.differences.count==9 && model.sourceSnapshot?.objects[selected]==nil && model.targetSnapshot?.objects[selected]==nil)
+    if outcome=="partial" {#expect(model.message=="Taşıma sonucu doğrulanamadı.")}
+    else {#expect(model.message.contains("hedefe uygulandı") && model.error.contains("tekrar gönderilmedi"))}
   }
   @Test func compareFilterLazyDetailAndPlanUseIndependentMetadataOnly() async throws {
     var calls:[String]=[]
@@ -30,7 +216,7 @@ import SQLServerKit
     #expect(model.detailComparison?.added==2 && model.detailComparison?.removed==1)
     #expect(model.changedGroups.count==2 && model.sourceSQL.contains("\r\n"))
     let count=calls.count;await model.loadDetail();#expect(calls.count==count)
-    model.marked=[row.key]
+    model.focused=row.key
     let plan=try #require(await model.preparePlan())
     #expect(plan.sql.contains("ALTER PROCEDURE") && plan.sql.contains("[City]"))
     #expect(model.target?.database=="TargetDB" && !model.applying)
@@ -44,16 +230,16 @@ import SQLServerKit
       }
       return result
     },writer:{endpoint,sql in writes.append(endpoint.database+"|"+sql);return Execution()})
-    await model.compare();let row=try #require(model.differences.first {$0.key.name=="usp_Customers"});model.marked=[row.key]
+    await model.compare();let row=try #require(model.differences.first {$0.key.name=="usp_Customers"});model.focused=row.key
     let plan=try #require(await model.preparePlan()),source=model.sourceID,target=model.targetID
     drift=true;await model.apply(plan,sourceID:source,targetID:target)
     #expect(writes.isEmpty && model.error.contains("değişti") && !model.applying)
-    drift=false;await model.compare();model.marked=[row.key]
+    drift=false;await model.compare();model.focused=row.key
     let fresh=try #require(await model.preparePlan());await model.apply(fresh,sourceID:source,targetID:target)
     #expect(writes.count==1 && writes[0].hasPrefix("TargetDB|"))
     #expect(writes[0].contains("ROLLBACK TRANSACTION") && !model.applying)
     #expect(SchemaComparisonModel.activeApplications==0)
-    model.marked=[row.key];let stale=try #require(await model.preparePlan())
+    model.focused=row.key;let stale=try #require(await model.preparePlan())
     model.target?.server.generation=UUID()
     await model.apply(stale,sourceID:source,targetID:target)
     #expect(writes.count==1 && model.error.contains("Bağlantı değişti"))
@@ -63,10 +249,10 @@ import SQLServerKit
     model.startComparison();try await Task.sleep(for:.milliseconds(10));model.cancel()
     try await Task.sleep(for:.milliseconds(100))
     #expect(model.differences.isEmpty && !model.busy)
-    await model.compare();let row=try #require(model.differences.first {$0.canStage});model.marked=[row.key]
+    await model.compare();let row=try #require(model.differences.first {$0.canStage});model.focused=row.key
     let plan=try #require(await model.preparePlan()),oldSource=model.sourceID,oldTarget=model.targetID
     model.targetID=model.sourceID;model.invalidate()
-    #expect(!model.validPair && model.marked.isEmpty && !model.detailReady)
+    #expect(!model.validPair && model.focused==nil && !model.detailReady)
     await model.apply(plan,sourceID:oldSource,targetID:oldTarget)
     #expect(model.error.contains("bağlamı değişti"))
   }
@@ -163,7 +349,10 @@ import SQLServerKit
       "TRD":"CREATE TRIGGER usp_Customers ON DATABASE FOR CREATE_TABLE"]
     for type in ["P","FN","IF","TF","TR","TRD"] {
       let model=model(reader:{endpoint,sql in
-        var result=try SchemaComparisonUIFixture.catalog(endpoint.database,sql)
+        // Reuse the procedure fixture's body for this synthetic DB trigger while
+        // retaining the real requested trigger identity in the returned rows.
+        let fixtureSQL=type=="TRD" ? sql.replacingOccurrences(of:"(s.name=N'' AND o.name=N'usp_Customers')",with:"(s.name=N'dbo' AND o.name=N'usp_Customers')"):sql
+        var result=try SchemaComparisonUIFixture.catalog(endpoint.database,fixtureSQL)
         let source=endpoint.database=="SourceDB",value=source ? "2":"1"
         let rows=[headers[type]!,"AS",type=="IF" ? "RETURN":"BEGIN",type=="FN" ? "    RETURN \(value);":"    SELECT \(value) AS [Value];"]+(type=="IF" ? []:["END;"])
         let definition=rows.map {$0+(source ? "   ":"")}.joined(separator:source ? "\r\n":"\n")
@@ -238,7 +427,7 @@ import SQLServerKit
     model.source?.server.generation=UUID();await stale.value
     #expect(!model.detailLoading && !model.detailReady && !model.columnsReady)
     #expect(model.sourceSQL.isEmpty && model.columnDifferences.isEmpty && model.detailNotice.contains("Bağlantı değişti"))
-    await model.compare();model.marked=[try #require(model.differences.first {$0.key.name=="usp_Customers"}).key]
+    await model.compare();model.focused=try #require(model.differences.first {$0.key.name=="usp_Customers"}).key
     let preview=Task {await model.preparePlan()};try await Task.sleep(for:.milliseconds(10))
     model.target?.server.generation=UUID()
     #expect(await preview.value==nil && model.error.contains("Bağlantı değişti"))
@@ -291,6 +480,7 @@ import SQLServerKit
     let inline=try #require(descendants(hosting).compactMap {$0 as? SQLInlineDiffView}.first)
     let frame=hosting.convert(inline.bounds,from:inline)
     #expect(frame.minX>=0 && frame.maxX<=1000 && frame.minY>=0 && frame.maxY<=680)
+    #expect(frame.height>=300)
     #expect(inline.leftText.string.contains("SELECT") && inline.rightText.string.contains("[City]"))
     window.contentView=nil
     let controller=SchemaComparisonWindow(model:model,openSQL:{_,_ in})

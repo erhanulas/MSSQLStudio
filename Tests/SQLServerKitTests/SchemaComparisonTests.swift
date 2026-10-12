@@ -36,9 +36,34 @@ struct SchemaComparisonTests {
     if let path=ProcessInfo.processInfo.environment["MSSQL_SCHEMA_SQL_DUMP"] {
       try SchemaComparison.inventory().write(toFile:path,atomically:true,encoding:.utf8)
       try sql.write(toFile:path+".filtered.sql",atomically:true,encoding:.utf8)
+      try SchemaComparison.inventory(keys:[.init(schema:"",name:"StudioDatabaseTrigger",databaseTrigger:true)]).write(toFile:path+".trigger-filtered.sql",atomically:true,encoding:.utf8)
+      try SchemaComparison.inventory(keys:[]).write(toFile:path+".empty-filtered.sql",atomically:true,encoding:.utf8)
       try SchemaComparison.refinementQuery([object("p")]).write(toFile:path+".refine.sql",atomically:true,encoding:.utf8)
       try SchemaComparison.columnsQuery(object("T",type:"U")).write(toFile:path+".columns.sql",atomically:true,encoding:.utf8)
     }
+  }
+  @Test func scopedInventoryKeepsDirectDependencyOwnersAndDatabaseTriggerIdentity() throws {
+    let normal=SchemaObjectKey(schema:"odd']",name:"same'name")
+    let trigger=SchemaObjectKey(schema:"",name:"same'name",databaseTrigger:true)
+    let scoped=SchemaComparison.inventory(keys:[normal,trigger])
+    let dependencies=try #require(scoped.range(of:"SELECT dependency.owner_schema"))
+    let query=String(scoped[dependencies.lowerBound...])
+    #expect(query.contains("sys.sql_expression_dependencies") && query.contains("sys.foreign_keys") && query.contains("t.parent_class=1"))
+    #expect(query.contains("dependency.owner_schema=N'odd'']' AND dependency.owner_name=N'same''name' AND dependency.database_trigger=0"))
+    #expect(query.contains("dependency.owner_schema=N'' AND dependency.owner_name=N'same''name' AND dependency.database_trigger=1"))
+    #expect(query.contains("THEN db_trigger.name ELSE OBJECT_NAME(owner.object_id)"))
+    #expect(!query.contains("WITH RECURSIVE") && !query.contains("m.definition"))
+    #expect(!SchemaComparison.inventory().contains("WHERE (dependency.owner_schema="))
+    #expect(SchemaComparison.inventory(keys:[]).hasSuffix(") dependency WHERE 1=0;"))
+
+    // The same name in schema and database trigger namespaces cannot merge.
+    let referenced=SchemaObjectKey(schema:"dbo",name:"Customers")
+    var result=Execution();result.results=[Rows(values:[["1","TestDB"]]),Rows(),Rows(values:[
+      [normal.schema,normal.name,referenced.schema,referenced.name,"0"],
+      [nil,trigger.name,referenced.schema,referenced.name,"1"]])]
+    let snapshot=try SchemaComparison.decode(result)
+    #expect(snapshot.dependencies.count==2)
+    #expect(snapshot.dependencies[normal]==[referenced] && snapshot.dependencies[trigger]==[referenced])
   }
   @Test func tableListUsesColumnDigestWhileFullBaselineProtectsEveryDDLChange() throws {
     let rawA=String(repeating:"a",count:64),rawB=String(repeating:"b",count:64),columns=String(repeating:"c",count:64),changedColumns=String(repeating:"d",count:64)
@@ -383,6 +408,13 @@ struct SchemaComparisonTests {
       #expect(try #require(a.objects[key]?.digest).count==64)
       #expect(try #require(a.objects[key]?.comparisonDigest).count==64)
       #expect(try #require(a.objects[view]?.digest).count==64)
+      #expect(a.dependencies[view]==[key] && a.dependencies[key]==nil)
+      let viewOnly=try SchemaComparison.decode(await c.execute(SchemaComparison.inventory(keys:[view]),limits:SchemaComparison.limits))
+      #expect(Set(viewOnly.objects.keys)==[view] && viewOnly.dependencies==[view:[key]])
+      let tableOnly=try SchemaComparison.decode(await c.execute(SchemaComparison.inventory(keys:[key]),limits:SchemaComparison.limits))
+      #expect(Set(tableOnly.objects.keys)==[key] && tableOnly.dependencies.isEmpty)
+      let empty=try SchemaComparison.decode(await c.execute(SchemaComparison.inventory(keys:[]),limits:SchemaComparison.limits))
+      #expect(empty.objects.isEmpty && empty.dependencies.isEmpty)
       _=try await c.execute("CREATE INDEX [IX_StudioCompare] ON \(key.qualified) ([Id]);")
       let indexOnly=try SchemaComparison.decode(await c.execute(SchemaComparison.inventory(keys:[key,view]),limits:SchemaComparison.limits))
       #expect(a.objects[key]?.digest != indexOnly.objects[key]?.digest)

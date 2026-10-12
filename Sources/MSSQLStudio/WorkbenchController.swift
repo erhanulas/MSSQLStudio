@@ -1102,13 +1102,67 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     explorerToggle.state = sidebar.isCollapsed ? .on : .off
   }
   @objc private func schemaApplied(_ notification:Notification) {
-    guard let server=notification.object as? ConnectedServer,let db=notification.userInfo?["database"] as? String else {return}
-    for root in roots where root.server === server {
-      func refreshDatabase(_ node:TreeNode) {if case .database=node.kind,node.database==db {refresh(node);return};for child in node.children {refreshDatabase(child)}}
-      refreshDatabase(root)
+    guard let server=notification.object as? ConnectedServer,let db=notification.userInfo?["database"] as? String,
+      let key=notification.userInfo?["key"] as? SchemaObjectKey,let type=notification.userInfo?["type"] as? String else {return}
+    Task {[weak self] in await self?.refreshComparedObject(server:server,database:db,key:key,type:type)}
+  }
+  func refreshComparedObject(server:ConnectedServer,database:String,key:SchemaObjectKey,type:String,indexService:CatalogIndexService = .shared,catalogService:SQLCatalogService = .shared) async {
+    guard server.online else {return}
+    let generation=server.generation
+    let folder:Folder
+    switch type {case "U":folder = .tables;case "V":folder = .views;case "P","PC":folder = .procedures;case "FN","IF","TF","FS","FT":folder = .functions;case "SN":folder = .synonyms;case "TR","TRD":folder = .triggers;default:return}
+    let sql:String
+    if folder == .triggers {
+      let parentClass=key.databaseTrigger ? 0:1
+      let schema=key.databaseTrigger ? "CAST(N'' AS sysname)":"OBJECT_SCHEMA_NAME(t.object_id)"
+      sql="-- StudioSchemaTargetRefresh\nSELECT t.object_id,t.name,\(schema),t.type_desc+CASE WHEN t.is_disabled=1 THEN N' Disabled' ELSE N'' END,CAST(NULL AS sysname),t.parent_id FROM sys.triggers t WHERE t.is_ms_shipped=0 AND t.parent_class=\(parentClass) AND t.name=\(SQL.literal(key.name))"+(key.databaseTrigger ? ";":" AND OBJECT_SCHEMA_NAME(t.object_id)=\(SQL.literal(key.schema));")
+    } else {
+      sql="-- StudioSchemaTargetRefresh\nSELECT TOP (30001) o.object_id,o.name,s.name,o.type_desc,c.name,0 FROM sys.objects o JOIN sys.schemas s ON s.schema_id=o.schema_id LEFT JOIN sys.columns c ON c.object_id=o.object_id WHERE o.is_ms_shipped=0 AND s.name=\(SQL.literal(key.schema)) AND o.name=\(SQL.literal(key.name)) ORDER BY c.column_id;"
     }
-    refreshIndexInBackground(server:server,database:db,force:true)
-    for document in state.documents where document.server === server && document.database==db {Task {await document.loadSymbols(force:true)}}
+    do {
+      let result=try await server.catalog(sql,database:database,limits:SchemaComparison.limits)
+      guard generation==server.generation,server.online else {return}
+      guard !result.partial,!result.stoppedEarly,result.results.count==1,!result.results.contains(where:\.truncated) else {throw SQLFailure("Nesne yenilemesi kısmi geldi.")}
+      let values=Array(result.results.first?.values ?? [])
+      guard values.count<=30_000,values.allSatisfy({$0.count>=6 && $0[0].flatMap(Int.init).map {$0>0}==true && $0[0]==values.first?[0] && $0[1]==key.name && $0[2]==key.schema && $0[3] != nil}) else {throw SQLFailure("Nesne yenileme yanıtı doğrulanamadı.")}
+      let item=Catalog.rows(result).first
+      let parentID=values.first?[5].flatMap(Int.init) ?? 0
+      if folder != .triggers {
+        let rows=item.map {[$0]} ?? []
+        try await indexService.replaceTarget(profile:server.profile,database:database,name:key.schema+"."+key.name,folder:folder,items:rows)
+        guard generation==server.generation,server.online else {return}
+        let symbol=item.map {CatalogSymbol(schema:$0.schema,name:$0.name,columns:values.compactMap {$0[4]},kind:$0.detail)}
+        let catalog=try await catalogService.replaceTarget(profile:server.profile,database:database,schema:key.schema,name:key.name,symbol:symbol)
+        guard generation==server.generation,server.online else {return}
+        if let catalog {for document in state.documents where document.server === server && document.database==database {document.applyTargetedCatalog(catalog,database:database,generation:generation)}}
+      }
+      var queue=roots.filter {$0.server === server},visited=0
+      while let node=queue.popLast() {
+        visited+=1;if visited%200==0 {await Task.yield()}
+        guard generation==server.generation,server.online else {return}
+        queue.append(contentsOf:node.children)
+        guard node.database==database else {continue}
+        if case .folder(let category)=node.kind,category==folder,node.loaded,
+          folder != .triggers || (node.ownerObject?.item?.id ?? 0)==parentID {
+          let matches:(TreeNode)->Bool={child in child.item?.name==key.name && (key.databaseTrigger || child.item?.schema==key.schema)}
+          if let existing=node.children.first(where:matches),let item {existing.item=item;existing.title=folder == .triggers ? item.name:item.schema+"."+item.name}
+          else if let item {node.children.append(TreeNode(folder == .triggers ? item.name:item.schema+"."+item.name,kind:.object(folder),server:server,database:database,item:item));node.children.sort {$0.title.localizedStandardCompare($1.title) == .orderedAscending}}
+          else {node.children.removeAll(where:matches)}
+          reloadExplorer(item:node,children:true)
+        }
+        if case .object(let category)=node.kind,category==folder,node.item?.name==key.name,
+          key.databaseTrigger || node.item?.schema==key.schema {
+          if let item {node.item=item}
+          if node.expandable {let expanded=outline.isItemExpanded(node);node.loaded=false;node.children=[];if expanded {load(node)} else {reloadExplorer(item:node,children:true)}}
+          else {reloadExplorer(item:node)}
+        }
+      }
+      if searchScope?.server === server,searchScope.map({searchDatabases($0).contains(database)})==true,!explorerSearch.stringValue.isEmpty {filterExplorer()}
+    } catch {
+      guard generation==server.generation else {return}
+      searchStatus.stringValue="Nesne uygulandı; yerel katalog yenilenemedi."
+      searchStatus.toolTip=error.localizedDescription
+    }
   }
   @objc private func refreshChangedObjects(_ notification: Notification) {
     guard let doc = notification.object as? QueryDocument else { return }
@@ -1535,10 +1589,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     let nodes=contextNode.map {node in selection.contains(where:{$0 === node}) ? selection:[node]} ?? selection
     let seeds=schemaEndpoints(for:nodes)
     let endpoints=state.servers.filter(\.online).flatMap {server in server.databases.map {SchemaEndpoint(server:server,database:$0.name)}}
-    let model=SchemaComparisonModel(endpoints:endpoints,sourceID:seeds.first?.id,targetID:seeds.count==2 ? seeds[1].id:nil)
+    let model=SchemaComparisonModel(endpoints:endpoints,sourceID:seeds.first?.id)
     let owner=SchemaComparisonWindow(model:model) {[weak self] endpoint,sql in self?.state.newQuery(server:endpoint.server,database:endpoint.database,text:sql,title:"DDL Karşılaştırma · SQL Önizlemesi")}
     auxiliaryWindows.append(owner);owner.showWindow(nil)
-    if seeds.count==2,model.validPair {model.startComparison()}
   }
   func outlineViewSelectionDidChange(_ notification: Notification) {
     if !showingSearch, let node=selected, node.server !== searchScope?.server {

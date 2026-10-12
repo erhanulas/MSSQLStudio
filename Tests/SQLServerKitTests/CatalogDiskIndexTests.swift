@@ -83,6 +83,103 @@ struct CatalogDiskIndexTests {
   }
 }
 
+private actor CatalogCompletionRefreshGate {
+  private var continuation:CheckedContinuation<Void,Never>?
+  private(set) var started=false
+  func wait() async {
+    started=true
+    await withCheckedContinuation {continuation=$0}
+  }
+  func release() {continuation?.resume();continuation=nil}
+}
+
+struct CatalogCompletionTargetTests {
+  private func location()->URL {URL(fileURLWithPath:"/tmp/StudioCompletionTarget-"+UUID().uuidString).appendingPathComponent("catalog.sqlite")}
+  @Test func replacementKeepsOtherSchemasAndExactUnicodeNamesAndOriginalFreshnessOnDisk() async throws {
+    let url=location();defer {try? FileManager.default.removeItem(at:url.deletingLastPathComponent())}
+    let disk=CatalogDiskIndex(url:url),service=SQLCatalogService(index:disk),profile=ServerProfile()
+    let scope=CatalogDiskIndex.scope(profile:profile,database:"D"),date=Date(timeIntervalSince1970:1234)
+    let symbols=[CatalogSymbol(schema:"dbo",name:"One",columns:["Old"]),CatalogSymbol(schema:"audit",name:"One",columns:["Audit"]),CatalogSymbol(schema:"DBO",name:"One",columns:["Upper"]),CatalogSymbol(schema:"dbo",name:"one",columns:["Lower"]),CatalogSymbol(schema:"dbo",name:"Å",columns:["Angstrom"]),CatalogSymbol(schema:"dbo",name:"Å",columns:["Ring"])]
+    try await disk.saveCompletionSnapshot(scope:scope,snapshot:.init(symbols:symbols,synchronizedAt:date))
+    let replacement=CatalogSymbol(schema:"dbo",name:"One",columns:["New","City"],kind:"VIEW")
+    let updated=try #require(try await service.replaceTarget(profile:profile,database:"D",schema:"dbo",name:"One",symbol:replacement))
+    #expect(updated.snapshot.synchronizedAt==date && !updated.fresh)
+    #expect(updated.snapshot.symbols.count==symbols.count)
+    #expect(updated.snapshot.symbols[0].columns==["New","City"] && updated.snapshot.symbols[0].kind=="VIEW")
+    #expect(updated.snapshot.symbols.dropFirst().map(\.columns)==symbols.dropFirst().map(\.columns))
+    let unicode=try #require(try await service.replaceTarget(profile:profile,database:"D",schema:"dbo",name:"Å",symbol:CatalogSymbol(schema:"dbo",name:"Å",columns:["Changed"])))
+    #expect(unicode.snapshot.symbols[4].columns==["Changed"] && unicode.snapshot.symbols[5].columns==["Ring"])
+    let reopened=SQLCatalogService(index:CatalogDiskIndex(url:url))
+    let persisted=try #require(try await reopened.cached(profile:profile,database:"D"))
+    #expect(persisted.snapshot.synchronizedAt==date && persisted.snapshot.symbols.map(\.columns)==unicode.snapshot.symbols.map(\.columns))
+    #expect(try await reopened.cached(profile:profile,database:"Other")==nil)
+  }
+  @Test func deletionAndNewObjectAreScopedAndAnAbsentCacheDoesNotCreateSnapshot() async throws {
+    let url=location();defer {try? FileManager.default.removeItem(at:url.deletingLastPathComponent())}
+    let disk=CatalogDiskIndex(url:url),service=SQLCatalogService(index:disk),profile=ServerProfile()
+    let symbol=CatalogSymbol(schema:"dbo",name:"One",columns:["ID"]),scope=CatalogDiskIndex.scope(profile:profile,database:"D"),date=Date(timeIntervalSince1970:321)
+    #expect(try await service.replaceTarget(profile:profile,database:"D",schema:"dbo",name:"One",symbol:symbol)==nil)
+    #expect(try await disk.completionSnapshot(scope:scope)==nil)
+    try await disk.saveCompletionSnapshot(scope:scope,snapshot:.init(symbols:[symbol,CatalogSymbol(schema:"audit",name:"One",columns:["Keep"])],synchronizedAt:date))
+    let removed=try #require(try await service.replaceTarget(profile:profile,database:"D",schema:"dbo",name:"One",symbol:nil))
+    #expect(removed.snapshot.symbols.map(\.schema)==["audit"] && removed.snapshot.synchronizedAt==date)
+    let created=try #require(try await service.replaceTarget(profile:profile,database:"D",schema:"dbo",name:"New",symbol:CatalogSymbol(schema:"dbo",name:"New",columns:[],kind:"SQL_STORED_PROCEDURE")))
+    #expect(created.snapshot.symbols.map(\.name)==["One","New"] && created.snapshot.symbols.first?.columns==["Keep"])
+    #expect(try await disk.completionSnapshot(scope:scope)?.symbols.map(\.name)==["One","New"])
+  }
+  @Test func concurrentTargetedNotificationsPreserveEachOtherWithoutMarkingCatalogFresh() async throws {
+    let url=location();defer {try? FileManager.default.removeItem(at:url.deletingLastPathComponent())}
+    let disk=CatalogDiskIndex(url:url),service=SQLCatalogService(index:disk),profile=ServerProfile(),date=Date(timeIntervalSince1970:456)
+    let scope=CatalogDiskIndex.scope(profile:profile,database:"D")
+    try await disk.saveCompletionSnapshot(scope:scope,snapshot:.init(symbols:[CatalogSymbol(schema:"dbo",name:"Keep",columns:["ID"])],synchronizedAt:date))
+    try await withThrowingTaskGroup(of:Void.self) {group in
+      for index in 0..<12 {
+        group.addTask {
+          _=try await service.replaceTarget(profile:profile,database:"D",schema:"dbo",name:"New\(index)",symbol:CatalogSymbol(schema:"dbo",name:"New\(index)",columns:["Column\(index)"]))
+        }
+      }
+      try await group.waitForAll()
+    }
+    let memory=try #require(try await service.cached(profile:profile,database:"D")),persisted=try #require(try await disk.completionSnapshot(scope:scope))
+    #expect(memory.snapshot.symbols.count==13 && persisted.symbols.count==13)
+    #expect(memory.snapshot.symbols.first?.name=="Keep" && memory.snapshot.symbols.first?.columns==["ID"])
+    #expect(Set(memory.snapshot.symbols.dropFirst().map(\.name))==Set((0..<12).map {"New\($0)"}))
+    #expect(memory.snapshot.synchronizedAt==date && persisted.synchronizedAt==date)
+  }
+  @Test func scopedUpdateWaitsForFullRefreshAndLateWaitersDoNotRestoreOldSymbol() async throws {
+    let url=location();defer {try? FileManager.default.removeItem(at:url.deletingLastPathComponent())}
+    let disk=CatalogDiskIndex(url:url),gate=CatalogCompletionRefreshGate(),profile=ServerProfile(),date=Date()
+    let service=SQLCatalogService(index:disk,refreshFixture:{_,_,_ in
+      await gate.wait()
+      return SQLCatalogSnapshot(symbols:[CatalogSymbol(schema:"dbo",name:"One",columns:["Before"]),CatalogSymbol(schema:"audit",name:"Keep",columns:["ID"])],synchronizedAt:date)
+    })
+    let full=Task {try await service.refresh(profile:profile,password:"unused",database:"D",force:true)}
+    let deadline=ContinuousClock.now.advanced(by:.seconds(2))
+    while !(await gate.started),ContinuousClock.now<deadline {try await Task.sleep(for:.milliseconds(10))}
+    #expect(await gate.started)
+    let second=Task {try await service.refresh(profile:profile,password:"unused",database:"D")}
+    let target=Task {try await service.replaceTarget(profile:profile,database:"D",schema:"dbo",name:"One",symbol:CatalogSymbol(schema:"dbo",name:"One",columns:["After"]))}
+    await gate.release()
+    let updated=try #require(try await target.value)
+    _=try await full.value;_=try await second.value
+    let cached=try #require(try await service.cached(profile:profile,database:"D"))
+    #expect(updated.snapshot.symbols.first?.columns==["After"] && cached.snapshot.symbols.first?.columns==["After"])
+    #expect(cached.snapshot.symbols.last?.name=="Keep" && cached.snapshot.synchronizedAt==date)
+    #expect(try await disk.completionSnapshot(scope:CatalogDiskIndex.scope(profile:profile,database:"D"))?.symbols.first?.columns==["After"])
+  }
+  @Test func invalidTargetMetadataLeavesExistingCompletionSnapshotUntouched() async throws {
+    let url=location();defer {try? FileManager.default.removeItem(at:url.deletingLastPathComponent())}
+    let disk=CatalogDiskIndex(url:url),service=SQLCatalogService(index:disk),profile=ServerProfile(),scope=CatalogDiskIndex.scope(profile:profile,database:"D")
+    try await disk.saveCompletionSnapshot(scope:scope,snapshot:.init(symbols:[CatalogSymbol(schema:"dbo",name:"One",columns:["Keep"])]))
+    for symbol in [CatalogSymbol(schema:"audit",name:"One",columns:["ID"]),CatalogSymbol(schema:"dbo",name:"One",columns:[String(repeating:"x",count:129)]),CatalogSymbol(schema:"dbo",name:"One",columns:["Bad\0Name"])] {
+      do {_=try await service.replaceTarget(profile:profile,database:"D",schema:"dbo",name:"One",symbol:symbol);Issue.record("Invalid scoped completion metadata must fail")}
+      catch is SQLFailure {}
+    }
+    #expect(try await service.cached(profile:profile,database:"D")?.snapshot.symbols.first?.columns==["Keep"])
+    #expect(try await disk.completionSnapshot(scope:scope)?.symbols.first?.columns==["Keep"])
+  }
+}
+
 struct ResultEditingDiskCacheTests {
   @Test func persistedProvenanceSkipsNetworkAndSeparatesScopeQueryAndProjection() async throws {
     let folder=URL(fileURLWithPath:"/tmp/StudioEditing-"+UUID().uuidString)
