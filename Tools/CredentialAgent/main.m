@@ -102,7 +102,16 @@ static NSDictionary *perform(NSDictionary *request) {
         }
     } else if ([operation isEqual:@"delete"] && validAccount(account)) {
         query[(__bridge NSString *)kSecAttrAccount] = account;
-        status = SecItemDelete((__bridge CFDictionaryRef)query);
+        // The legacy SecItemDelete wrapper compares the *old application path*,
+        // even when the new caller satisfies its signed requirement. Use the
+        // file-Keychain item API on the exact service/account reference instead.
+        query[(__bridge NSString *)kSecReturnRef] = @YES;
+        CFTypeRef item = NULL;
+        status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &item);
+        if (status == errSecSuccess && item && CFGetTypeID(item) == SecKeychainItemGetTypeID())
+            status = SecKeychainItemDelete((SecKeychainItemRef)item);
+        else if (status == errSecSuccess) status = errSecInvalidItemRef;
+        if (item) CFRelease(item);
         if (status == errSecItemNotFound) status = errSecSuccess;
     } else if ([operation isEqual:@"list"] || [operation isEqual:@"renew"]) {
         NSMutableDictionary *lookup = [query mutableCopy];
