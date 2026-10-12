@@ -12,7 +12,9 @@ Bu dosya mimari, geliştirme durumu ve görünüm kurallarının ana kaynağıd�
 
 ## Güncel durum — 12 Ekim 2026
 
-Son doğrulanmış yayın **v0.2.80, build 81**; kaynak `1723f6d0ca455af556354ae90fc61976dd7a1bb6`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38255071001` başarılı; 292 paket testi (267 geçti / 25 dış koşullu atlandı), public latest, indirilen ZIP/PKG/credential archive SHA-256, digest/manifest, app/helper strict imzaları ve exact frozen helper eşitliği doğrulandı. Helper v1 hash'leri v0.2.69'dan aynen korunur; yeniden derlenmez/imzalanmaz. v0.2.62 önizleme tema hatası, v0.2.64 CI viewport/odak test engeli ve v0.2.72 favori ağacı seçim regresyonu nedeniyle yayımlanmadı; bu etiketler korunur.
+Son doğrulanmış yayın **v0.2.81, build 82**; kaynak `0898655fdb58adafe6b69b30ce6aff2c40125559`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38256656840` başarılı; 296 paket testi (271 geçti / 25 dış koşullu atlandı), public latest, indirilen ZIP/PKG/credential archive SHA-256, digest/manifest, app/helper strict imzaları ve exact frozen helper eşitliği doğrulandı. Helper v1 hash'leri v0.2.69'dan aynen korunur; yeniden derlenmez/imzalanmaz. v0.2.62 önizleme tema hatası, v0.2.64 CI viewport/odak test engeli ve v0.2.72 favori ağacı seçim regresyonu nedeniyle yayımlanmadı; bu etiketler korunur.
+
+- v0.2.81: GitHub asset indirmesinde hatalı JSON Accept → HTTP 500 giderildi; octet-stream/no-cache/fresh redirect, sınırlı retry ve gerçek HTTP/ağ tanısı eklendi. Yerel/CI 296 test: 271 geçti / 25 dış koşullu atlandı; canlı Foundation feed ve izole Güncel CUA, Release/public paket/imza/frozen helper geçti. Yeni zorunlu CI adımı imzalı uygulamanın kendi güncelleyicisiyle public 0.2.81'i okudu. Hatalı eski updater için bir defalık doğrudan PKG kurulum gerekir.
 
 - v0.2.80: Command+F ilk arama açılışı ve Düzen → Bul validation düzeltildi. Command+F/Ctrl+F ortak yol; seçili metin/fold/no-dim ve Command+Shift+F ayrımı korunur. Yerel/CI 292 test: 267 geçti / 25 dış koşullu atlandı; boş/seçili editörde Command+F ve menü CUA, Release ve public paket/imza/frozen helper doğrulandı.
 
