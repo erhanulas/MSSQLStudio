@@ -3,7 +3,75 @@ import Testing
 import SQLServerKit
 @testable import MSSQLStudio
 
+@MainActor private final class ExplorerDragFixture:NSObject,NSDraggingInfo {
+  let draggingPasteboard=NSPasteboard(name:.init("explorer-drag-\(UUID())"))
+  var draggingSource:Any?
+  var draggingDestinationWindow:NSWindow? {nil}
+  var draggingSourceOperationMask:NSDragOperation {.move}
+  var draggingLocation:NSPoint {.zero}
+  var draggedImageLocation:NSPoint {.zero}
+  nonisolated var draggedImage:NSImage? {nil}
+  var draggingSequenceNumber:Int {1}
+  var draggingFormation:NSDraggingFormation = .none
+  var animatesToDestination=false
+  var numberOfValidItemsForDrop=1
+  var springLoadingHighlight:NSSpringLoadingHighlight {.none}
+  func slideDraggedImage(to:NSPoint) {}
+  nonisolated override func namesOfPromisedFilesDropped(atDestination:URL) -> [String]? {nil}
+  func enumerateDraggingItems(options:NSDraggingItemEnumerationOptions = [],for view:NSView?,classes:[AnyClass],searchOptions:[NSPasteboard.ReadingOptionKey:Any] = [:],using block:(NSDraggingItem,Int,UnsafeMutablePointer<ObjCBool>) -> Void) {}
+  func resetSpringLoading() {}
+}
+
 @MainActor struct ObjectExplorerTests {
+  @Test func explorerDragReordersRootsAndPersistsWithoutChangingSessionsOrTreeIdentity() throws {
+    _=NSApplication.shared
+    let suite="explorer-order-test-\(UUID())",defaults=try #require(UserDefaults(suiteName:suite))
+    defer {defaults.removePersistentDomain(forName:suite)}
+    let state=StudioState();state.explorerOrderDefaults=defaults
+    let servers=["A","B","C"].map {name in
+      let server=ConnectedServer(profile:ServerProfile(name:name),password:"");server.online=false
+      server.databases=[CatalogItem(id:1,name:"master")];return server
+    }
+    state.servers=servers
+    let doc=QueryDocument(server:servers[0],database:"master",title:"Keep")
+    doc.state = .ready;doc.transactionCount=1;state.documents=[doc];state.active=doc
+    let host=WorkbenchController(state:state);_ = host.view
+    func descendants(_ v:NSView)->[NSView] {[v]+v.subviews.flatMap(descendants)}
+    let outline=try #require(descendants(host.view).compactMap {$0 as? NSOutlineView}.first)
+    func roots()->[TreeNode] {(0..<outline.numberOfRows).compactMap {outline.item(atRow:$0) as? TreeNode}.filter {if case .server=$0.kind {return true};return false}}
+    let original=roots(),a=try #require(original.first),c=try #require(original.last)
+    let folder=try #require(a.children.first);outline.expandItem(folder)
+    let database=try #require(folder.children.first)
+    outline.selectRowIndexes(IndexSet(integer:outline.row(forItem:database)),byExtendingSelection:false)
+    let writer=try #require(outline.dataSource?.outlineView?(outline,pasteboardWriterForItem:c) as? NSPasteboardItem)
+    #expect(outline.registeredDraggedTypes.contains(WorkbenchController.explorerDragType))
+    #expect(writer.string(forType:WorkbenchController.explorerDragType) == servers[2].id.uuidString)
+    #expect(host.outlineView(outline,pasteboardWriterForItem:database) == nil)
+    #expect(host.explorerDropIndex(sourceID:servers[2].id,item:a,childIndex:NSOutlineViewDropOnItemIndex) == 0)
+    #expect(host.explorerDropIndex(sourceID:servers[2].id,item:database,childIndex:NSOutlineViewDropOnItemIndex) == nil)
+    #expect(host.explorerDropIndex(sourceID:UUID(),item:nil,childIndex:0) == nil)
+    #expect(host.explorerDropIndex(sourceID:servers[2].id,item:nil,childIndex:3) == nil)
+    #expect(host.explorerDropIndex(sourceID:servers[2].id,item:nil,childIndex:4) == nil)
+    let drag=ExplorerDragFixture();drag.draggingSource=outline
+    defer {drag.draggingPasteboard.releaseGlobally()}
+    #expect(drag.draggingPasteboard.writeObjects([writer]))
+    #expect(outline.dataSource?.outlineView?(outline,validateDrop:drag,proposedItem:a,proposedChildIndex:NSOutlineViewDropOnItemIndex) == .move)
+    drag.draggingSource=NSOutlineView()
+    #expect(host.outlineView(outline,validateDrop:drag,proposedItem:nil,proposedChildIndex:0).isEmpty)
+    #expect(!host.outlineView(outline,acceptDrop:drag,item:nil,childIndex:0))
+    drag.draggingSource=outline
+    #expect(outline.dataSource?.outlineView?(outline,acceptDrop:drag,item:nil,childIndex:0) == true)
+    #expect(state.servers.map(\.id) == [servers[2].id,servers[0].id,servers[1].id])
+    #expect(roots().elementsEqual([c,a,original[1]],by:{$0 === $1}))
+    #expect(outline.isItemExpanded(folder) && outline.item(atRow:outline.selectedRow) as? TreeNode === database)
+    #expect(state.active === doc && doc.state == .ready && doc.transactionCount == 1 && servers.allSatisfy {!$0.online})
+    #expect(defaults.stringArray(forKey:"explorerServerOrder") == state.servers.map {$0.id.uuidString})
+    #expect(defaults.object(forKey:"explorerActiveServerIDs") == nil)
+    #expect(state.moveExplorer(servers[2].id,to:3))
+    #expect(state.servers.map(\.id) == servers.map(\.id))
+    #expect(!state.moveExplorer(servers[2].id,to:3) && !state.moveExplorer(UUID(),to:0) && !state.moveExplorer(servers[0].id,to:-1))
+    #expect(ExplorerPersistence.orderedIDs(servers.map(\.id),previous:defaults.stringArray(forKey:"explorerServerOrder")) == servers.map(\.id))
+  }
   @Test func agentPollingOnlyRunsForVisibleExpandedBranchesAndPreservesSelection() async throws {
     _=NSApplication.shared
     let state=StudioState(),server=ConnectedServer(profile:ServerProfile(),password:"")

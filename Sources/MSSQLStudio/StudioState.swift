@@ -408,6 +408,16 @@ struct ObjectEditorKey: Codable, Equatable {
   }
 }
 @MainActor final class StudioState {
+  var explorerOrderDefaults=UserDefaults.standard
+  @discardableResult func moveExplorer(_ id:UUID,to insertionIndex:Int) -> Bool {
+    guard (0...servers.count).contains(insertionIndex),let old=servers.firstIndex(where:{$0.id == id}) else {return false}
+    let destination=insertionIndex > old ? insertionIndex-1:insertionIndex
+    guard destination != old else {return false}
+    let server=servers.remove(at:old);servers.insert(server,at:destination)
+    explorerOrderDefaults.set(servers.map {$0.id.uuidString},forKey:"explorerServerOrder")
+    changed?()
+    return true
+  }
   var servers: [ConnectedServer] = []
   var documents: [QueryDocument] = []
   var active: QueryDocument?
@@ -561,7 +571,8 @@ struct ObjectEditorKey: Codable, Equatable {
   func restoreExplorers() async -> Bool {
     do {
       let saved = try await Task.detached { try ServerVault().list() }.value
-      let ids = ExplorerPersistence.selectedIDs(saved: saved.map { $0.profile.id }, previous: UserDefaults.standard.stringArray(forKey: "explorerActiveServerIDs"))
+      let selected = ExplorerPersistence.selectedIDs(saved: saved.map { $0.profile.id }, previous: UserDefaults.standard.stringArray(forKey: "explorerActiveServerIDs"))
+      let ids=ExplorerPersistence.orderedIDs(selected,previous:explorerOrderDefaults.stringArray(forKey:"explorerServerOrder"))
       UserDefaults.standard.set(ids.map(\.uuidString), forKey: "explorerActiveServerIDs")
       let chosen = ids.compactMap { id in saved.first { $0.profile.id == id } }
       for record in chosen where !servers.contains(where: { $0.id == record.profile.id }) {

@@ -3,6 +3,13 @@ import Testing
 import Security
 @testable import SQLServerKit
 struct StartupUpdateTests {
+  @Test func explorerOrderRestoresOnlySelectedIDsAndAppendsNewProfiles() {
+    let a=UUID(),b=UUID(),c=UUID(),missing=UUID()
+    #expect(ExplorerPersistence.orderedIDs([a,b,c],previous:[b.uuidString,missing.uuidString,"invalid",b.uuidString,a.uuidString]) == [b,a,c])
+    #expect(ExplorerPersistence.orderedIDs([a,c],previous:[b.uuidString,c.uuidString,a.uuidString]) == [c,a])
+    #expect(ExplorerPersistence.orderedIDs([a,b],previous:nil) == [a,b])
+    #expect(ExplorerPersistence.orderedIDs([],previous:[a.uuidString]) == [])
+  }
   @Test func explorerMigrationRestoresAllSavedButHonorsExplicitDisconnect() {
     let a=UUID(), b=UUID(), missing=UUID()
     #expect(ExplorerPersistence.selectedIDs(saved:[a,b],previous:nil) == [a,b])

@@ -59,6 +59,13 @@ import SwiftUI
         server.databases=[CatalogItem(id:5,name:"DemoDB")]
         studio.servers.append(server)
       }
+      if Bundle.main.object(forInfoDictionaryKey:"StudioExplorerOrderSmoke") as? Bool == true {
+        if !studio.servers.contains(where:{$0 === server}) {studio.servers.append(server)}
+        for name in ["UI Test B","UI Test C"] {
+          let other=ConnectedServer(profile:ServerProfile(name:name),password:"");other.online=false
+          studio.servers.append(other)
+        }
+      }
       let document = QueryDocument(server: server, database: "master", title: "SQLQuery1.sql")
       document.sql = ""
       document.savedText = document.sql

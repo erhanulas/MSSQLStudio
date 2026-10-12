@@ -358,6 +358,10 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     outline.target = self
     outline.doubleAction = #selector(openObject)
     outline.setAccessibilityIdentifier("objectExplorer")
+    outline.registerForDraggedTypes([Self.explorerDragType])
+    outline.setDraggingSourceOperationMask(.move,forLocal:true)
+    outline.setDraggingSourceOperationMask([],forLocal:false)
+    outline.setAccessibilityHelp("Bağlantı başlıklarını sürükleyerek Explorer sırasını değiştirebilirsiniz.")
     let menu = NSMenu()
     menu.delegate = self
     outline.menu = menu
@@ -561,6 +565,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         roots.append(serverTree(server))
       }
     }
+    roots=state.servers.compactMap {server in roots.first {$0.server === server}}
     for root in roots {synchronizeFavorites(in:root)}
     rebuildSearchScopes()
     outline.reloadData()
@@ -1355,6 +1360,36 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
   }
   private func visible(_ nodes: [TreeNode]) -> [TreeNode] { nodes }
+  static let explorerDragType=NSPasteboard.PasteboardType("local.mssqlstudio.explorer-connection")
+  func outlineView(_ outlineView:NSOutlineView,pasteboardWriterForItem item:Any) -> (any NSPasteboardWriting)? {
+    guard !showingSearch,let node=item as? TreeNode,case .server=node.kind,roots.contains(where:{$0 === node}) else {return nil}
+    let writer=NSPasteboardItem();writer.setString(node.server.id.uuidString,forType:Self.explorerDragType)
+    return writer
+  }
+  func explorerDropIndex(sourceID:UUID,item:Any?,childIndex:Int) -> Int? {
+    guard !showingSearch,let old=roots.firstIndex(where:{$0.server.id == sourceID}) else {return nil}
+    let index:Int
+    if let item {
+      guard childIndex == NSOutlineViewDropOnItemIndex,let node=item as? TreeNode,case .server=node.kind,
+        let target=roots.firstIndex(where:{$0 === node}) else {return nil}
+      index=target
+    } else {index=childIndex}
+    guard (0...roots.count).contains(index),index != old,index != old+1 else {return nil}
+    return index
+  }
+  func outlineView(_ outlineView:NSOutlineView,validateDrop info:any NSDraggingInfo,proposedItem item:Any?,proposedChildIndex childIndex:Int) -> NSDragOperation {
+    guard info.draggingSource as? NSOutlineView === outlineView,info.draggingPasteboard.pasteboardItems?.count == 1,
+      let raw=info.draggingPasteboard.string(forType:Self.explorerDragType),let id=UUID(uuidString:raw),
+      let index=explorerDropIndex(sourceID:id,item:item,childIndex:childIndex) else {return []}
+    outlineView.setDropItem(nil,dropChildIndex:index)
+    return .move
+  }
+  func outlineView(_ outlineView:NSOutlineView,acceptDrop info:any NSDraggingInfo,item:Any?,childIndex:Int) -> Bool {
+    guard info.draggingSource as? NSOutlineView === outlineView,info.draggingPasteboard.pasteboardItems?.count == 1,
+      let raw=info.draggingPasteboard.string(forType:Self.explorerDragType),let id=UUID(uuidString:raw),
+      let index=explorerDropIndex(sourceID:id,item:item,childIndex:childIndex) else {return false}
+    return state.moveExplorer(id,to:index)
+  }
   func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
     visible((item as? TreeNode)?.children ?? (showingSearch ? searchResults ?? [] : roots)).count
   }
@@ -1420,7 +1455,11 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     cell.textField = label
     cell.imageView = image
-    cell.toolTip = node.error ?? (!node.server.online ? "Explorer bağlantısı kapalı. Son yüklenen nesneler gösteriliyor. Yenile veya çift tıklama ile yeniden bağlanın; açık sorgu oturumları korunur." : nil) ?? node.item?.detail ?? "\(node.server.profile.name) · \(node.server.profile.host),\(node.server.profile.port) · \(node.database)"
+    cell.toolTip = node.error ?? (!node.server.online ? "Explorer bağlantısı kapalı. Son yüklenen nesneler gösteriliyor. Bağlantı işlemleri menüsünden yeniden bağlanabilirsiniz; açık sorgu oturumları korunur." : nil) ?? node.item?.detail ?? "\(node.server.profile.name) · \(node.server.profile.host),\(node.server.profile.port) · \(node.database)"
+    if case .server = node.kind {
+      cell.toolTip=(cell.toolTip ?? "")+"\nSürükleyerek Explorer bağlantılarının sırasını değiştirin."
+      label.setAccessibilityHelp(cell.toolTip)
+    }
     if case .relation(let relation)=node.linked {
       cell.toolTip=relation.qualified + " · " + relation.type + (relation.remarks.isEmpty ? "" : "\n"+relation.remarks)
     }

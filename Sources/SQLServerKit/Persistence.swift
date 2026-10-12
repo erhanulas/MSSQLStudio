@@ -200,6 +200,11 @@ public enum Export {
 }
 
 public enum ExplorerPersistence {
+  public static func orderedIDs(_ ids:[UUID], previous:[String]?) -> [UUID] {
+    let available=Set(ids)
+    var seen=Set<UUID>()
+    return ((previous ?? []).compactMap(UUID.init(uuidString:))+ids).filter {available.contains($0) && seen.insert($0).inserted}
+  }
   public static func selectedIDs(saved: [UUID], previous: [String]?) -> [UUID] {
     guard let previous else { return saved }
     let available = Set(saved)
