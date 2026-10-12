@@ -93,6 +93,41 @@ import Testing
     let canonical=SQLTextDiff.compareIgnoringSQLWhitespace("SELECT N'é';","SELECT N'e\u{301}';")
     #expect(canonical.lines.first?.changed==true)
   }
+  @Test func longRepeatedProcedureKeepsTwoChangeGroupsSyntaxColorsAndExactCopyAfterShift() throws {
+    let previous=UserDefaults.standard.string(forKey:"ssmsTheme")
+    defer {StudioTheme.apply(previous ?? "light")}
+    StudioTheme.apply("light")
+    let rows=Array(repeating:"    SELECT 1;",count:1500)
+    var modified=rows;modified[10]="    SELECT 2;";modified[1480]="    SELECT 3;"
+    let original="CREATE PROCEDURE dbo.p AS\nBEGIN\n"+rows.joined(separator:"\n")+"\nEND;"
+    let edited="CREATE PROCEDURE dbo.p AS\r\nBEGIN\r\n\r\n"+modified.map {$0+"  "}.joined(separator:"\r\n")+"\r\nEND;"
+    let comparison=SQLTextDiff.compareIgnoringSQLWhitespace(original,edited),view=preview(original,edited,ignoringWhitespace:true)
+    #expect(!comparison.simplified && comparison.added==2 && comparison.removed==2)
+    #expect(view.changeRows.count==2 && view.renderedRows==1504 && !view.truncated)
+    #expect(Data(view.leftText.selectedSQL(in:NSRange(location:0,length:view.leftText.string.utf16.count)).utf8)==Data(original.utf8))
+    #expect(Data(view.rightText.selectedSQL(in:NSRange(location:0,length:view.rightText.string.utf16.count)).utf8)==Data(edited.utf8))
+    for text in [view.leftText,view.rightText] {
+      let storage=try #require(text.textContentStorage?.textStorage)
+      let middle=(storage.string as NSString).range(of:"SELECT 1;",options:[],range:NSRange(location:storage.length/2,length:storage.length-storage.length/2))
+      #expect(storage.attribute(.backgroundColor,at:middle.location,effectiveRange:nil)==nil)
+      #expect(hex(storage.attribute(.foregroundColor,at:middle.location,effectiveRange:nil) as? NSColor)==0x0000FF)
+    }
+    #expect(comparison.lines.filter(\.changed).allSatisfy {$0.old != $0.new})
+    view.display(comparison:comparison,original:original,edited:edited,changeIndex:1)
+    #expect(view.left.contentView.bounds.minY>20_000)
+  }
+  @Test func routineReflowAndBlankRowsDoNotCreateExtraNativeChanges() throws {
+    let rows=Array(repeating:"SELECT 1;",count:1500)
+    var modified=rows;modified[10]="SELECT 2;";modified[1480]="SELECT 3;"
+    modified[5]="\nSELECT\n    1;";modified[1475]="\nSELECT\n    1;"
+    let original=rows.joined(separator:"\n"),edited=modified.joined(separator:"\r\n")
+    let comparison=SQLTextDiff.compareIgnoringSQLWhitespace(original,edited),view=preview(original,edited,ignoringWhitespace:true)
+    #expect(!comparison.simplified && comparison.added==2 && comparison.removed==2)
+    #expect(view.changeRows.count==2 && comparison.lines.filter(\.changed).count==2)
+    #expect(comparison.lines.filter(\.changed).allSatisfy {$0.old != $0.new})
+    #expect(Data(view.leftText.selectedSQL(in:NSRange(location:0,length:view.leftText.string.utf16.count)).utf8)==Data(original.utf8))
+    #expect(Data(view.rightText.selectedSQL(in:NSRange(location:0,length:view.rightText.string.utf16.count)).utf8)==Data(edited.utf8))
+  }
   @Test func lightAndDarkSSMSColorsCoexistWithLineAndComposedCharacterDiffHighlights() throws {
     let previous=UserDefaults.standard.string(forKey:"ssmsTheme")
     defer {StudioTheme.apply(previous ?? "light")}

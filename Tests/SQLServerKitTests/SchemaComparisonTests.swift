@@ -241,12 +241,91 @@ struct SchemaComparisonTests {
     for module in [procedure,function] {
       let kind=module.type=="P" ? "PROC":"FUNCTION"
       let compact="CREATE \(kind) dbo.\(module.key.name) AS SELECT 1;"
-      #expect(try SchemaComparison.compare(source:refined(module,compact),target:refined(module,compact.replacingOccurrences(of:"SELECT 1",with:"SELECT\n  1"))).first?.status == .changed)
+      #expect(try SchemaComparison.compare(source:refined(module,compact),target:refined(module,compact.replacingOccurrences(of:"SELECT 1",with:"SELECT\n  1"))).first?.status == .equal)
     }
     var content=Execution();content.results=[Rows(values:[[added,"1","1","0",nil]])]
     let decoded=try SchemaComparison.decodeContent(content,object:target)
     #expect(decoded.definition.utf8.elementsEqual(added.utf8))
     #expect(decoded.sql.contains("C.INCKEYNO AS ExternalOrderId,\r\n"))
+  }
+  @Test func readableSQLModuleComparisonPolicyExcludesCLRAndNonModuleObjects() throws {
+    for type in ["V","P","FN","IF","TF","TR","TRD"] {#expect(object("module",type:type).usesSQLCodeComparison)}
+    for type in ["U","SN","PC","FS","FT","TA","unknown"] {#expect(!object("module",type:type).usesSQLCodeComparison)}
+    for type in ["PC","FS","FT","TA"] {
+      var result=Execution();result.results=[Rows(values:[["1","A"]]),Rows(values:[["1","dbo","CLRModule",type,nil,"CLR tanımı otomatik taşınamaz.",nil]]),Rows()]
+      let snapshot=try SchemaComparison.decode(result)
+      #expect(try SchemaComparison.compare(source:snapshot,target:snapshot).first?.status == .unavailable)
+    }
+  }
+  @Test(arguments:["P","FN","IF","TF","TR","TRD"])
+  func proceduresFunctionsAndTriggersIgnoreOnlyFormatting(_ type:String) throws {
+    let key=SchemaObjectKey(schema:type=="TRD" ? "":"dbo",name:"module",databaseTrigger:type=="TRD")
+    let source=SchemaObject(key:key,objectID:41,type:type,digest:String(repeating:"a",count:64))
+    // Keep the object ID equal to isolate the raw-hash conflict assertion below.
+    let target=SchemaObject(key:key,objectID:41,type:type,digest:String(repeating:"b",count:64))
+    let declarations:[String:String]=[
+      "P":"CREATE PROC oldName @value int AS -- note  text      \nBEGIN SELECT @value + 1 AS [Value Text], N'a  b' AS Note; END;",
+      "FN":"CREATE FUNCTION oldName(@value int) RETURNS int AS -- note  text      \nBEGIN DECLARE @result int; SELECT @result = @value + 1 FROM dbo.[Value Text] WHERE Note = N'a  b'; RETURN @result; END;",
+      "IF":"CREATE FUNCTION oldName(@value int) RETURNS TABLE AS -- note  text      \nRETURN (SELECT @value + 1 AS [Value Text], N'a  b' AS Note);",
+      "TF":"CREATE FUNCTION oldName(@value int) RETURNS @result TABLE ([Value Text] int, Note nvarchar(20)) AS -- note  text      \nBEGIN INSERT @result SELECT @value + 1, N'a  b'; RETURN; END;",
+      "TR":"CREATE TRIGGER oldName ON dbo.T AFTER UPDATE AS -- note  text      \nBEGIN DECLARE @value int=0; SELECT @value + 1 AS [Value Text], N'a  b' AS Note; END;",
+      "TRD":"CREATE TRIGGER oldName ON DATABASE FOR CREATE_TABLE AS -- note  text      \nBEGIN DECLARE @value int=0; SELECT @value + 1 AS [Value Text], N'a  b' AS Note; END;"
+    ]
+    let original=try #require(declarations[type]).replacingOccurrences(of:"\n",with:"\n/* outer\n/* nested */ tail */\n")
+    let formatted=original.replacingOccurrences(of:"CREATE ",with:"ALTER ").replacingOccurrences(of:"oldName",with:key.qualified)
+      .replacingOccurrences(of:"\n",with:"\r\n").replacingOccurrences(of:"      \r\n",with:"\t \r\n")
+      .replacingOccurrences(of:" AS ",with:"\r\nAS\t").replacingOccurrences(of:" + 1",with:"\t+\t1")
+      .replacingOccurrences(of:" = ",with:"\t=\t").replacingOccurrences(of:"; END",with:";\r\n\r\nEND")
+    let parent=type=="TRD" ? "DATABASE":type=="TR" ? "[dbo].[T]":""
+    func refined(_ object:SchemaObject,_ sql:String,ansi:String="1",quoted:String="1") throws -> SchemaSnapshot {
+      var result=Execution();result.results=[Rows(values:[[String(object.objectID),sql,ansi,quoted,"0",parent]])]
+      return try SchemaComparison.refine(.init(objects:[object]),objects:[object],result:result)
+    }
+    let a=try refined(source,original),b=try refined(target,formatted)
+    let equal=try #require(SchemaComparison.compare(source:a,target:b).first)
+    #expect(equal.status == .equal && !equal.canStage)
+    #expect(a.objects[key]?.comparisonDigest==b.objects[key]?.comparisonDigest)
+    #expect(a.objects[key]?.digest==source.digest && b.objects[key]?.digest==target.digest)
+    #expect(throws:SQLFailure.self) {try SchemaMigration.validateBaseline(a,current:b,keys:[key])}
+    for changed in [
+      formatted.replacingOccurrences(of:"\t+\t1",with:"\t+\t2"),
+      formatted.replacingOccurrences(of:"N'a  b'",with:"N'a b'"),
+      formatted.replacingOccurrences(of:"[Value Text]",with:"[Value  Text]"),
+      formatted.replacingOccurrences(of:"-- note  text",with:"-- note text"),
+      formatted.replacingOccurrences(of:"/* nested */",with:"/*  nested */")
+    ] {#expect(try SchemaComparison.compare(source:a,target:refined(target,changed)).first?.status == .changed)}
+    #expect(try SchemaComparison.compare(source:a,target:refined(target,formatted,ansi:"0")).first?.status == .changed)
+    #expect(try SchemaComparison.compare(source:a,target:refined(target,formatted,quoted:"0")).first?.status == .changed)
+    var execution=Execution();execution.results=[Rows(values:[[formatted,"1","1","0",parent]])]
+    let content=try SchemaComparison.decodeContent(execution,object:try #require(b.objects[key]))
+    #expect(content.definition.utf8.elementsEqual(formatted.utf8))
+    #expect(content.sql.contains("N'a  b'"))
+  }
+  @Test(arguments:["TR","TRD"])
+  func triggerStateParentAndOriginalMigrationSQLRemainSignificant(_ type:String) throws {
+    let key=SchemaObjectKey(schema:type=="TRD" ? "":"dbo",name:"trigger",databaseTrigger:type=="TRD")
+    let source=SchemaObject(key:key,objectID:41,type:type,digest:String(repeating:"a",count:64))
+    let target=SchemaObject(key:key,objectID:41,type:type,digest:String(repeating:"b",count:64))
+    let parent=type=="TRD" ? "DATABASE":"[dbo].[T]"
+    let scope=type=="TRD" ? "ON DATABASE FOR CREATE_TABLE":"ON [dbo].[T] AFTER UPDATE"
+    let sql="CREATE TRIGGER oldName \(scope) AS\r\nBEGIN\r\n\tSELECT N'keep  original'; -- retained      \r\nEND;"
+    func refined(_ object:SchemaObject,disabled:Bool,parent:String) throws -> SchemaSnapshot {
+      var result=Execution();result.results=[Rows(values:[[String(object.objectID),sql,"0","0",disabled ? "1":"0",parent]])]
+      return try SchemaComparison.refine(.init(objects:[object]),objects:[object],result:result)
+    }
+    let a=try refined(source,disabled:true,parent:parent)
+    let b=try refined(target,disabled:false,parent:parent)
+    #expect(try SchemaComparison.compare(source:a,target:b).first?.status == .changed)
+    let differentParent=try refined(target,disabled:true,parent:parent+"_changed")
+    #expect(try SchemaComparison.compare(source:a,target:differentParent).first?.status == .changed)
+    let left=try #require(a.objects[key]),right=try #require(b.objects[key])
+    let desired=SchemaObjectContent(object:left,sql:try ExplorerScripts.module(sql,verb:"CREATE",qualified:key.qualified,ansi:false,quoted:false),ansi:false,quoted:false,disabled:true,triggerParent:parent,definition:sql)
+    let existing=SchemaObjectContent(object:right,sql:desired.sql,ansi:false,quoted:false,disabled:false,triggerParent:parent,definition:sql)
+    let plan=try SchemaMigration.plan(selected:[key],source:a,target:b,sourceContent:[key:desired],targetContent:[key:existing])
+    #expect(plan.sql.contains("SET ANSI_NULLS OFF;") && plan.sql.contains("SET QUOTED_IDENTIFIER OFF;"))
+    #expect(plan.sql.contains("DISABLE TRIGGER \(key.qualified) ON \(parent);"))
+    #expect(plan.sql.contains("N''keep  original''; -- retained      \r\n"))
+    #expect(desired.definition.utf8.elementsEqual(sql.utf8))
   }
   @Test func migrationOrdersDependenciesEscapesSQLAndNeverDropsModules() throws {
     let table=object("T",type:"U",id:10),view=object("v",type:"V",id:11),proc=object("p']\n--",id:12)

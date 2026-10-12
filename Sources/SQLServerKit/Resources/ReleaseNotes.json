@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.89",
+    "date": "2026-10-12",
+    "title": "Tüm SQL modüllerinde temiz kod farkları ve daha doğru satır eşleme",
+    "changes": [
+      "View’ların yanında prosedür, scalar/table-valued fonksiyon ve tablo/veritabanı trigger karşılaştırmaları da gereksiz boşluk, girinti ve satır sonlarını yok sayar. Yalnız biçimi farklı nesneler fark listesine gelmez.",
+      "Alt kod görünümü satır ekleme, satır kayması ve farklı satır yerleşimlerinde aynı kod bölümlerini daha doğru eşler. Uzun kodda birbirinden uzak küçük değişiklikler aradaki aynı kodu tamamen değişmiş gibi boyamaz.",
+      "Gerçek kod değişiklikleri satır ve metin vurgusuyla belirgin kalır; önceki/sonraki fark gezinmesi ve özgün SQL kopyalama korunur. Metin değerleri, tırnaklı adlar, yorum içeriği ve Unicode farkları kaybolmaz.",
+      "Trigger etkinliği/bağlandığı nesne, SQL oturum ayarları, özgün tanımlar ve gönderim öncesi tam nesne doğrulaması korunur."
+    ]
+  },
+  {
     "version": "0.2.88",
     "date": "2026-10-12",
     "title": "View karşılaştırmasında gerçek kod farklarına odaklanma",

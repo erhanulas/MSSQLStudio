@@ -80,12 +80,77 @@ import Testing
     }
   }
   @Test func viewWhitespaceDiffHasBoundedFallbackForDenseSemanticReplacements() {
-    let original=(0..<1001).map {"SELECT [old\($0)] + \($0);"}.joined(separator:"\n")
-    let edited=(0..<1001).map {"SELECT [new\($0)] - \($0+1);"}.joined(separator:"\n")
+    let original=(0..<1001).map {"SELECT [old\($0)] + N'old\($0)';"}.joined(separator:"\n")
+    let edited=(0..<1001).map {"DELETE [new\($0)] - N'new\($0)';"}.joined(separator:"\n")
     let diff=SQLTextDiff.compareIgnoringSQLWhitespace(original,edited)
     #expect(diff.simplified && diff.added==1001 && diff.removed==1001)
     #expect(diff.lines.compactMap(\.old).joined(separator:"\n")==original)
     #expect(diff.lines.compactMap(\.new).joined(separator:"\n")==edited)
+  }
+  @Test func longModuleDiffKeepsSparseChangesSeparateWithoutPaintingStableMiddle() {
+    let rows=(0..<4500).map {"    SELECT \($0) AS [Step];"}
+    var edited=rows;edited[10]="    SELECT 100010 AS [Step];";edited[4480]="    SELECT 104480 AS [Step];"
+    let original="CREATE PROCEDURE dbo.p AS BEGIN\n"+rows.joined(separator:"\n")+"\nEND;"
+    let source="CREATE PROCEDURE dbo.p AS BEGIN\r\n\r\n"+edited.map {$0+"  "}.joined(separator:"\r\n")+"\r\nEND;"
+    let diff=SQLTextDiff.compareIgnoringSQLWhitespace(original,source)
+    #expect(!diff.simplified && diff.added==2 && diff.removed==2)
+    #expect(diff.lines.filter(\.changed).count==2)
+    #expect(diff.lines.filter(\.changed).map(\.oldNumber)==[12,4482])
+    #expect(diff.lines.filter(\.changed).map(\.newNumber)==[13,4483])
+    #expect(diff.lines.compactMap(\.old).joined(separator:"\n")==original)
+    #expect(diff.lines.compactMap(\.new).joined(separator:"\r\n")==source)
+  }
+  @Test func longRepeatedModuleWithoutUniqueAnchorsRetainsTwoSmallEditsAndInsertedBlock() {
+    let rows=Array(repeating:"    SELECT 1;",count:1700)
+    var edited=rows;edited[10]="    SELECT 2;";edited[1680]="    SELECT 3;"
+    let original=rows.joined(separator:"\n"),source=edited.joined(separator:"\n")
+    let diff=SQLTextDiff.compareIgnoringSQLWhitespace(original,source)
+    #expect(!diff.simplified && diff.added==2 && diff.removed==2)
+    #expect(diff.lines.filter(\.changed).count==2)
+    #expect(diff.lines.filter(\.changed).map(\.oldNumber)==[11,1681])
+    let inserted=Array(rows.prefix(20))+["    SELECT N'new';","    PRINT N'new';"]+Array(rows.dropFirst(20))
+    let insertion=SQLTextDiff.compareIgnoringSQLWhitespace(original,inserted.joined(separator:"\n"))
+    #expect(!insertion.simplified && insertion.added==2 && insertion.removed==0)
+    #expect(insertion.lines.filter(\.changed).count==2)
+    #expect(insertion.lines.compactMap(\.old).joined(separator:"\n")==original)
+    #expect(insertion.lines.compactMap(\.new).joined(separator:"\n")==inserted.joined(separator:"\n"))
+    let deletion=SQLTextDiff.compareIgnoringSQLWhitespace(inserted.joined(separator:"\n"),original)
+    #expect(!deletion.simplified && deletion.added==0 && deletion.removed==2)
+    #expect(deletion.lines.filter(\.changed).count==2)
+    #expect(deletion.lines.filter(\.changed).allSatisfy {$0.old != $0.new})
+  }
+  @Test func longReflowedModuleUsesOnlyRealTokensForDiffAndPreservesRows() {
+    let statements=(0..<1800).map {"SET @value = @value + \($0);"}
+    let original=statements.joined(separator:"\n")
+    var edited=statements.map {$0.replacingOccurrences(of:" = ",with:"\n    = ")}
+    edited[10]="SET @value\n    = @value - 10;";edited[1780]="SET @value\n    = @value - 1780;"
+    let source=edited.joined(separator:"\r\n\r\n")
+    let diff=SQLTextDiff.compareIgnoringSQLWhitespace(original,source)
+    #expect(diff.added==2 && diff.removed==2)
+    #expect(!diff.simplified && diff.lines.filter(\.changed).count==2)
+    #expect(diff.lines.filter(\.changed).map(\.oldNumber)==[11,1781])
+    #expect(diff.lines.filter(\.changed).map(\.newNumber)==[32,5342])
+    #expect(diff.lines.compactMap(\.old).joined(separator:"\n")==original)
+    #expect(diff.lines.compactMap(\.newNumber)==Array(1...5399))
+  }
+  @Test func repeatedModuleBlankLinesWrappedNeighborsAndInsertedCommentsKeepCoherentRows() {
+    let rows=Array(repeating:"SELECT 1;",count:1500),original=rows.joined(separator:"\n")
+    for wrap in [false,true] {
+      var modified=rows;modified[10]="SELECT 2;";modified[1480]="SELECT 3;"
+      modified[5]=wrap ? "\nSELECT\n    1;":"\nSELECT 1;"
+      modified[1475]=wrap ? "\nSELECT\n    1;":"\nSELECT 1;"
+      let source=modified.joined(separator:"\r\n"),diff=SQLTextDiff.compareIgnoringSQLWhitespace(original,source)
+      #expect(!diff.simplified && diff.added==2 && diff.removed==2)
+      #expect(diff.lines.filter(\.changed).count==2)
+      #expect(diff.lines.filter(\.changed).allSatisfy {$0.old != $0.new})
+      #expect(diff.lines.compactMap(\.old).joined(separator:"\n")==original)
+    }
+    var comments=rows;comments[10]="SELECT 2;";comments[1480]="SELECT 3;"
+    comments[5]="-- Added comment\n\nSELECT 1;"
+    let diff=SQLTextDiff.compareIgnoringSQLWhitespace(original,comments.joined(separator:"\n"))
+    #expect(!diff.simplified && diff.added==3 && diff.removed==2)
+    #expect(diff.lines.filter(\.changed).count==3)
+    #expect(diff.lines.filter(\.changed).allSatisfy {$0.old != $0.new})
   }
   @Test func jobCommandsUseValidatedGUIDAndPreserveSharedSchedules() throws {
     let id=UUID().uuidString

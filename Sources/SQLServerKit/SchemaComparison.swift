@@ -22,6 +22,9 @@ public struct SchemaObject: Identifiable, Equatable, Sendable {
   public let structuralDigest: String?
   public init(key:SchemaObjectKey,objectID:Int,type:String,digest:String?,issue:String="",comparisonDigest:String?=nil,definitionDigest:String?=nil,structuralDigest:String?=nil) {self.key=key;self.objectID=objectID;self.type=type;self.digest=digest;self.issue=issue;self.comparisonDigest=comparisonDigest;self.definitionDigest=definitionDigest;self.structuralDigest=structuralDigest}
   public var kind: String {switch type {case "U":return "Tablo";case "V":return "View";case "P","PC":return "Prosedür";case "FN","IF","TF","FS","FT":return "Fonksiyon";case "TR","TA","TRD":return "Trigger";case "SN":return "Synonym";default:return type}}
+  /// Shared by inventory refinement and inline code comparison. CLR objects have
+  /// no readable T-SQL body and retain their unavailable/unsupported behavior.
+  public var usesSQLCodeComparison: Bool {["V","P","FN","IF","TF","TR","TRD"].contains(type)}
 }
 public struct SchemaSnapshot: Sendable {
   public var objects: [SchemaObjectKey:SchemaObject]
@@ -477,9 +480,9 @@ extension SchemaComparison {
       var execution=Execution();execution.results=[Rows(values:[Array(row[1...5])])]
       let content=try decodeContent(execution,object:object)
       // CREATE / ALTER and stale names retained by sp_rename are delivery details.
-      // Views ignore formatting-only whitespace, with protected SQL text and
-      // lexical boundaries retained. Other module bodies keep exact comparison.
-      let code=object.type=="V" ? SQLWhitespaceComparison.key(content.sql):content.sql
+      // Readable T-SQL modules ignore formatting-only whitespace, with protected
+      // text, lexical boundaries and captured session SET options retained.
+      let code=object.usesSQLCodeComparison ? SQLWhitespaceComparison.key(content.sql):content.sql
       let canonical=code+"\n--trigger-state:"+String(content.disabled)+"|"+content.triggerParent
       func hash(_ value:String)->String {SHA256.hash(data:Data(value.utf8)).map {String(format:"%02x",$0)}.joined()}
       let definitionDigest=hash(canonical)

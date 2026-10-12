@@ -27,6 +27,8 @@ import SQLServerKit
     let row=try #require(model.differences.first {$0.key.name=="usp_Customers"})
     model.focused=row.key;await model.loadDetail()
     #expect(model.detailReady && model.sourceSQL.contains("[City]") && !model.targetSQL.contains("[City]"))
+    #expect(model.detailComparison?.added==2 && model.detailComparison?.removed==1)
+    #expect(model.changedGroups.count==2 && model.sourceSQL.contains("\r\n"))
     let count=calls.count;await model.loadDetail();#expect(calls.count==count)
     model.marked=[row.key]
     let plan=try #require(await model.preparePlan())
@@ -150,6 +152,43 @@ import SQLServerKit
     #expect(model.error.contains("DDL özeti hesaplanamadı") && model.error.contains("v_ActiveBalance"))
     #expect(model.visible.isEmpty && model.differences.isEmpty && model.sourceSnapshot==nil)
     #expect(model.message=="Karşılaştırma tamamlanamadı." && !model.busy)
+  }
+  @Test func proceduresFunctionsAndTriggersUseWhitespaceAwareInlineComparison() async throws {
+    let headers:[String:String]=[
+      "P":"CREATE PROCEDURE dbo.usp_Customers",
+      "FN":"CREATE FUNCTION dbo.usp_Customers() RETURNS int",
+      "IF":"CREATE FUNCTION dbo.usp_Customers() RETURNS TABLE",
+      "TF":"CREATE FUNCTION dbo.usp_Customers() RETURNS @rows TABLE (Value int)",
+      "TR":"CREATE TRIGGER dbo.usp_Customers ON dbo.Customers AFTER INSERT",
+      "TRD":"CREATE TRIGGER usp_Customers ON DATABASE FOR CREATE_TABLE"]
+    for type in ["P","FN","IF","TF","TR","TRD"] {
+      let model=model(reader:{endpoint,sql in
+        var result=try SchemaComparisonUIFixture.catalog(endpoint.database,sql)
+        let source=endpoint.database=="SourceDB",value=source ? "2":"1"
+        let rows=[headers[type]!,"AS",type=="IF" ? "RETURN":"BEGIN",type=="FN" ? "    RETURN \(value);":"    SELECT \(value) AS [Value];"]+(type=="IF" ? []:["END;"])
+        let definition=rows.map {$0+(source ? "   ":"")}.joined(separator:source ? "\r\n":"\n")
+        let parent:String?=type=="TRD" ? "DATABASE":type=="TR" ? "[dbo].[Customers]":nil
+        if sql.contains("StudioSchemaInventory") {
+          var values=Array(result.results[1].values)
+          for i in values.indices where values[i][0]=="101" {values[i][1]=type=="TRD" ? "":"dbo";values[i][3]=type}
+          result.results[1]=Rows(values:values)
+        } else if sql.contains("StudioSchemaRefinement") {
+          var values=Array(result.results[0].values)
+          for i in values.indices where values[i][0]=="101" {values[i][1]=definition;values[i][5]=parent}
+          result.results[0]=Rows(values:values)
+        } else if sql.contains("sys.sql_modules"),sql.contains("=101") {result.results[0]=Rows(values:[[definition,"1","1","0",parent]])}
+        return result
+      })
+      await model.compare()
+      let row=try #require(model.visible.first {$0.key.name=="usp_Customers"})
+      #expect(row.source?.type==type && row.source?.usesSQLCodeComparison==true)
+      model.focused=row.key;await model.loadDetail()
+      let comparison=try #require(model.detailComparison)
+      #expect(comparison.added==1 && comparison.removed==1 && !comparison.simplified)
+      #expect(comparison.lines.filter(\.changed).count==1 && model.changedGroups.count==1)
+      #expect(model.sourceSQL.contains("\r\n") && !model.targetSQL.contains("\r\n"))
+      #expect(model.error.isEmpty && model.detailNotice.isEmpty)
+    }
   }
   @Test func detailModePersistsAcrossObjectsRecomparisonAndDelayedLoads() async throws {
     var delay=false

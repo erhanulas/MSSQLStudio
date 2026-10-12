@@ -196,9 +196,9 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
       guard contextCurrent else {throw SQLFailure("Bağlantı değişti. Yeniden karşılaştırın.")}
       if codeFailures.isEmpty {
         let limitedOld=String(old.prefix(200_000)),limitedNew=String(new.prefix(200_000))
-        let viewCode=(difference.source ?? difference.target)?.type=="V"
+        let moduleCode=(difference.source ?? difference.target)?.usesSQLCodeComparison==true
         let comparison=await Task.detached(priority:.userInitiated) {
-          viewCode ? SQLTextDiff.compareIgnoringSQLWhitespace(limitedOld,limitedNew):SQLTextDiff.compare(limitedOld,limitedNew)
+          moduleCode ? SQLTextDiff.compareIgnoringSQLWhitespace(limitedOld,limitedNew):SQLTextDiff.compare(limitedOld,limitedNew)
         }.value
         guard token==detailRevision,context==revision else {return}
         guard contextCurrent else {throw SQLFailure("Bağlantı değişti. Yeniden karşılaştırın.")}
@@ -360,7 +360,7 @@ struct SchemaComparisonPanel: View {
         }
         if model.effectiveDetailMode == .code,let comparison=model.detailComparison {
           Text("−\(comparison.removed)  +\(comparison.added)").monospacedDigit().font(.caption).foregroundStyle(.secondary)
-            .help((model.currentDifference?.source ?? model.currentDifference?.target)?.type=="V" ? "Gereksiz boşluk ve satır sonları yok sayılır; özgün SQL korunur.":"Değişen SQL satırları")
+            .help((model.currentDifference?.source ?? model.currentDifference?.target)?.usesSQLCodeComparison==true ? "Gereksiz boşluk ve satır sonları yok sayılır; özgün SQL korunur.":"Değişen SQL satırları")
           Text(model.changedGroups.isEmpty ? "Kod aynı":"\(model.changeIndex+1)/\(model.changedGroups.count)").font(.caption).foregroundStyle(.secondary)
           StudioActionButton("Önceki kod farkı",icon:"chevron.up") {model.moveChange(-1)}.labelStyle(.iconOnly).disabled(model.changedGroups.isEmpty).accessibilityIdentifier("schemaPreviousDifference")
           StudioActionButton("Sonraki kod farkı",icon:"chevron.down") {model.moveChange(1)}.labelStyle(.iconOnly).disabled(model.changedGroups.isEmpty).accessibilityIdentifier("schemaNextDifference")
@@ -507,7 +507,11 @@ struct SchemaComparisonPanel: View {
       return row+[columns]
     }
     func body(_ id:Int)->String {switch id {
-      case 101:return "CREATE PROCEDURE [dbo].[usp_Customers]\nAS\nBEGIN\n    SET NOCOUNT ON;\n    SELECT [CustomerID], [Name]"+(source ? ", [City]":"")+"\n    FROM [dbo].[Customers];\nEND;"
+      case 101:
+        let rows=["CREATE PROCEDURE [dbo].[usp_Customers]", "AS", "BEGIN"]+(source ? [""]:[])+[
+          "    SET NOCOUNT ON;", "    SELECT [CustomerID], [Name]"+(source ? ", [City]":"")]+(1...150).map {"    -- Sabit adım \($0)"}+[
+          "    FROM [dbo].[Customers]", "    WHERE [CustomerID] "+(source ? ">= 0;":"> 0;"), "END;"]
+        return rows.map {$0+(source ? "    ":"  ")}.joined(separator:source ? "\r\n":"\n")
       case 102:return "CREATE VIEW [dbo].[v_Orders] AS SELECT 1 AS [OrderID];"
       case 108:return "CREATE VIEW [dbo].[v_Balance] AS SELECT [CustomerID], [Amount] FROM [dbo].[Customers];"
       case 109:
