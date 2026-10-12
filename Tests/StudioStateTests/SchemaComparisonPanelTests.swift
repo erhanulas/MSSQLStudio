@@ -213,7 +213,7 @@ import SQLServerKit
     #expect(model.visible.contains {$0.key==selected} && model.differences.count==10)
     #expect(!model.applying && SchemaComparisonModel.activeApplications==0)
   }
-  @Test func committedWriteWithFailedReconciliationKeepsOtherRowsAndNeverAdvertisesTheOldRowAsCurrent() async throws {
+  @Test func committedWriteWithFailedReconciliationKeepsTheSelectedRowVisibleButBlocked() async throws {
     var committed=false,writes=0,calls:[String]=[]
     let model=model(reader:{endpoint,sql in
       calls.append(sql)
@@ -228,17 +228,19 @@ import SQLServerKit
     await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID)
     #expect(writes==1 && model.message.contains("hedefe uygulandı") && !model.message.contains("tamamlanamadı"))
     #expect(model.error.contains("hedefe uygulandı") && model.error.contains("tekrar gönderilmedi"))
-    #expect(model.differences.map(\.key)==others && model.sourceSnapshot?.objects[selected]==nil && model.targetSnapshot?.objects[selected]==nil)
-    #expect(model.focused==nil && !model.detailReady && model.sourceSQL.isEmpty && !model.canPreparePlan)
+    #expect(model.differences.filter {$0.key != selected}.map(\.key)==others && model.sourceSnapshot?.objects[selected]==nil && model.targetSnapshot?.objects[selected]==nil)
+    #expect(model.visible.contains {$0.key==selected} && model.focused==selected && !model.detailReady && model.sourceSQL.isEmpty && !model.canPreparePlan)
+    #expect(model.unverifiedKeys.contains(selected) && model.canRefreshFocused && model.migrationNotices[selected]?.kind == .appliedUnverified)
     #expect(model.search=="dbo" && model.detailMode == .code && !model.applying && SchemaComparisonModel.activeApplications==0)
     #expect(calls.dropFirst(start).count==4 && calls.dropFirst(start).allSatisfy {$0.contains("o.name=N'usp_Customers'")})
     #expect(await model.preparePlan()==nil && writes==1)
   }
-  @Test(arguments:["partial","generation","offline"]) func uncertainOrDisconnectedApplyCannotReuseAStaleSelectedComparison(outcome:String) async throws {
+  @Test(arguments:["partial","generation","offline","network"]) func uncertainOrDisconnectedApplyKeepsTheVisibleRowAndCannotReuseAStaleComparison(outcome:String) async throws {
     var writes=0
     let model=model(writer:{endpoint,_ in
       writes+=1
       var result=Execution()
+      if outcome=="network" {throw SQLFailure("Bağlantı kesildi.",diagnostics:[.init(state:"08S01",code:10054,message:"Connection reset")])}
       if outcome=="partial" {result.partial=true}
       if outcome=="generation" {endpoint.server.generation=UUID()}
       if outcome=="offline" {endpoint.server.online=false}
@@ -249,10 +251,129 @@ import SQLServerKit
     model.focused=selected;let plan=try #require(await model.preparePlan())
     await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID)
     #expect(writes==1 && !model.error.isEmpty && !model.applying && SchemaComparisonModel.activeApplications==0)
-    #expect(!model.differences.contains {$0.key==selected} && model.focused==nil && !model.canPreparePlan)
-    #expect(model.differences.count==9 && model.sourceSnapshot?.objects[selected]==nil && model.targetSnapshot?.objects[selected]==nil)
-    if outcome=="partial" {#expect(model.message=="Taşıma sonucu doğrulanamadı.")}
+    #expect(model.visible.contains {$0.key==selected} && model.focused==selected && !model.canPreparePlan)
+    #expect(model.differences.count==10 && model.sourceSnapshot?.objects[selected]==nil && model.targetSnapshot?.objects[selected]==nil)
+    #expect(model.unverifiedKeys.contains(selected) && model.migrationNotices[selected] != nil)
+    if outcome=="partial" || outcome=="network" {#expect(model.message=="Taşıma sonucu doğrulanamadı." && model.migrationNotices[selected]?.kind == .uncertain)}
     else {#expect(model.message.contains("hedefe uygulandı") && model.error.contains("tekrar gönderilmedi"))}
+  }
+  @Test func duplicatePrimaryKeyFailureKeepsTheTableDifferenceAndRequiresScopedRefreshAndANewPreview() async throws {
+    var writes=0,calls:[String]=[]
+    let failure=SQLFailure("SQL Server işlemi tamamlanamadı.",diagnostics:[
+      .init(state:"42S01",code:2714,message:"There is already an object named 'PK_TBLSTSABIT_HACIM_DATA' in the database."),
+      .init(state:"42000",code:1750,message:"Could not create constraint or index. See previous errors.")])
+    let model=model(reader:{endpoint,sql in calls.append(sql);return try SchemaComparisonUIFixture.catalog(endpoint.database,sql)},writer:{_,_ in writes+=1;throw failure})
+    await model.compare()
+    let selected=try #require(model.visible.first {$0.key.name=="Customers"}).key
+    let other=try #require(model.visible.first {$0.key.name=="v_ActiveBalance"}).key
+    model.focused=other;await model.loadDetail()
+    model.focused=selected;await model.loadDetail();model.search="dbo";model.kind="Tablo";model.detailMode = .columns
+    let others=model.differences.filter {$0.key != selected}.map(\.key)
+    let oldUnattempted=try #require(await model.preparePlan())
+    let plan=try #require(await model.preparePlan())
+    await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID)
+    #expect(writes==1 && model.visible.contains {$0.key==selected && $0.status == .changed})
+    #expect(model.focused==selected && model.unverifiedKeys.contains(selected) && !model.canPreparePlan && model.canRefreshFocused)
+    #expect(model.error.contains("2714") && model.error.contains("1750") && model.error.contains("PK_TBLSTSABIT_HACIM_DATA"))
+    #expect(model.migrationNotices[selected]?.kind == .failed && model.message.contains("taşınamadı") && !model.message.contains("hedefe uygulandı"))
+    #expect(model.sourceSnapshot?.objects[selected]==nil && model.targetSnapshot?.objects[selected]==nil)
+    #expect(model.differences.filter {$0.key != selected}.map(\.key)==others)
+    #expect(await model.preparePlan()==nil)
+    await model.loadDetail();#expect(!model.detailReady && model.detailNotice.contains("eski önizleme"))
+    await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID);#expect(writes==1)
+    let start=calls.count;await model.refreshFocusedDifference()
+    #expect(model.error.isEmpty && model.visible.contains {$0.key==selected && $0.status == .changed})
+    #expect(!model.unverifiedKeys.contains(selected) && model.canPreparePlan && !model.canRefreshFocused)
+    #expect(model.columnsReady && model.detailReady && model.columnChangeCount==3)
+    #expect(model.search=="dbo" && model.kind=="Tablo" && model.detailMode == .columns && model.focused==selected)
+    #expect(calls.dropFirst(start).filter {$0.contains("StudioSchemaInventory")}.allSatisfy {$0.contains("o.name=N'Customers'")})
+    #expect(model.differences.filter {$0.key != selected}.map(\.key)==others)
+    await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID);#expect(writes==1)
+    let fresh=try #require(await model.preparePlan());#expect(fresh.id != plan.id)
+    await model.apply(oldUnattempted,sourceID:model.sourceID,targetID:model.targetID);#expect(writes==1 && model.error.contains("artık güncel değil"))
+    await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID);#expect(writes==1)
+    await model.apply(fresh,sourceID:model.sourceID,targetID:model.targetID);#expect(writes==2)
+    #expect(model.unverifiedKeys.contains(selected) && model.visible.contains {$0.key==selected})
+    let cached=calls.count;model.focused=other;await model.loadDetail();#expect(calls.count==cached)
+    model.focused=selected;await model.compare();model.focused=selected
+    _=try #require(await model.preparePlan())
+    await model.apply(oldUnattempted,sourceID:model.sourceID,targetID:model.targetID)
+    #expect(writes==2 && model.error.contains("artık güncel değil"))
+    await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID)
+    #expect(writes==2 && model.error.contains("daha önce gönderildi"))
+  }
+  @Test func failedSelectedRefreshNeverUnlocksOrHidesAnUnverifiedDifference() async throws {
+    var attempted=false,writes=0
+    let model=model(reader:{endpoint,sql in
+      if attempted,endpoint.database=="TargetDB",sql.contains("StudioSchemaInventory") {throw SQLFailure("Metadata okunamadı.")}
+      return try SchemaComparisonUIFixture.catalog(endpoint.database,sql)
+    },writer:{_,_ in writes+=1;attempted=true;throw SQLFailure("Sunucu yanıtı alınamadı.")})
+    await model.compare();let selected=try #require(model.visible.first {$0.key.name=="usp_Customers"}).key
+    model.focused=selected;let plan=try #require(await model.preparePlan())
+    await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID)
+    await model.refreshFocusedDifference()
+    #expect(writes==1 && model.visible.contains {$0.key==selected} && model.focused==selected)
+    #expect(model.unverifiedKeys.contains(selected) && model.sourceSnapshot?.objects[selected]==nil && model.targetSnapshot?.objects[selected]==nil)
+    #expect(!model.canPreparePlan && model.canRefreshFocused && !model.busy && model.error.contains("Metadata okunamadı"))
+    #expect(model.migrationNotices[selected]?.kind == .uncertain && model.message.contains("listede korunuyor"))
+    await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID);#expect(writes==1)
+  }
+  @Test func uncertainWriteOnlyLeavesTheListAfterSelectedRefreshVerifiesEquality() async throws {
+    var attempted=false,writes=0,calls:[String]=[]
+    let model=model(reader:{endpoint,sql in
+      calls.append(sql)
+      return try SchemaComparisonUIFixture.catalog(attempted && endpoint.database=="TargetDB" ? "SourceDB":endpoint.database,sql)
+    },writer:{_,_ in writes+=1;attempted=true;throw SQLFailure("Yanıt alınamadı.",diagnostics:[.init(state:"08S01",code:10054,message:"Connection reset")])})
+    await model.compare();let selected=try #require(model.visible.first {$0.key.name=="usp_Customers"}).key
+    let other=try #require(model.visible.first {$0.key.name=="v_ActiveBalance"}).key
+    model.focused=other;await model.loadDetail();model.search="dbo";model.detailMode = .code
+    let otherSource=model.sourceSnapshot?.objects[other],otherTarget=model.targetSnapshot?.objects[other]
+    model.focused=selected;let plan=try #require(await model.preparePlan())
+    await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID)
+    #expect(model.visible.contains {$0.key==selected} && model.migrationNotices[selected]?.kind == .uncertain)
+    #expect(!model.message.contains("hedefe uygulandı") && writes==1)
+    let start=calls.count;await model.refreshFocusedDifference()
+    #expect(model.differences.first {$0.key==selected}?.status == .equal && !model.visible.contains {$0.key==selected})
+    #expect(model.focused==nil && model.error.isEmpty && !model.unverifiedKeys.contains(selected) && model.migrationNotices[selected]==nil)
+    #expect(calls.dropFirst(start).count==2 && calls.dropFirst(start).allSatisfy {$0.contains("o.name=N'usp_Customers'")})
+    #expect(model.sourceSnapshot?.objects[other]==otherSource && model.targetSnapshot?.objects[other]==otherTarget)
+    #expect(model.search=="dbo" && model.kind=="Tüm türler" && model.detailMode == .code)
+    let cached=calls.count;model.focused=other;await model.loadDetail();#expect(calls.count==cached)
+    model.focused=try #require(model.visible.first {$0.key.name=="ufn_Total"}).key
+    let next=await model.preparePlan();#expect(model.canPreparePlan && next != nil && writes==1)
+  }
+  @Test func unreadableSelectedRefreshCannotHideThePreviousDifferenceOrEnableAWrite() async throws {
+    var attempted=false,writes=0
+    let model=model(reader:{endpoint,sql in
+      var result=try SchemaComparisonUIFixture.catalog(endpoint.database,sql)
+      if attempted,endpoint.database=="TargetDB",sql.contains("StudioSchemaInventory") {
+        var rows=Array(result.results[1].values)
+        for i in rows.indices where rows[i][2]=="usp_Customers" {rows[i][4]=nil;rows[i][5]="Tanım okunamıyor."}
+        result.results[1]=Rows(values:rows)
+      }
+      return result
+    },writer:{_,_ in writes+=1;attempted=true;throw SQLFailure("Yanıt alınamadı.")})
+    await model.compare();let selected=try #require(model.visible.first {$0.key.name=="usp_Customers"}).key
+    model.focused=selected;let plan=try #require(await model.preparePlan())
+    await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID)
+    await model.refreshFocusedDifference()
+    #expect(model.visible.contains {$0.key==selected} && model.focused==selected && model.unverifiedKeys.contains(selected))
+    #expect(!model.canPreparePlan && model.canRefreshFocused && model.error.contains("karşılaştırılamıyor"))
+    #expect(model.migrationNotices[selected]?.kind == .uncertain && writes==1)
+  }
+  @Test func endpointChangeDuringSelectedRefreshRejectsTheLateMetadataAndDoesNotRestoreTheOldFailure() async throws {
+    var attempted=false
+    let model=model(reader:{endpoint,sql in
+      if attempted,sql.contains("StudioSchemaInventory") {try await Task.sleep(for:.milliseconds(40))}
+      return try SchemaComparisonUIFixture.catalog(endpoint.database,sql)
+    },writer:{_,_ in attempted=true;throw SQLFailure("Yanıt alınamadı.")})
+    await model.compare();model.focused=try #require(model.visible.first {$0.key.name=="usp_Customers"}).key
+    let plan=try #require(await model.preparePlan());await model.apply(plan,sourceID:model.sourceID,targetID:model.targetID)
+    let task=Task {await model.refreshFocusedDifference()}
+    try await Task.sleep(for:.milliseconds(10));#expect(model.busy)
+    model.targetID="";await task.value
+    #expect(model.differences.isEmpty && model.visible.isEmpty && model.sourceSnapshot==nil && model.targetSnapshot==nil)
+    #expect(model.migrationNotices.isEmpty && model.unverifiedKeys.isEmpty && model.focused==nil && !model.busy && !model.detailReady)
   }
   @Test func compareFilterLazyDetailAndPlanUseIndependentMetadataOnly() async throws {
     var calls:[String]=[]

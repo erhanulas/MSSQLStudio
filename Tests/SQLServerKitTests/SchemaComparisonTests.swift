@@ -381,19 +381,91 @@ struct SchemaComparisonTests {
     let unsupported=try SchemaSnapshot(objects:[object("tr",type:"TR",issue:"indexed")])
     #expect(throws:SQLFailure.self) {try SchemaMigration.orderedKeys([obj.key],source:unsupported,target:b)}
   }
-  @Test func tableAlterAddsColumnsAndConstraintsButRejectsDestructiveRebuilds() throws {
+  @Test func tableAlterChangesColumnsAndDefaultsButRejectsDestructiveRebuilds() throws {
     let target=TableDefinition(schema:"dbo",name:"T",columns:[.init(id:10,name:"Id",type:"int",nullable:false),.init(id:20,name:"Name",type:"nvarchar(50)",defaultName:"DF_Old",defaultSQL:"(N'old')")])
     var source=target;source.columns[1].type="nvarchar(100)";source.columns[1].defaultName="DF_New";source.columns[1].defaultSQL="(N'new')";source.columns.append(.init(id:30,name:"City",type:"nvarchar(100)"))
     source.definitions=[.init(name:"PK_T",kind:"PK",sql:"ALTER TABLE [dbo].[T] ADD CONSTRAINT [PK_T] PRIMARY KEY ([Id]);"),.init(name:"FK_T",kind:"FK",sql:"ALTER TABLE [dbo].[T] ADD CONSTRAINT [FK_T] FOREIGN KEY ([Id]) REFERENCES [dbo].[T] ([Id]);")]
     let sql=try SchemaMigration.tableChanges(source:source,target:target)
     #expect(sql.contains("DROP CONSTRAINT [DF_Old]") && sql.contains("ALTER COLUMN [Name] nvarchar(100)"))
     #expect(sql.contains("ADD [City]") && !sql.contains("DROP TABLE") && !sql.contains("DROP COLUMN"))
-    #expect(try #require(sql.range(of:"ADD CONSTRAINT [PK_T]")).lowerBound < #require(sql.range(of:"ADD CONSTRAINT [FK_T]")).lowerBound)
+    #expect(sql.contains("ADD CONSTRAINT [DF_Old] DEFAULT (N'new') FOR [Name]"))
+    #expect(!sql.contains("[DF_New]") && !sql.contains("[PK_T]") && !sql.contains("[FK_T]"))
     source.columns.removeFirst();#expect(throws:SQLFailure.self) {try SchemaMigration.tableChanges(source:source,target:target)}
     source=target;source.columns[0].identity=true;#expect(throws:SQLFailure.self) {try SchemaMigration.tableChanges(source:source,target:target)}
     let aliasTarget=TableDefinition(schema:"dbo",name:"T",columns:[.init(id:1,name:"Amount",type:"[dbo].[TDBFLOAT]",baseType:"decimal(28,4)")])
     var aliasSource=aliasTarget;aliasSource.columns[0].baseType="decimal(28,8)";aliasSource.columns.append(.init(id:2,name:"NewColumn",type:"int"))
     #expect(throws:SQLFailure.self) {try SchemaMigration.tableChanges(source:aliasSource,target:aliasTarget)}
+  }
+  @Test func existingTableAdditionPreservesEveryTargetConstraintAndIndex() throws {
+    var target=TableDefinition(schema:"dbo",name:"TBLSTSABIT_HACIM_DATA",columns:[.init(id:7,name:"Id",type:"int",nullable:false)],primaryKey:["Id"],primaryKeyName:"PK_Target",definitions:[
+      .init(name:"PK_Target",kind:"PK",sql:"ALTER TABLE [dbo].[TBLSTSABIT_HACIM_DATA] ADD CONSTRAINT [PK_Target] PRIMARY KEY NONCLUSTERED ([Id]);"),
+      .init(name:"IX_Target",kind:"INDEX",sql:"CREATE INDEX [IX_Target] ON [dbo].[TBLSTSABIT_HACIM_DATA] ([Id]) WITH (FILLFACTOR = 80);"),
+      .init(name:"UQ_Target",kind:"UQ",sql:"ALTER TABLE [dbo].[TBLSTSABIT_HACIM_DATA] ADD CONSTRAINT [UQ_Target] UNIQUE ([Id]);"),
+      .init(name:"CK_Target",kind:"CHECK",sql:"ALTER TABLE [dbo].[TBLSTSABIT_HACIM_DATA] ADD CONSTRAINT [CK_Target] CHECK ([Id]>0);"),
+      .init(name:"FK_Target",kind:"FK",sql:"ALTER TABLE [dbo].[TBLSTSABIT_HACIM_DATA] ADD CONSTRAINT [FK_Target] FOREIGN KEY ([Id]) REFERENCES [dbo].[Parent] ([Id]);")])
+    target.heapFilegroup="PRIMARY"
+    var source=target;source.heapFilegroup=""
+    source.primaryKeyName="PK_TBLSTSABIT_HACIM_DATA"
+    source.definitions=[
+      .init(name:"PK_TBLSTSABIT_HACIM_DATA",kind:"PK",sql:"ALTER TABLE [dbo].[TBLSTSABIT_HACIM_DATA] ADD CONSTRAINT [PK_TBLSTSABIT_HACIM_DATA] PRIMARY KEY CLUSTERED ([Id]);"),
+      .init(name:"IX_Source",kind:"INDEX",sql:"CREATE INDEX [IX_Source] ON [dbo].[TBLSTSABIT_HACIM_DATA] ([Id]) WITH (FILLFACTOR = 100);")]
+    source.columns.append(.init(id:8,name:"Volume",type:"decimal(28,8)"))
+    #expect(try SchemaMigration.tableChanges(source:source,target:target) == "ALTER TABLE [dbo].[TBLSTSABIT_HACIM_DATA] ADD [Volume] decimal(28,8) NULL;")
+    source.columns.removeLast()
+    #expect(throws:SQLFailure.self) {try SchemaMigration.tableChanges(source:source,target:target)}
+  }
+  @Test func existingTableTypeNullAndCollationChangesDoNotRecreateKeysOrIndexes() throws {
+    let target=TableDefinition(schema:"odd]schema",name:"T",columns:[.init(id:1,name:"Id",type:"int",nullable:false),.init(id:2,name:"Code]",type:"varchar(20)",nullable:false,collation:"Latin1_General_100_CI_AS")],primaryKey:["Id"],primaryKeyName:"PK_T",definitions:[.init(name:"PK_T",kind:"PK",sql:"ALTER TABLE [odd]]schema].[T] ADD CONSTRAINT [PK_T] PRIMARY KEY ([Id]);"),.init(name:"IX_T",kind:"INDEX",sql:"CREATE INDEX [IX_T] ON [odd]]schema].[T] ([Code]]]);")])
+    var source=target
+    source.columns[1].type="varchar(40)";source.columns[1].nullable=true;source.columns[1].collation="Latin1_General_100_CS_AS"
+    source.definitions=[];source.primaryKey=[];source.primaryKeyName=""
+    let sql=try SchemaMigration.tableChanges(source:source,target:target)
+    #expect(sql == "ALTER TABLE [odd]]schema].[T] ALTER COLUMN [Code]]] varchar(40) COLLATE Latin1_General_100_CS_AS NULL;")
+    if let path=ProcessInfo.processInfo.environment["MSSQL_SCHEMA_SQL_DUMP"] {try sql.write(toFile:path+".alter-column.sql",atomically:true,encoding:.utf8)}
+  }
+  @Test func existingTableCannotMakePreservedPrimaryKeyNullable() throws {
+    let target=TableDefinition(schema:"dbo",name:"T",columns:[.init(id:1,name:"Amount",type:"decimal(28,8)"),.init(id:2,name:"Id",type:"int",nullable:false)],primaryKey:["Id"],primaryKeyName:"PK_Target")
+    var source=target
+    source.columns[0].type="decimal(30,8)";source.columns[1].nullable=true
+    source.primaryKey=[];source.primaryKeyName=""
+    do {
+      _=try SchemaMigration.tableChanges(source:source,target:target)
+      Issue.record("A plan must not be returned when a preserved primary key would become nullable.")
+    } catch let error as SQLFailure {
+      #expect(error.localizedDescription.contains("Id") && error.localizedDescription.contains("primary key") && error.localizedDescription.contains("NULL yapılamaz"))
+    }
+  }
+  @Test func existingTableDefaultsRetainTargetIdentityAndNeverCopySourceNames() throws {
+    let target=TableDefinition(schema:"dbo",name:"T",columns:[.init(id:1,name:"Amount",type:"decimal(28,8)",defaultName:"DF_Target]",defaultSQL:"((0))"),.init(id:2,name:"Enabled",type:"bit")])
+    var source=target;source.columns[0].defaultName="DF_NameUsedByAnotherTable"
+    #expect(throws:SQLFailure.self) {try SchemaMigration.tableChanges(source:source,target:target)}
+    source.columns[0].defaultSQL="((1))"
+    source.columns[1].defaultName="DF_NameUsedByAnotherTable";source.columns[1].defaultSQL="((0))"
+    source.columns.append(.init(id:3,name:"Label",type:"nvarchar(40)",defaultName:"DF_NameUsedByAnotherTable",defaultSQL:"(N'O''Hara')"))
+    let sql=try SchemaMigration.tableChanges(source:source,target:target)
+    #expect(sql == "ALTER TABLE [dbo].[T] DROP CONSTRAINT [DF_Target]]];\nGO\nALTER TABLE [dbo].[T] ADD CONSTRAINT [DF_Target]]] DEFAULT ((1)) FOR [Amount];\nGO\nALTER TABLE [dbo].[T] ADD DEFAULT ((0)) FOR [Enabled];\nGO\nALTER TABLE [dbo].[T] ADD [Label] nvarchar(40) NULL DEFAULT (N'O''Hara');")
+    #expect(!sql.contains("DF_NameUsedByAnotherTable"))
+    if let path=ProcessInfo.processInfo.environment["MSSQL_SCHEMA_SQL_DUMP"] {try sql.write(toFile:path+".defaults.sql",atomically:true,encoding:.utf8)}
+    source=target;source.columns[0].defaultSQL=""
+    #expect(try SchemaMigration.tableChanges(source:source,target:target) == "ALTER TABLE [dbo].[T] DROP CONSTRAINT [DF_Target]]];")
+  }
+  @Test func existingTablePlanExecutesOnlyColumnDeltaWhileNewTableKeepsCompleteCreate() throws {
+    let desiredObject=object("T",type:"U"),oldObject=object("T",type:"U",digest:String(repeating:"b",count:64),id:9)
+    let source=try SchemaSnapshot(objects:[desiredObject]),target=try SchemaSnapshot(objects:[oldObject])
+    let oldTable=TableDefinition(schema:"dbo",name:"T",columns:[.init(id:1,name:"Id",type:"int",nullable:false)],primaryKey:["Id"],primaryKeyName:"PK_Target",definitions:[.init(name:"PK_Target",kind:"PK",sql:"ALTER TABLE [dbo].[T] ADD CONSTRAINT [PK_Target] PRIMARY KEY ([Id]);")])
+    var desiredTable=oldTable
+    desiredTable.primaryKeyName="PK_Source";desiredTable.definitions=[.init(name:"PK_Source",kind:"PK",sql:"ALTER TABLE [dbo].[T] ADD CONSTRAINT [PK_Source] PRIMARY KEY ([Id]);")]
+    desiredTable.columns.append(.init(id:2,name:"City",type:"nvarchar(100)"))
+    let desired=SchemaObjectContent(object:desiredObject,sql:try desiredTable.createScript(),table:desiredTable),existing=SchemaObjectContent(object:oldObject,sql:try oldTable.createScript(),table:oldTable)
+    let plan=try SchemaMigration.plan(selected:[desiredObject.key],source:source,target:target,sourceContent:[desiredObject.key:desired],targetContent:[oldObject.key:existing])
+    #expect(plan.sql.contains("EXEC sys.sp_executesql N'ALTER TABLE [dbo].[T] ADD [City] nvarchar(100) NULL;';"))
+    #expect(!plan.sql.contains("CREATE TABLE") && !plan.sql.contains("PRIMARY KEY") && !plan.sql.contains("DROP CONSTRAINT") && !plan.sql.contains("CREATE INDEX"))
+    #expect(plan.sql.contains("ROLLBACK TRANSACTION") && plan.sql.contains("THROW;"))
+    #expect(plan.warnings.contains { $0.contains("yalnız kolon farkları") && $0.contains("korunur") })
+    let newPlan=try SchemaMigration.plan(selected:[desiredObject.key],source:source,target:try SchemaSnapshot(objects:[]),sourceContent:[desiredObject.key:desired],targetContent:[:])
+    #expect(newPlan.sql.contains("CREATE TABLE [dbo].[T]") && newPlan.sql.contains("ADD CONSTRAINT [PK_Source] PRIMARY KEY ([Id])"))
+    #expect(!newPlan.warnings.contains { $0.contains("yalnız kolon farkları") })
+    if let path=ProcessInfo.processInfo.environment["MSSQL_SCHEMA_SQL_DUMP"] {try plan.sql.write(toFile:path+".existing-table.plan.sql",atomically:true,encoding:.utf8)}
   }
   @Test(.enabled(if:ProcessInfo.processInfo.environment["MSSQL_TEST_PASSWORD"] != nil))
   func liveInventoryUsesCompleteServerHashesAndDetectsDDLChangeWithRollback() async throws {

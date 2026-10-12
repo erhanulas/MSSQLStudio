@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.93",
+    "date": "2026-10-12",
+    "title": "Güvenilir DDL taşıması ve mevcut tablolarda sade ALTER",
+    "changes": [
+      "Başarısız veya sonucu belirsiz DDL taşımasında nesne artık fark listesinden kaybolmaz. Hata durumu görünür kalır; yalnız seçili nesne yenilenerek güncel fark doğrulanabilir.",
+      "Mevcut tablolarda yalnız kolon ekleme ve desteklenen tip, NULL, collation ve varsayılan değer değişiklikleri uygulanır. Hedefteki PK, indeks, ilişkiler ve depolama yerleşimi korunur; kaynak tanımları tekrar oluşturulmaz.",
+      "Varsayılan değer adları nedeniyle gereksiz DDL veya ad çakışması üretilmez. Hedef PK kolonunu NULL yapma isteği SQL gönderilmeden açık hata ile durur.",
+      "Okunamayan güncel tanım başarı sayılmaz; eski taşıma önizlemesi yeniden gönderilemez. Yenileme diğer nesneleri, filtreleri ve görünüm tercihini korur."
+    ]
+  },
+  {
     "version": "0.2.92",
     "date": "2026-10-12",
     "title": "DDL karşılaştırmada kaynak solda, hedef sağda",

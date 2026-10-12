@@ -340,6 +340,7 @@ public enum SchemaComparison {
 }
 
 public struct SchemaMigrationPlan: Sendable {
+  public let id=UUID()
   public let keys: [SchemaObjectKey]
   public let sql: String
   public let source: SchemaSnapshot
@@ -397,7 +398,11 @@ public enum SchemaMigration {
       case "U":
         guard let table=content.table else {throw SQLFailure("Tablo metadata eksik.")}
         if old == nil {script=try table.createScript()}
-        else {guard let previous=targetContent[key]?.table else {throw SQLFailure("Hedef tablo metadata eksik.")};script=try tableChanges(source:table,target:previous)}
+        else {
+          guard let previous=targetContent[key]?.table else {throw SQLFailure("Hedef tablo metadata eksik.")}
+          script=try tableChanges(source:table,target:previous)
+          warnings.insert("Mevcut tablolarda yalnız kolon farkları uygulanır; hedefteki anahtarlar, indeksler, ilişkiler ve depolama yerleşimi korunur.")
+        }
         warnings.insert("Tablo verileri taşınmaz. Tip/NULL değişiklikleri mevcut verilere göre başarısız olabilir ve şema kilidi alabilir.")
       case "SN":
         script=(old == nil ? "":"DROP SYNONYM \(key.qualified);\n")+content.sql
@@ -429,26 +434,23 @@ public enum SchemaMigration {
     guard max(sql.utf16.count,before.utf16.count,after.utf16.count)<=900_000 else {throw SQLFailure("Taşıma önizlemesi büyük; daha az nesne seçin (900.000 karakter sınırı).")}
     return SchemaMigrationPlan(keys:keys,sql:sql,source:source,target:target,warnings:warnings.sorted(),originalSQL:before,desiredSQL:after)
   }
-  /// Conservative rowstore migration: no table rebuild, column removal, rename or ordinal rewrite.
+  /// Match the table comparison's column-only scope. Preserve target keys/indexes/checks/FKs;
+  /// never rebuild a table, remove/rename a column, or rewrite its ordinal.
   public static func tableChanges(source:TableDefinition,target:TableDefinition) throws -> String {
-    guard source.schema==target.schema,source.name==target.name,source.heapFilegroup==target.heapFilegroup else {throw SQLFailure("Tablo kimliği/depolama konumu otomatik değiştirilemez.")}
+    guard source.schema==target.schema,source.name==target.name else {throw SQLFailure("Tablo kimliği otomatik değiştirilemez.")}
     let sourceNames=source.columns.map(\.name),targetNames=target.columns.map(\.name)
     guard Array(sourceNames.prefix(targetNames.count))==targetNames else {throw SQLFailure("Kolon silme/sıralama/yeniden adlandırma veri korumak için otomatik uygulanmaz; SQL editöründe ayrıca inceleyin.")}
     var actions:[String]=[]
     let q=source.qualified
-    let sourceDefs=Dictionary(uniqueKeysWithValues:source.definitions.filter {$0.kind != "TRIGGER"}.map {($0.kind+"|"+$0.name,$0)})
-    let targetDefs=Dictionary(uniqueKeysWithValues:target.definitions.filter {$0.kind != "TRIGGER"}.map {($0.kind+"|"+$0.name,$0)})
-    for key in targetDefs.keys.sorted() {
-      let old=targetDefs[key]!
-      if sourceDefs[key]?.sql != old.sql {
-        actions.append(old.kind=="INDEX" ? "DROP INDEX \(SQL.identifier(old.name)) ON \(q);":"ALTER TABLE \(q) DROP CONSTRAINT \(SQL.identifier(old.name));")
-      }
-    }
     for (index,old) in target.columns.enumerated() {
       let c=source.columns[index]
       if c.type==old.type,(c.type.hasPrefix("[") || c.type.lowercased()=="sysname"),c.valueType != old.valueType {throw SQLFailure("\(c.name) kolonunun özel veri tipi \(c.type) iki veritabanında farklı temel tipe sahip. Önce veri tipi tanımlarını eşitleyin; tablo ALTER işlemi özel tip tanımını değiştirmez.")}
       guard c.identity==old.identity,c.seed==old.seed,c.increment==old.increment,c.computed==old.computed,c.persisted==old.persisted,c.sparse==old.sparse,c.rowGUID==old.rowGUID else {throw SQLFailure("Identity/computed/sparse/ROWGUID değişikliği otomatik uygulanamaz: \(c.name)")}
-      let defaultChanged=c.defaultSQL != old.defaultSQL || c.defaultName != old.defaultName
+      guard !target.primaryKey.contains(c.name) || !c.nullable else {throw SQLFailure("\(c.name) hedefte primary key kolonu olduğu için NULL yapılamaz. Mevcut anahtar korunur; anahtar değişikliğini ayrıca inceleyin.")}
+      // Default constraint names are local schema identities, not column behavior.
+      // Reuse an existing target name and let SQL Server name newly added defaults;
+      // copying a source name can collide with a different target table's constraint.
+      let defaultChanged=c.defaultSQL != old.defaultSQL
       if defaultChanged,!old.defaultSQL.isEmpty {
         guard !old.defaultName.isEmpty else {throw SQLFailure("Eski default constraint adı eksik.")}
         actions.append("ALTER TABLE \(q) DROP CONSTRAINT \(SQL.identifier(old.defaultName));")
@@ -458,12 +460,14 @@ public enum SchemaMigration {
         actions.append("ALTER TABLE \(q) ALTER COLUMN \(SQL.identifier(c.name)) \(c.type)\(c.collation.isEmpty ? "":" COLLATE "+(try ObjectScripts.collation(c.collation)))\(c.nullable ? " NULL":" NOT NULL");")
       }
       if defaultChanged,!c.defaultSQL.isEmpty {
-        actions.append("ALTER TABLE \(q) ADD \(c.defaultName.isEmpty ? "":"CONSTRAINT "+SQL.identifier(c.defaultName)+" ")DEFAULT \(c.defaultSQL) FOR \(SQL.identifier(c.name));")
+        actions.append("ALTER TABLE \(q) ADD \(old.defaultName.isEmpty ? "":"CONSTRAINT "+SQL.identifier(old.defaultName)+" ")DEFAULT \(c.defaultSQL) FOR \(SQL.identifier(c.name));")
       }
     }
-    for c in source.columns.dropFirst(target.columns.count) {actions.append("ALTER TABLE \(q) ADD \(try ObjectScripts.column(c,validateType:false));")}
-    for key in sourceDefs.keys.sorted {a,b in let rank=["PK":0,"UQ":1,"INDEX":2,"CHECK":3,"FK":4];return (rank[sourceDefs[a]!.kind] ?? 5,a)<(rank[sourceDefs[b]!.kind] ?? 5,b)} where sourceDefs[key]?.sql != targetDefs[key]?.sql {actions.append(sourceDefs[key]!.sql)}
-    guard !actions.isEmpty else {throw SQLFailure("Tablo farkı desteklenen ALTER kapsamı dışında; otomatik eksik script üretilmedi.")}
+    for var c in source.columns.dropFirst(target.columns.count) {
+      c.defaultName=""
+      actions.append("ALTER TABLE \(q) ADD \(try ObjectScripts.column(c,validateType:false));")
+    }
+    guard !actions.isEmpty else {throw SQLFailure("Tabloda uygulanacak kolon değişikliği yok; hedefteki anahtar, indeks ve diğer tablo özellikleri korunur.")}
     return actions.joined(separator:"\nGO\n")
   }
 }

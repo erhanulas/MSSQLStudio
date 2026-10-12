@@ -13,6 +13,12 @@ import SQLServerKit
   }
 }
 enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolonlar"}
+struct SchemaMigrationNotice {
+  enum Kind {case failed,uncertain,appliedUnverified}
+  let kind:Kind
+  let detail:String
+  var title:String {switch kind {case .failed:return "Taşıma başarısız";case .uncertain:return "Taşıma sonucu belirsiz";case .appliedUnverified:return "Güncel fark doğrulanamadı"}}
+}
 
 @MainActor final class SchemaComparisonModel: ObservableObject {
   typealias Reader = @MainActor @Sendable (SchemaEndpoint,String) async throws -> Execution
@@ -25,6 +31,8 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
   @Published private(set) var applying=false
   @Published private(set) var message="İki veritabanı seçip Karşılaştır’a basın."
   @Published private(set) var error=""
+  @Published private(set) var migrationNotices:[SchemaObjectKey:SchemaMigrationNotice]=[:]
+  @Published private(set) var unverifiedKeys:Set<SchemaObjectKey>=[]
   @Published var search="" {didSet {filter()}}
   @Published var kind="Tüm türler" {didSet {filter()}}
   @Published var focused: SchemaObjectKey?
@@ -70,6 +78,9 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
   var cancelOperation:(()->Void)?
   private var comparisonTask:Task<Void,Never>?
   private var changingEndpoints=false
+  private var needsNewPreview:Set<SchemaObjectKey>=[]
+  private var attemptedPlanIDs:Set<UUID>=[]
+  private var preparedPlanIDs:[SchemaObjectKey:UUID]=[:]
   func startComparison() {comparisonTask?.cancel();comparisonTask=Task {await compare()}}
   private let reader: Reader
   private let writer: Reader
@@ -104,9 +115,11 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
   }
   var validPair: Bool {guard let source,let target else {return false};return source.server.online && target.server.online && !source.sameDatabase(as:target)}
   var currentDifference: SchemaDifference? {differences.first {$0.key==focused}}
-  var canPreparePlan:Bool {!busy && !applying && validPair && contextCurrent && currentDifference?.canStage==true}
+  var canPreparePlan:Bool {!busy && !applying && validPair && contextCurrent && currentDifference.map {$0.canStage && !unverifiedKeys.contains($0.key)}==true}
+  var canRefreshFocused:Bool {!busy && !applying && validPair && contextCurrent && focused.map {unverifiedKeys.contains($0)}==true}
+  func migrationNotice(for row:SchemaDifference)->SchemaMigrationNotice? {migrationNotices[row.key]}
   func invalidate() {
-    revision=UUID();detailRevision=UUID();cacheRevision=UUID();sourceGeneration=nil;targetGeneration=nil;sourceContextID=nil;targetContextID=nil;differences=[];visible=[];focused=nil;sourceSnapshot=nil;targetSnapshot=nil;cache=[:];columnCache=[:];clearDetail();error="";message="Seçim değişti. Yeniden karşılaştırın."
+    revision=UUID();detailRevision=UUID();cacheRevision=UUID();sourceGeneration=nil;targetGeneration=nil;sourceContextID=nil;targetContextID=nil;differences=[];visible=[];focused=nil;sourceSnapshot=nil;targetSnapshot=nil;cache=[:];columnCache=[:];migrationNotices=[:];unverifiedKeys=[];needsNewPreview=[];preparedPlanIDs=[:];clearDetail();error="";message="Seçim değişti. Yeniden karşılaştırın."
   }
   private func clearDetail() {
     sourceSQL="";targetSQL="";detailReady=false;detailLoading=false;detailComparison=nil;columnDifferences=[];columnsReady=false;detailNotice="";diffTruncated=false;changeIndex=0
@@ -195,6 +208,11 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
     sourceSQL="";targetSQL="";detailReady=false;detailLoading=false;detailComparison=nil;columnsReady=false;columnDifferences=[];detailNotice="";diffTruncated=false;changeIndex=0
     guard let difference=currentDifference,let source,let target,let a=sourceSnapshot,let b=targetSnapshot else {detailSummary="Bir nesne seçin.";return}
     guard contextCurrent else {detailSummary="Bağlantı değişti. Yeniden karşılaştırın.";return}
+    if unverifiedKeys.contains(difference.key) {
+      detailSummary=difference.key.qualified
+      detailNotice=(migrationNotices[difference.key]?.detail ?? "Taşıma sonucu doğrulanamadı.")+"\nGüncel farkı görmek için seçili nesneyi yenileyin; eski önizleme tekrar gönderilemez."
+      return
+    }
     detailLoading=true;detailSummary=difference.key.qualified;let context=revision
     let columnObject=["U","V"].contains((difference.source ?? difference.target)?.type ?? "")
     defer {if token==detailRevision {detailLoading=false}}
@@ -244,7 +262,7 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
       }
       detailSummary=difference.key.qualified
       var shown=Set<String>()
-      detailNotice=([difference.migrationIssue]+notices+codeFailures).filter {!$0.isEmpty && shown.insert($0).inserted}.joined(separator:" · ")
+      detailNotice=([migrationNotices[difference.key]?.title ?? "",difference.migrationIssue]+notices+codeFailures).filter {!$0.isEmpty && shown.insert($0).inserted}.joined(separator:" · ")
     } catch {
       guard token==detailRevision,context==revision else {return}
       if !contextCurrent {columnsReady=false;columnDifferences=[];detailReady=false;detailComparison=nil;sourceSQL="";targetSQL=""}
@@ -256,6 +274,7 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
     guard !busy,!applying,validPair,let source,let target,let a=sourceSnapshot,let b=targetSnapshot else {return nil}
     guard contextCurrent else {error="Bağlantı değişti. Yeniden karşılaştırın.";return nil}
     guard let difference=currentDifference,difference.canStage else {error="Taşımak için uygun bir nesne seçin.";return nil}
+    guard !unverifiedKeys.contains(difference.key) else {error="Önce seçili nesneyi yenileyin, ardından yeni taşıma önizlemesi hazırlayın.";return nil}
     busy=true;error="";message="Seçilen nesnenin taşıma önizlemesi hazırlanıyor…"
     let token=revision,key=difference.key,selection:Set<SchemaObjectKey>=[difference.key]
     defer {if token==revision {busy=false}}
@@ -274,6 +293,8 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
       guard contextCurrent else {throw SQLFailure("Bağlantı değişti. Yeniden karşılaştırın.")}
       guard plan.keys==[key] else {throw SQLFailure("Her taşıma işleminde yalnız bir nesne uygulanabilir.")}
       try Task.checkCancellation()
+      needsNewPreview.remove(key)
+      preparedPlanIDs[key]=plan.id
       message="\(keys.count) nesne · Hedef: \(target.title) · Henüz gönderilmedi"
       return plan
     } catch {guard token==revision else {return nil};self.error=error.localizedDescription;message="Önizleme oluşturulamadı.";return nil}
@@ -283,6 +304,11 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
     guard !busy,!applying,self.sourceID==sourceID,self.targetID==targetID,validPair,let source,let target,
       let a=sourceSnapshot,let b=targetSnapshot else {error="Karşılaştırma bağlamı değişti; yeniden önizleyin.";return}
     guard contextCurrent else {error="Bağlantı değişti. Yeniden karşılaştırın.";return}
+    guard !attemptedPlanIDs.contains(plan.id) else {error="Bu taşıma önizlemesi daha önce gönderildi. Yeni önizleme hazırlayın; önceki gönderim tekrar edilmedi.";return}
+    guard !unverifiedKeys.contains(key),!needsNewPreview.contains(key) else {error="Önce seçili nesneyi yenileyip yeni taşıma önizlemesi hazırlayın. Önceki gönderim tekrar edilmedi.";return}
+    guard preparedPlanIDs[key]==plan.id else {error="Taşıma önizlemesi artık güncel değil. Yeni önizleme hazırlayın; önceki gönderim tekrar edilmedi.";return}
+    attemptedPlanIDs.insert(plan.id)
+    preparedPlanIDs.removeValue(forKey:key)
     applying=true;Self.activeApplications+=1
     defer {applying=false;Self.activeApplications-=1}
     error="";message="Hedef doğrulanıyor ve değişiklik uygulanıyor…"
@@ -327,7 +353,9 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
       let (left,right)=try await (refinedA,refinedB)
       try validateContext()
       let row=try SchemaComparison.compare(source:left,target:right).first
+      if let row,row.status == .unavailable {throw SQLFailure("\(key.qualified) güncel tanımı karşılaştırılamıyor. "+row.migrationIssue)}
       sourceSnapshot=merging(left,into:a,key:key);targetSnapshot=merging(right,into:b,key:key)
+      migrationNotices.removeValue(forKey:key);unverifiedKeys.remove(key);needsNewPreview.remove(key)
       if let index=differences.firstIndex(where:{$0.key==key}) {
         if let row {differences[index]=row} else {differences.remove(at:index)}
       }
@@ -342,19 +370,62 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
         evictCaches(for:key,source:source,target:target,sourceSnapshot:a,targetSnapshot:b)
         sourceSnapshot?.objects.removeValue(forKey:key);sourceSnapshot?.dependencies.removeValue(forKey:key)
         targetSnapshot?.objects.removeValue(forKey:key);targetSnapshot?.dependencies.removeValue(forKey:key)
-        differences.removeAll {$0.key==key};filter()
-        if focused==key {focused=nil;detailRevision=UUID();clearDetail();detailSummary=key.qualified}
+        // Keep the last observed difference visible, but revoke its baseline and
+        // preview. Disappearing from a differences-only list would imply success.
+        let rejected=(error as? SQLFailure).map {!$0.diagnostics.isEmpty && $0.diagnostics.allSatisfy {diagnostic in diagnostic.code>0 && (diagnostic.state.hasPrefix("42") || diagnostic.state.hasPrefix("23"))}} ?? false
+        migrationNotices[key]=SchemaMigrationNotice(kind:committed ? .appliedUnverified:rejected ? .failed:.uncertain,detail:error.localizedDescription)
+        unverifiedKeys.insert(key);needsNewPreview.insert(key)
+        if focused==key {detailRevision=UUID();clearDetail();detailSummary=key.qualified;detailNotice="\(migrationNotices[key]!.title). Seçili nesneyi yenileyin; eski önizleme tekrar gönderilemez."}
       }
       if committed {
         // A committed write is never reported as a failed/retryable migration.
-        // Remove only the unverified row; leaving its old digest would advertise
-        // stale metadata as a current, actionable comparison.
-        self.error="Nesne hedefe uygulandı, ancak güncel karşılaştırması alınamadı: "+error.localizedDescription+"\nTaşıma tekrar gönderilmedi. Güncel liste için yeniden karşılaştırın."
+        self.error="Nesne hedefe uygulandı, ancak güncel karşılaştırması alınamadı: "+error.localizedDescription+"\nTaşıma tekrar gönderilmedi. Güncel fark için seçili nesneyi yenileyin."
         message="\(key.qualified) hedefe uygulandı; güncel farkı doğrulanamadı."
       } else {
-        self.error=error.localizedDescription+"\nOtomatik tekrar yapılmadı. Ağ kesildiyse sonucu hedefte yeniden karşılaştırın."
-        message=writeAttempted ? "Taşıma sonucu doğrulanamadı.":"Taşıma tamamlanamadı."
+        self.error=error.localizedDescription+"\nOtomatik tekrar yapılmadı. "+(writeAttempted ? "Güncel fark için seçili nesneyi yenileyin.":"Güncel nesne bilgilerini kontrol edin.")
+        message=migrationNotices[key]?.kind == .failed ? "\(key.qualified) taşınamadı; fark listede korunuyor.":writeAttempted ? "Taşıma sonucu doğrulanamadı.":"Taşıma tamamlanamadı."
       }
+    }
+  }
+  func refreshFocusedDifference() async {
+    guard canRefreshFocused,let key=focused,let source,let target,let a=sourceSnapshot,let b=targetSnapshot else {return}
+    busy=true;error="";message="\(key.qualified) yeniden karşılaştırılıyor…"
+    let token=revision,sg=source.server.generation,tg=target.server.generation
+    defer {if token==revision {busy=false}}
+    func validateContext() throws {
+      try Task.checkCancellation()
+      guard token==revision,sg==source.server.generation,tg==target.server.generation,contextCurrent else {throw SQLFailure("Bağlantı veya karşılaştırma seçimi değişti; yeniden karşılaştırın.")}
+    }
+    do {
+      async let ar=readInventory(source,keys:[key])
+      async let br=readInventory(target,keys:[key])
+      let (freshA,freshB)=try await (ar,br)
+      try validateContext()
+      let preliminary=try SchemaComparison.compare(source:freshA,target:freshB)
+      let refinementKeys=preliminary.filter {$0.status == .changed && $0.source?.type != "U" && $0.source?.type != "SN"}.map(\.key)
+      async let refinedA=refine(freshA,keys:refinementKeys,endpoint:source)
+      async let refinedB=refine(freshB,keys:refinementKeys,endpoint:target)
+      let (left,right)=try await (refinedA,refinedB)
+      try validateContext()
+      let row=try SchemaComparison.compare(source:left,target:right).first
+      if let row,row.status == .unavailable {throw SQLFailure("\(key.qualified) güncel tanımı karşılaştırılamıyor. "+row.migrationIssue)}
+      sourceSnapshot=merging(left,into:a,key:key);targetSnapshot=merging(right,into:b,key:key)
+      if let index=differences.firstIndex(where:{$0.key==key}) {
+        if let row {differences[index]=row} else {differences.remove(at:index)}
+      }
+      unverifiedKeys.remove(key)
+      if row == nil || row?.status == .equal {migrationNotices.removeValue(forKey:key);needsNewPreview.remove(key)}
+      filter()
+      if focused==key {
+        if let row,Self.isListedDifference(row) {await loadDetail()}
+        else {focused=nil;clearDetail();detailSummary="\(key.qualified) güncel olarak karşılaştırıldı."}
+      }
+      try validateContext()
+      message="\(key.qualified) yenilendi. "+comparisonSummary
+    } catch {
+      guard token==revision else {return}
+      self.error=error.localizedDescription
+      message="\(key.qualified) yenilenemedi; önceki fark ve taşıma durumu listede korunuyor."
     }
   }
   private func readInventory(_ endpoint:SchemaEndpoint,keys:[SchemaObjectKey]) async throws -> SchemaSnapshot {
@@ -418,9 +489,10 @@ struct SchemaComparisonPanel: View {
       TableColumn("Tür") {Text(($0.source ?? $0.target)?.kind ?? "")}.width(90)
       TableColumn("Durum") {row in
         Group {
-          if model.focused==row.key {Label(row.status.rawValue,systemImage:statusSymbol(row.status))}
+          if let notice=model.migrationNotice(for:row) {Label(notice.title,systemImage:"exclamationmark.triangle").foregroundStyle(Color(nsColor:StudioTheme.danger))}
+          else if model.focused==row.key {Label(row.status.rawValue,systemImage:statusSymbol(row.status))}
           else {Label(row.status.rawValue,systemImage:statusSymbol(row.status)).foregroundStyle(Color(nsColor:tone(row.status)))}
-        }.help(row.migrationIssue)
+        }.help(model.migrationNotice(for:row).map {$0.detail+(model.unverifiedKeys.contains(row.key) ? "\nGüncel fark için seçili nesneyi yenileyin.":"\nGüncel fark yeniden doğrulandı; yeniden taşımak için yeni önizleme açın.")} ?? row.migrationIssue)
       }.width(min:160,ideal:190)
     }.disabled(model.applying).accessibilityIdentifier("schemaDifferences")
       .overlay {if model.visible.isEmpty && !model.busy {
@@ -494,6 +566,10 @@ struct SchemaComparisonPanel: View {
         if model.unavailableCount>0 {metric("Okunamadı",count:model.unavailableCount,color:StudioTheme.danger).help("Tanımı şifreli veya okunamayan nesneler listelenmez.")}
       }
       if model.applying {ProgressView().controlSize(.small)}
+      if model.focused.map({model.unverifiedKeys.contains($0)})==true {
+        StudioActionButton("Seçili nesneyi yenile",icon:"arrow.clockwise") {Task {await model.refreshFocusedDifference()}}.labelStyle(.iconOnly)
+          .disabled(!model.canRefreshFocused).help("Yalnız seçili nesnenin kaynak ve hedef bilgilerini yenile; taşıma tekrar gönderilmez.").accessibilityIdentifier("schemaRefreshSelected")
+      }
       StudioActionButton("Kaynak SQL’i hedef sekmede aç",icon:"doc.text") {openSQL(model.sourceSQL)}.labelStyle(.iconOnly)
         .disabled(model.detailComparison == nil || model.currentDifference?.source == nil || model.sourceSQL.isEmpty || model.applying).accessibilityIdentifier("schemaOpenSQL")
       StudioActionButton("Taşıma Önizlemesi",icon:"paperplane") {preview()}.buttonStyle(StudioPrimaryButton())
