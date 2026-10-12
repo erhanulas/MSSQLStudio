@@ -84,6 +84,9 @@ Tablodaki kısa dosya adları, ayrıca yol belirtilmedikçe aynı satır grubunu
 
 ## Editör, sonuçlar ve performans
 
+- BEGIN/END caret eşleştirmesi en çok 250.000 UTF-16 üzerinde lexer ile yapılır. İç içe CASE kendi END’ini tüketir; transaction/dialog BEGIN ve END CONVERSATION blok sayılmaz, GO eşleşme sınırıdır. Yorum/literal/quoted identifier kapsamı dışarıda kalır. Eşler TextKit 2 viewport dekorasyonu olarak çizilir; foreground/undo/SQL değiştirilmez, katlanmış gizli eş çizilmez. Referans: [DataGrip eşleşen ayırıcılar](https://www.jetbrains.com/help/datagrip/code-editing.html).
+- Editörden nesne tanımına geçiş CREATE/ALTER sekmesini ağ isteğinden önce açar. Metadata ayrı server katalog bağlantısından yüklenir; geçici sekme yükleme/hata durumunu gösterir, yükleme sırasında düzenleme/yürütme kapalıdır, diğer sekmeler kullanılabilir ve bekleyen sekme kapatılabilir. Aynı server/DB/schema/name isteği tek sekmede birleştirilir; objectID çözülünce mevcut objectEditorKey sekmesine geçilir ve düzenlemeler korunur. Kapalı/iptal edilmiş sekmeye yanıt uygulanmaz; server generation değişirse görünür hata olur. Ham moduleOriginal ve ALTER edit baseline ayrımı korunur; sorgu bağlantısı tanım hazır olduktan sonra açılır.
+
 - Yazım sonrası SSMS token renkleri tamamlamanın gecikmesini beklemeden, 250.000 UTF-16 bütçesiyle güncellenir; caret literal içindeyse typingAttributes aynı rengi taşır. IME marked text sırasında boyama ertelenir; metin/undo değiştirilmez.
 - TextKit 2'yi koruyun; `layoutManager` erişimiyle TextKit 1'e geçmeyin. Native find/scroll/selection/undo/completion davranışını koruyun. Renklendirmede metni yeniden atamayın; yalnız değişen attribute aralıklarını güncelleyin. IME marked text sırasında biçimlendirmeyi erteleyin.
 - Ana editör, fark önizleme ve Agent komut alanı `SQLSourceHighlighting`/StudioTheme renklerini paylaşır. Genel tema dekorasyonu `sqlSourcePreview` veya `agentCommandEditor` syntax renklerini sıfırlamamalıdır. Native fark önizlemesi StudioTheme.changed bildiriminde hem hizalı diff satırlarını hem çalıştırılacak SQL'i yeniden renklendirir; seçim/kaydırma ve değişiklik zeminleri korunur. Undo/redo restored text ile SwiftUI binding'i senkron tutun; renklendirmeyi undo kaydına eklemeyin.
@@ -215,6 +218,8 @@ Noktalı virgülsüz ardışık SELECT ifadeleri ve UNION kolları tamamlama bin
 - Yerel history/recovery opt-in'dir; Application Support/MSSQLStudio klasörü 0700, dosyalar 0600 ve atomik yazılır. SQL değer içerebilir; snapshot parola içermez. Mevcut kullanıcı kayıtlarını test için silmeyin.
 
 Güncelleme onayında Güncelle ve Yeniden Aç / Güncelle ve Kapat / Vazgeç seçenekleri vardır. İlk seçimde mevcut signed app executable’ı `--reopen-after-update <version> <parentPID>` ile UI/Keychain/restore başlatmadan ayrı bekler; Installer must-close korunur. En çok 30 dk parent çıkışı + canonical hedefin exact sürümü + strict/deep sabit DR imzası beklenir; yakalanan eski güven kimliği değişmez. Doğrulanırsa NSWorkspace createsNewApplicationInstance ile yeni uygulama açılır; eksik/iptal/yanlış imzada açılmaz. Bu izleyici frozen credential helper değildir; parola taşımaz veya helper’ı değiştirmez. [Apple yeni application instance](https://developer.apple.com/documentation/appkit/nsworkspace/openconfiguration/createsnewapplicationinstance).
+
+Güncellemeleri Kontrol Et single-flight ilerleme penceresini ağ isteğinden önce gösterir. Kontrol/indirme/doğrulama aşamaları aynı pencerededir; işlem sürerken tekrar kontrol ve kapatma düğmesi pasiftir, diğer sorgu sekmeleri kullanılabilir. Güncel/hata sonucu aynı yüzeyde kalır; doğrulanmış paket hazırsa mevcut kurulum seçim ekranına geçilir.
 
 ## Geliştirme, doğrulama ve yayın akışı
 

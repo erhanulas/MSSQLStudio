@@ -199,6 +199,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
 /// must not edit text attributes or invalidate TextKit's cached paragraph fragments.
 @MainActor final class OccurrenceHighlights: NSView {
   weak var editor: NSTextView?
+  var blockRanges:[NSRange]=[] {didSet {if oldValue != blockRanges {needsDisplay=true}}}
   var ranges:[NSRange]=[] {didSet {if oldValue != ranges {needsDisplay=true}}}
   override var isFlipped: Bool {true}
   override func hitTest(_ point:NSPoint) -> NSView? {nil}
@@ -206,7 +207,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     guard let editor,let content=editor.textContentStorage,let layout=editor.textLayoutManager else {return []}
     var rects:[NSRect]=[]
     let viewport=layout.textViewportLayoutController.viewportRange
-    for range in ranges where range != editor.selectedRange() {
+    for range in ranges+blockRanges where range != editor.selectedRange() {
       guard NSMaxRange(range) <= (content.textStorage?.length ?? 0),
         let start=content.location(content.documentRange.location,offsetBy:range.location),
         let end=content.location(start,offsetBy:range.length),
@@ -912,6 +913,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   private func clearOccurrences() {
     occurrenceRanges=[]
     occurrenceHighlights.ranges=[]
+    occurrenceHighlights.blockRanges=[]
   }
   func updateOccurrences() {
     guard !paintingOccurrences,!editor.trackingMouseSelection else {return}
@@ -928,6 +930,13 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
           updatedRanges.append(found);start=NSMaxRange(found)
         }
       }
+    }
+    let sourceRange=projection?.sourceRange(range) ?? range
+    let blocks=range.length == 0 ? TSQL.matchingBlock(in:document.sql,at:sourceRange.location):[]
+    occurrenceHighlights.blockRanges=blocks.compactMap { block in
+      guard let projection else {return block}
+      guard !projection.regions.contains(where: {NSIntersectionRange($0.hidden,block).length > 0}) else {return nil}
+      return NSRange(location:projection.displayOffset(block.location),length:block.length)
     }
     occurrenceRanges=updatedRanges
     occurrenceHighlights.ranges=updatedRanges

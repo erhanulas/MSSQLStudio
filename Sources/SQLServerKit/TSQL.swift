@@ -25,6 +25,32 @@ public struct CatalogSymbol: Sendable, Codable {
   }
 }
 public enum TSQL {
+  /// Lexical block pairing: CASE consumes its own END; transaction BEGIN is not a block.
+  /// Work is bounded on the native selection path and ranges remain UTF-16.
+  public static func matchingBlock(in source:String,at caret:Int) -> [NSRange] {
+    guard source.utf16.count <= 250_000,caret >= 0,caret <= source.utf16.count else {return []}
+    let tokens=lex(source).filter {$0.kind != .space && $0.kind != .comment}
+    var stack:[Int]=[],pairs:[Int:Int]=[:]
+    for (i,token) in tokens.enumerated() {
+      guard token.kind == .keyword else {continue}
+      switch token.text.uppercased() {
+      case "GO": stack.removeAll()
+      case "CASE": stack.append(i)
+      case "BEGIN":
+        let next=i+1 < tokens.count ? tokens[i+1].text.uppercased():""
+        if !["TRAN","TRANSACTION","DISTRIBUTED","DIALOG","CONVERSATION"].contains(next) {stack.append(i)}
+      case "END":
+        // END CONVERSATION is an independent statement, never a block closer.
+        if i+1 < tokens.count,tokens[i+1].text.uppercased() == "CONVERSATION" {continue}
+        if let start=stack.popLast(),tokens[start].text.uppercased() == "BEGIN" {pairs[start]=i;pairs[i]=start}
+      default: break
+      }
+    }
+    let selected=tokens.indices.first {tokens[$0].range.location <= caret && caret < NSMaxRange(tokens[$0].range)} ?? tokens.indices.last {NSMaxRange(tokens[$0].range) == caret}
+    guard let i=selected,
+      let other=pairs[i] else {return []}
+    return [tokens[min(i,other)].range,tokens[max(i,other)].range]
+  }
   /// Quote pairing belongs to typed code, never to comments or existing literals.
   /// Bound synchronous work on the editor's input path.
   public static func allowsQuotePair(in source:String,at caret:Int) -> Bool {

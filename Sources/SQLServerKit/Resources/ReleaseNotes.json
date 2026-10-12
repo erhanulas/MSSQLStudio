@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.78",
+    "date": "2026-10-12",
+    "title": "Görünür yükleme durumları ve SQL blok eşleşmesi",
+    "changes": [
+      "Güncellemeleri Kontrol Et, sonuç gelene kadar görünür bir bekleme penceresi gösterir. Kontrol, indirme ve imza doğrulama aşamaları aynı alanda izlenir; yinelenen kontrol engellenir ve sonuç veya hata aynı pencerede gösterilir.",
+      "SQL editöründe BEGIN veya END üzerine tek tıklayınca eşleşen iki ayırıcı birlikte vurgulanır. İç içe bloklar, TRY/CATCH, CASE, yorumlar, metinler, transaction komutları ve GO sınırları ayrılır; SSMS renkleri ve native seçim korunur.",
+      "Nesne tanımına Command-tıklama veya Command-B ile geçince CREATE/ALTER sekmesi hemen açılır ve tanım yüklenirken bekleme göstergesi sunar. Hatalar sekmede görünür; sekme kapatılırsa geç gelen yanıt yeniden açmaz, mevcut nesne sekmeleri ve düzenlemeleri korunur."
+    ]
+  },
+  {
     "version": "0.2.77",
     "date": "2026-10-12",
     "title": "Kararlı SQL renkleri, Explorer görünümü ve seçilebilir yeniden açma",

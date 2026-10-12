@@ -1257,9 +1257,32 @@ private struct SSMSMarkdown: View {
   }
 }
 
+/// A single visible surface survives the complete asynchronous update preparation.
+@MainActor final class UpdateProgressController:NSWindowController {
+  let status=NSTextField(wrappingLabelWithString: "Güncellemeler kontrol ediliyor…")
+  let spinner=NSProgressIndicator()
+  let done=NSButton(title:"Kapat",target:nil,action:nil)
+  init() {
+    let window=NSWindow(contentRect:NSRect(x:0,y:0,width:440,height:170),styleMask:[.titled],backing:.buffered,defer:false)
+    window.title="MSSQL Studio Güncellemesi";window.isReleasedWhenClosed=false
+    super.init(window:window)
+    spinner.style = .spinning;spinner.startAnimation(nil)
+    status.alignment = .center;status.setAccessibilityIdentifier("updateCheckStatus")
+    done.target=self;done.action=#selector(closeProgress);done.isEnabled=false
+    let stack=NSStackView(views:[spinner,status,done]);stack.orientation = .vertical;stack.spacing=16
+    stack.translatesAutoresizingMaskIntoConstraints=false;window.contentView?.addSubview(stack)
+    NSLayoutConstraint.activate([stack.centerXAnchor.constraint(equalTo:window.contentView!.centerXAnchor),stack.centerYAnchor.constraint(equalTo:window.contentView!.centerYAnchor),stack.widthAnchor.constraint(equalToConstant:392)])
+    window.center()
+  }
+  required init?(coder:NSCoder) {fatalError()}
+  func phase(_ text:String) {status.stringValue=text}
+  func finish(_ text:String) {phase(text);spinner.stopAnimation(nil);spinner.isHidden=true;done.isEnabled=true;done.keyEquivalent="\r"}
+  @objc private func closeProgress() {close()}
+}
+
 extension WorkbenchController {
   @objc func installUpdate() {
-    guard !updateInProgress else {return}
+    guard !updateInProgress else {updateProgress?.showWindow(nil);return}
     let feed:URL
     do {
       if let source=UserDefaults.standard.string(forKey:"githubUpdateRepository"),!source.isEmpty {
@@ -1269,19 +1292,24 @@ extension WorkbenchController {
       else {throw SQLFailure("GitHub yayın deposu henüz tanımlanmadı. Ayarlar → GitHub güncellemeleri alanına kullanıcı/depo adresini girin.")}
     }catch {state.showError(error.localizedDescription);return}
     let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
-    updateInProgress=true
+    updateProgress?.close()
+    let progress=UpdateProgressController();updateProgress=progress
+    updateInProgress=true;progress.showWindow(nil)
     Task {
       defer {updateInProgress=false}
       let updater = ApplicationUpdate()
       do {
         guard let release = try await updater.check(feed:feed,currentVersion:version) else {
-          let alert = NSAlert(); alert.messageText = "MSSQL Studio güncel"; alert.runModal(); return
+          progress.finish("MSSQL Studio güncel. Yeni bir sürüm bulunamadı.");return
         }
+        progress.phase("MSSQL Studio \(release.version) indiriliyor…")
         let package = try await updater.downloadInstaller(release)
         defer {try? FileManager.default.removeItem(at:package)}
+        progress.phase("Güncelleme paketi doğrulanıyor…")
         let prepared = try await updater.prepareInstaller(package:package,expectedVersion:release.version,currentVersion:version)
         var installerOpened=false
         defer {if !installerOpened {try? FileManager.default.removeItem(at:prepared.directory)}}
+        progress.close()
         let alert=NSAlert();alert.messageText="MSSQL Studio \(prepared.version) kuruluma hazır"
         alert.informativeText="macOS Kurulum penceresinde kurulumu tamamlayın. Yeniden açmayı seçerseniz yeni sürüm doğrulandıktan sonra uygulama otomatik açılır; kurulum iptal edilirse açılmaz. Kayıtlı bağlantılarınız korunur."
         alert.addButton(withTitle:"Güncelle ve Yeniden Aç")
@@ -1301,7 +1329,7 @@ extension WorkbenchController {
         }
         Application.updateTerminationApproved=true
         NSApp.terminate(nil)
-      } catch { state.showError(error.localizedDescription) }
+      } catch {progress.showWindow(nil);progress.finish("Güncelleme kontrolü tamamlanamadı.\n"+error.localizedDescription)}
     }
   }
 }

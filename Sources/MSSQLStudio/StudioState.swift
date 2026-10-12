@@ -46,6 +46,7 @@ import SQLServerKit
   }
   var startupError: String?
   var catalogFixture: ((String) -> Execution)?
+  var asyncCatalogFixture: ((String) async throws -> Execution)?
   var indexingDatabases = Set<String>()
   var indexErrors: [String:String] = [:]
   private var indexPreparation: Task<Void, Never>?
@@ -75,6 +76,7 @@ import SQLServerKit
     self.password = password
   }
   func catalog(_ sql: String, database: String, limits: Limits = Limits()) async throws -> Execution {
+    if let asyncCatalogFixture {return try await asyncCatalogFixture(sql)}
     if let catalogFixture { return catalogFixture(sql) }
     guard online else { throw SQLFailure("Bağlantı çevrimdışı. Bağlantı ayarlarından yeniden bağlanın.") }
     var profile = self.profile
@@ -129,6 +131,10 @@ struct ObjectEditorKey: Codable, Equatable {
   var file: URL?
   var state = State.disconnected
   var results: [Rows] = []
+  var definitionLoading=false
+  var definitionError:String?
+  var definitionSymbol:CatalogSymbol?
+  var definitionTask:Task<Void,Never>?
   var objectEditorKey: ObjectEditorKey?
   var moduleInitialSQL: String?
   var moduleOriginal: String?
@@ -264,7 +270,7 @@ struct ObjectEditorKey: Codable, Equatable {
     }
   }
   func execute(override: String? = nil, estimated: Bool = false, repeatRead: Bool = false) {
-    guard state == .ready, confirmDiscardResultEdits?() != false else { return }
+    guard !definitionLoading,state == .ready, confirmDiscardResultEdits?() != false else { return }
     let source = sql as NSString
     let query =
       override
@@ -607,7 +613,7 @@ struct ObjectEditorKey: Codable, Equatable {
   }
   @discardableResult func newQuery(
     server: ConnectedServer, database: String? = nil, text: String = "", title: String? = nil,
-    run: Bool = false, refreshSeconds: Int? = nil
+    run: Bool = false, refreshSeconds: Int? = nil, startConnection:Bool = true
   ) -> QueryDocument {
     let doc = QueryDocument(
       server: server, database: database ?? server.profile.database,
@@ -631,7 +637,7 @@ struct ObjectEditorKey: Codable, Equatable {
     doc.runAfterConnect = run
     doc.initialRefreshSeconds = refreshSeconds
     changed?()
-    doc.connect()
+    if startConnection {doc.connect()}
 
     return doc
   }
@@ -742,6 +748,7 @@ struct ObjectEditorKey: Codable, Equatable {
       return false
     }
     guard confirmSave(doc) else { return false }
+    doc.definitionTask?.cancel();doc.definitionTask=nil
     doc.disconnect()
     documents.removeAll { $0.id == doc.id }
     if active === doc { active = documents.last }
