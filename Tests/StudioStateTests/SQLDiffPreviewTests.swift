@@ -5,11 +5,11 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct SQLDiffPreviewTests {
-  private func preview(_ original: String, _ edited: String, index: Int = -1, width: CGFloat = 900, height: CGFloat = 240, ignoringWhitespace:Bool=false) -> SQLInlineDiffView {
+  private func preview(_ original: String, _ edited: String, index: Int = -1, width: CGFloat = 900, height: CGFloat = 240, ignoringWhitespace:Bool=false, editedOnLeft:Bool=false) -> SQLInlineDiffView {
     _=NSApplication.shared
     let view=SQLInlineDiffView(frame:NSRect(x:0,y:0,width:width,height:height))
     let comparison=ignoringWhitespace ? SQLTextDiff.compareIgnoringSQLWhitespace(original,edited):SQLTextDiff.compare(original,edited)
-    view.display(comparison:comparison,original:original,edited:edited,changeIndex:index)
+    view.display(comparison:comparison,original:original,edited:edited,changeIndex:index,editedOnLeft:editedOnLeft)
     view.layoutSubtreeIfNeeded()
     return view
   }
@@ -31,6 +31,57 @@ import Testing
     let reversed=preview(edited,original)
     #expect(reversed.rightText.string==view.leftText.string)
     #expect(reversed.rightText.selectedSQL(in:NSRange(location:0,length:reversed.rightText.string.utf16.count))==original)
+  }
+  @Test func sourceOnLeftSwapsPhysicalPanesAndRulersWithoutReversingDiffCopyOrViewport() throws {
+    _=NSApplication.shared
+    let previous=UserDefaults.standard.string(forKey:"ssmsTheme")
+    defer {StudioTheme.apply(previous ?? "light")}
+    StudioTheme.apply("light")
+    let rows=(0..<140).map {"SELECT \($0), ["+String(repeating:"LongName",count:20)+"];"}
+    var changed=rows
+    changed[80]=changed[80].replacingOccurrences(of:"SELECT 80,",with:"SELECT -2,")
+    changed.insert("PRINT N'Yeni 🥐';",at:2)
+    let original=rows.joined(separator:"\r\n"),edited=changed.joined(separator:"\r\n")
+    let comparison=SQLTextDiff.compareIgnoringSQLWhitespace(original,edited)
+    let view=preview(original,edited,ignoringWhitespace:true,editedOnLeft:true)
+    #expect(view.right.frame.minX==0 && view.left.frame.minX>view.right.frame.maxX)
+    let accessibilityOrder=try #require(view.accessibilityChildren() as? [NSView])
+    #expect(accessibilityOrder.count==2 && accessibilityOrder.first===view.right && accessibilityOrder.last===view.left)
+    let originalRuler=try #require(view.left.verticalRulerView as? SQLInlineDiffRuler)
+    let editedRuler=try #require(view.right.verticalRulerView as? SQLInlineDiffRuler)
+    #expect(view.convert(editedRuler.bounds,from:editedRuler).minX<view.convert(originalRuler.bounds,from:originalRuler).minX)
+    #expect(originalRuler.numbers[2]==nil && editedRuler.numbers[2]==3)
+    #expect(comparison.added==2)
+    #expect(comparison.removed==1)
+    #expect(view.changeRows==[2,81])
+    for (text,source) in [(view.leftText,original),(view.rightText,edited)] {
+      #expect(Data(text.selectedSQL(in:NSRange(location:0,length:text.string.utf16.count)).utf8)==Data(source.utf8))
+    }
+    let old=try #require(view.leftText.textContentStorage?.textStorage),new=try #require(view.rightText.textContentStorage?.textStorage)
+    let removed=(old.string as NSString).range(of:"SELECT 80,").location
+    let added=(new.string as NSString).range(of:"Yeni 🥐").location
+    #expect(hex(old.attribute(.backgroundColor,at:removed,effectiveRange:nil) as? NSColor)==0xFCE5E5)
+    #expect(hex(new.attribute(.backgroundColor,at:added,effectiveRange:nil) as? NSColor)==0xACE0C4)
+    view.left.contentView.scroll(to:NSPoint(x:44,y:1200))
+    view.right.contentView.scroll(to:NSPoint(x:88,y:1300))
+    #expect(abs(view.left.contentView.bounds.minY-1300)<1)
+    let selection=NSRange(location:20,length:8)
+    view.rightText.setSelectedRange(selection)
+    let origins=[view.left.contentView.bounds.origin,view.right.contentView.bounds.origin],renders=view.renderCount
+    view.display(comparison:comparison,original:original,edited:edited,changeIndex:-1)
+    view.layoutSubtreeIfNeeded()
+    #expect(view.left.frame.minX==0 && view.right.frame.minX>view.left.frame.maxX)
+    let defaultAccessibilityOrder=try #require(view.accessibilityChildren() as? [NSView])
+    #expect(defaultAccessibilityOrder.first===view.left && defaultAccessibilityOrder.last===view.right)
+    #expect(view.renderCount==renders && view.rightText.selectedRange()==selection)
+    #expect(view.left.contentView.bounds.origin==origins[0] && view.right.contentView.bounds.origin==origins[1])
+    #expect(hex(old.attribute(.backgroundColor,at:removed,effectiveRange:nil) as? NSColor)==0xFCE5E5)
+    #expect(hex(new.attribute(.backgroundColor,at:added,effectiveRange:nil) as? NSColor)==0xACE0C4)
+    view.display(comparison:comparison,original:original,edited:edited,changeIndex:1,editedOnLeft:true)
+    view.layoutSubtreeIfNeeded()
+    #expect(view.right.frame.minX==0 && view.left.contentView.bounds.minY>1500)
+    #expect(abs(view.left.contentView.bounds.minY-view.right.contentView.bounds.minY)<1)
+    #expect(view.renderCount==renders)
   }
   @Test func viewWhitespaceOnlyRowsStayNeutralAndAddedProjectionKeepsExactCopiedSQL() throws {
     let previous=UserDefaults.standard.string(forKey:"ssmsTheme")

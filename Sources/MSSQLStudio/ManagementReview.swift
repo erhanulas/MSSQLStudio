@@ -17,7 +17,7 @@ import SwiftUI
   private var approved: (() -> Void)?
   private var finished: (() -> Void)?
   private var observers:[NSObjectProtocol]=[]
-  init(parent:NSWindow,title:String,original:String,edited:String,canApply:Bool,leftTitle:String="Açılan tanım",rightTitle:String="Düzenlenen tanım",executionSQL:String?=nil,ignoringSQLWhitespace:Bool=false,approved:@escaping () -> Void,finished:@escaping () -> Void) {
+  init(parent:NSWindow,title:String,original:String,edited:String,canApply:Bool,leftTitle:String="Açılan tanım",rightTitle:String="Düzenlenen tanım",executionSQL:String?=nil,ignoringSQLWhitespace:Bool=false,editedOnLeft:Bool=false,approved:@escaping () -> Void,finished:@escaping () -> Void) {
     super.init()
     self.approved=approved;self.finished=finished
     panel.title="Nesne değişikliklerini incele";panel.minSize=NSSize(width:960,height:600);panel.delegate=self
@@ -37,7 +37,7 @@ import SwiftUI
       let preview=SQLInlineDiffView(frame:.zero);inlinePreview=preview
       preview.leftText.setAccessibilityLabel(leftTitle+" SQL farkları")
       preview.rightText.setAccessibilityLabel(rightTitle+" SQL farkları")
-      let captions=NSStackView(views:[leftTitle,rightTitle].map {title in
+      let captions=NSStackView(views:(editedOnLeft ? [rightTitle,leftTitle]:[leftTitle,rightTitle]).map {title in
         let caption=NSTextField(labelWithString:title);caption.font = .systemFont(ofSize:12,weight:.semibold)
         return caption
       })
@@ -47,7 +47,8 @@ import SwiftUI
       diff=column
     } else {
       split.isVertical=true;split.dividerStyle = .thin
-      for (scroll,label) in [(left,leftTitle),(right,rightTitle)] {
+      let panes=editedOnLeft ? [(right,rightTitle),(left,leftTitle)]:[(left,leftTitle),(right,rightTitle)]
+      for (scroll,label) in panes {
         configure(scroll,text:"")
         let caption=NSTextField(labelWithString:label);caption.font = .systemFont(ofSize:12,weight:.semibold)
         let column=NSStackView(views:[caption,scroll]);column.orientation = .vertical;column.spacing=8;column.edgeInsets=NSEdgeInsets(top:10,left:12,bottom:10,right:12)
@@ -90,7 +91,7 @@ import SwiftUI
       }.value
       guard let self,!Task.isCancelled else {return}
       self.comparison=comparison
-      if let inlinePreview {inlinePreview.display(comparison:comparison,original:previewOriginal,edited:previewEdited,changeIndex:-1)}
+      if let inlinePreview {inlinePreview.display(comparison:comparison,original:previewOriginal,edited:previewEdited,changeIndex:-1,editedOnLeft:editedOnLeft)}
       else {render(comparison,to:left,old:true,source:previewOriginal);render(comparison,to:right,old:false,source:previewEdited)}
       summary.stringValue="−\(comparison.removed) kaldırılan  ·  +\(comparison.added) eklenen satır"+(comparison.simplified ? "  ·  Büyük değişiklik için blok karşılaştırması":"")
       let truncated=oversized || comparison.lines.count>10_000 || inlinePreview?.truncated == true

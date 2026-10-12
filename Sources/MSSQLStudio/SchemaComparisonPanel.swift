@@ -17,8 +17,8 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
 @MainActor final class SchemaComparisonModel: ObservableObject {
   typealias Reader = @MainActor @Sendable (SchemaEndpoint,String) async throws -> Execution
   let endpoints: [SchemaEndpoint]
-  @Published var sourceID: String
-  @Published var targetID: String
+  @Published var sourceID: String {didSet {if oldValue != sourceID {endpointSelectionChanged()}}}
+  @Published var targetID: String {didSet {if oldValue != targetID {endpointSelectionChanged()}}}
   @Published private(set) var differences: [SchemaDifference]=[]
   @Published private(set) var visible: [SchemaDifference]=[]
   @Published private(set) var busy=false
@@ -69,6 +69,7 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
   static private(set) var activeApplications=0
   var cancelOperation:(()->Void)?
   private var comparisonTask:Task<Void,Never>?
+  private var changingEndpoints=false
   func startComparison() {comparisonTask?.cancel();comparisonTask=Task {await compare()}}
   private let reader: Reader
   private let writer: Reader
@@ -76,12 +77,31 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
     self.endpoints=endpoints
     let initialSource=sourceID ?? endpoints.first?.id ?? ""
     self.sourceID=initialSource
-    self.targetID=targetID ?? ""
+    let initialTarget=targetID ?? ""
+    if let source=endpoints.first(where:{$0.id==initialSource}),let target=endpoints.first(where:{$0.id==initialTarget}),source.sameDatabase(as:target) {self.targetID=""}
+    else {self.targetID=initialTarget}
     self.reader=reader ?? {endpoint,sql in if let fixture=endpoint.server.schemaComparisonFixture {return try fixture(endpoint.database,sql)};return try await endpoint.server.catalog(sql,database:endpoint.database,limits:SchemaComparison.limits)}
     self.writer=writer ?? {endpoint,sql in guard endpoint.server.schemaComparisonFixture == nil else {throw SQLFailure("Çevrimdışı önizleme; SQL gönderilmez.")};var l=SchemaComparison.limits;l.timeout=120;return try await endpoint.server.catalog(sql,database:endpoint.database,limits:l)}
   }
   var source: SchemaEndpoint? {endpoints.first {$0.id==sourceID}}
   var target: SchemaEndpoint? {endpoints.first {$0.id==targetID}}
+  var targetEndpoints:[SchemaEndpoint] {guard let source else {return endpoints};return endpoints.filter {!source.sameDatabase(as:$0)}}
+  private func endpointSelectionChanged() {
+    guard !changingEndpoints else {return}
+    changingEndpoints=true
+    if let source,let target,source.sameDatabase(as:target) {targetID=""}
+    changingEndpoints=false
+    if !applying {comparisonTask?.cancel();cancelOperation?()}
+    invalidate()
+    if !applying {busy=false}
+  }
+  func swapEndpoints() {
+    guard !busy,!applying,let source,let target,!source.sameDatabase(as:target) else {return}
+    changingEndpoints=true
+    sourceID=target.id;targetID=source.id
+    changingEndpoints=false
+    invalidate()
+  }
   var validPair: Bool {guard let source,let target else {return false};return source.server.online && target.server.online && !source.sameDatabase(as:target)}
   var currentDifference: SchemaDifference? {differences.first {$0.key==focused}}
   var canPreparePlan:Bool {!busy && !applying && validPair && contextCurrent && currentDifference?.canStage==true}
@@ -374,17 +394,15 @@ struct SchemaComparisonPanel: View {
       }
       footer
     }.padding(14).studioPanel().controlSize(.small)
-      .onChange(of:model.sourceID) {_,_ in model.invalidate()}
-      .onChange(of:model.targetID) {_,_ in model.invalidate()}
       .task(id:model.focused) {await model.loadDetail()}
   }
   private var controls:some View {
     HStack(spacing:8) {
-      endpoint("Kaynak",icon:"arrow.up.forward",selection:$model.sourceID)
+      endpoint("Kaynak",icon:"arrow.up.forward",selection:$model.sourceID,options:model.endpoints)
       StudioActionButton("Kaynak ve hedefi değiştir",icon:"arrow.left.arrow.right") {
-        let old=model.sourceID;model.sourceID=model.targetID;model.targetID=old;model.invalidate()
+        model.swapEndpoints()
       }.labelStyle(.iconOnly).disabled(model.source == nil || model.target == nil || model.busy || model.applying).accessibilityIdentifier("schemaSwap")
-      endpoint("Hedef",icon:"arrow.down.forward",selection:$model.targetID)
+      endpoint("Hedef",icon:"arrow.down.forward",selection:$model.targetID,options:model.targetEndpoints)
       if model.busy {ProgressView().controlSize(.small)}
       StudioActionButton(model.busy ? "İptal":"Karşılaştır",icon:model.busy ? "xmark":"arrow.triangle.branch",tint:Color(nsColor:model.busy ? StudioTheme.warning:StudioTheme.success)) {
         if model.busy {model.cancel()} else {model.startComparison()}
@@ -435,10 +453,10 @@ struct SchemaComparisonPanel: View {
         columns
       } else if let comparison=model.detailComparison {
         HStack(spacing:0) {
-          sideTitle("Hedef",name:model.target?.title ?? "",color:StudioTheme.danger)
           sideTitle("Kaynak",name:model.source?.title ?? "",color:StudioTheme.success)
+          sideTitle("Hedef",name:model.target?.title ?? "",color:StudioTheme.danger)
         }
-        SQLInlineDiffPreview(comparison:comparison,original:String(model.targetSQL.prefix(200_000)),edited:String(model.sourceSQL.prefix(200_000)),changeIndex:model.changeIndex).accessibilityIdentifier("schemaInlineDiff")
+        SQLInlineDiffPreview(comparison:comparison,original:String(model.targetSQL.prefix(200_000)),edited:String(model.sourceSQL.prefix(200_000)),changeIndex:model.changeIndex,editedOnLeft:true).accessibilityIdentifier("schemaInlineDiff")
         if model.diffTruncated || comparison.simplified {Text("Büyük tanım için sınırlı önizleme gösteriliyor; tam kaynak kodunu SQL sekmesinde açabilirsiniz.").font(.caption2).foregroundStyle(.secondary)}
         else if model.changedGroups.isEmpty,model.currentDifference?.status == .changed {
           Text(model.hasColumns ? "SQL kodu aynı; farkları Kolonlar görünümünde inceleyin.":"SQL kodu aynı; nesnenin çalışma durumu veya özellikleri farklı.").font(.caption2).foregroundStyle(.secondary)
@@ -457,8 +475,8 @@ struct SchemaComparisonPanel: View {
       }
       Table(model.visibleColumns) {
         TableColumn("Kolon") {row in Text(row.name).fontWeight(row.isEqual ? .regular:.medium).lineLimit(1).help(row.name)}.width(min:130,ideal:180)
-        TableColumn("Hedef · \(model.target?.database ?? "")") {row in columnValue(row.target,changed:!row.isEqual,source:false)}.width(min:180,ideal:270)
         TableColumn("Kaynak · \(model.source?.database ?? "")") {row in columnValue(row.source,changed:!row.isEqual,source:true)}.width(min:180,ideal:270)
+        TableColumn("Hedef · \(model.target?.database ?? "")") {row in columnValue(row.target,changed:!row.isEqual,source:false)}.width(min:180,ideal:270)
         TableColumn("Fark") {row in Text(row.summary).font(.caption).foregroundStyle(Color(nsColor:row.isEqual ? StudioTheme.muted:StudioTheme.warning)).lineLimit(2).help(row.summary)}.width(min:110,ideal:190)
       }.accessibilityIdentifier("schemaColumns")
         .overlay {if model.columnsReady && model.visibleColumns.isEmpty {Text("Kolon özellikleri aynı").foregroundStyle(.secondary)}}
@@ -482,10 +500,10 @@ struct SchemaComparisonPanel: View {
         .disabled(!model.canPreparePlan).accessibilityIdentifier("schemaMigrationPreview")
     }
   }
-  private func endpoint(_ title:String,icon:String,selection:Binding<String>)->some View {
+  private func endpoint(_ title:String,icon:String,selection:Binding<String>,options:[SchemaEndpoint])->some View {
     HStack(spacing:7) {
       Label(title,systemImage:icon).font(.caption).foregroundStyle(.secondary)
-      Picker(title,selection:selection) {Text("Veritabanı seçin").tag("");ForEach(model.endpoints,id:\.id) {Text($0.title).tag($0.id)}}.labelsHidden().frame(minWidth:105,maxWidth:.infinity).accessibilityLabel(title+" veritabanı").accessibilityIdentifier(title=="Kaynak" ? "schemaSource":"schemaTarget").help(selection.wrappedValue.isEmpty ? title+" veritabanını seçin":model.endpoints.first {$0.id==selection.wrappedValue}?.title ?? title)
+      Picker(title,selection:selection) {Text("Veritabanı seçin").tag("");ForEach(options,id:\.id) {Text($0.title).tag($0.id)}}.labelsHidden().frame(minWidth:105,maxWidth:.infinity).accessibilityLabel(title+" veritabanı").accessibilityIdentifier(title=="Kaynak" ? "schemaSource":"schemaTarget").help(selection.wrappedValue.isEmpty ? title+" veritabanını seçin":model.endpoints.first {$0.id==selection.wrappedValue}?.title ?? title)
     }.frame(minWidth:170,idealWidth:220,maxWidth:330).disabled(model.busy || model.applying)
   }
   private func metric(_ title:String,count:Int,color:NSColor)->some View {
@@ -544,7 +562,7 @@ struct SchemaComparisonPanel: View {
   }
   private func showReview(title:String,old:String,new:String,sql:String?,ignoringSQLWhitespace:Bool,approve:(()->Void)?=nil) {
     guard let window,review==nil else {return}
-    review=ModuleReviewController(parent:window,title:title,original:old,edited:new,canApply:approve != nil,leftTitle:model.target?.title ?? "Hedef",rightTitle:model.source?.title ?? "Kaynak",executionSQL:sql,ignoringSQLWhitespace:ignoringSQLWhitespace,approved:{approve?()},finished:{[weak self] in self?.review=nil})
+    review=ModuleReviewController(parent:window,title:title,original:old,edited:new,canApply:approve != nil,leftTitle:model.target?.title ?? "Hedef",rightTitle:model.source?.title ?? "Kaynak",executionSQL:sql,ignoringSQLWhitespace:ignoringSQLWhitespace,editedOnLeft:true,approved:{approve?()},finished:{[weak self] in self?.review=nil})
   }
   func windowShouldClose(_ sender:NSWindow)->Bool {if model.applying {NSSound.beep();return false};operation?.cancel();model.cancel();return true}
 }

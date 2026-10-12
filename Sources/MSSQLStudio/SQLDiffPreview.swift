@@ -9,9 +9,10 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
   let original: String
   let edited: String
   let changeIndex: Int
+  var editedOnLeft = false
   func makeNSView(context: Context) -> SQLInlineDiffView { SQLInlineDiffView(frame: .zero) }
   func updateNSView(_ view: SQLInlineDiffView, context: Context) {
-    view.display(comparison: comparison, original: original, edited: edited, changeIndex: changeIndex)
+    view.display(comparison: comparison, original: original, edited: edited, changeIndex: changeIndex, editedOnLeft: editedOnLeft)
   }
 }
 
@@ -126,6 +127,9 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
   let left=NSScrollView(), right=NSScrollView()
   let leftText=SQLInlineDiffTextView(usingTextLayoutManager: true)
   let rightText=SQLInlineDiffTextView(usingTextLayoutManager: true)
+  // Pane identities stay attached to original/edited SQL when their physical
+  // positions swap, preserving diff direction, copy mapping and scroll state.
+  private(set) var editedOnLeft = false
   private(set) var changeRows: [Int] = []
   private(set) var renderedRows = 0
   private(set) var truncated = false
@@ -163,6 +167,7 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
       addSubview(scroll)
       NotificationCenter.default.addObserver(self, selector: #selector(scrolled(_:)), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
     }
+    setAccessibilityChildren([left,right])
     NotificationCenter.default.addObserver(self, selector: #selector(themeChanged), name: StudioTheme.changed, object: nil)
     setContentHuggingPriority(.init(1), for: .horizontal); setContentHuggingPriority(.init(1), for: .vertical)
   }
@@ -176,7 +181,12 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
     }
     return rows
   }
-  func display(comparison: SQLTextDiff.Comparison, original: String, edited: String, changeIndex: Int) {
+  func display(comparison: SQLTextDiff.Comparison, original: String, edited: String, changeIndex: Int, editedOnLeft: Bool = false) {
+    if self.editedOnLeft != editedOnLeft {
+      self.editedOnLeft=editedOnLeft
+      setAccessibilityChildren(editedOnLeft ? [right,left]:[left,right])
+      needsLayout=true
+    }
     if cachedOriginal.map({!$0.utf8.elementsEqual(original.utf8)}) ?? true || cachedEdited.map({!$0.utf8.elementsEqual(edited.utf8)}) ?? true || cachedComparison != comparison {
       cachedComparison=comparison; cachedOriginal=original; cachedEdited=edited
       render(preservingViewport: false)
@@ -194,8 +204,10 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
   override func layout() {
     super.layout()
     let half=max(0, (bounds.width-1)/2)
-    left.frame=NSRect(x: 0, y: 0, width: half, height: bounds.height)
-    right.frame=NSRect(x: half+1, y: 0, width: max(0,bounds.width-half-1), height: bounds.height)
+    let leading=NSRect(x: 0, y: 0, width: half, height: bounds.height)
+    let trailing=NSRect(x: half+1, y: 0, width: max(0,bounds.width-half-1), height: bounds.height)
+    left.frame=editedOnLeft ? trailing:leading
+    right.frame=editedOnLeft ? leading:trailing
     resizeDocuments(); revealPendingChange()
   }
   override func draw(_ dirtyRect: NSRect) {

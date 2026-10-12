@@ -34,12 +34,16 @@ import Testing
     let edited="CREATE PROCEDURE dbo.p AS\r\nBEGIN\r\n\r\n"+changed.map {$0+"  "}.joined(separator:"\r\n")+"\r\nEND;"
     let execution="SET ANSI_NULLS OFF;\r\nGO\r\n"+edited.replacingOccurrences(of:"CREATE PROCEDURE",with:"ALTER PROCEDURE")
     var approved=0
-    let review=ModuleReviewController(parent:window,title:"Source → Target / dbo.p",original:original,edited:edited,canApply:true,leftTitle:"TargetDB",rightTitle:"SourceDB",executionSQL:execution,ignoringSQLWhitespace:true,approved:{approved+=1},finished:{})
+    let review=ModuleReviewController(parent:window,title:"Source → Target / dbo.p",original:original,edited:edited,canApply:true,leftTitle:"TargetDB",rightTitle:"SourceDB",executionSQL:execution,ignoringSQLWhitespace:true,editedOnLeft:true,approved:{approved+=1},finished:{})
     let (content,summary,submit,cancel)=try controls(window)
     defer {cancel.performClick(nil);window.close();withExtendedLifetime(review) {}}
     try await ready(summary)
     content.layoutSubtreeIfNeeded()
     let preview=try #require(descendants(content).compactMap {$0 as? SQLInlineDiffView}.first)
+    let sourceTitle=try #require(descendants(content).compactMap {$0 as? NSTextField}.first {$0.stringValue=="SourceDB"})
+    let targetTitle=try #require(descendants(content).compactMap {$0 as? NSTextField}.first {$0.stringValue=="TargetDB"})
+    #expect(content.convert(preview.right.bounds,from:preview.right).minX<content.convert(preview.left.bounds,from:preview.left).minX)
+    #expect(content.convert(sourceTitle.bounds,from:sourceTitle).minX<content.convert(targetTitle.bounds,from:targetTitle).minX)
     #expect(preview.changeRows.count==2 && !preview.truncated)
     #expect(summary.stringValue=="−2 kaldırılan  ·  +2 eklenen satır")
     #expect(Data(preview.leftText.selectedSQL(in:NSRange(location:0,length:preview.leftText.string.utf16.count)).utf8)==Data(original.utf8))
@@ -68,6 +72,32 @@ import Testing
     #expect(descendants(content).allSatisfy {!($0 is SQLInlineDiffView)})
     #expect(summary.stringValue=="−1 kaldırılan  ·  +1 eklenen satır")
     #expect(submit.isEnabled && approved==0)
+  }
+  @Test func exactDDLReviewPlacesSourceAndItsCaptionOnLeftAndTargetOnRight() async throws {
+    _=NSApplication.shared
+    let previous=UserDefaults.standard.string(forKey:"ssmsTheme")
+    defer {StudioTheme.apply(previous ?? "light")}
+    StudioTheme.apply("light")
+    let window=parent(),original="CREATE TABLE dbo.Target (ID int);",edited="CREATE TABLE dbo.Source (ID bigint);"
+    let execution="ALTER TABLE dbo.Target ALTER COLUMN ID bigint;"
+    let review=ModuleReviewController(parent:window,title:"Table transfer",original:original,edited:edited,canApply:true,leftTitle:"TargetDB",rightTitle:"SourceDB",executionSQL:execution,editedOnLeft:true,approved:{},finished:{})
+    let (content,summary,submit,cancel)=try controls(window)
+    defer {cancel.performClick(nil);window.close();withExtendedLifetime(review) {}}
+    try await ready(summary)
+    content.layoutSubtreeIfNeeded()
+    #expect(descendants(content).allSatisfy {!($0 is SQLInlineDiffView)})
+    let texts=descendants(content).compactMap {$0 as? NSTextView}
+    let source=try #require(texts.first {$0.string.contains("dbo.Source")})
+    let target=try #require(texts.first {$0.string.contains("ID int")})
+    #expect(content.convert(source.bounds,from:source).minX<content.convert(target.bounds,from:target).minX)
+    for (text,title) in [(source,"SourceDB"),(target,"TargetDB")] {
+      let column=try #require(text.enclosingScrollView?.superview as? NSStackView)
+      #expect(column.arrangedSubviews.compactMap {$0 as? NSTextField}.first?.stringValue==title)
+    }
+    let added=try #require(source.textContentStorage?.textStorage),removed=try #require(target.textContentStorage?.textStorage)
+    #expect(added.attribute(.backgroundColor,at:0,effectiveRange:nil) as? NSColor==StudioTheme.color(0xE3F3EA,0x254B3A))
+    #expect(removed.attribute(.backgroundColor,at:0,effectiveRange:nil) as? NSColor==StudioTheme.color(0xFCE5E5,0x502D36))
+    #expect(texts.contains {$0.string==execution} && submit.isEnabled)
   }
   @Test func ddlMetadataChangeCanBeApprovedWithNoTextChangeAndDoesNotAlterExecutionSQL() async throws {
     let window=parent(),source="CREATE TRIGGER dbo.tr ON dbo.T AFTER INSERT AS SELECT 1;"

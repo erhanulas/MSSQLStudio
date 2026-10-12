@@ -32,6 +32,65 @@ import SQLServerKit
     model.targetID="" // A programmatic context change is guarded even before the view invalidates.
     #expect(!model.canPreparePlan)
   }
+  @Test func targetChoicesExcludeTheSourceDatabaseAcrossDuplicateConnectionProfiles() {
+    let sourceServer=ConnectedServer(profile:.init(name:"First",host:"SQL.HOST",port:1433),password:"")
+    let duplicateServer=ConnectedServer(profile:.init(name:"Duplicate",host:"sql.host",port:1433),password:"")
+    let otherPort=ConnectedServer(profile:.init(name:"Other port",host:"sql.host",port:1444),password:"")
+    let otherHost=ConnectedServer(profile:.init(name:"Other host",host:"other.host",port:1433),password:"")
+    for server in [sourceServer,duplicateServer,otherPort,otherHost] {server.online=true}
+    let endpoints=[SchemaEndpoint(server:sourceServer,database:"SourceDB"),SchemaEndpoint(server:duplicateServer,database:"sourcedb"),SchemaEndpoint(server:duplicateServer,database:"TargetDB"),SchemaEndpoint(server:otherPort,database:"SourceDB"),SchemaEndpoint(server:otherHost,database:"SourceDB")]
+    let model=SchemaComparisonModel(endpoints:endpoints,sourceID:endpoints[0].id,targetID:endpoints[1].id)
+    #expect(model.targetID.isEmpty && !model.validPair)
+    #expect(model.targetEndpoints.map(\.id)==Array(endpoints.dropFirst(2)).map(\.id))
+    model.targetID=endpoints[1].id
+    #expect(model.targetID.isEmpty && model.target==nil)
+    model.targetID=endpoints[3].id
+    #expect(model.validPair && model.target?.id==endpoints[3].id)
+  }
+  @Test func sourceChangesKeepAnEligibleTargetButClearACollidingTargetAndPriorResults() async throws {
+    let server=SchemaComparisonUIFixture.server()
+    let endpoints=[SchemaEndpoint(server:server,database:"SourceDB"),SchemaEndpoint(server:server,database:"TargetDB"),SchemaEndpoint(server:server,database:"ThirdDB")]
+    var reads=0
+    let model=SchemaComparisonModel(endpoints:endpoints,targetID:endpoints[1].id,reader:{endpoint,sql in reads+=1;return try SchemaComparisonUIFixture.catalog(endpoint.database,sql)})
+    await model.compare();#expect(!model.visible.isEmpty)
+    let completedReads=reads
+    model.sourceID=endpoints[2].id
+    #expect(model.targetID==endpoints[1].id && model.validPair)
+    #expect(model.differences.isEmpty && model.sourceSnapshot==nil && model.targetSnapshot==nil && !model.canPreparePlan)
+    #expect(model.targetEndpoints.map(\.id)==[endpoints[0].id,endpoints[1].id])
+    model.sourceID=endpoints[1].id
+    #expect(model.targetID.isEmpty && model.target==nil && !model.validPair)
+    #expect(model.targetEndpoints.map(\.id)==[endpoints[0].id,endpoints[2].id])
+    await model.compare();#expect(reads==completedReads)
+  }
+  @Test func swappingEndpointsPreservesBothChoicesAndInvalidatesThePreviousPreviewWithoutAutomaticReads() async throws {
+    var reads=0,writes=0
+    let model=model(reader:{endpoint,sql in reads+=1;return try SchemaComparisonUIFixture.catalog(endpoint.database,sql)},writer:{_,_ in writes+=1;return Execution()})
+    await model.compare()
+    model.focused=try #require(model.visible.first {$0.key.name=="usp_Customers"}).key
+    await model.loadDetail();let plan=try #require(await model.preparePlan())
+    let source=model.sourceID,target=model.targetID,completedReads=reads
+    model.search="usp";model.kind="Prosedür";model.detailMode = .code
+    model.swapEndpoints()
+    #expect(model.sourceID==target && model.targetID==source && model.validPair)
+    #expect(model.targetEndpoints.contains {$0.id==source} && !model.targetEndpoints.contains {$0.id==target})
+    #expect(model.differences.isEmpty && model.focused==nil && !model.detailReady && !model.canPreparePlan)
+    #expect(model.sourceSQL.isEmpty && model.targetSQL.isEmpty && model.detailComparison==nil)
+    #expect(model.search=="usp" && model.kind=="Prosedür" && model.detailMode == .code && reads==completedReads)
+    await model.apply(plan,sourceID:source,targetID:target)
+    #expect(writes==0 && reads==completedReads)
+    model.targetID="";model.swapEndpoints()
+    #expect(model.sourceID==target && model.targetID.isEmpty)
+  }
+  @Test func changingSourceDuringComparisonRejectsTheDelayedResultsWithoutAViewObserver() async throws {
+    let model=model(reader:{endpoint,sql in try await Task.sleep(for:.milliseconds(40));return try SchemaComparisonUIFixture.catalog(endpoint.database,sql)})
+    let task=Task {await model.compare()}
+    try await Task.sleep(for:.milliseconds(10));#expect(model.busy)
+    model.sourceID=model.targetID
+    #expect(model.targetID.isEmpty && !model.busy)
+    await task.value
+    #expect(model.differences.isEmpty && model.sourceSnapshot==nil && model.targetSnapshot==nil && !model.detailReady && !model.validPair)
+  }
   @Test func focusChangesWhilePreparingCannotPresentThePreviousObjectsPlan() async throws {
     let model=model(reader:{endpoint,sql in
       if !sql.contains("StudioSchemaInventory") && !sql.contains("StudioSchemaRefinement") {try await Task.sleep(for:.milliseconds(40))}
@@ -482,6 +541,7 @@ import SQLServerKit
     #expect(frame.minX>=0 && frame.maxX<=1000 && frame.minY>=0 && frame.maxY<=680)
     #expect(frame.height>=300)
     #expect(inline.leftText.string.contains("SELECT") && inline.rightText.string.contains("[City]"))
+    #expect(inline.right.frame.minX<inline.left.frame.minX) // Source/edited is visually left; target/original stays logically old.
     window.contentView=nil
     let controller=SchemaComparisonWindow(model:model,openSQL:{_,_ in})
     let comparison=try #require(controller.window)

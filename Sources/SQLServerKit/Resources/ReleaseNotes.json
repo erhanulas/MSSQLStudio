@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.91",
+    "date": "2026-10-12",
+    "title": "DDL karşılaştırmada kaynak solda, hedef sağda",
+    "changes": [
+      "DDL karşılaştırmasının alt kod ve kolon görünümlerinde kaynak solda, hedef sağda gösterilir. Taşıma önizlemesi de aynı sırayı kullanır; renkler, satır eşleme ve özgün SQL kopyalama korunur.",
+      "Kaynak olarak seçilen veritabanı hedef seçim listesinde gösterilmez. Kaynak değiştirilince aynı veritabanına denk gelen hedef temizlenir; yön değiştirme düğmesi iki farklı veritabanını doğru şekilde değiştirir."
+    ]
+  },
+  {
     "version": "0.2.90",
     "date": "2026-10-12",
     "title": "Kompakt DDL karşılaştırma ve tek nesnede hızlı taşıma",
