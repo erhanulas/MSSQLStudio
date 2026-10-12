@@ -273,6 +273,8 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   }
   func didReplaceCharacters() {didChangeText()}
   override func validateUserInterfaceItem(_ item:any NSValidatedUserInterfaceItem)->Bool {
+    if item.action == #selector(undoSQL(_:)) {return isEditable && undoManager?.canUndo == true}
+    if item.action == #selector(redoSQL(_:)) {return isEditable && undoManager?.canRedo == true}
     if item.action == #selector(performFindPanelAction(_:)),let action=NSTextFinder.Action(rawValue:item.tag) {
       // Opening the bar must not depend on a previously initialized search session.
       if action == .showFindInterface {return isSelectable && sqlFinder.findBarContainer != nil}
@@ -281,6 +283,96 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     return super.validateUserInterfaceItem(item)
   }
 
+  // Window-owned history mixes different query tabs and is lost on detach.
+  private let sqlUndoManager=UndoManager()
+  override var undoManager:UndoManager? {allowsUndo ? sqlUndoManager:nil}
+  private struct UndoInput {
+    var deleting:Bool
+    var backward:Bool
+    var space:Bool
+    var caret:Int
+    var time:TimeInterval
+  }
+  private var undoInput:UndoInput?
+  private var atomicUndoInput=false
+  // A native typing run otherwise coalesces across many words and long pauses.
+  // Keep words (including their trailing spaces) together, and isolate bulk edits.
+  func finishUndoInput() {
+    breakUndoCoalescing();undoInput=nil;atomicUndoInput=false
+  }
+  private func noteUndoInput(in range:NSRange,replacement:String?) {
+    guard !hasMarkedText(),undoManager?.isUndoing != true,undoManager?.isRedoing != true,
+      let replacement,range.location != NSNotFound,NSMaxRange(range) <= (string as NSString).length
+    else {undoInput=nil;atomicUndoInput=false;return}
+    let deleting=replacement.isEmpty && range.length>0
+    let text=deleting ? (string as NSString).substring(with:range):replacement
+    let space=text == " " || text == "\t"
+    let word=text.count == 1 && text.unicodeScalars.allSatisfy {
+      CharacterSet.alphanumerics.contains($0) || CharacterSet.nonBaseCharacters.contains($0) || "_@#".unicodeScalars.contains($0)
+    }
+    let atomic=(!space && !word) || (!deleting && range.length>0)
+    let now=ProcessInfo.processInfo.systemUptime
+    let backward=deleting && range.location < selectedRange().location
+    let caretBefore=backward ? NSMaxRange(range):range.location
+    if atomic || undoInput == nil || undoInput.map({
+      $0.deleting != deleting || $0.backward != backward || $0.caret != caretBefore || now-$0.time>1
+        || (deleting ? $0.space != space : $0.space && !space)
+    }) == true {breakUndoCoalescing()}
+    undoInput=UndoInput(deleting:deleting,backward:backward,space:space,caret:range.location+(replacement as NSString).length,time:now)
+    atomicUndoInput=atomic
+  }
+  private var nativeUndoInput=false
+  private func withUndoInput(in range:NSRange,replacement:String?,edit:()->Void) {
+    guard !nativeUndoInput,isEditable else {edit();return}
+    nativeUndoInput=true;defer {nativeUndoInput=false}
+    // Break before AppKit prepares the edit, not in shouldChangeText: that callback
+    // is too late and would leave the first character in the preceding undo step.
+    noteUndoInput(in:range,replacement:replacement)
+    let atomic=atomicUndoInput
+    edit()
+    if atomic {finishUndoInput()}
+  }
+  override func insertText(_ value:Any,replacementRange:NSRange) {
+    let text=(value as? String) ?? (value as? NSAttributedString)?.string
+    let range=replacementRange.location == NSNotFound ? selectedRange():replacementRange
+    withUndoInput(in:range,replacement:text) {super.insertText(value,replacementRange:replacementRange)}
+  }
+  override func deleteBackward(_ sender:Any?) {
+    var range=selectedRange()
+    if range.length == 0,range.location>0,range.location <= (string as NSString).length {
+      range=(string as NSString).rangeOfComposedCharacterSequence(at:range.location-1)
+    }
+    withUndoInput(in:range,replacement:"") {super.deleteBackward(sender)}
+  }
+  override func deleteForward(_ sender:Any?) {
+    var range=selectedRange()
+    if range.length == 0,range.location < (string as NSString).length {
+      range=(string as NSString).rangeOfComposedCharacterSequence(at:range.location)
+    }
+    withUndoInput(in:range,replacement:"") {super.deleteForward(sender)}
+  }
+  override func cut(_ sender:Any?) {
+    finishUndoInput();super.cut(sender);finishUndoInput()
+  }
+  override func paste(_ sender:Any?) {
+    finishUndoInput();super.paste(sender);finishUndoInput()
+  }
+  @objc func undoSQL(_ sender:Any?) {
+    guard isEditable else {return}
+    dismissSuggestions?();finishUndoInput();undoManager?.undo()
+  }
+  @objc func redoSQL(_ sender:Any?) {
+    guard isEditable else {return}
+    dismissSuggestions?();finishUndoInput();undoManager?.redo()
+  }
+  private func handleHistoryKey(_ event:NSEvent)->Bool {
+    let flags=event.modifierFlags.intersection([.command,.control,.shift,.option])
+    let key=event.charactersIgnoringModifiers?.lowercased()
+    if GridShortcuts.matches(.undo,event) || (key == "z" && (flags == .control || flags == .command)) {undoSQL(nil);return true}
+    if GridShortcuts.matches(.redo,event) || (key == "y" && flags == .control)
+      || (key == "z" && (flags == [.control,.shift] || flags == [.command,.shift])) {redoSQL(nil);return true}
+    return false
+  }
   private var quoteClosers:[Int:UInt16] = [:]
   private var quoteSource=""
   // Declared native edit ranges distinguish typing from replacing/pasting whole SQL.
@@ -342,6 +434,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     return true
   }
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    if window?.firstResponder === self,handleHistoryKey(event) {return true}
     if GridShortcuts.matches(.matchingPair,event) {jumpToMatchingPair?();return true}
     if GridShortcuts.matches(.parameterInfo,event) {requestParameterInfo?();return true}
     if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, event.charactersIgnoringModifiers?.lowercased() == "b" { navigateDefinition?(); return true }
@@ -426,6 +519,10 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   override func menu(for event: NSEvent) -> NSMenu? {
     let menu = super.menu(for:event) ?? NSMenu()
     menu.addItem(.separator())
+    for (title,action) in [("Geri Al ("+GridShortcuts.binding(.undo).label+")",#selector(undoSQL(_:))),("İleri Al ("+GridShortcuts.binding(.redo).label+")",#selector(redoSQL(_:)))] {
+      let item=NSMenuItem(title:title,action:action,keyEquivalent:"");item.target=self;menu.addItem(item)
+    }
+    menu.addItem(.separator())
     for (title,action) in [("Eşleşen Ayırıcıya Git ("+GridShortcuts.binding(.matchingPair).label+")",#selector(goToMatchingPair(_:))),("Parametre Bilgisi ("+GridShortcuts.binding(.parameterInfo).label+")",#selector(showParameterInfo(_:)))] {
       let item=NSMenuItem(title:title,action:action,keyEquivalent:"");item.target=self;menu.addItem(item)
     }
@@ -492,6 +589,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     insertText("\n" + indentation,replacementRange:selection)
   }
   override func keyDown(with event: NSEvent) {
+    if handleHistoryKey(event) {return}
     if GridShortcuts.matches(.matchingPair,event) {jumpToMatchingPair?();return}
     if GridShortcuts.matches(.parameterInfo,event) {requestParameterInfo?();return}
     if isFindShortcut(event) {showSelectionFind();return}
@@ -868,6 +966,7 @@ private struct SQLParameterHelp:View {
   }
   @objc private func willUndoChanged(_ notification: Notification) {
     guard let manager = notification.object as? UndoManager, manager === editor.undoManager else { return }
+    editor.finishUndoInput()
     editor.sqlFinder.noteClientStringWillChange()
     expandAll()
   }
@@ -943,7 +1042,9 @@ private struct SQLParameterHelp:View {
     // attribute cache even when a later undo restores identical source text.
     highlightedSource=nil
     editor.typingAttributes[.foregroundColor]=StudioTheme.editorText
+    editor.finishUndoInput()
     editor.insertText(text,replacementRange:NSRange(location:0,length:(editor.string as NSString).length))
+    editor.finishUndoInput()
     highlight()
     resizeToViewport()
   }
@@ -965,6 +1066,7 @@ private struct SQLParameterHelp:View {
     // Even an empty initial document must initialize NSTextView's text input/layout state.
     // Skipping the first assignment leaves a fresh blank TextKit 2 view without a click target.
     if editor.string != document.sql || !initializedText {
+      editor.finishUndoInput()
       editor.sqlFinder.noteClientStringWillChange()
       editor.string = document.sql
       initializedText = true
@@ -1382,7 +1484,9 @@ private struct SQLParameterHelp:View {
     guard let analysis = currentAnalysis, analysisSource == editor.string, analysis.suggestions.indices.contains(index), projection == nil else { suggestionPopover.close(); return }
     suggestionPopover.close(); suppressNextPopup = true
     editor.window?.makeFirstResponder(editor)
+    editor.finishUndoInput()
     editor.insertText(analysis.suggestions[index].text,replacementRange:analysis.replacement)
+    editor.finishUndoInput()
   }
   static func codeParagraph() -> NSParagraphStyle {
     let paragraph = NSMutableParagraphStyle()

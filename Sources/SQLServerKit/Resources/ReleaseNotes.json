@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.82",
+    "date": "2026-10-12",
+    "title": "Renkli bit değerleri, kontrollü geri alma ve fonksiyon tamamlaması",
+    "changes": [
+      "Sonuç grid’inde true bit değerleri açık/koyu temaya uyumlu yeşil dolgulu işaretli kutucukla gösterilir. False boş kutu ve NULL metni ayrıdır; kopyalama ve düzenleme ham SQL değerini korur.",
+      "SQL editöründe her sorgunun geri alma geçmişi ayrıdır; sekme/pencere değişimi başka sorgunun geçmişini etkilemez. Yazma kelime ve duraklama sınırlarında, silme ve toplu değişiklikler ayrı adımlarda geri alınır.",
+      "Ctrl+Z ile geri al; Ctrl+Y veya Ctrl+Shift+Z ile ileri al. Command+Z / Command+Shift+Z korunur. Geri al/ileri al kısayolları Ayarlar → Kısayollar’dan değiştirilebilir; editör sağ tık menüsünde de bulunur.",
+      "EXEC/EXECUTE tamamlaması prosedürlerle birlikte DDL kataloğundaki fonksiyonlarda da ad içinde arar; tür ikonu, şema filtresi, return ataması ve 100 öneri sınırı korunur."
+    ]
+  },
+  {
     "version": "0.2.81",
     "date": "2026-10-12",
     "title": "GitHub güncelleme kontrolü düzeltmesi",

@@ -62,6 +62,28 @@ struct SQLIntelligenceTests {
     #expect(try result("SELECT * FROM details").suggestions.isEmpty)
     #expect(try result("EXEC OtherDB.dbo.customer").suggestions.isEmpty)
   }
+  @Test func execCompletionIncludesFunctionsWithKindsSchemaAndContainsMatching() throws {
+    let relations=(0..<500).map {CatalogSymbol(schema:"dbo",name:"CustomerTable\($0)",columns:[])}
+    let functions=["SQL_SCALAR_FUNCTION","SQL_INLINE_TABLE_VALUED_FUNCTION","SQL_TABLE_VALUED_FUNCTION","CLR_SCALAR_FUNCTION","CLR_TABLE_VALUED_FUNCTION"].enumerated().map {
+      CatalogSymbol(schema:$0.offset == 4 ? "other":"dbo",name:"ufn_GetCustomer\($0.offset)",columns:[],kind:$0.element)
+    }
+    let catalog=SQLIntelligence.Catalog(snapshot:.init(symbols:relations+functions+[
+      CatalogSymbol(schema:"dbo",name:"CustomerProcedure",columns:[],kind:"SQL_STORED_PROCEDURE")]))
+    func result(_ sql:String) throws -> SQLIntelligence.Analysis {try SQLIntelligence.analyze(source:sql,caret:(sql as NSString).length,catalog:catalog,verified:true,automaticAliases:true,automaticNoLock:true)}
+    let items=try result("EXEC CUSTOMER").suggestions
+    #expect(items.count == 6 && items.first?.kind == .procedure)
+    #expect(items.dropFirst().allSatisfy {$0.kind == .function && !$0.text.contains(" AS ") && !$0.text.contains("NOLOCK")})
+    #expect(try result("EXECUTE dbo.Customer").suggestions.count == 5)
+    #expect(try result("EXEC @status = [other].Customer").suggestions.map(\.text) == ["[ufn_GetCustomer4]"])
+    #expect(try result("EXEC dbo.ufn").suggestions.first?.text == "[ufn_GetCustomer0]")
+    #expect(try result("EXEC ").suggestions.count == 6)
+    for sql in ["EXEC @sql", "EXEC ('Customer", "-- EXEC Customer", "EXEC OtherDB.dbo.Customer", "SELECT * FROM ufn"] {
+      #expect(try result(sql).suggestions.isEmpty, "\(sql)")
+    }
+    let crowded=SQLIntelligence.Catalog(snapshot:.init(symbols:(0..<200).map {CatalogSymbol(schema:"dbo",name:String(format:"ufn_%03d",$0),columns:[],kind:"SQL_SCALAR_FUNCTION")}))
+    #expect(try crowded.matchingRoutines("ufn",limit:500).count == 100)
+    #expect(try crowded.matchingRoutines("ufn",limit:0).isEmpty)
+  }
   @Test func columnCompletionUsesAliasAndStatementScope() throws {
     let sql = "SELECT c. FROM dbo.Customers AS c JOIN dbo.Orders AS o ON c.CustomerID=o.CustomerID;"
     let value = try analyze(sql,caret:9)

@@ -3,7 +3,18 @@ import SQLServerKit
 import SwiftUI
 
 @MainActor enum GridShortcuts {
-  enum Action: String, CaseIterable { case headers, newQuery, columns, matchingPair, parameterInfo }
+  enum Action: String, CaseIterable { case headers, newQuery, columns, matchingPair, parameterInfo, undo, redo }
+  static func title(_ action:Action)->String {
+    switch action {
+    case .headers: return "Grid · Başlıklarla kopyala"
+    case .newQuery: return "Yeni sorgu"
+    case .columns: return "Grid · Kolon başlığında ara"
+    case .matchingPair: return "Editör · Eşleşen ayırıcıya git"
+    case .parameterInfo: return "Editör · Parametre bilgisi"
+    case .undo: return "Editör · Geri al"
+    case .redo: return "Editör · İleri al"
+    }
+  }
   struct Binding: Codable, Equatable {
     var key: String
     var modifiers: UInt
@@ -16,6 +27,8 @@ import SwiftUI
   static let changed = Notification.Name("MSSQLStudio.gridShortcutsChanged")
   static func binding(_ action: Action) -> Binding {
     if let data = UserDefaults.standard.data(forKey: "shortcut.\(action.rawValue)"), let binding = try? JSONDecoder().decode(Binding.self, from: data) { return binding }
+    if action == .undo {return Binding(key:"z",modifiers:NSEvent.ModifierFlags.control.rawValue)}
+    if action == .redo {return Binding(key:"y",modifiers:NSEvent.ModifierFlags.control.rawValue)}
     if action == .matchingPair {return Binding(key:"m",modifiers:NSEvent.ModifierFlags([.control,.shift]).rawValue)}
     if action == .parameterInfo {return Binding(key:"p",modifiers:NSEvent.ModifierFlags.control.rawValue)}
     if action == .columns { return Binding(key:"j",modifiers:NSEvent.ModifierFlags([.command,.shift]).rawValue) }
@@ -42,7 +55,11 @@ import SwiftUI
     else { return "Bir harf/rakam ile ⌘ veya ⌃ kullanın. Escape iptal eder." }
     // Existing application and standard editing commands remain reserved.
     let reserved: [(String,NSEvent.ModifierFlags)] = [("q",.command),("w",.command),("s",.command),("s",[.command,.shift]),("o",.command),("c",.command),("v",.command),("x",.command),("a",.command),("z",.command),("z",[.command,.shift]),("f",.command),("f",.control),("f",[.command,.shift]),("r",.command),("m",.command),("l",.command),("b",[.command,.option])]
-    guard !reserved.contains(where: { $0.0 == key && $0.1 == flags }) else { return "Bu tuş uygulamanın başka bir işlemi için ayrılmış." }
+    let historyOwner:Action? = key == "z" && (flags == .command || flags == .control) ? .undo
+      : (key == "z" && (flags == [.command,.shift] || flags == [.control,.shift])) || (key == "y" && flags == .control) ? .redo : nil
+    guard historyOwner == nil || historyOwner == action,
+      historyOwner == action || !reserved.contains(where: { $0.0 == key && $0.1 == flags })
+    else { return "Bu tuş uygulamanın başka bir işlemi için ayrılmış." }
     let value = Binding(key: key, modifiers: flags.rawValue)
     guard !Action.allCases.filter({ $0 != action }).contains(where: { binding($0) == value }) else { return "Bu kısayol diğer işlemde kullanılıyor." }
     if let data = try? JSONEncoder().encode(value) { UserDefaults.standard.set(data, forKey: "shortcut.\(action.rawValue)") }
@@ -71,16 +88,13 @@ import SwiftUI
 // Cell-based drawing avoids constructing NSTextField/Auto Layout trees for every visible row × column.
 @MainActor final class GridDataCell: NSTextFieldCell {
   var isBit = false
-  private let checkbox = NSButtonCell()
   override init(textCell string: String) {
     super.init(textCell:string)
     font = StudioTheme.uiFont; lineBreakMode = .byTruncatingTail
     isEditable = false; isSelectable = false; isBordered = false; focusRingType = .none
-    checkbox.setButtonType(.switch); checkbox.title = ""; checkbox.isEnabled = false; checkbox.controlSize = .small
   }
   required init(coder: NSCoder) { fatalError() }
-  // NSCell's inherited ObjC copy would shallow-copy Swift-owned checkbox storage.
-  // Field editing copies the cell; each copy must own a separate NSButtonCell.
+  // Field editing copies the cell; preserve its bit presentation and read-only state.
   override func copy(with zone: NSZone? = nil) -> Any {
     let cell = GridDataCell(textCell: stringValue)
     cell.isBit = isBit; cell.font = font; cell.alignment = alignment
@@ -101,8 +115,15 @@ import SwiftUI
         let outline = NSBezierPath(roundedRect:box.insetBy(dx:0.5,dy:0.5),xRadius:2,yRadius:2)
         NSColor.secondaryLabelColor.setStroke(); outline.lineWidth = 1; outline.stroke()
       } else {
-        checkbox.state = .on
-        checkbox.draw(withFrame:NSRect(x:frame.midX-8,y:frame.midY-8,width:16,height:16),in:view)
+        StudioTheme.success.setFill()
+        NSBezierPath(roundedRect:box,xRadius:2.5,yRadius:2.5).fill()
+        // Paint the value without enabling a control in the read-only results grid.
+        let check=NSBezierPath()
+        check.move(to:NSPoint(x:box.minX+2.5,y:box.midY))
+        check.line(to:NSPoint(x:box.minX+5,y:box.minY+(view.isFlipped ? 8.5:3.5)))
+        check.line(to:NSPoint(x:box.maxX-2.5,y:box.minY+(view.isFlipped ? 3.5:8.5)))
+        check.lineWidth=1.5;check.lineCapStyle = .round;check.lineJoinStyle = .round
+        (StudioTheme.dark ? NSColor(calibratedWhite:0.12,alpha:1):NSColor.white).setStroke();check.stroke()
       }
     } else { super.drawInterior(withFrame:frame.insetBy(dx:6,dy:2),in:view) }
   }

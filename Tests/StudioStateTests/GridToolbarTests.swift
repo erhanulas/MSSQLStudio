@@ -234,6 +234,32 @@ import Testing
     controller.copySelectionData(includeHeaders: true)
     #expect(NSPasteboard.general.string(forType: .string) == "Enabled\n1\n0\nNULL")
   }
+  @Test func trueBitPaintsFilledColorAndFalseAndNullStayDistinctInBothThemes() throws {
+    _=NSApplication.shared
+    let previous=UserDefaults.standard.string(forKey:"ssmsTheme");defer {StudioTheme.apply(previous ?? "light")}
+    let view=NSView(frame:NSRect(x:0,y:0,width:40,height:30)),cell=GridDataCell(textCell:"1")
+    cell.isBit=true
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      let accent=try #require(StudioTheme.success.usingColorSpace(.deviceRGB))
+      func coloredPixels(_ value:String) throws -> Int {
+        cell.stringValue=value
+        let bitmap=try #require(NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:40,pixelsHigh:30,bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0))
+        let context=try #require(NSGraphicsContext(bitmapImageRep:bitmap))
+        NSGraphicsContext.saveGraphicsState();NSGraphicsContext.current=context
+        StudioTheme.canvas.setFill();view.bounds.fill();cell.drawInterior(withFrame:view.bounds,in:view)
+        NSGraphicsContext.restoreGraphicsState()
+        return (0..<40).reduce(0) {total,x in total+(0..<30).filter {y in
+          guard let color=bitmap.colorAt(x:x,y:y)?.usingColorSpace(.deviceRGB) else {return false}
+          return abs(color.redComponent-accent.redComponent)<0.03 && abs(color.greenComponent-accent.greenComponent)<0.03 && abs(color.blueComponent-accent.blueComponent)<0.03
+        }.count}
+      }
+      #expect(try coloredPixels("1")>70)
+      #expect(try coloredPixels("0") == 0 && coloredPixels("NULL") == 0)
+      let copy=try #require(cell.copy() as? GridDataCell)
+      #expect(copy.isBit && !copy.isEditable && !copy.isSelectable && copy.stringValue == "NULL")
+    }
+  }
   @Test func scrollingDoesNotReformatRangeAndHeaderShortcutIsConfigurable() throws {
     _ = NSApplication.shared
     let controller = ResultController()

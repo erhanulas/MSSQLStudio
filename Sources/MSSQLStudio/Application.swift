@@ -97,7 +97,7 @@ import SwiftUI
       let document = QueryDocument(server: server, database: "master", title: "SQLQuery1.sql")
       document.sql = ""
       document.savedText = document.sql
-      document.intelligenceCatalog = SQLIntelligence.Catalog(snapshot:SQLCatalogSnapshot(symbols:[CatalogSymbol(schema:"dbo",name:"Customers",columns:["CustomerID","Name","City"]),CatalogSymbol(schema:"dbo",name:"Orders",columns:["OrderID","CustomerID","Amount"]),CatalogSymbol(schema:"dbo",name:"usp_GetCustomerDetails",columns:[],kind:"SQL_STORED_PROCEDURE")]))
+      document.intelligenceCatalog = SQLIntelligence.Catalog(snapshot:SQLCatalogSnapshot(symbols:[CatalogSymbol(schema:"dbo",name:"Customers",columns:["CustomerID","Name","City"]),CatalogSymbol(schema:"dbo",name:"Orders",columns:["OrderID","CustomerID","Amount"]),CatalogSymbol(schema:"dbo",name:"usp_GetCustomerDetails",columns:[],kind:"SQL_STORED_PROCEDURE"),CatalogSymbol(schema:"dbo",name:"ufn_GetCustomerName",columns:[],kind:"SQL_SCALAR_FUNCTION")]))
       document.catalogDatabase = "master"; document.catalogVerified = true
       if Bundle.main.object(forInfoDictionaryKey:"StudioGridSmoke") as? Bool == true {
         do {
@@ -212,7 +212,7 @@ import SwiftUI
     command(file, "Sekmeyi Kapat", #selector(WorkbenchController.closeTab), "w")
     let edit = menu("Düzen")
     edit.addItem(withTitle: "Geri Al", action: Selector(("undo:")), keyEquivalent: "z")
-    edit.addItem(withTitle: "Yinele", action: Selector(("redo:")), keyEquivalent: "Z")
+    edit.addItem(withTitle: "İleri Al", action: Selector(("redo:")), keyEquivalent: "Z")
     edit.addItem(.separator())
     edit.addItem(withTitle: "Kes", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
     edit.addItem(withTitle: "Kopyala", action: #selector(NSText.copy(_:)), keyEquivalent: "c")

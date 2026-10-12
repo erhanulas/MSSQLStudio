@@ -98,7 +98,7 @@ private struct ShortcutCapture: NSViewRepresentable {
   var report: (String) -> Void
   func makeNSView(context: Context) -> ShortcutCaptureButton {
     let button = ShortcutCaptureButton(); button.bezelStyle = .rounded; button.shortcutAction = action; button.report = report; button.stop()
-    button.setAccessibilityLabel(action == .newQuery ? "Yeni sorgu kısayolunu değiştir" : "Başlıklarla kopyalama kısayolunu değiştir")
+    button.setAccessibilityLabel(GridShortcuts.title(action)+" kısayolunu değiştir")
     return button
   }
   func updateNSView(_ button: ShortcutCaptureButton, context: Context) {
@@ -159,7 +159,7 @@ private struct SettingsPanel: View {
         settingsPage(title: "Kısayollar", subtitle: "Sık kullandığın işlemlere hızlı erişim", icon: "command") {
       ForEach(GridShortcuts.Action.allCases, id: \.rawValue) { action in
         HStack {
-          Text(action == .headers ? "Grid · Başlıklarla kopyala" : action == .columns ? "Grid · Kolon başlığında ara" : action == .matchingPair ? "Editör · Eşleşen ayırıcıya git" : action == .parameterInfo ? "Editör · Parametre bilgisi" : "Yeni sorgu")
+          Text(GridShortcuts.title(action))
           Spacer()
           ShortcutCapture(action: action) { message = $0; shortcutRevision += 1 }.frame(width:220,height:28)
           StudioActionButton("Sıfırla", icon:"arrow.counterclockwise", tint:.accentColor) { GridShortcuts.reset(action); shortcutRevision += 1 }
@@ -168,7 +168,7 @@ private struct SettingsPanel: View {
       .id(shortcutRevision)
       Text("Değiştir’e basıp istediğiniz tuş birleşimine basın. ⌘ veya ⌃ ile harf/rakam kullanın. Ayrılmış ve çakışan kısayollar reddedilir; Escape iptal eder.")
         .font(.caption).foregroundStyle(.secondary)
-      Text("Kısayol değişiklikleri hemen kaydedilir.").font(.caption).foregroundStyle(.secondary)
+      Text("Kısayol değişiklikleri hemen kaydedilir. Editörde ⌘Z / ⌘⇧Z ve ⌃Z / ⌃Y / ⌃⇧Z her zaman geri al / ileri al için kullanılabilir.").font(.caption).foregroundStyle(.secondary)
         }.tabItem { Label("Kısayollar", systemImage: "command") }.tag("shortcuts")
         settingsPage(title: "Çalışma Alanı", subtitle: "Geçmiş ve oturum kurtarma", icon: "square.stack") {
       Toggle("Sorgu geçmişini bu Mac'te sakla", isOn: $history)

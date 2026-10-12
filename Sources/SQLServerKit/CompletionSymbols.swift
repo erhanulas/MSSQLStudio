@@ -107,7 +107,7 @@ public enum SQLIntelligence {
     private let qualified: [String:CatalogSymbol]
     private let names: [String:[CatalogSymbol]]
     private let sorted: [(String,CatalogSymbol)]
-    private let procedures: [(String,CatalogSymbol)]
+    private let routines: [(String,CatalogSymbol)]
     public var fresh: Bool { Date().timeIntervalSince(snapshot.synchronizedAt) < 300 }
     public init(snapshot: SQLCatalogSnapshot) {
       self.snapshot = snapshot
@@ -115,7 +115,7 @@ public enum SQLIntelligence {
       for item in snapshot.symbols { qualified[Self.key(item.schema,item.name)] = item; names[item.name.lowercased(),default:[]].append(item) }
       self.qualified = qualified; self.names = names
       sorted = snapshot.symbols.map { ($0.name.lowercased(),$0) }.sorted { $0.0 == $1.0 ? $0.1.schema < $1.1.schema : $0.0 < $1.0 }
-      procedures = sorted.filter {$0.1.kind.contains("PROCEDURE")}
+      routines = sorted.filter {$0.1.kind.contains("PROCEDURE") || $0.1.kind.contains("FUNCTION")}
     }
     private static func key(_ schema: String, _ name: String) -> String { schema.lowercased()+"\u{1f}"+name.lowercased() }
     public func resolve(_ parts: [String]) -> CatalogSymbol? {
@@ -126,12 +126,12 @@ public enum SQLIntelligence {
       return values.count == 1 ? values[0] : nil
     }
     public func isAmbiguous(_ parts: [String]) -> Bool { parts.count == 1 && (names[parts[0].lowercased()]?.count ?? 0) > 1 && qualified[Self.key("dbo",parts[0])] == nil }
-    public func matchingProcedures(_ text:String,schema:String?=nil,limit:Int=100) throws -> [CatalogSymbol] {
+    public func matchingRoutines(_ text:String,schema:String?=nil,limit:Int=100) throws -> [CatalogSymbol] {
       let needle=text.lowercased(), schema=schema?.lowercased(), limit=max(0,min(limit,100))
       var result:[CatalogSymbol]=[]
       // Prefer prefixes, then interior matches; unrelated relations cannot consume the limit.
       for prefixPass in [true,false] {
-        for (index,pair) in procedures.enumerated() {
+        for (index,pair) in routines.enumerated() {
           if index%256 == 0 {try Task.checkCancellation()}
           guard result.count<limit else {return result}
           let (name,item)=pair
@@ -349,16 +349,15 @@ public enum SQLIntelligence {
         let nextToken = tokens.first { $0.range.location >= NSMaxRange(replacement) && $0.range.location > replacement.location }
         let alreadyAliased = nextToken?.text.uppercased() == "AS" || nextToken?.kind == .word
         let occupied = Set(visible.map { $0.alias.lowercased() })
-        let candidates = execution ? try catalog?.matchingProcedures(prefix,schema:qualifier) ?? [] : catalog?.matches(prefix,schema:qualifier) ?? []
+        let candidates = execution ? try catalog?.matchingRoutines(prefix,schema:qualifier) ?? [] : catalog?.matches(prefix,schema:qualifier) ?? []
         for item in candidates {
           let isRelation = ["USER_TABLE","VIEW"].contains(item.kind)
-          if execution && !item.kind.contains("PROCEDURE") { continue }
           if !execution && !isRelation && item.kind != "SYNONYM" { continue }
           var text = qualifier == nil ? SQL.identifier(item.schema)+"."+SQL.identifier(item.name) : SQL.identifier(item.name)
           if automaticAliases && isRelation && !alreadyAliased && ["FROM","JOIN"].contains(context.last?.text.uppercased() ?? "") { text += " AS "+alias(for:item.name,occupied:occupied)
             if automaticNoLock && nextToken?.text.uppercased() != "WITH" { text += " WITH(NOLOCK)" }
           }
-          let kind: Suggestion.Kind = item.kind.contains("PROCEDURE") ? .procedure : item.kind == "VIEW" ? .view : item.kind == "SYNONYM" ? .synonym : .table
+          let kind: Suggestion.Kind = item.kind.contains("PROCEDURE") ? .procedure : item.kind.contains("FUNCTION") ? .function : item.kind == "VIEW" ? .view : item.kind == "SYNONYM" ? .synonym : .table
           suggestions.append(Suggestion(text:text,label:SQL.identifier(item.schema)+"."+SQL.identifier(item.name),kind:kind,detail:text))
         }
       } else if let qualifier {
