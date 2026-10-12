@@ -12,7 +12,9 @@ Bu dosya mimari, geliştirme durumu ve görünüm kurallarının ana kaynağıd�
 
 ## Güncel durum — 12 Ekim 2026
 
-Son doğrulanmış yayın **v0.2.79, build 80**; kaynak `735d6e3f50d9503d532d4a8d786106452fb8a21f`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38253581092` başarılı; 291 paket testi (266 geçti / 25 dış koşullu atlandı), public latest, indirilen ZIP/PKG/credential archive SHA-256, digest/manifest, app/helper strict imzaları ve exact frozen helper eşitliği doğrulandı. Helper v1 hash'leri v0.2.69'dan aynen korunur; yeniden derlenmez/imzalanmaz. v0.2.62 önizleme tema hatası, v0.2.64 CI viewport/odak test engeli ve v0.2.72 favori ağacı seçim regresyonu nedeniyle yayımlanmadı; bu etiketler korunur.
+Son doğrulanmış yayın **v0.2.80, build 81**; kaynak `1723f6d0ca455af556354ae90fc61976dd7a1bb6`. Depo: https://github.com/erhanulas/MSSQLStudio. Actions `38255071001` başarılı; 292 paket testi (267 geçti / 25 dış koşullu atlandı), public latest, indirilen ZIP/PKG/credential archive SHA-256, digest/manifest, app/helper strict imzaları ve exact frozen helper eşitliği doğrulandı. Helper v1 hash'leri v0.2.69'dan aynen korunur; yeniden derlenmez/imzalanmaz. v0.2.62 önizleme tema hatası, v0.2.64 CI viewport/odak test engeli ve v0.2.72 favori ağacı seçim regresyonu nedeniyle yayımlanmadı; bu etiketler korunur.
+
+- v0.2.80: Command+F ilk arama açılışı ve Düzen → Bul validation düzeltildi. Command+F/Ctrl+F ortak yol; seçili metin/fold/no-dim ve Command+Shift+F ayrımı korunur. Yerel/CI 292 test: 267 geçti / 25 dış koşullu atlandı; boş/seçili editörde Command+F ve menü CUA, Release ve public paket/imza/frozen helper doğrulandı.
 
 - v0.2.79: CASE/END ve nested parantez vurgusu, ayarlanabilir Ctrl+Shift+M ile iki yönlü eşe geçiş, griye dönmeyen native find ve Ctrl+P/otomatik EXEC/fonksiyon parametre yardımı yayımlandı. Yerel/CI 291 test: 266 geçti / 25 dış koşullu atlandı. Lexer/ordinal/named arg/OUTPUT/stale metadata/cache, native find-replace undo, Release, izole eşleme/arama/parametre CUA ve public paket/imza/frozen helper doğrulandı. Canlı metadata ve gerçek Installer denenmedi.
 
