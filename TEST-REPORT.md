@@ -1168,3 +1168,13 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Public latest v0.2.58; ZIP, PKG ve update.json indirildi. ZIP SHA-256 `1a566f8cd724b86e1bb14cf0bcd2bc5cd43f8ae24884133daf96ea7ebc4d37dd`; PKG SHA-256 `baeb39a961bb8d2cb32505fa1b41dc99e51051cb74172e090e96fc242e63ffbe`. İki hash yayın manifesti ve GitHub asset digest ile eşleşti; manifestin tamamı yeniden üretilen manifestle eşleşti.
 - İndirilen ZIP ve açılmış PKG payload uygulamalarında strict/deep codesign ve sabit designated requirement doğrulandı. ZIP/PKG uygulama binary, Info.plist ve bundled ReleaseNotes.json içerikleri eşleşti; sürüm/build 0.2.58/59, bundle ID local.mssqlstudio.app. GitHub sürüm notları paket içindeki notlarla eşleşti.
 - Doğrulama çıktısı `/tmp/mssql-v58-verification.log`; dosyalar `/tmp/mssql-v58-verify`, çıkarılmış ZIP uygulaması `/tmp/mssql-v58-verify/extracted/MSSQLStudio.app`. Kurulu kullanıcı uygulaması/Keychain/gerçek veritabanı değiştirilmedi. Canlı SQL Server regresyonu için bağlantı bilgisi bulunmadığına ilişkin önceki sınırlama devam ediyor.
+
+
+## 12 Ekim 2026 — v0.2.72 geliştirme doğrulaması
+
+- SQL tamamlama: 26 pt tek satır, en çok 16 görünür öneri; tam satır yüksekliği, 100 öneride Home/End/Page/ok gezinmesi, Tab kabulü/undo, tooltip/AX ve açık/koyu görünüm kontrolleri geçti. Caret üst/alt alan hesaplaması artık açılış yönünü de belirler.
+- Explorer: offline yenileme/heartbeat sıfır bağlantı denemesi; yeni sorgu isteğinde mevcut profil için bir kez bağlantı, eşzamanlı kısayolda tek deneme ve başarısızlıkta sekme/form açılmaması sentetik testlerle doğrulandı. Bağlantı menüsü kapatma/yeniden bağlama, cached tree ve bağımsız sorgunun açık transaction durumunu korur.
+- İlgili 15 uygulama testi geçti. Tam paket çalışması 124 uygulama + 140 core = **264 test, 239 geçti / 25 dış koşullu atlandı**; iki hedefin tamamlanmış test özetleri doğrulandı. Log: `/tmp/mssql-072-tests.log`.
+- Release build başarılı: `/tmp/mssql-072-release.log`. İzole `/tmp/MSSQLStudio-072-ui/MSSQLStudio.app` (local.mssqlstudio.uitest) CUA kontrolünde 100 önerinin 16 kompakt satırı, ekran altındaki caret için yukarı açılış, End ile son öneri/Home-Down-Tab ile `[Name]` ekleme ve Explorer bağlantı menüsü gözlendi. Gerçek kullanıcı app’i, Keychain ve SQL oturumları değiştirilmedi; test app’i kapatıldı.
+- Canlı SQL Server ağ kesintisi/yeniden bağlantısı bu ortamda doğrulanmadı; sentetik kontrol canlı ağ kanıtı değildir. Frozen credential helper kaynak/binary/hash değişmedi.
+- Yayın CI/paket doğrulaması henüz bekleniyor.

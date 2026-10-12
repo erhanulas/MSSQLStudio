@@ -60,19 +60,19 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     guard let item else { return }
     let color=SQLSuggestionStyle.color(item.kind)
     color.withAlphaComponent(StudioTheme.dark ? 0.16:0.08).setFill()
-    NSBezierPath(roundedRect:NSRect(x:8,y:8,width:26,height:26),xRadius:6,yRadius:6).fill()
+    NSBezierPath(roundedRect:NSRect(x:5,y:3,width:20,height:20),xRadius:4,yRadius:4).fill()
     NSImage(systemSymbolName:SQLSuggestionStyle.symbol(item.kind),accessibilityDescription:nil)?
       .withSymbolConfiguration(.init(paletteColors:[color]))?
-      .draw(in:NSRect(x:14,y:14,width:14,height:14))
+      .draw(in:NSRect(x:8,y:6,width:14,height:14))
     let paragraph=NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
     let label=NSMutableAttributedString(string:item.label,attributes:[.font:NSFont.monospacedSystemFont(ofSize:12,weight:.medium),.foregroundColor:StudioTheme.text,.paragraphStyle:paragraph])
     if !prefix.isEmpty {
       let match=(item.label as NSString).range(of:prefix,options:.caseInsensitive)
       if match.location != NSNotFound { label.addAttributes([.foregroundColor:StudioTheme.accent,.font:NSFont.monospacedSystemFont(ofSize:12,weight:.bold)],range:match) }
     }
-    label.draw(in:NSRect(x:44,y:5,width:max(0,bounds.width-56),height:17))
-    let detail=SQLSuggestionStyle.title(item.kind)+(item.detail.isEmpty ? "":" · "+item.detail)
-    detail.draw(in:NSRect(x:44,y:23,width:max(0,bounds.width-56),height:14),withAttributes:[.font:NSFont.systemFont(ofSize:10),.foregroundColor:StudioTheme.muted,.paragraphStyle:paragraph])
+    label.draw(in:NSRect(x:34,y:5,width:max(0,bounds.width-140),height:17))
+    paragraph.alignment = .right
+    SQLSuggestionStyle.title(item.kind).draw(in:NSRect(x:bounds.width-100,y:6,width:90,height:14),withAttributes:[.font:NSFont.systemFont(ofSize:10),.foregroundColor:StudioTheme.muted,.paragraphStyle:paragraph])
   }
 }
 @MainActor private final class SQLSuggestionSurface: NSView {
@@ -89,22 +89,22 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   required init?(coder:NSCoder) { fatalError() }
   override func layout() {
     super.layout()
-    scroll.frame=NSRect(x:6,y:34,width:max(0,bounds.width-12),height:max(0,bounds.height-66))
+    scroll.frame=NSRect(x:6,y:27,width:max(0,bounds.width-12),height:max(0,bounds.height-52))
     (scroll.documentView as? NSTableView)?.tableColumns.first?.width=max(0,scroll.contentSize.width)
   }
   override func draw(_ dirtyRect:NSRect) {
     StudioTheme.canvas.setFill(); bounds.fill()
     StudioTheme.panel.setFill()
-    NSRect(x:0,y:0,width:bounds.width,height:30).fill()
-    NSRect(x:0,y:bounds.height-30,width:bounds.width,height:30).fill()
+    NSRect(x:0,y:0,width:bounds.width,height:25).fill()
+    NSRect(x:0,y:bounds.height-23,width:bounds.width,height:23).fill()
     StudioTheme.border.setFill()
-    NSRect(x:0,y:29,width:bounds.width,height:1).fill()
-    NSRect(x:0,y:bounds.height-30,width:bounds.width,height:1).fill()
-    "SQL TAMAMLAMA".draw(at:NSPoint(x:14,y:8),withAttributes:[.font:NSFont.systemFont(ofSize:10,weight:.semibold),.foregroundColor:StudioTheme.muted])
+    NSRect(x:0,y:24,width:bounds.width,height:1).fill()
+    NSRect(x:0,y:bounds.height-23,width:bounds.width,height:1).fill()
+    "SQL TAMAMLAMA".draw(at:NSPoint(x:14,y:6),withAttributes:[.font:NSFont.systemFont(ofSize:10,weight:.semibold),.foregroundColor:StudioTheme.muted])
     let countLabel="\(count) öneri"
     let attributes:[NSAttributedString.Key:Any]=[.font:NSFont.monospacedDigitSystemFont(ofSize:10,weight:.medium),.foregroundColor:StudioTheme.accent]
-    countLabel.draw(at:NSPoint(x:bounds.width-countLabel.size(withAttributes:attributes).width-14,y:8),withAttributes:attributes)
-    "↑ ↓  Gezin      ⇥ / ↵  Ekle      esc  Kapat".draw(at:NSPoint(x:14,y:bounds.height-22),withAttributes:[.font:NSFont.systemFont(ofSize:10,weight:.medium),.foregroundColor:StudioTheme.muted])
+    countLabel.draw(at:NSPoint(x:bounds.width-countLabel.size(withAttributes:attributes).width-14,y:6),withAttributes:attributes)
+    "↑ ↓  Gezin    PgUp / PgDn  Sayfa    ⇥ / ↵  Ekle    esc  Kapat".draw(at:NSPoint(x:14,y:bounds.height-18),withAttributes:[.font:NSFont.systemFont(ofSize:10,weight:.medium),.foregroundColor:StudioTheme.muted])
   }
 }
 @MainActor final class SQLSuggestionList: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
@@ -115,9 +115,9 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   override func loadView() {
     let surface=SQLSuggestionSurface(frame:NSRect(x:0,y:0,width:500,height:200))
     let column=NSTableColumn(identifier:.init("suggestion")); column.width=488
-    table.addTableColumn(column); table.headerView=nil; table.rowHeight=40
+    table.addTableColumn(column); table.headerView=nil; table.rowHeight=26
     table.style = .plain
-    table.intercellSpacing=NSSize(width:0,height:2); table.backgroundColor=StudioTheme.canvas
+    table.intercellSpacing=NSSize(width:0,height:0); table.backgroundColor=StudioTheme.canvas
     table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
     table.delegate=self; table.dataSource=self; table.target=self; table.doubleAction=#selector(commit)
     table.focusRingType = .none
@@ -141,7 +141,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     let identifier=NSUserInterfaceItemIdentifier("sqlSuggestionCell")
     let cell=tableView.makeView(withIdentifier:identifier,owner:self) as? SQLSuggestionCell ?? SQLSuggestionCell()
     cell.identifier=identifier; cell.item=items[row]; cell.prefix=prefix; cell.needsDisplay=true
-    cell.toolTip=SQLSuggestionStyle.title(items[row].kind)+" · "+items[row].text+" · Tab/Enter ile ekle; Escape kapatır"
+    cell.toolTip=SQLSuggestionStyle.title(items[row].kind)+" · "+items[row].text+(items[row].detail.isEmpty ? "":"\n"+items[row].detail)+"\nTab/Enter ile ekle; Escape kapatır"
     cell.setAccessibilityElement(true); cell.setAccessibilityRole(.staticText)
     cell.setAccessibilityLabel(items[row].label+" · "+SQLSuggestionStyle.title(items[row].kind))
     cell.setAccessibilityHelp(items[row].text)
@@ -151,17 +151,22 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     self.items=items; self.prefix=prefix; _ = view
     (view as? SQLSuggestionSurface)?.count=items.count
     table.reloadData(); if !items.isEmpty { table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false) }
-    preferredContentSize=NSSize(width:500,height:CGFloat(max(1,min(10,items.count)))*42+66)
+    preferredContentSize=NSSize(width:500,height:CGFloat(max(1,min(16,items.count)))*26+52)
     view.frame.size=preferredContentSize; view.needsLayout=true
     view.layoutSubtreeIfNeeded(); if !items.isEmpty { table.scrollRowToVisible(0) }
   }
   func fit(maximumHeight:CGFloat) {
     // Keep full rows between the fixed heading and keyboard hint footer.
-    let rows=max(1,min(10,Int((maximumHeight-66)/42),max(1,items.count)))
-    preferredContentSize=NSSize(width:500,height:CGFloat(rows)*42+66)
+    let rows=max(1,min(16,Int((maximumHeight-52)/26),max(1,items.count)))
+    preferredContentSize=NSSize(width:500,height:CGFloat(rows)*26+52)
     view.frame.size=preferredContentSize; view.needsLayout=true; view.layoutSubtreeIfNeeded()
   }
-  var visibleRowCount:Int {max(1,Int((view.bounds.height-66)/42))}
+  var visibleRowCount:Int {max(1,Int((view.bounds.height-52)/26))}
+  static func placement(anchor:NSRect,screen:NSRect,preferredHeight:CGFloat) -> (below:Bool,height:CGFloat) {
+    let above=max(0,screen.maxY-anchor.maxY-32), below=max(0,anchor.minY-screen.minY-32)
+    let down=below >= preferredHeight || (above < preferredHeight && below >= above)
+    return (down,down ? below:above)
+  }
   func move(_ step: Int) {
     guard !items.isEmpty else { return }
     let row = max(0,min(items.count-1,table.selectedRow+step))
@@ -1044,13 +1049,16 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
           suggestionList.update(analysis.suggestions,prefix:(source as NSString).substring(with:NSRange(location:analysis.replacement.location,length:prefixLength)))
           guard let anchor = suggestionAnchor(), let host = window.contentView else { return }
           let hostAnchor = host.convert(anchor,from:editor)
+          var below=true
           if let screen=window.screen {
             let screenAnchor=window.convertToScreen(host.convert(hostAnchor,to:nil))
-            let space=max(screen.visibleFrame.maxY-screenAnchor.maxY,screenAnchor.minY-screen.visibleFrame.minY)-32
-            suggestionList.fit(maximumHeight:space)
+            let placement=SQLSuggestionList.placement(anchor:screenAnchor,screen:screen.visibleFrame,preferredHeight:suggestionList.preferredContentSize.height)
+            below=placement.below
+            suggestionList.fit(maximumHeight:placement.height)
           }
           suggestionPopover.contentSize=suggestionList.preferredContentSize
-          suggestionPopover.show(relativeTo:hostAnchor,of:host,preferredEdge:host.isFlipped ? .maxY : .minY)
+          let edge:NSRectEdge=below ? (host.isFlipped ? .maxY:.minY):(host.isFlipped ? .minY:.maxY)
+          suggestionPopover.show(relativeTo:hostAnchor,of:host,preferredEdge:edge)
           window.makeFirstResponder(editor)
           installSuggestionKeys()
         } else { suggestionPopover.close() }

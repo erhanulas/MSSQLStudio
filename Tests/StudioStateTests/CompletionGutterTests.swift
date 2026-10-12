@@ -24,9 +24,10 @@ import Testing
       StudioTheme.apply(theme)
       list.view.frame.size=list.preferredContentSize
       list.view.layoutSubtreeIfNeeded()
-      #expect(list.preferredContentSize == NSSize(width:500,height:486))
-      #expect(list.table.enclosingScrollView!.frame.minY == 34)
-      #expect(list.table.rowHeight == 40 && !list.table.acceptsFirstResponder)
+      #expect(list.preferredContentSize == NSSize(width:500,height:468))
+      #expect(list.table.enclosingScrollView!.frame.minY == 27)
+      #expect(list.table.rowHeight == 26 && !list.table.acceptsFirstResponder)
+      #expect(list.visibleRowCount == 16)
       let cell=try #require(list.tableView(list.table,viewFor:list.table.tableColumns[0],row:0))
       #expect(cell.toolTip?.contains(suggestions[0].text) == true)
       #expect(cell.accessibilityLabel()?.contains("Tablo") == true)
@@ -42,8 +43,25 @@ import Testing
     #expect(NSApp.sendAction(try #require(list.table.doubleAction),to:list.table.target,from:list.table))
     #expect(accepted == suggestions[16].text)
     list.update(Array(suggestions.prefix(1))); #expect(list.table.selectedRow == 0)
-    #expect(list.preferredContentSize.height == 108)
+    #expect(list.preferredContentSize.height == 78)
     #expect(list.table.enclosingScrollView!.documentVisibleRect.contains(list.table.rect(ofRow:0)))
+  }
+
+  @Test func completionUsesRoomAboveLowCaretAndKeepsFullCompactRows() {
+    let screen=NSRect(x:0,y:25,width:1200,height:800)
+    let low=SQLSuggestionList.placement(anchor:NSRect(x:100,y:100,width:1,height:18),screen:screen,preferredHeight:468)
+    let high=SQLSuggestionList.placement(anchor:NSRect(x:100,y:750,width:1,height:18),screen:screen,preferredHeight:468)
+    #expect(!low.below && low.height == 675)
+    #expect(high.below && high.height == 693)
+    let middle=SQLSuggestionList.placement(anchor:NSRect(x:100,y:400,width:1,height:18),screen:screen,preferredHeight:468)
+    #expect(!middle.below && middle.height == 375)
+    let list=SQLSuggestionList()
+    list.update((0..<100).map {.init(text:"Column\($0)",label:"Column\($0)",kind:.column)})
+    list.fit(maximumHeight:middle.height)
+    #expect(list.visibleRowCount == 12 && list.preferredContentSize.height == 364)
+    #expect(list.table.enclosingScrollView!.documentVisibleRect.contains(list.table.rect(ofRow:11)))
+    list.move(99)
+    #expect(list.table.enclosingScrollView!.documentVisibleRect.contains(list.table.rect(ofRow:99)))
   }
 
   @Test func actualPopoverKeepsUsableSizeAndKeyboardSelectionVisible() async throws {

@@ -16,6 +16,7 @@ import SQLServerKit
     }
   }
   var healthCheckFixture: (() async throws -> Void)?
+  var reconnectFixture: (() async throws -> Void)?
   private var checkingHealth = false
   func checkExplorerHealth() async {
     guard online, !reconnecting, !checkingHealth, catalogFixture == nil || healthCheckFixture != nil else {return}
@@ -537,10 +538,19 @@ struct ObjectEditorKey: Codable, Equatable {
     changed?()
     defer { server.reconnecting = false; changed?() }
     do {
+      if let reconnectFixture=server.reconnectFixture {
+        try await reconnectFixture(); server.online=true; return
+      }
+      if !servers.contains(where:{$0 === server}) {servers.append(server)}
       _ = try await connect(server.profile, password: server.password, save: false)
     } catch {
       server.startupError = error.localizedDescription
     }
+  }
+  func prepareExplorerForNewQuery(_ server:ConnectedServer) async -> Bool {
+    guard !server.reconnecting else {return false}
+    if !server.online {await reconnectExplorer(server)}
+    return server.online
   }
   func rememberExplorer(_ id: UUID, selected: Bool) {
     var ids = UserDefaults.standard.stringArray(forKey: "explorerActiveServerIDs") ?? servers.filter(\.remembered).map { $0.id.uuidString }

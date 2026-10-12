@@ -322,7 +322,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     let label = NSTextField(labelWithString: "EXPLORER")
     label.font = .systemFont(ofSize: 10, weight: .semibold)
     let refresh = symbolButton("arrow.clockwise", tip: "Seçili dalın nesnelerini sunucudan yenile", action: #selector(refreshExplorer))
-    let connect = symbolButton("plus", tip: "Sunucuya bağlan", action: #selector(showConnect))
+    let connect = symbolButton("network", tip: "Bağlantı işlemleri", action: #selector(showExplorerConnections(_:)))
+    connect.setAccessibilityIdentifier("explorerConnectionActions")
     let collapse = symbolButton("sidebar.left", tip: "Object Explorer’ı gizle", action: #selector(toggleExplorer))
     indexStatus.target=self; indexStatus.action=#selector(showIndexStatus(_:))
     indexStatus.image=NSImage(systemSymbolName:"externaldrive",accessibilityDescription:nil)
@@ -500,7 +501,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   private var selected: TreeNode? { outline.item(atRow: outline.selectedRow) as? TreeNode }
   var selectedServer: ConnectedServer? {
-    selected?.server ?? state.active?.server ?? state.servers.first(where: \.online)
+    selected?.server ?? state.active?.server ?? state.servers.first(where: \.online) ?? state.servers.first
   }
   static func queryDatabase(for node: TreeNode) -> String {
     switch node.kind {
@@ -734,7 +735,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       case "run", "plan": item.isEnabled = doc?.state == .ready
       case "cancel": item.isEnabled = doc?.state == .running
       case "save", "format": item.isEnabled = doc != nil
-      case "query": item.isEnabled = selectedServer?.online == true
+      case "query": item.isEnabled = selectedServer?.reconnecting == false
       default: break
       }
       (item.view as? NSControl)?.isEnabled = item.isEnabled
@@ -818,11 +819,25 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     if let name = database.titleOfSelectedItem { state.active?.useDatabase(name) }
   }
   @objc func newQuery() {
-    guard let server = selectedServer ?? state.active?.server, server.online || Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" else {
+    guard let server = selectedServer else {
       showConnect()
       return
     }
-    state.newQuery(server: server, database: selectedDatabase)
+    openNewQuery(server:server,database:selectedDatabase)
+  }
+  private func openNewQuery(server:ConnectedServer,database:String) {
+    guard !server.reconnecting else {return}
+    if server.online || Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" {
+      state.newQuery(server:server,database:database); return
+    }
+    Task { [weak self] in
+      guard let self else {return}
+      guard await state.prepareExplorerForNewQuery(server) else {
+        if let error=server.startupError {status.stringValue="Yeniden bağlantı başarısız: "+error;status.toolTip=error}
+        return
+      }
+      state.newQuery(server:server,database:database)
+    }
   }
   @objc func execute() { state.active?.execute() }
   @objc func cancel() { state.active?.cancel() }
@@ -930,14 +945,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       return
     }
     guard !node.server.reconnecting else { return }
-    guard node.server.online else {
-      Task { [weak self] in
-        guard let self else { return }
-        await state.reconnectExplorer(node.server)
-        if node.server.online { refresh(node) }
-      }
-      return
-    }
+    guard node.server.online else { return }
     if node.linked != nil || node.objectFolder == .linkedServers {
       if case .group = node.linked, let parent=node.parent {refresh(parent);return}
       if case .detail = node.linked, let parent=node.parent {refresh(parent);return}
@@ -1003,6 +1011,31 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   @objc private func reconnectServer() {
     guard let server = contextNode?.server else { return }
     Task { await state.reconnectExplorer(server) }
+  }
+  func explorerConnectionMenu(server:ConnectedServer?) -> NSMenu {
+    let menu=NSMenu();menu.autoenablesItems=false
+    let add=NSMenuItem(title:"Yeni Bağlantı…",action:#selector(showConnect),keyEquivalent:"")
+    add.target=self;add.image=NSImage(systemSymbolName:"plus",accessibilityDescription:nil);menu.addItem(add)
+    if let server {
+      menu.addItem(.separator())
+      let action=NSMenuItem(title:server.online ? "Aktif Bağlantıyı Kapat":"Yeniden Bağlan",action:server.online ? #selector(closeExplorerConnection(_:)):#selector(reconnectExplorerConnection(_:)),keyEquivalent:"")
+      action.target=self;action.representedObject=server;action.isEnabled = !server.reconnecting
+      action.image=NSImage(systemSymbolName:server.online ? "power":"arrow.triangle.2.circlepath",accessibilityDescription:nil)
+      action.toolTip=server.profile.name+" · Açık sorgu oturumları korunur."
+      menu.addItem(action)
+    }
+    return menu
+  }
+  @objc private func showExplorerConnections(_ sender:NSButton) {
+    explorerConnectionMenu(server:selectedServer).popUp(positioning:nil,at:NSPoint(x:0,y:sender.bounds.maxY),in:sender)
+  }
+  @objc private func closeExplorerConnection(_ sender:NSMenuItem) {
+    guard let server=sender.representedObject as? ConnectedServer,server.online,!server.reconnecting else {return}
+    Task {await state.disconnectExplorer(server)}
+  }
+  @objc private func reconnectExplorerConnection(_ sender:NSMenuItem) {
+    guard let server=sender.representedObject as? ConnectedServer else {return}
+    Task {await state.reconnectExplorer(server)}
   }
   @objc private func disconnectServer() {
     guard let server = contextNode?.server else { return }
@@ -1654,12 +1687,12 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     if case .server = node.kind {command("Favori Sorgular…",#selector(showFavoritesAtNode))}
     if case .database = node.kind {command("Favori Sorgular…",#selector(showFavoritesAtNode))}
 
-    if !node.server.online || node.server.startupError != nil {
+    if !node.server.online {
       command(node.server.reconnecting ? "Bağlanıyor…" : "Yeniden Bağlan", #selector(reconnectServer))
       menu.items.last?.isEnabled = !node.server.reconnecting
       command("Bağlantı ayarları…", #selector(editConnection))
       if case .server = node.kind {command("Bağlantıyı kaldır…", #selector(disconnectServer))}
-      command("Bağlan ve Yenile", #selector(refreshContextNode))
+      command("Yeni Sorgu", #selector(newQueryAtNode))
       menu.items.last?.isEnabled = !node.server.reconnecting
       return
     }
@@ -1670,6 +1703,10 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     if case .server = node.kind {
       command("Bağlantı ayarları…",#selector(editConnection))
+      command("Aktif Bağlantıyı Kapat",#selector(closeExplorerConnection(_:)))
+      menu.items.last?.representedObject=node.server
+      menu.items.last?.image=NSImage(systemSymbolName:"power",accessibilityDescription:nil)
+      menu.items.last?.isEnabled = !node.server.reconnecting
       command("Bağlantıyı kaldır…", #selector(disconnectServer))
     }
     command("Yeni Sorgu", #selector(newQueryAtNode))
@@ -1872,7 +1909,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   @objc private func newQueryAtNode() {
     if let node = contextNode {
       let name = Self.queryDatabase(for: node)
-      state.newQuery(server: node.server, database: name)
+      openNewQuery(server: node.server, database: name)
     }
   }
   @objc private func refreshContextNode() { if let node = contextNode { refresh(node) } }

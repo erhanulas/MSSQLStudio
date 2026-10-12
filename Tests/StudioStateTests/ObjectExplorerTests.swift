@@ -247,6 +247,51 @@ import SQLServerKit
     server.recordExplorerFailure(SQLFailure("Lost", diagnostics: [.init(state: "08S01", code: 0, message: "link")]))
     #expect(!server.online && server.startupError != nil)
   }
+  @Test func offlineRefreshNeverReconnectsAndNewQueryExplicitlyAttemptsOnce() async throws {
+    let state=StudioState(),server=ConnectedServer(profile:ServerProfile(),password:"")
+    server.online=false;state.servers=[server]
+    var attempts=0,checks=0
+    server.reconnectFixture={attempts += 1;try await Task.sleep(for:.milliseconds(40));throw SQLFailure("Fixture unavailable")}
+    server.healthCheckFixture={checks += 1}
+    let host=WorkbenchController(state:state);_ = host.view
+    #expect(host.selectedServer === server)
+    let root=TreeNode("Offline",kind:.server,server:server)
+    host.refresh(root);await server.checkExplorerHealth()
+    #expect(attempts == 0 && checks == 0)
+    host.newQuery();host.newQuery()
+    for _ in 0..<100 where attempts == 0 || server.reconnecting {try await Task.sleep(for:.milliseconds(10))}
+    #expect(attempts == 1 && !server.online && !server.reconnecting)
+    #expect(server.startupError == "Fixture unavailable" && state.documents.isEmpty)
+    host.refresh(root);await server.checkExplorerHealth()
+    #expect(attempts == 1 && checks == 0)
+    server.reconnectFixture={attempts += 1}
+    #expect(await state.prepareExplorerForNewQuery(server))
+    #expect(server.online && attempts == 2)
+    #expect(await state.prepareExplorerForNewQuery(server))
+    #expect(attempts == 2)
+  }
+  @Test func connectionMenuClosesOnlyExplorerAndOffersExplicitReconnect() async throws {
+    let state=StudioState(),server=ConnectedServer(profile:ServerProfile(),password:"")
+    state.servers=[server]
+    let doc=QueryDocument(server:server,database:"master",title:"Independent")
+    doc.state = .ready;doc.transactionCount=1;state.documents=[doc];state.active=doc
+    let host=WorkbenchController(state:state);_ = host.view
+    let menu=host.explorerConnectionMenu(server:server)
+    let close=try #require(menu.items.first {$0.title == "Aktif Bağlantıyı Kapat"})
+    #expect(close.isEnabled && close.image != nil && close.representedObject as? ConnectedServer === server)
+    #expect(NSApp.sendAction(try #require(close.action),to:close.target,from:close))
+    for _ in 0..<100 where server.online {try await Task.sleep(for:.milliseconds(10))}
+    #expect(!server.online && state.servers.first === server && doc.state == .ready && doc.transactionCount == 1)
+    let offline=host.explorerConnectionMenu(server:server)
+    let reconnect=try #require(offline.items.first {$0.title == "Yeniden Bağlan"})
+    server.reconnecting=true
+    #expect(host.explorerConnectionMenu(server:server).items.last?.isEnabled == false)
+    server.reconnecting=false
+    var attempts=0;server.reconnectFixture={attempts += 1}
+    #expect(NSApp.sendAction(try #require(reconnect.action),to:reconnect.target,from:reconnect))
+    for _ in 0..<100 where !server.online {try await Task.sleep(for:.milliseconds(10))}
+    #expect(server.online && attempts == 1 && doc.transactionCount == 1)
+  }
   @Test func procedureFunctionAndTriggerIconsHaveDistinctSemanticsAndParentOwnership() throws {
     let server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false
     func node(_ f:Folder,_ detail:String="")->TreeNode {TreeNode("Example",kind:.object(f),server:server,item:.init(id:1,name:"Example",schema:"dbo",detail:detail))}
