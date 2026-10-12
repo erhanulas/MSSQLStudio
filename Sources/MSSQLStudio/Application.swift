@@ -9,6 +9,19 @@ import SwiftUI
   private var workbench: WorkbenchController!
   static func main() {
     let arguments=ProcessInfo.processInfo.arguments
+    // Release smoke uses the actual Foundation updater before UI/Keychain/restore.
+    if arguments.dropFirst().first == "--check-update-feed" {
+      guard arguments.count == 3,let address=Bundle.main.object(forInfoDictionaryKey:"MSSQLUpdateFeedURL") as? String,let feed=URL(string:address) else {exit(2)}
+      Task {
+        do {
+          guard let release=try await ApplicationUpdate().check(feed:feed,currentVersion:"0"),release.version == arguments[2] else {
+            FileHandle.standardError.write(Data("Public update feed version mismatch.\n".utf8));exit(1)
+          }
+          print("Foundation updater feed verified: "+release.version);exit(0)
+        }catch {FileHandle.standardError.write(Data((error.localizedDescription+"\n").utf8));exit(1)}
+      }
+      RunLoop.main.run();return
+    }
     if arguments.dropFirst().first == "--reopen-after-update" {
       guard arguments.count == 4,let parent=Int32(arguments[3]),parent > 1,
         ApplicationUpdate.isNewer(arguments[2],than:"0") else {return}

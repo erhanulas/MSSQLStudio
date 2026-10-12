@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.81",
+    "date": "2026-10-12",
+    "title": "GitHub güncelleme kontrolü düzeltmesi",
+    "changes": [
+      "GitHub update.json indirmesinde hatalı JSON Accept başlığının neden olduğu HTTP 500 düzeltildi. Dosya indirme başlığı ve güncel yönlendirme kullanılır.",
+      "Geçici ağ ve sunucu hatalarında en fazla üç sınırlı deneme yapılır. Kalıcı hatalarda gerçek HTTP/ağ kodu gösterilir; depo gizliliği veya dosya eksikliği varsayılmaz.",
+      "Gelecek yayınlarda public update.json erişimi, imzalı uygulamanın kendi Foundation güncelleyicisiyle otomatik doğrulanır. HTTPS, manifest boyutu, SHA-256 ve paket imza kontrolleri korunur."
+    ]
+  },
+  {
     "version": "0.2.80",
     "date": "2026-10-12",
     "title": "Command+F SQL editörü arama düzeltmesi",

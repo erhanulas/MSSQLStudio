@@ -34,19 +34,61 @@ public actor ApplicationUpdate {
     public let installerURL: URL?
     public let installerSHA256: String?
   }
+  typealias ManifestTransport = @Sendable (URLRequest) async throws -> (Data,URLResponse)
+  private let manifestTransport:ManifestTransport
+  init(manifestTransport:@escaping ManifestTransport) {self.manifestTransport=manifestTransport}
   public func check(feed: URL, currentVersion: String) async throws -> Release? {
-    guard feed.scheme == "https",feed.user == nil,feed.password == nil else { throw SQLFailure("Güncelleme adresi HTTPS olmalı.") }
-    var request = URLRequest(url: feed, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
-    request.setValue("application/json", forHTTPHeaderField: "Accept")
-    let (data, response) = try await URLSession.shared.data(for: request)
-    guard let http = response as? HTTPURLResponse, http.statusCode == 200,
-      response.url?.scheme == "https", data.count < 65536 else {
-      throw SQLFailure("Güncelleme bilgisi alınamadı. GitHub deposunun herkese açık olduğunu ve son yayında update.json bulunduğunu kontrol edin.")
+    guard feed.scheme == "https",feed.user == nil,feed.password == nil else {throw SQLFailure("Güncelleme adresi HTTPS olmalı.")}
+    for attempt in 0..<3 {
+      try Task.checkCancellation()
+      var address=feed
+      // GitHub serves release assets, not its JSON API. Avoid stale CDN redirects.
+      if feed.host?.lowercased() == "github.com",feed.path.hasSuffix("/releases/latest/download/update.json"),var parts=URLComponents(url:feed,resolvingAgainstBaseURL:false) {
+        parts.queryItems=(parts.queryItems ?? [])+[URLQueryItem(name:"studio_update_check",value:UUID().uuidString)]
+        address=parts.url ?? feed
+      }
+      var request=URLRequest(url:address,cachePolicy:.reloadIgnoringLocalCacheData,timeoutInterval:10)
+      request.setValue("application/octet-stream",forHTTPHeaderField:"Accept")
+      request.setValue("no-cache",forHTTPHeaderField:"Cache-Control")
+      request.setValue("MSSQLStudio-Updater",forHTTPHeaderField:"User-Agent")
+      let data:Data,response:URLResponse
+      do {(data,response)=try await manifestTransport(request)}
+      catch {
+        try Task.checkCancellation()
+        if let network=error as? URLError {
+          if network.code == .cancelled {throw error}
+          if attempt<2,[.timedOut,.networkConnectionLost,.cannotConnectToHost,.dnsLookupFailed].contains(network.code) {
+            try await Task.sleep(for:.milliseconds(250*(attempt+1)));continue
+          }
+          throw SQLFailure("Güncelleme sunucusuna ulaşılamadı (ağ kodu \(network.code.rawValue)). İnternet bağlantınızı kontrol edip yeniden deneyin.")
+        }
+        throw error
+      }
+      try Task.checkCancellation()
+      guard let http=response as? HTTPURLResponse,response.url?.scheme == "https" else {throw SQLFailure("Güncelleme sunucusu güvenli bir HTTPS yanıtı vermedi.")}
+      if http.statusCode != 200 {
+        if attempt<2,[408,429,500,502,503,504].contains(http.statusCode) {
+          try await Task.sleep(for:.milliseconds(250*(attempt+1)));continue
+        }
+        let detail:String
+        switch http.statusCode {
+        case 404:detail="Güncelleme dosyası bulunamadı; yayın adresini kontrol edin."
+        case 401,403:detail="Güncelleme sunucusu erişimi reddetti; ağ erişimini veya yayın adresini kontrol edin."
+        case 429:detail="Güncelleme sunucusunun istek sınırına ulaşıldı; biraz sonra yeniden deneyin."
+        case 500...599:detail="Güncelleme sunucusu geçici hata verdi; biraz sonra yeniden deneyin."
+        default:detail="Güncelleme sunucusundan beklenmeyen yanıt alındı."
+        }
+        throw SQLFailure("Güncelleme bilgisi alınamadı (HTTP \(http.statusCode)). "+detail)
+      }
+      guard !data.isEmpty,data.count<65536 else {throw SQLFailure("Güncelleme bilgisi boş veya boyut sınırını aşıyor.")}
+      let release:Release
+      do {release=try JSONDecoder().decode(Release.self,from:data)}
+      catch {throw SQLFailure("Güncelleme dosyası geçerli JSON biçiminde değil.")}
+      guard Self.isNewer(release.version,than:"0"),release.downloadURL.scheme == "https",release.sha256.count == 64,
+        release.sha256.allSatisfy({$0.isHexDigit}) else {throw SQLFailure("Güncelleme bilgisi geçersiz.")}
+      return Self.isNewer(release.version,than:currentVersion) ? release:nil
     }
-    let release = try JSONDecoder().decode(Release.self, from:data)
-    guard Self.isNewer(release.version,than:"0"), release.downloadURL.scheme == "https", release.sha256.count == 64,
-      release.sha256.allSatisfy({ $0.isHexDigit }) else { throw SQLFailure("Güncelleme bilgisi geçersiz.") }
-    return Self.isNewer(release.version,than:currentVersion) ? release : nil
+    throw SQLFailure("Güncelleme kontrolü tamamlanamadı.")
   }
   public func download(_ release: Release) async throws -> URL {
     guard release.downloadURL.scheme == "https" else { throw SQLFailure("Paket adresi HTTPS olmalı.") }
@@ -99,7 +141,7 @@ public actor ApplicationUpdate {
     guard actual == "designated => " + identity else {return false}
     return true
   }
-  public init() {}
+  public init() {manifestTransport={request in try await URLSession.shared.data(for:request)}}
   public nonisolated static func isNewer(_ candidate: String, than current: String) -> Bool {
     let allowed = CharacterSet(charactersIn:"0123456789.")
     guard !candidate.isEmpty, candidate.unicodeScalars.allSatisfy(allowed.contains), !candidate.contains("..") else { return false }

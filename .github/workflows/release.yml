@@ -47,6 +47,13 @@ jobs:
           version="${RELEASE_TAG#v}"
           gh release create "$RELEASE_TAG" "releases/MSSQLStudio-$version.zip" "releases/MSSQLStudio-$version.pkg" releases/update.json releases/MSSQLStudio-CredentialAgent-v1.zip --verify-tag --title "MSSQL Studio $version" --notes-file releases/release-notes.md --draft
           gh release edit "$RELEASE_TAG" --draft=false --latest
+      - name: Verify public feed through application updater
+        run: |
+          version="${RELEASE_TAG#v}"
+          smoke_dir="$(mktemp -d /tmp/MSSQLStudio-feed.XXXXXX)"
+          trap 'rm -rf "$smoke_dir"' EXIT
+          ditto -x -k "releases/MSSQLStudio-$version.zip" "$smoke_dir"
+          "$smoke_dir/MSSQLStudio.app/Contents/MacOS/MSSQLStudio" --check-update-feed "$version"
       - name: Remove temporary signing identity
         if: always()
         run: python3 scripts/ci-signing.py cleanup
