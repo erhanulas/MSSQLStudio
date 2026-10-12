@@ -45,6 +45,7 @@ import SQLServerKit
     }
   }
   var startupError: String?
+  var schemaComparisonFixture: ((String,String) throws -> Execution)?
   var catalogFixture: ((String) -> Execution)?
   var asyncCatalogFixture: ((String) async throws -> Execution)?
   var indexingDatabases = Set<String>()

@@ -300,6 +300,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     NotificationCenter.default.addObserver(self,selector:#selector(refreshManagedObject(_:)),name:.init("studioManagedObjectCompleted"),object:nil)
     NotificationCenter.default.addObserver(self, selector: #selector(catalogIndexUpdated(_:)), name: .init("catalogIndexUpdated"), object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(catalogIndexUpdated(_:)), name: .init("sqlCatalogChanged"), object: nil)
+    NotificationCenter.default.addObserver(self,selector:#selector(schemaApplied(_:)),name:.init("studioSchemaComparedApplied"),object:nil)
     NotificationCenter.default.addObserver(self,selector:#selector(favoritesChanged),name:FavoriteQueriesModel.changed,object:state.favorites)
     state.changed = { [weak self] in self?.reloadWorkspace() }
   }
@@ -380,6 +381,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     column.width = 330
     outline.addTableColumn(column)
     outline.outlineTableColumn = column
+    outline.allowsMultipleSelection = true
     outline.dataSource = self
     outline.delegate = self
     outline.target = self
@@ -388,7 +390,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     outline.registerForDraggedTypes([Self.explorerDragType])
     outline.setDraggingSourceOperationMask(.move,forLocal:true)
     outline.setDraggingSourceOperationMask([],forLocal:false)
-    outline.setAccessibilityHelp("Bağlantı başlıklarını sürükleyerek Explorer sırasını değiştirebilirsiniz.")
+    outline.setAccessibilityHelp("Bağlantı başlıklarını sürükleyerek sıralayın. Command-tıklama ile iki veritabanı seçip sağ tıktan DDL Karşılaştır’ı açın.")
     let menu = NSMenu()
     menu.delegate = self
     outline.menu = menu
@@ -571,7 +573,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   private func reloadWorkspace() {
     guard isViewLoaded else { return }
-    let selection=selected
+    let selection=outline.selectedRowIndexes.compactMap {outline.item(atRow:$0) as? TreeNode}
     let removed = roots.filter {root in !state.servers.contains(where:{$0 === root.server})}
     if !removed.isEmpty {
       roots.removeAll {root in removed.contains(where:{$0 === root})}
@@ -602,10 +604,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     rebuildSearchScopes()
     reloadExplorer()
     restoreExplorerExpansion()
-    if let selection {
-      let row=outline.row(forItem:selection)
-      if row >= 0 {outline.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)}
-    }
+    let restored=IndexSet(selection.compactMap {node -> Int? in let row=outline.row(forItem:node);return row>=0 ? row:nil})
+    if !restored.isEmpty {outline.selectRowIndexes(restored,byExtendingSelection:false)}
     renderTabs()
     renderActive()
     updateControls()
@@ -1101,6 +1101,15 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     UserDefaults.standard.set(sidebar.isCollapsed,forKey:"explorerCollapsed")
     explorerToggle.state = sidebar.isCollapsed ? .on : .off
   }
+  @objc private func schemaApplied(_ notification:Notification) {
+    guard let server=notification.object as? ConnectedServer,let db=notification.userInfo?["database"] as? String else {return}
+    for root in roots where root.server === server {
+      func refreshDatabase(_ node:TreeNode) {if case .database=node.kind,node.database==db {refresh(node);return};for child in node.children {refreshDatabase(child)}}
+      refreshDatabase(root)
+    }
+    refreshIndexInBackground(server:server,database:db,force:true)
+    for document in state.documents where document.server === server && document.database==db {Task {await document.loadSymbols(force:true)}}
+  }
   @objc private func refreshChangedObjects(_ notification: Notification) {
     guard let doc = notification.object as? QueryDocument else { return }
     let targets = ModuleEditing.changedObjects(doc.lastExecutedSQL ?? "")
@@ -1513,6 +1522,24 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     if let node = item as? TreeNode, !node.loaded { load(node) }
     return true
   }
+  func outlineView(_ outlineView:NSOutlineView,selectionIndexesForProposedSelection proposed:IndexSet)->IndexSet {
+    guard proposed.count>1 else {return proposed}
+    if proposed.allSatisfy({index in guard let node=outlineView.item(atRow:index) as? TreeNode else {return false};if case .database=node.kind {return true};return false}) {return IndexSet(proposed.suffix(2))}
+    return IndexSet(integer:proposed.last ?? 0)
+  }
+  func schemaEndpoints(for nodes:[TreeNode])->[SchemaEndpoint] {
+    nodes.compactMap {node in guard node.server.online,case .database=node.kind else {return nil};return SchemaEndpoint(server:node.server,database:node.database)}
+  }
+  @objc private func compareDatabasesAtNode() {
+    let selection=outline.selectedRowIndexes.compactMap {outline.item(atRow:$0) as? TreeNode}
+    let nodes=contextNode.map {node in selection.contains(where:{$0 === node}) ? selection:[node]} ?? selection
+    let seeds=schemaEndpoints(for:nodes)
+    let endpoints=state.servers.filter(\.online).flatMap {server in server.databases.map {SchemaEndpoint(server:server,database:$0.name)}}
+    let model=SchemaComparisonModel(endpoints:endpoints,sourceID:seeds.first?.id,targetID:seeds.count==2 ? seeds[1].id:nil)
+    let owner=SchemaComparisonWindow(model:model) {[weak self] endpoint,sql in self?.state.newQuery(server:endpoint.server,database:endpoint.database,text:sql,title:"DDL Karşılaştırma · SQL Önizlemesi")}
+    auxiliaryWindows.append(owner);owner.showWindow(nil)
+    if seeds.count==2,model.validPair {model.startComparison()}
+  }
   func outlineViewSelectionDidChange(_ notification: Notification) {
     if !showingSearch, let node=selected, node.server !== searchScope?.server {
       rebuildSearchScopes()
@@ -1866,6 +1893,11 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       menu.items.last?.image=NSImage(systemSymbolName:"power",accessibilityDescription:nil)
       menu.items.last?.isEnabled = !node.server.reconnecting
       command("Bağlantıyı kaldır…", #selector(disconnectServer))
+    }
+    if case .database=node.kind {
+      command("DDL Karşılaştır…",#selector(compareDatabasesAtNode))
+      menu.items.last?.image=NSImage(systemSymbolName:"arrow.left.arrow.right.square",accessibilityDescription:"DDL Karşılaştır")
+      menu.items.last?.toolTip="Command-tıklama ile iki veritabanı seçin; kaynak/hedef yönü karşılaştırma penceresinde değiştirilebilir."
     }
     command("Yeni Sorgu", #selector(newQueryAtNode))
     command("Nesneleri Yenile", #selector(refreshContextNode))

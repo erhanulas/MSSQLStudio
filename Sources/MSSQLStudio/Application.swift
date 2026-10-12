@@ -87,6 +87,9 @@ import SwiftUI
         server.databases=[CatalogItem(id:5,name:"DemoDB")]
         studio.servers.append(server)
       }
+      if Bundle.main.object(forInfoDictionaryKey:"StudioSchemaComparisonSmoke") as? Bool == true {
+        studio.servers.append(SchemaComparisonUIFixture.server())
+      }
       if Bundle.main.object(forInfoDictionaryKey:"StudioExplorerOrderSmoke") as? Bool == true {
         if !studio.servers.contains(where:{$0 === server}) {studio.servers.append(server)}
         for name in ["UI Test B","UI Test C"] {
@@ -170,7 +173,8 @@ import SwiftUI
     if let content = window.contentView { StudioTheme.decorate(content) }
   }
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-    Self.updateTerminationApproved || studio.canQuit() ? .terminateNow : .terminateCancel
+    guard SchemaComparisonModel.activeApplications==0 else {NSSound.beep();return .terminateCancel}
+    return Self.updateTerminationApproved || studio.canQuit() ? .terminateNow : .terminateCancel
   }
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
   private func createMenu() {

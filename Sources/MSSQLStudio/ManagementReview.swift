@@ -15,7 +15,7 @@ import SwiftUI
   private var approved: (() -> Void)?
   private var finished: (() -> Void)?
   private var observers:[NSObjectProtocol]=[]
-  init(parent:NSWindow,title:String,original:String,edited:String,canApply:Bool,approved:@escaping () -> Void,finished:@escaping () -> Void) {
+  init(parent:NSWindow,title:String,original:String,edited:String,canApply:Bool,leftTitle:String="Açılan tanım",rightTitle:String="Düzenlenen tanım",executionSQL:String?=nil,approved:@escaping () -> Void,finished:@escaping () -> Void) {
     super.init()
     self.approved=approved;self.finished=finished
     panel.title="Nesne değişikliklerini incele";panel.minSize=NSSize(width:960,height:600);panel.delegate=self
@@ -29,17 +29,18 @@ import SwiftUI
     top.edgeInsets=NSEdgeInsets(top:16,left:18,bottom:12,right:18)
     tabs.selectedSegment=0;tabs.target=self;tabs.action=#selector(changeTab)
     split.isVertical=true;split.dividerStyle = .thin
-    for (scroll,label) in [(left,"Açılan tanım"),(right,"Düzenlenen tanım")] {
+    for (scroll,label) in [(left,leftTitle),(right,rightTitle)] {
       configure(scroll,text:"")
       let caption=NSTextField(labelWithString:label);caption.font = .systemFont(ofSize:12,weight:.semibold)
       let column=NSStackView(views:[caption,scroll]);column.orientation = .vertical;column.spacing=8;column.edgeInsets=NSEdgeInsets(top:10,left:12,bottom:10,right:12)
       scroll.widthAnchor.constraint(equalTo:column.widthAnchor,constant:-24).isActive=true
       split.addArrangedSubview(column)
     }
-    let oversized=original.utf16.count>1_000_000 || edited.utf16.count>1_000_000
+    let oversized=original.utf16.count>1_000_000 || edited.utf16.count>1_000_000 || (executionSQL?.utf16.count ?? 0)>1_000_000
     let previewOriginal=oversized ? String(original.prefix(200_000)):original
     let previewEdited=oversized ? String(edited.prefix(200_000)):edited
-    configure(script,text:previewEdited)
+    let execution=executionSQL ?? previewEdited
+    configure(script,text:String(execution.prefix(1_000_000)))
     for view in [split,script] {embed(view,in:body)}
     script.isHidden=true
     let cancel=StudioToolbarButton(symbol:"xmark",label:canApply ? "Vazgeç":"Kapat",tone:.neutral,title:canApply ? "Vazgeç":"Kapat",width:80);cancel.target=self;cancel.action=#selector(closeReview);cancel.keyEquivalent="\u{1b}"
@@ -59,7 +60,7 @@ import SwiftUI
       })
     }
     observers.append(NotificationCenter.default.addObserver(forName:StudioTheme.changed,object:nil,queue:.main) { [weak self] _ in
-      MainActor.assumeIsolated { self?.refreshSQLTheme(original:previewOriginal,edited:previewEdited) }
+      MainActor.assumeIsolated { self?.refreshSQLTheme(original:previewOriginal,edited:previewEdited,execution:execution) }
     })
     parent.beginSheet(panel)
     task=Task { [weak self] in
@@ -70,7 +71,7 @@ import SwiftUI
       summary.stringValue="−\(comparison.removed) kaldırılan  ·  +\(comparison.added) eklenen satır"+(comparison.simplified ? "  ·  Büyük değişiklik için blok karşılaştırması":"")
       let truncated=oversized || comparison.lines.count>10_000
       if truncated {summary.stringValue="Büyük tanım: kısmi önizleme (en çok 10.000 satır). Buradan uygulanamaz; tam SQL sorgu sekmesindedir."}
-      apply.isEnabled=canApply && !truncated && (comparison.added+comparison.removed)>0
+      apply.isEnabled=canApply && !truncated && (executionSQL != nil || (comparison.added+comparison.removed)>0)
       split.setPosition(split.bounds.width/2,ofDividerAt:0)
     }
   }
@@ -95,7 +96,7 @@ import SwiftUI
     view.defaultParagraphStyle=style
     view.textContentStorage?.textStorage?.addAttribute(.paragraphStyle,value:style,range:NSRange(location:0,length:(view.string as NSString).length))
   }
-  private func refreshSQLTheme(original:String,edited:String) {
+  private func refreshSQLTheme(original:String,edited:String,execution:String) {
     for scroll in [left,right,script] {
       (scroll.documentView as? NSTextView)?.backgroundColor=StudioTheme.editorCanvas
     }
@@ -105,8 +106,8 @@ import SwiftUI
     }
     if let view=script.documentView as? NSTextView {
       let selection=view.selectedRange(),viewport=script.contentView.bounds.origin
-      view.textContentStorage?.textStorage?.setAttributedString(SQLSourceHighlighting.attributed(edited))
-      size(view,in:script,text:edited)
+      view.textContentStorage?.textStorage?.setAttributedString(SQLSourceHighlighting.attributed(execution))
+      size(view,in:script,text:execution)
       view.setSelectedRange(selection);script.contentView.scroll(to:viewport);script.reflectScrolledClipView(script.contentView)
     }
   }

@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.84",
+    "date": "2026-10-12",
+    "title": "Veritabanları arasında DDL karşılaştırma ve seçili nesneleri taşıma",
+    "changes": [
+      "Explorer’da Command-tıklama ile iki veritabanı seçip sağ tık → DDL Karşılaştır ile kaynak/hedef ekranını açın; yönü pencerede değiştirebilirsiniz.",
+      "Tablo, view, prosedür, fonksiyon, tablo/veritabanı trigger’ı ve synonym farkları; arama/tür filtresi, yalnız farklar, yan yana SSMS renkli tanım ve satır farkı önizlemesi.",
+      "Sunucuda SHA-256 özetleri, yalnız farklı modüller için 64’lü toplu doğrulama, seçilen nesne için lazy tanım ve sınırlı bellek önbelleği; açık sorgu oturumları etkilenmez.",
+      "Seçili en çok 100 nesne için bağımlılık sıralı SQL önizlemesi ve açık onayla hedefe gönderim. Kaynak/hedef yeniden doğrulanır; bağlantı veya nesne değişmişse eski önizleme reddedilir.",
+      "Standart rowstore tablolar yeni oluşturulabilir veya desteklenen ALTER değişiklikleriyle güncellenebilir. Tablo verisi taşınmaz; kolon silme/sıra değiştirme, table rebuild ve desteklenmeyen özel özellikler otomatik uygulanmaz. SQL Server 2017+ ve iki veritabanında VIEW DEFINITION izni gereklidir."
+    ]
+  },
+  {
     "version": "0.2.83",
     "date": "2026-10-12",
     "title": "Renkli bit değerleri, kontrollü geri alma ve fonksiyon tamamlaması",
