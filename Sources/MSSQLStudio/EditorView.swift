@@ -273,8 +273,8 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   }
   func didReplaceCharacters() {didChangeText()}
   override func validateUserInterfaceItem(_ item:any NSValidatedUserInterfaceItem)->Bool {
-    if item.action == #selector(undoSQL(_:)) {return isEditable && undoManager?.canUndo == true}
-    if item.action == #selector(redoSQL(_:)) {return isEditable && undoManager?.canRedo == true}
+    if item.action == #selector(undoSQL(_:)) || item.action == #selector(undoFromMenu(_:)) {return isEditable && undoManager?.canUndo == true}
+    if item.action == #selector(redoSQL(_:)) || item.action == #selector(redoFromMenu(_:)) {return isEditable && undoManager?.canRedo == true}
     if item.action == #selector(performFindPanelAction(_:)),let action=NSTextFinder.Action(rawValue:item.tag) {
       // Opening the bar must not depend on a previously initialized search session.
       if action == .showFindInterface {return isSelectable && sqlFinder.findBarContainer != nil}
@@ -357,6 +357,10 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   override func paste(_ sender:Any?) {
     finishUndoInput();super.paste(sender);finishUndoInput()
   }
+  // NSWindow normally owns these responder actions. Route the Edit menu to this
+  // editor too, so its validation and execution use the same per-query history.
+  @objc(undo:) func undoFromMenu(_ sender:Any?) {undoSQL(sender)}
+  @objc(redo:) func redoFromMenu(_ sender:Any?) {redoSQL(sender)}
   @objc func undoSQL(_ sender:Any?) {
     guard isEditable else {return}
     dismissSuggestions?();finishUndoInput();undoManager?.undo()
