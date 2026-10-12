@@ -3,7 +3,7 @@ import SQLServerKit
 import SwiftUI
 
 @MainActor enum GridShortcuts {
-  enum Action: String, CaseIterable { case headers, newQuery, columns }
+  enum Action: String, CaseIterable { case headers, newQuery, columns, matchingPair, parameterInfo }
   struct Binding: Codable, Equatable {
     var key: String
     var modifiers: UInt
@@ -16,6 +16,8 @@ import SwiftUI
   static let changed = Notification.Name("MSSQLStudio.gridShortcutsChanged")
   static func binding(_ action: Action) -> Binding {
     if let data = UserDefaults.standard.data(forKey: "shortcut.\(action.rawValue)"), let binding = try? JSONDecoder().decode(Binding.self, from: data) { return binding }
+    if action == .matchingPair {return Binding(key:"m",modifiers:NSEvent.ModifierFlags([.control,.shift]).rawValue)}
+    if action == .parameterInfo {return Binding(key:"p",modifiers:NSEvent.ModifierFlags.control.rawValue)}
     if action == .columns { return Binding(key:"j",modifiers:NSEvent.ModifierFlags([.command,.shift]).rawValue) }
     if action == .newQuery { return Binding(key: "n", modifiers: NSEvent.ModifierFlags.command.rawValue) }
     return Binding(key: "c", modifiers: headersModifiers.rawValue)

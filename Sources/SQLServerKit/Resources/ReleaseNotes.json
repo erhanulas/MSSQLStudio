@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.79",
+    "date": "2026-10-12",
+    "title": "SQL eşleşme gezinmesi, temiz arama ve parametre yardımı",
+    "changes": [
+      "SQL editöründe BEGIN/END yanında CASE/END ve iç içe parantez çiftleri de birlikte vurgulanır. Ctrl+Shift+M ile eşleşen başlangıç veya kapanışa gidilir; katlanmış hedef açılır, SQL ve SSMS renkleri korunur.",
+      "Ctrl+F ve Command+F araması editörün tamamını griye boyamaz. Native arama, eşleşme vurguları, sonraki/önceki sonuç, değiştir ve geri alma davranışları korunur.",
+      "EXEC/EXECUTE prosedür ve fonksiyon çağrılarında parametreler tanımlandıkları sırayla, veri tipi ve OUTPUT/READONLY bilgisiyle gösterilir. Yazılan parametre vurgulanır; Ctrl+P yardımı yeniden açar. İç içe fonksiyonlar, virgüllü metinler, return ataması ve isimli parametreler ayrıştırılır.",
+      "Eşleşen ayırıcı ve parametre bilgisi kısayolları Ayarlar → Kısayollar’dan değiştirilebilir. Metadata ayrı bağlantıdan sınırlı/iptal edilebilir okunur; güncel sorgu, veritabanı ve bağlantı dışındaki geç yanıtlar uygulanmaz."
+    ]
+  },
+  {
     "version": "0.2.78",
     "date": "2026-10-12",
     "title": "Görünür yükleme durumları ve SQL blok eşleşmesi",

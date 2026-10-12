@@ -675,7 +675,7 @@ private struct ObjectPropertiesPanel:View {
     else if sql.contains("HAS_PERMS_BY_NAME") { e.results=[Rows(fields:[Field("Name"),Field("Schema"),Field("Type"),Field("Created")],values:[["Customers","dbo","USER_TABLE","2026-10-09T10:00:00"]]),Rows(values:[["dbo","SELECT","GRANT"]])] }
     else if sql.contains("sys.sql_expression_dependencies") { e.results=[Rows(values:[["dbo.ActiveCustomers","dbo.Customers"]])] }
     else if sql.contains("SELECT c.name") { e.results=[Rows(values:[["Id"],["Name"],["Active"]])] }
-    else if sql.contains("SELECT object_id") { e.results=[Rows(values:[["1001"]])] }
+    else if sql.contains("SELECT object_id") { e.results=[Rows(values:[[sql.contains("usp_GetCustomerDetails") || sql.contains("SalesByCity") ? "1003":"1001"]])] }
     return e
   }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import SQLServerKit
 
 private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
@@ -199,6 +200,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
 /// must not edit text attributes or invalidate TextKit's cached paragraph fragments.
 @MainActor final class OccurrenceHighlights: NSView {
   weak var editor: NSTextView?
+  var findRanges:[NSRange]=[] {didSet {if oldValue != findRanges {needsDisplay=true}}}
   var blockRanges:[NSRange]=[] {didSet {if oldValue != blockRanges {needsDisplay=true}}}
   var ranges:[NSRange]=[] {didSet {if oldValue != ranges {needsDisplay=true}}}
   override var isFlipped: Bool {true}
@@ -207,7 +209,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     guard let editor,let content=editor.textContentStorage,let layout=editor.textLayoutManager else {return []}
     var rects:[NSRect]=[]
     let viewport=layout.textViewportLayoutController.viewportRange
-    for range in ranges+blockRanges where range != editor.selectedRange() {
+    for range in ranges+blockRanges+findRanges where range != editor.selectedRange() {
       guard NSMaxRange(range) <= (content.textStorage?.length ?? 0),
         let start=content.location(content.documentRange.location,offsetBy:range.location),
         let end=content.location(start,offsetBy:range.length),
@@ -234,7 +236,47 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     return max(50,min(1000,defaults.integer(forKey:completionDelayKey)))
   }
 }
-@MainActor final class SQLTextView: NSTextView {
+@MainActor final class SQLTextView: NSTextView, @preconcurrency NSTextFinderClient {
+  lazy var sqlFinder:NSTextFinder = {
+    let finder=NSTextFinder();finder.client=self
+    finder.isIncrementalSearchingEnabled=true;finder.incrementalSearchingShouldDimContentView=false
+    return finder
+  }()
+  var findMatchesChanged:(([NSRange])->Void)?
+  private var findObservation:NSKeyValueObservation?
+  func configureFinder(in scroll:NSScrollView) {
+    sqlFinder.findBarContainer=scroll
+    findObservation=sqlFinder.observe(\.incrementalMatchRanges,options:[.new]) { [weak self] finder,_ in
+      let ranges=finder.incrementalMatchRanges.map { $0.rangeValue }
+      Task { @MainActor [weak self] in self?.findMatchesChanged?(ranges) }
+    }
+  }
+  var firstSelectedRange:NSRange {selectedRange()}
+  func contentView(at index:Int,effectiveCharacterRange range:NSRangePointer)->NSView {
+    range.pointee=NSRange(location:0,length:string.utf16.count);return self
+  }
+  func rects(forCharacterRange range:NSRange)->[NSValue]? {
+    guard let content=textContentStorage,let layout=textLayoutManager,NSMaxRange(range)<=string.utf16.count,
+      let start=content.location(content.documentRange.location,offsetBy:range.location),let end=content.location(start,offsetBy:range.length),let textRange=NSTextRange(location:start,end:end) else {return []}
+    var rects:[NSValue]=[]
+    layout.enumerateTextSegments(in:textRange,type:.standard,options:[]) {_,rect,_,_ in
+      rects.append(NSValue(rect:rect.offsetBy(dx:self.textContainerOrigin.x,dy:self.textContainerOrigin.y)));return true
+    };return rects
+  }
+  var visibleCharacterRanges:[NSValue] {
+    guard let content=textContentStorage,let range=textLayoutManager?.textViewportLayoutController.viewportRange else {return []}
+    let start=content.offset(from:content.documentRange.location,to:range.location),end=content.offset(from:content.documentRange.location,to:range.endLocation)
+    return [NSValue(range:NSRange(location:start,length:max(0,end-start)))]
+  }
+  func shouldReplaceCharacters(inRanges ranges:[NSValue],with strings:[String])->Bool {
+    isEditable && ranges.count == strings.count && ranges.allSatisfy {NSMaxRange($0.rangeValue)<=string.utf16.count} && shouldChangeText(inRanges:ranges,replacementStrings:strings)
+  }
+  func didReplaceCharacters() {didChangeText()}
+  override func validateUserInterfaceItem(_ item:any NSValidatedUserInterfaceItem)->Bool {
+    if item.action == #selector(performFindPanelAction(_:)),let action=NSTextFinder.Action(rawValue:item.tag) {return sqlFinder.validateAction(action)}
+    return super.validateUserInterfaceItem(item)
+  }
+
   private var quoteClosers:[Int:UInt16] = [:]
   private var quoteSource=""
   // Declared native edit ranges distinguish typing from replacing/pasting whole SQL.
@@ -244,6 +286,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     quoteSource=string
   }
   override func shouldChangeText(in range:NSRange,replacementString:String?) -> Bool {
+    sqlFinder.noteClientStringWillChange()
     refreshQuoteClosers()
     guard super.shouldChangeText(in:range,replacementString:replacementString) else {return false}
     guard !quoteClosers.isEmpty,let replacementString,range.location != NSNotFound,
@@ -295,11 +338,14 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     return true
   }
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    if GridShortcuts.matches(.matchingPair,event) {jumpToMatchingPair?();return true}
+    if GridShortcuts.matches(.parameterInfo,event) {requestParameterInfo?();return true}
     if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, event.charactersIgnoringModifiers?.lowercased() == "b" { navigateDefinition?(); return true }
     if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control, event.charactersIgnoringModifiers?.lowercased() == "f" { showSelectionFind(); return true }
     return super.performKeyEquivalent(with:event)
   }
   func showSelectionFind() {
+    prepareEdit?()
     let item=NSMenuItem(); item.tag=NSTextFinder.Action.showFindInterface.rawValue
     performFindPanelAction(item)
   }
@@ -307,10 +353,9 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     dismissSuggestions?()
     if (sender as? NSValidatedUserInterfaceItem)?.tag == NSTextFinder.Action.showFindInterface.rawValue,
       selectedRange().length > 0 {
-      let selection=NSMenuItem(); selection.tag=NSTextFinder.Action.setSearchString.rawValue
-      super.performFindPanelAction(selection)
+      sqlFinder.performAction(.setSearchString)
     }
-    super.performFindPanelAction(sender)
+    if let item=sender as? NSValidatedUserInterfaceItem,let action=NSTextFinder.Action(rawValue:item.tag) {sqlFinder.performAction(action)}
   }
   override func selectAll(_ sender: Any?) { dismissSuggestions?(); super.selectAll(sender) }
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -357,6 +402,10 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     let first=word(at:range.location),last=word(at:max(range.location,min(text.length-1,NSMaxRange(range)-1)))
     return NSUnionRange(first,last)
   }
+  var jumpToMatchingPair:(()->Void)?
+  var requestParameterInfo:(()->Void)?
+  @objc private func goToMatchingPair(_ sender:Any?) {jumpToMatchingPair?()}
+  @objc private func showParameterInfo(_ sender:Any?) {requestParameterInfo?()}
   var navigateDefinition: (() -> Void)?
   var unfoldSelection: ((NSRange) -> Bool)?
   @objc private func goToDefinition(_ sender: Any?) { navigateDefinition?() }
@@ -370,6 +419,9 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   override func menu(for event: NSEvent) -> NSMenu? {
     let menu = super.menu(for:event) ?? NSMenu()
     menu.addItem(.separator())
+    for (title,action) in [("Eşleşen Ayırıcıya Git ("+GridShortcuts.binding(.matchingPair).label+")",#selector(goToMatchingPair(_:))),("Parametre Bilgisi ("+GridShortcuts.binding(.parameterInfo).label+")",#selector(showParameterInfo(_:)))] {
+      let item=NSMenuItem(title:title,action:action,keyEquivalent:"");item.target=self;menu.addItem(item)
+    }
     let definition = NSMenuItem(title:"Nesne Tanımına Git (⌘B / ⌘tık)",action:#selector(goToDefinition(_:)),keyEquivalent:""); definition.target = self; menu.addItem(definition)
     for (title, action) in [("Bloğu Daralt / Aç (⌥⌘[)", #selector(toggleCodeOutline(_:))), ("Tüm Blokları Aç (⌥⌘])", #selector(expandCodeOutline(_:)))] {
       let item = NSMenuItem(title:title,action:action,keyEquivalent:""); item.target = self; menu.addItem(item)
@@ -433,6 +485,8 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     insertText("\n" + indentation,replacementRange:selection)
   }
   override func keyDown(with event: NSEvent) {
+    if GridShortcuts.matches(.matchingPair,event) {jumpToMatchingPair?();return}
+    if GridShortcuts.matches(.parameterInfo,event) {requestParameterInfo?();return}
     if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control, event.charactersIgnoringModifiers?.lowercased() == "f" { showSelectionFind(); return }
     if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control, event.charactersIgnoringModifiers?.lowercased() == "a" { selectAll(nil); return }
     if suggestionKey?(event) == true { return }
@@ -592,6 +646,43 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     }
   }
 }
+private struct SQLParameterHelp:View {
+  let name:String
+  let parameters:[RoutineParameter]
+  let active:Int?
+  let status:String?
+  var body:some View {
+    VStack(alignment:.leading,spacing:8) {
+      HStack {
+        Image(systemName:"list.number").foregroundStyle(Color(nsColor:StudioTheme.accent))
+        Text(name).font(.system(size:12,weight:.semibold,design:.monospaced)).lineLimit(1).truncationMode(.middle)
+        Spacer()
+        Text(GridShortcuts.binding(.parameterInfo).label+" · esc").font(.system(size:10)).foregroundStyle(.secondary)
+      }
+      Divider()
+      if let status {Text(status).font(.system(size:12)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)}
+      else if parameters.isEmpty {Text("Parametre almıyor").font(.system(size:12)).foregroundStyle(.secondary)}
+      else {
+        ScrollViewReader { proxy in
+          ScrollView {
+            VStack(alignment:.leading,spacing:2) {
+              ForEach(Array(parameters.enumerated()),id: \.element.id) { index,p in
+                HStack(spacing:8) {
+                  Text(String(index+1)).frame(width:20).foregroundStyle(.secondary)
+                  Text(p.name).fontWeight(active == index ? .bold:.medium)
+                  Text(p.type+(p.output ? " OUTPUT":"")+(p.tableType ? " READONLY":"")).foregroundStyle(.secondary)
+                  Spacer(minLength:0)
+                }.font(.system(size:11,design:.monospaced)).padding(.horizontal,6).padding(.vertical,5)
+                  .background(active == index ? Color(nsColor:StudioTheme.accent).opacity(0.16):.clear,in:RoundedRectangle(cornerRadius:5)).id(index)
+              }
+            }
+          }.onAppear {if let active {proxy.scrollTo(active,anchor:.center)}}
+            .onChange(of:active) {_,value in if let value {proxy.scrollTo(value,anchor:.center)}}
+        }
+      }
+    }.padding(12).background(Color(nsColor:StudioTheme.panel)).accessibilityIdentifier("sqlParameterInfo")
+  }
+}
 @MainActor final class EditorController: NSObject, NSTextViewDelegate, NSPopoverDelegate {
   let surface = NSView()
   let scroll = SQLEditorScrollView()
@@ -607,6 +698,14 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   private var intelligenceGeneration = UUID()
   private let suggestionList = SQLSuggestionList()
   private let suggestionPopover = NSPopover()
+  private let parameterPopover=NSPopover()
+  private var parameterTask:Task<Void,Never>?
+  private var parameterGeneration=UUID()
+  private var parameterCache:[String:(Date,[RoutineParameter])]=[:]
+  private(set) var parameterCall:SQLRoutineCall?
+  private(set) var parameterValues:[RoutineParameter]=[]
+  private(set) var parameterStatus:String?
+  var parameterShown:Bool {parameterPopover.isShown}
   private var suggestionKeyMonitor: SQLSuggestionKeyMonitor?
   private var analysisCaret = -1
   var completionSize:NSSize {suggestionPopover.contentSize}
@@ -661,8 +760,9 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     editor.isAutomaticTextReplacementEnabled = false
     editor.isAutomaticSpellingCorrectionEnabled = false
     editor.isContinuousSpellCheckingEnabled = false
-    editor.usesFindBar = true
-    editor.isIncrementalSearchingEnabled = true
+    editor.usesFindBar = false
+    editor.configureFinder(in:scroll)
+    editor.findMatchesChanged = { [weak self] ranges in self?.occurrenceHighlights.findRanges=Array(ranges.prefix(500)) }
     editor.font = StudioTheme.codeFont
     editor.textColor = StudioTheme.editorText
     editor.backgroundColor = StudioTheme.editorCanvas
@@ -685,6 +785,8 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
       width: 884, height: CGFloat.greatestFiniteMagnitude)
     editor.autoresizingMask = []
     editor.delegate = self
+    editor.requestParameterInfo = { [weak self] in self?.scheduleParameters(manual:true) }
+    editor.jumpToMatchingPair = { [weak self] in self?.jumpToMatchingPair() }
     editor.navigateDefinition = { [weak self] in self?.navigateDefinition() }
     editor.mouseSelectionEnded = { [weak self] in self?.occurrenceTask?.cancel();self?.updateOccurrences() }
     editor.unfoldSelection = { [weak self] range in
@@ -727,7 +829,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     suggestionPopover.animates = false; suggestionPopover.behavior = .semitransient
     suggestionList.accept = { [weak self] in self?.acceptSuggestion($0) }
     editor.requestSuggestions = { [weak self] in self?.scheduleIntelligence(manual:true) }
-    editor.dismissSuggestions = { [weak self] in self?.suggestionPopover.close() }
+    editor.dismissSuggestions = { [weak self] in self?.suggestionPopover.close();self?.dismissParameterHelp() }
     editor.suggestionKey = { [weak self] in self?.handleSuggestionKey($0) ?? false }
     NotificationCenter.default.addObserver(self,selector:#selector(catalogChanged),name:.init("sqlCatalogChanged"),object:document)
     NotificationCenter.default.addObserver(self,selector:#selector(catalogChanged),name:.init("sqlEditorPreferencesChanged"),object:nil)
@@ -759,6 +861,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   }
   @objc private func willUndoChanged(_ notification: Notification) {
     guard let manager = notification.object as? UndoManager, manager === editor.undoManager else { return }
+    editor.sqlFinder.noteClientStringWillChange()
     expandAll()
   }
   @objc private func undoChanged(_ notification: Notification) {
@@ -855,6 +958,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     // Even an empty initial document must initialize NSTextView's text input/layout state.
     // Skipping the first assignment leaves a fresh blank TextKit 2 view without a click target.
     if editor.string != document.sql || !initializedText {
+      editor.sqlFinder.noteClientStringWillChange()
       editor.string = document.sql
       initializedText = true
     }
@@ -880,6 +984,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     ruler.needsDisplay = true
     edited?()
     suggestionPopover.close()
+    scheduleParameters()
     scheduleIntelligence(allowPopup:!suppressNextPopup)
     suppressNextPopup = false
   }
@@ -893,6 +998,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
       guard let self,!changingPresentation,editor.string == selectedSource,editor.selectedRange() == range else {return}
       updateOccurrences()
     }
+    scheduleParameters()
     document.selectedRange = projection?.sourceRange(range) ?? range
     let prefix = (document.sql as NSString).substring(
       to: min(document.selectedRange.location, (document.sql as NSString).length))
@@ -943,6 +1049,65 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     // Also repaint when the selected occurrence changes within the same match set.
     // The selected word keeps its native selection color; the other matches get yellow.
     occurrenceHighlights.needsDisplay=true
+  }
+  func dismissParameterHelp() {
+    parameterTask?.cancel();parameterGeneration=UUID();parameterPopover.close()
+  }
+  func scheduleParameters(manual:Bool=false) {
+    parameterTask?.cancel()
+    let generation=UUID();parameterGeneration=generation
+    guard projection == nil,editor.selectedRange().length == 0,!editor.hasMarkedText(),editor.window == nil || editor.window?.firstResponder === editor else {parameterPopover.close();return}
+    let source=editor.string,caret=editor.selectedRange().location,db=document.database,server=document.server,serverGeneration=document.server.generation
+    let catalog=document.catalogDatabase == db ? document.intelligenceCatalog:nil
+    parameterTask=Task { [weak self] in
+      do {
+        if !manual {try await Task.sleep(for:.milliseconds(180))}
+        let call=await Task.detached(priority:.userInitiated) {SQLRoutineCall.context(source:source,caret:caret,catalog:catalog)}.value
+        guard let self else {return}
+        guard !Task.isCancelled,parameterGeneration == generation,editor.string == source,editor.selectedRange().location == caret,document.database == db,document.server === server,server.generation == serverGeneration else {return}
+        guard let call else {parameterCall=nil;parameterPopover.close();return}
+        parameterCall=call
+        let key=server.id.uuidString+"|"+db+"|"+serverGeneration.uuidString+"|"+call.key
+        if let cached=parameterCache[key],Date().timeIntervalSince(cached.0)<300 {
+          parameterValues=cached.1;parameterStatus=nil;showParameterHelp();return
+        }
+        parameterValues=[];parameterStatus="Parametreler yükleniyor…";showParameterHelp()
+        do {
+          var limits=Limits();limits.rows=2100;limits.totalBytes=1_048_576;limits.timeout=15
+          let ids=try await server.catalog("SELECT object_id FROM sys.objects WHERE schema_id=SCHEMA_ID(\(SQL.literal(call.symbol.schema))) AND name=\(SQL.literal(call.symbol.name));",database:db,limits:limits)
+          try Task.checkCancellation()
+          guard parameterGeneration == generation,document.database == db,server.generation == serverGeneration else {return}
+          guard !ids.partial,let raw=ids.results.first?.values.first?.first,let raw,let id=Int(raw) else {throw SQLFailure("Nesne bulunamadı; indeksi yenileyin.")}
+          let values=try RoutineScripts.decode(await server.catalog(RoutineScripts.parameters(id),database:db,limits:limits)).sorted {$0.id<$1.id}
+          guard !Task.isCancelled else {return}
+          guard server.generation == serverGeneration else {throw SQLFailure("Bağlantı değişti; parametre bilgisini yeniden açın.")}
+          if parameterCache.count>=64 {parameterCache.removeAll()}
+          parameterCache[key]=(Date(),values)
+          guard parameterGeneration == generation,editor.string == source,editor.selectedRange().location == caret,document.database == db else {return}
+          parameterValues=values;parameterStatus=nil;showParameterHelp()
+        } catch {
+          guard !Task.isCancelled,parameterGeneration == generation,editor.string == source,editor.selectedRange().location == caret,document.database == db else {return}
+          parameterStatus="Parametre bilgisi alınamadı: "+error.localizedDescription;showParameterHelp()
+        }
+      } catch { /* Superseded caret/source never publishes old parameter metadata. */ }
+    }
+  }
+  private func showParameterHelp() {
+    guard let call=parameterCall,let window=editor.window,window.firstResponder === editor,let anchor=suggestionAnchor() else {return}
+    suggestionPopover.close()
+    let height=parameterStatus == nil && !parameterValues.isEmpty ? CGFloat(min(6,parameterValues.count))*28+62:104
+    let content=SQLParameterHelp(name:call.symbol.schema+"."+call.symbol.name,parameters:parameterValues,active:call.activeIndex(in:parameterValues),status:parameterStatus)
+    StudioPopover.show(parameterPopover,content:content,from:editor,rect:anchor,size:NSSize(width:480,height:height))
+  }
+  func jumpToMatchingPair() {
+    let sourceRange=projection?.sourceRange(editor.selectedRange()) ?? editor.selectedRange()
+    let pair=TSQL.matchingBlock(in:document.sql,at:sourceRange.location)
+    guard pair.count == 2 else {NSSound.beep();return}
+    let current=pair.firstIndex {$0.location <= sourceRange.location && sourceRange.location < NSMaxRange($0)} ?? pair.firstIndex {NSMaxRange($0) == sourceRange.location} ?? 0
+    let destination=pair[1-current].location
+    if projection != nil {expandAll()}
+    editor.setSelectedRange(NSRange(location:destination,length:0));editor.scrollRangeToVisible(NSRange(location:destination,length:0))
+    updateOccurrences()
   }
   func navigateDefinition() {
     guard projection == nil, editor.string.utf16.count <= 100_000, let catalog = document.intelligenceCatalog, document.catalogDatabase == document.database else { return }
@@ -1036,6 +1201,8 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     restoreViewport(NSPoint(x:oldOrigin.x,y:max(0,displayLineTop(sourceAnchor)-relativeY)))
   }
   private func presentFolds(selection: NSRange) {
+    editor.sqlFinder.noteClientStringWillChange()
+    dismissParameterHelp()
     intelligenceTask?.cancel();occurrenceTask?.cancel();clearOccurrences();highlightedSource=nil; suggestionPopover.close(); diagnostics = []
     changingPresentation = true
     defer {changingPresentation=false; textViewDidChangeSelection(Notification(name:NSTextView.didChangeSelectionNotification,object:editor))}
@@ -1095,7 +1262,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     index?.pointee = values.isEmpty ? -1 : 0
     return values
   }
-  @objc private func catalogChanged() { scheduleIntelligence(allowPopup:false) }
+  @objc private func catalogChanged() {dismissParameterHelp();scheduleParameters();scheduleIntelligence(allowPopup:false)}
   func scheduleIntelligence(manual: Bool = false, allowPopup: Bool = true) {
     intelligenceTask?.cancel()
     let generation = UUID(); intelligenceGeneration = generation
@@ -1126,7 +1293,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
         highlight()
         let prefixLength = caret-analysis.replacement.location
         let dot = analysis.replacement.location > 0 && (source as NSString).substring(with:NSRange(location:analysis.replacement.location-1,length:1)) == "."
-        if (manual || automatic && allowPopup && (analysis.procedureCompletion || prefixLength >= 2 || dot)), !analysis.suggestions.isEmpty, let window = editor.window, window.firstResponder === editor {
+        if !parameterPopover.isShown,(manual || automatic && allowPopup && (analysis.procedureCompletion || prefixLength >= 2 || dot)), !analysis.suggestions.isEmpty, let window = editor.window, window.firstResponder === editor {
           guard let anchor = suggestionAnchor(), let host = window.contentView else { return }
           let hostAnchor = host.convert(anchor,from:editor)
           var below=true

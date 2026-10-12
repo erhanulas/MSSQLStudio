@@ -159,7 +159,7 @@ private struct SettingsPanel: View {
         settingsPage(title: "Kısayollar", subtitle: "Sık kullandığın işlemlere hızlı erişim", icon: "command") {
       ForEach(GridShortcuts.Action.allCases, id: \.rawValue) { action in
         HStack {
-          Text(action == .headers ? "Grid · Başlıklarla kopyala" : action == .columns ? "Grid · Kolon başlığında ara" : "Yeni sorgu")
+          Text(action == .headers ? "Grid · Başlıklarla kopyala" : action == .columns ? "Grid · Kolon başlığında ara" : action == .matchingPair ? "Editör · Eşleşen ayırıcıya git" : action == .parameterInfo ? "Editör · Parametre bilgisi" : "Yeni sorgu")
           Spacer()
           ShortcutCapture(action: action) { message = $0; shortcutRevision += 1 }.frame(width:220,height:28)
           StudioActionButton("Sıfırla", icon:"arrow.counterclockwise", tint:.accentColor) { GridShortcuts.reset(action); shortcutRevision += 1 }
