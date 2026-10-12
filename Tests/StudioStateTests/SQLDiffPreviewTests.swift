@@ -43,45 +43,54 @@ import Testing
     changed.insert("PRINT N'Yeni 🥐';",at:2)
     let original=rows.joined(separator:"\r\n"),edited=changed.joined(separator:"\r\n")
     let comparison=SQLTextDiff.compareIgnoringSQLWhitespace(original,edited)
-    let view=preview(original,edited,ignoringWhitespace:true,editedOnLeft:true)
-    #expect(view.right.frame.minX==0 && view.left.frame.minX>view.right.frame.maxX)
-    let accessibilityOrder=try #require(view.accessibilityChildren() as? [NSView])
-    #expect(accessibilityOrder.count==2 && accessibilityOrder.first===view.right && accessibilityOrder.last===view.left)
-    let originalRuler=try #require(view.left.verticalRulerView as? SQLInlineDiffRuler)
-    let editedRuler=try #require(view.right.verticalRulerView as? SQLInlineDiffRuler)
-    #expect(view.convert(editedRuler.bounds,from:editedRuler).minX<view.convert(originalRuler.bounds,from:originalRuler).minX)
-    #expect(originalRuler.numbers[2]==nil && editedRuler.numbers[2]==3)
-    #expect(comparison.added==2)
-    #expect(comparison.removed==1)
-    #expect(view.changeRows==[2,81])
-    for (text,source) in [(view.leftText,original),(view.rightText,edited)] {
-      #expect(Data(text.selectedSQL(in:NSRange(location:0,length:text.string.utf16.count)).utf8)==Data(source.utf8))
+    for width in [CGFloat(900),CGFloat(901)] {
+      let view=preview(original,edited,width:width,ignoringWhitespace:true,editedOnLeft:true)
+      #expect(view.right.frame.minX==0 && view.left.frame.minX>view.right.frame.maxX)
+      let accessibilityOrder=try #require(view.accessibilityChildren() as? [NSView])
+      #expect(accessibilityOrder.count==2 && accessibilityOrder.first===view.right && accessibilityOrder.last===view.left)
+      let originalRuler=try #require(view.left.verticalRulerView as? SQLInlineDiffRuler)
+      let editedRuler=try #require(view.right.verticalRulerView as? SQLInlineDiffRuler)
+      #expect(view.convert(editedRuler.bounds,from:editedRuler).minX<view.convert(originalRuler.bounds,from:originalRuler).minX)
+      #expect(originalRuler.numbers[2]==nil && editedRuler.numbers[2]==3)
+      #expect(comparison.added==2)
+      #expect(comparison.removed==1)
+      #expect(view.changeRows==[2,81])
+      for (text,source) in [(view.leftText,original),(view.rightText,edited)] {
+        #expect(Data(text.selectedSQL(in:NSRange(location:0,length:text.string.utf16.count)).utf8)==Data(source.utf8))
+      }
+      let old=try #require(view.leftText.textContentStorage?.textStorage),new=try #require(view.rightText.textContentStorage?.textStorage)
+      let removed=(old.string as NSString).range(of:"SELECT 80,").location
+      let added=(new.string as NSString).range(of:"Yeni 🥐").location
+      #expect(hex(old.attribute(.backgroundColor,at:removed,effectiveRange:nil) as? NSColor)==0xFCE5E5)
+      #expect(hex(new.attribute(.backgroundColor,at:added,effectiveRange:nil) as? NSColor)==0xACE0C4)
+      view.left.contentView.scroll(to:NSPoint(x:44,y:1200))
+      view.right.contentView.scroll(to:NSPoint(x:88,y:1300))
+      #expect(abs(view.left.contentView.bounds.minY-1300)<1)
+      let selection=NSRange(location:20,length:8)
+      view.rightText.setSelectedRange(selection)
+      let origins=[view.left.contentView.bounds.origin,view.right.contentView.bounds.origin],renders=view.renderCount
+      view.display(comparison:comparison,original:original,edited:edited,changeIndex:-1)
+      view.layoutSubtreeIfNeeded()
+      #expect(view.left.frame.minX==0 && view.right.frame.minX>view.left.frame.maxX)
+      let defaultAccessibilityOrder=try #require(view.accessibilityChildren() as? [NSView])
+      #expect(defaultAccessibilityOrder.first===view.left && defaultAccessibilityOrder.last===view.right)
+      #expect(view.renderCount==renders && view.rightText.selectedRange()==selection)
+      // Native clip bounds round to backing pixels when a half-point pane origin moves.
+      let pixel=1/max(1,view.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1)
+      for (scroll,expected) in zip([view.left,view.right],origins) {
+        let actual=scroll.contentView.bounds.origin
+        #expect(abs(actual.x-expected.x)<=pixel+0.001,"Horizontal clip origin \(actual.x), expected \(expected.x), pixel \(pixel)")
+        #expect(abs(actual.y-expected.y)<=pixel+0.001,"Vertical clip origin \(actual.y), expected \(expected.y), pixel \(pixel)")
+      }
+      #expect(abs(view.left.contentView.bounds.minY-view.right.contentView.bounds.minY)<=pixel+0.001)
+      #expect(hex(old.attribute(.backgroundColor,at:removed,effectiveRange:nil) as? NSColor)==0xFCE5E5)
+      #expect(hex(new.attribute(.backgroundColor,at:added,effectiveRange:nil) as? NSColor)==0xACE0C4)
+      view.display(comparison:comparison,original:original,edited:edited,changeIndex:1,editedOnLeft:true)
+      view.layoutSubtreeIfNeeded()
+      #expect(view.right.frame.minX==0 && view.left.contentView.bounds.minY>1500)
+      #expect(abs(view.left.contentView.bounds.minY-view.right.contentView.bounds.minY)<1)
+      #expect(view.renderCount==renders)
     }
-    let old=try #require(view.leftText.textContentStorage?.textStorage),new=try #require(view.rightText.textContentStorage?.textStorage)
-    let removed=(old.string as NSString).range(of:"SELECT 80,").location
-    let added=(new.string as NSString).range(of:"Yeni 🥐").location
-    #expect(hex(old.attribute(.backgroundColor,at:removed,effectiveRange:nil) as? NSColor)==0xFCE5E5)
-    #expect(hex(new.attribute(.backgroundColor,at:added,effectiveRange:nil) as? NSColor)==0xACE0C4)
-    view.left.contentView.scroll(to:NSPoint(x:44,y:1200))
-    view.right.contentView.scroll(to:NSPoint(x:88,y:1300))
-    #expect(abs(view.left.contentView.bounds.minY-1300)<1)
-    let selection=NSRange(location:20,length:8)
-    view.rightText.setSelectedRange(selection)
-    let origins=[view.left.contentView.bounds.origin,view.right.contentView.bounds.origin],renders=view.renderCount
-    view.display(comparison:comparison,original:original,edited:edited,changeIndex:-1)
-    view.layoutSubtreeIfNeeded()
-    #expect(view.left.frame.minX==0 && view.right.frame.minX>view.left.frame.maxX)
-    let defaultAccessibilityOrder=try #require(view.accessibilityChildren() as? [NSView])
-    #expect(defaultAccessibilityOrder.first===view.left && defaultAccessibilityOrder.last===view.right)
-    #expect(view.renderCount==renders && view.rightText.selectedRange()==selection)
-    #expect(view.left.contentView.bounds.origin==origins[0] && view.right.contentView.bounds.origin==origins[1])
-    #expect(hex(old.attribute(.backgroundColor,at:removed,effectiveRange:nil) as? NSColor)==0xFCE5E5)
-    #expect(hex(new.attribute(.backgroundColor,at:added,effectiveRange:nil) as? NSColor)==0xACE0C4)
-    view.display(comparison:comparison,original:original,edited:edited,changeIndex:1,editedOnLeft:true)
-    view.layoutSubtreeIfNeeded()
-    #expect(view.right.frame.minX==0 && view.left.contentView.bounds.minY>1500)
-    #expect(abs(view.left.contentView.bounds.minY-view.right.contentView.bounds.minY)<1)
-    #expect(view.renderCount==renders)
   }
   @Test func viewWhitespaceOnlyRowsStayNeutralAndAddedProjectionKeepsExactCopiedSQL() throws {
     let previous=UserDefaults.standard.string(forKey:"ssmsTheme")

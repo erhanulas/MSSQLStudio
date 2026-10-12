@@ -139,6 +139,7 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
   private var cachedEdited: String?
   private var lastChangeIndex = -1
   private var pendingChangeRow: Int?
+  private var preserveOrientationViewport = false
   private var sourceWidth: CGFloat = 0, targetWidth: CGFloat = 0
   private var syncing = false
   override var isFlipped: Bool { true }
@@ -185,6 +186,7 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
     if self.editedOnLeft != editedOnLeft {
       self.editedOnLeft=editedOnLeft
       setAccessibilityChildren(editedOnLeft ? [right,left]:[left,right])
+      preserveOrientationViewport=true
       needsLayout=true
     }
     if cachedOriginal.map({!$0.utf8.elementsEqual(original.utf8)}) ?? true || cachedEdited.map({!$0.utf8.elementsEqual(edited.utf8)}) ?? true || cachedComparison != comparison {
@@ -203,12 +205,26 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
   }
   override func layout() {
     super.layout()
+    let preserveViewport=preserveOrientationViewport,previouslySyncing=syncing
+    preserveOrientationViewport=false
+    let origins=[left.contentView.bounds.origin,right.contentView.bounds.origin]
+    if preserveViewport {syncing=true}
     let half=max(0, (bounds.width-1)/2)
     let leading=NSRect(x: 0, y: 0, width: half, height: bounds.height)
     let trailing=NSRect(x: half+1, y: 0, width: max(0,bounds.width-half-1), height: bounds.height)
     left.frame=editedOnLeft ? trailing:leading
     right.frame=editedOnLeft ? leading:trailing
-    resizeDocuments(); revealPendingChange()
+    resizeDocuments()
+    if preserveViewport {
+      // Retiling can backing-align clip bounds or reveal an offscreen selection.
+      // Keep each SQL pane's viewport before applying explicit diff navigation.
+      for (scroll,origin) in zip([left,right],origins) {
+        scroll.contentView.scroll(to:origin);scroll.reflectScrolledClipView(scroll.contentView)
+        scroll.verticalRulerView?.needsDisplay=true
+      }
+      syncing=previouslySyncing
+    }
+    revealPendingChange()
   }
   override func draw(_ dirtyRect: NSRect) {
     StudioTheme.border.setFill(); NSRect(x: max(0,(bounds.width-1)/2), y: 0, width: 1, height: bounds.height).fill()
