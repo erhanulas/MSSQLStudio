@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.69",
+    "date": "2026-10-12",
+    "title": "Güncellemelerde parola erişimi ve sessiz kurulum",
+    "changes": [
+      "Başarılı kurulumdan sonra açılışı kesen kuruldu uyarısı kaldırıldı.",
+      "Kişisel imzalı sürümlerde parolalara erişim, güncellemelerde aynı kalan imzalı bir MSSQL Studio bileşenine taşındı.",
+      "Eski bağlantı kayıtları korunur. İlk geçişte macOS onay isterse Her Zaman İzin Ver’i seçin; kilitli anahtar zinciri ayrıca parola isteyebilir.",
+      "Parola bileşeni yalnız doğrulanmış MSSQL Studio’dan gelen istekleri kabul eder; bağlantı parolaları dosyalara veya komut satırına yazılmaz."
+    ]
+  },
+  {
     "version": "0.2.68",
     "date": "2026-10-12",
     "title": "Results sekmelerinde kaynak SQL önizlemesi",

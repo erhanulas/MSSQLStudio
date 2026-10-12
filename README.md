@@ -27,7 +27,7 @@ Ayarlar (⌘,) altı sekmede tema, editör, kısayollar, yerel kayıt, güncelle
 
 Tam SSMS/DataGrip eşdeğerliği, eksiksiz T-SQL parser, grafik plan/JOIN diyagramı, serbest docking veya otomatik tablo rebuild yoktur. Filtreler yalnız yüklenen sonuçlara uygulanır. Varsayılan okuma bütçesi 50.000 satır/64 MB/60 sn; büyük modlar da sınırlıdır ve partial sonucu açıkça bildirir.
 
-Yayınlar sabit **kişisel self-signed sertifika** kullanır; Apple Developer ID/notarization değildir. PKG kapsayıcısında Developer ID Installer imzası yoktur. Keychain sürekliliği, Gatekeeper onayı ve kilitli Keychain davranışı ayrı konulardır; tüm parola istemlerinin kesin ortadan kalktığı iddia edilmez. Ayrıntılar [geliştirme rehberindedir](AGENTS.md#keychain-kalıcı-imza-ve-güncelleme).
+Yayınlar sabit **kişisel self-signed sertifika** kullanır; Apple Developer ID/notarization değildir. PKG kapsayıcısında Developer ID Installer imzası yoktur. v0.2.69’dan itibaren parolalara güncellemelerde değişmeyen imzalı bir bileşen erişir. Eski kayıtların ilk geçişinde macOS onay isterse **Her Zaman İzin Ver**’i seçin. Keychain sürekliliği, Gatekeeper onayı ve kilitli Keychain davranışı ayrı konulardır; tüm parola istemlerinin kesin ortadan kalktığı iddia edilmez. Ayrıntılar [geliştirme rehberindedir](AGENTS.md#keychain-kalıcı-imza-ve-güncelleme).
 
 ## Derleme ve test
 
