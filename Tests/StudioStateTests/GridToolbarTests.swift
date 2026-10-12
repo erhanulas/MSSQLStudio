@@ -123,6 +123,22 @@ import Testing
     #expect(!null.isEnabled)
     #expect(grid.result.values[0] == ["1", "Alpha", "A"])
   }
+  @Test func momentaryToolbarActionsDoNotLeaveSelectedButtons() throws {
+    let (controller,grid,window)=try editingFixture()
+    defer {window.close()}
+    grid.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
+    for id in ["gridCopyHeaders","gridCloneRow","gridUndoRows","gridAddRow","gridUndoRows"] {
+      let action=try button(id,in:controller)
+      #expect(action.isEnabled)
+      action.state = .on
+      #expect(action.sendAction(action.action,to:action.target))
+      #expect(action.state == .off)
+    }
+    let toggle=try button("gridEdit",in:controller)
+    #expect(toggle.state == .on)
+    #expect(toggle.sendAction(toggle.action,to:toggle.target))
+    #expect(toggle.state == .off && grid.editDefinition == nil)
+  }
   @Test func untouchedNativeEditorCanExitViaEditingToggle() throws {
     let (controller, grid, window) = try editingFixture()
     defer { window.close() }

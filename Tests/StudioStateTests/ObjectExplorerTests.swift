@@ -33,6 +33,54 @@ import SQLServerKit
     outline.collapseItem(agent);await host.refreshExpandedAgentJobs();#expect(requests == 2)
     outline.expandItem(agent);server.online=false;await host.refreshExpandedAgentJobs();#expect(requests == 2)
   }
+  @Test func explorerHealthDetectsLostConnectionsAndIgnoresSQLAndStaleFailures() async throws {
+    _=NSApplication.shared
+    let server=ConnectedServer(profile:ServerProfile(),password:"")
+    let state=StudioState();state.servers=[server]
+    let host=WorkbenchController(state:state)
+    let window=NSWindow(contentRect:NSRect(x:-2000,y:0,width:1200,height:800),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentViewController=host;host.view.frame.size=NSSize(width:1200,height:800)
+    host.view.layoutSubtreeIfNeeded();defer {window.close()}
+    let doc=QueryDocument(server:server,database:"master",title:"Independent session");doc.state = .ready
+    let lost=SQLFailure("Connection lost",diagnostics:[Diagnostic(state:"08S01",code:10054,message:"Transport error")])
+    server.healthCheckFixture={throw SQLFailure("Permission denied",diagnostics:[Diagnostic(state:"42000",code:229,message:"Permission denied")])}
+    await server.checkExplorerHealth();#expect(server.online)
+    server.healthCheckFixture={server.generation=UUID();throw lost}
+    await server.checkExplorerHealth();#expect(server.online)
+    server.healthCheckFixture={throw lost}
+    await server.checkExplorerHealth()
+    #expect(!server.online && server.startupError?.contains("08S01") == true)
+    #expect(doc.state == .ready)
+    func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+    let outline=try #require(descendants(host.view).compactMap {$0 as? NSOutlineView}.first)
+    let root=try #require(outline.item(atRow:0) as? TreeNode)
+    #expect(root.displayTitle.contains("Bağlantı kapalı"))
+    let cell=try #require(outline.view(atColumn:0,row:outline.row(forItem:root),makeIfNecessary:true))
+    let labels=descendants(cell).compactMap {$0 as? NSTextField}.map(\.stringValue)
+    #expect(labels.contains {$0.contains("Bağlantı kapalı")})
+    var calls=0
+    server.healthCheckFixture={calls+=1}
+    await server.checkExplorerHealth();#expect(calls == 0)
+    server.online=true;await server.checkExplorerHealth();#expect(calls == 1 && server.online)
+    server.reconnecting=true;await server.checkExplorerHealth();#expect(calls == 1)
+  }
+  @Test func closedQuerySessionDoesNotClaimReadyOrDisconnectHealthyExplorer() async throws {
+    let server=ConnectedServer(profile:ServerProfile(),password:"")
+    var checks=0;server.healthCheckFixture={checks+=1}
+    let doc=QueryDocument(server:server,database:"master",title:"Closed handle")
+    doc.sql="SELECT 1;";doc.state = .ready
+    doc.execute()
+    await doc.task?.value
+    #expect(doc.task == nil && doc.state == .disconnected && !doc.canRefresh)
+    #expect(doc.messages.contains("08003") && server.online && checks == 1)
+    doc.state = .ready;doc.useDatabase("OtherDB")
+    await doc.task?.value
+    #expect(doc.task == nil && doc.state == .disconnected && doc.database == "master")
+    #expect(server.online && checks == 2)
+    let offline=ConnectedServer(profile:ServerProfile(),password:"")
+    await offline.checkExplorerHealth()
+    #expect(!offline.online && offline.startupError?.contains("08003") == true)
+  }
   @Test func runningQueryDoesNotPreventNativeTabSwitchAndVisiblePanelsAreReused() async throws {
     _=NSApplication.shared
     let state=StudioState(),server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false

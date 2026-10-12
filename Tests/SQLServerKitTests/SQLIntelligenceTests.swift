@@ -71,6 +71,36 @@ struct SQLIntelligenceTests {
     let separate = "SELECT * FROM dbo.Customers c; SELECT c. FROM dbo.Orders o;"
     #expect(try analyze(separate,caret:(separate as NSString).range(of:"c. FROM").location+2).suggestions.isEmpty)
   }
+  @Test func executionContextRetainsStructuredConnectionDiagnostics() async throws {
+    do {
+      _ = try await TSQL.run("SELECT 1;",on:ODBCConnection())
+      Issue.record("A closed connection must fail")
+    } catch let error as SQLFailure {
+      #expect(error.message.contains("Batch başlangıç satırı 1"))
+      #expect(error.diagnostics.first?.state == "08003")
+    }
+  }
+  @Test func columnCompletionNeverInventsAliasesForUnaliasedRelations() throws {
+    let catalog=SQLIntelligence.Catalog(snapshot:.init(symbols:[
+      CatalogSymbol(schema:"dbo",name:"TBLSTSABIT",columns:["STOK_KODU","STOK_ADI"]),
+      CatalogSymbol(schema:"dbo",name:"Other",columns:["STOK_KODU"])],synchronizedAt:Date()))
+    func complete(_ sql:String) throws -> SQLIntelligence.Analysis {
+      try SQLIntelligence.analyze(source:sql,caret:(sql as NSString).length,catalog:catalog,verified:true)
+    }
+    for sql in ["SELECT * FROM TBLSTSABIT where STOK_", "SELECT * FROM [dbo].[TBLSTSABIT] WITH(NOLOCK) WHERE STOK_"] {
+      let items=try complete(sql).suggestions.filter {$0.kind == .column}
+      #expect(Set(items.map(\.text)) == ["[STOK_KODU]","[STOK_ADI]"])
+      #expect(!items.contains {$0.text.contains("[T].")})
+    }
+    #expect(try complete("SELECT * FROM TBLSTSABIT WHERE [T].STOK_").suggestions.isEmpty)
+    #expect(try complete("SELECT * FROM TBLSTSABIT T WHERE STOK_").suggestions.first?.text == "[T].[STOK_KODU]")
+    #expect(try complete("SELECT * FROM TBLSTSABIT AS [T] WHERE [T].STOK_").suggestions.first?.text == "[STOK_KODU]")
+    #expect(try complete("SELECT * FROM TBLSTSABIT WHERE TBLSTSABIT.STOK_").suggestions.first?.text == "[STOK_KODU]")
+    let joins=try complete("SELECT * FROM dbo.TBLSTSABIT JOIN dbo.Other ON 1=1 WHERE STOK_").suggestions.filter {$0.kind == .column}
+    #expect(joins.contains {$0.text == "[dbo].[TBLSTSABIT].[STOK_KODU]"})
+    #expect(joins.contains {$0.text == "[dbo].[Other].[STOK_KODU]"})
+    #expect(try complete("SELECT * FROM TBLSTSABIT T; SELECT * FROM TBLSTSABIT WHERE STOK_").suggestions.first?.text == "[STOK_KODU]")
+  }
   @Test func localCTEAndTemporaryColumns() throws {
     let cte = "WITH q AS (SELECT CustomerID AS KeyID FROM dbo.Customers) SELECT q. FROM q;"
     #expect(try analyze(cte,caret:(cte as NSString).range(of:"q. FROM").location+2).suggestions.map(\.text) == ["[KeyID]"])

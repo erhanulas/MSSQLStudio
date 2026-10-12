@@ -157,6 +157,7 @@ public enum SQLIntelligence {
   }
   private struct Binding {
     let alias: String
+    var explicitAlias = false
     let parts: [String]
     let columns: [String]?
     let scope: NSRange
@@ -244,7 +245,7 @@ public enum SQLIntelligence {
         j = close+1; if j < tokens.count && tokens[j].text.uppercased() == "AS" { j += 1 }
         if j < tokens.count, tokens[j].kind == .word {
           let name = raw(tokens[j].text); ignored.insert(j)
-          bindings.append(Binding(alias:name,parts:[name],columns:local[name.lowercased()],scope:scope(i)))
+          bindings.append(Binding(alias:name,explicitAlias:true,parts:[name],columns:local[name.lowercased()],scope:scope(i)))
         }
         continue
       }
@@ -255,12 +256,12 @@ public enum SQLIntelligence {
       guard !parts.isEmpty else { continue }
       ignored.formUnion(indices)
       let name = parts.joined(separator:".").lowercased(), resolved = catalog?.resolve(parts)
-      var alias = parts.last!
+      var alias = parts.last!, explicitAlias = false
       if j < tokens.count && tokens[j].text == "(", let close = closes[j] { j = close+1 }
       if j < tokens.count && tokens[j].text.uppercased() == "AS" { ignored.insert(j); j += 1 }
-      if j < tokens.count && tokens[j].kind == .word { alias = raw(tokens[j].text); ignored.insert(j) }
+      if j < tokens.count && tokens[j].kind == .word { alias = raw(tokens[j].text); explicitAlias = true; ignored.insert(j) }
       let columns = local[name] ?? (resolved?.kind == "SYNONYM" ? nil : resolved?.columns)
-      bindings.append(Binding(alias:alias,parts:parts,columns:columns,scope:scope(i)))
+      bindings.append(Binding(alias:alias,explicitAlias:explicitAlias,parts:parts,columns:columns,scope:scope(i)))
       references.append((i,parts,NSRange(location:tokens[indices[0]].range.location,length:NSMaxRange(tokens[indices.last!].range)-tokens[indices[0]].range.location)))
     }
     guard bindings.count <= 128 else { return Analysis(tokens:all,diagnostics:[],suggestions:[],replacement:replacement) }
@@ -359,7 +360,11 @@ public enum SQLIntelligence {
       } else {
         for binding in visible {
           for column in binding.columns ?? [] where column.lowercased().hasPrefix(prefix.lowercased()) {
-            let text = SQL.identifier(binding.alias)+"."+SQL.identifier(column)
+            // Only emitted aliases already present in this statement may qualify columns.
+            // A single unaliased source needs no qualifier; multiple sources retain
+            // their actual table names to avoid ambiguous bare columns.
+            let qualifier = binding.explicitAlias ? SQL.identifier(binding.alias)+"." : visible.count == 1 ? "" : binding.parts.map(SQL.identifier).joined(separator:".")+"."
+            let text = qualifier+SQL.identifier(column)
             suggestions.append(Suggestion(text:text,label:text,kind:.column,detail:binding.parts.joined(separator:".")))
             if suggestions.count >= 100 { break }
           }

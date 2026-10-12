@@ -262,7 +262,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private var sidebar: NSSplitViewItem!
   init(state: StudioState) {
     self.state = state
+    explorerToggle.tracksActiveState=true
     super.init(nibName: nil, bundle: nil)
+    NotificationCenter.default.addObserver(self,selector:#selector(explorerConnectionChanged(_:)),name:ConnectedServer.explorerConnectionChanged,object:nil)
     NotificationCenter.default.addObserver(self,selector:#selector(agentChanged(_:)),name:.init("studioAgentChanged"),object:nil)
     NotificationCenter.default.addObserver(self, selector: #selector(refreshShortcuts), name: GridShortcuts.changed, object: nil)
     NotificationCenter.default.addObserver(
@@ -573,6 +575,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         while !Task.isCancelled {
           do {try await Task.sleep(for:.seconds(15))} catch {return}
           guard self != nil else {return}
+          await self?.checkExplorerConnections()
           await self?.refreshExpandedAgentJobs()
         }
       }
@@ -1059,6 +1062,18 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         }
       }
       if searchScope?.server === server && searchScope.map({ searchDatabases($0).contains(db) }) == true && !explorerSearch.stringValue.isEmpty { filterExplorer() }
+    }
+  }
+  @objc private func explorerConnectionChanged(_ notification:Notification) {
+    guard isViewLoaded, let server=notification.object as? ConnectedServer else {return}
+    for root in roots where root.server === server {outline.reloadItem(root)}
+    updateControls(); updateIndexStatus()
+  }
+  func checkExplorerConnections() async {
+    guard isViewLoaded, let window=view.window, window.isVisible, !window.isMiniaturized,
+      window.occlusionState.contains(.visible) else {return}
+    for server in state.servers where server.online && !server.reconnecting {
+      await server.checkExplorerHealth()
     }
   }
   @objc private func catalogIndexUpdated(_ notification: Notification) {

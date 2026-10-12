@@ -9,7 +9,30 @@ import SQLServerKit
   var generation = UUID()
   var databases: [CatalogItem] = []
   var remembered = false
-  var online = true
+  static let explorerConnectionChanged = Notification.Name("explorerConnectionChanged")
+  var online = true {
+    didSet {
+      if online != oldValue { NotificationCenter.default.post(name:Self.explorerConnectionChanged,object:self) }
+    }
+  }
+  var healthCheckFixture: (() async throws -> Void)?
+  private var checkingHealth = false
+  func checkExplorerHealth() async {
+    guard online, !reconnecting, !checkingHealth, catalogFixture == nil || healthCheckFixture != nil else {return}
+    checkingHealth=true
+    defer {checkingHealth=false}
+    let token=generation, connection=metadata
+    do {
+      if let healthCheckFixture {try await healthCheckFixture()}
+      else {
+        var limits=Limits();limits.rows=1;limits.timeout=5
+        _ = try await connection.execute("SELECT 1;",limits:limits)
+      }
+    } catch {
+      guard generation == token, metadata === connection, online, !reconnecting else {return}
+      recordExplorerFailure(error)
+    }
+  }
   var reconnecting = false
   func pauseIndexing() { indexPreparation?.cancel() }
   func recordExplorerFailure(_ error: Error) {
@@ -72,6 +95,7 @@ import SQLServerKit
       return result
     } catch {
       await connection.disconnect()
+      if generation == token {recordExplorerFailure(error)}
       throw error
     }
   }
@@ -182,6 +206,7 @@ struct ObjectEditorKey: Codable, Equatable {
         Task { [weak self] in await self?.loadSymbols() }
       } catch {
         state = .disconnected
+        await recordConnectionFailure(error)
         messages = error.localizedDescription
         changed?()
       }
@@ -230,6 +255,7 @@ struct ObjectEditorKey: Codable, Equatable {
         changed?()
       } catch {
         state = .ready
+        await recordConnectionFailure(error)
         messages += error.localizedDescription + "\n"
         changed?()
       }
@@ -266,7 +292,7 @@ struct ObjectEditorKey: Codable, Equatable {
       guard let self else { return }
       defer {
         task = nil
-        state = .ready
+        if state != .disconnected {state = .ready}
         if applyingModule && lastExecutionSucceeded && !partial && transactionCount == 0 { moduleApplied?() }
         if !estimated && lastExecutionSucceeded && !partial && transactionCount == 0 && !ModuleEditing.changedObjects(query).isEmpty {
           NotificationCenter.default.post(name: .init("studioDDLCompleted"), object: self)
@@ -318,20 +344,32 @@ struct ObjectEditorKey: Codable, Equatable {
         partial = !results.isEmpty
         if let index = results.lastIndex(where: { !$0.fields.isEmpty }) { results[index].truncated = true }
         completed?(query, nil, error.localizedDescription)
+        await recordConnectionFailure(error)
       }
-      if estimated { _ = try? await connection.execute("SET SHOWPLAN_XML OFF;") }
-      if captureActual { _ = try? await connection.execute("SET STATISTICS XML OFF;") }
-      if let result = try? await connection.execute("SELECT @@TRANCOUNT, DB_NAME();"),
-        let row = result.results.first?.values.first, row.count > 1
-      {
-        transactionCount = row[0].flatMap(Int.init) ?? 0
-        if let database = row[1], self.database != database {
-          self.database = database
-          clearSymbols()
-          Task { [weak self] in await self?.loadSymbols() }
-        }
+      if state != .disconnected {
+        if estimated { _ = try? await connection.execute("SET SHOWPLAN_XML OFF;") }
+        if captureActual { _ = try? await connection.execute("SET STATISTICS XML OFF;") }
+        do {
+          var limits=Limits();limits.rows=1;limits.timeout=5
+          let result = try await connection.execute("SELECT @@TRANCOUNT, DB_NAME();",limits:limits)
+          if let row = result.results.first?.values.first, row.count > 1 {
+            transactionCount = row[0].flatMap(Int.init) ?? 0
+            if let database = row[1], self.database != database {
+              self.database = database
+              clearSymbols()
+              Task { [weak self] in await self?.loadSymbols() }
+            }
+          }
+        } catch {await recordConnectionFailure(error)}
       }
     }
+  }
+  private func recordConnectionFailure(_ error:Error) async {
+    guard let failure=error as? SQLFailure,
+      failure.diagnostics.contains(where:{$0.state.hasPrefix("08")}) else {return}
+    state = .disconnected
+    // Query sessions are independent: verify the Explorer session itself.
+    await server.checkExplorerHealth()
   }
   private func receive(_ event: QueryEvent) {
     guard acceptingEvents else { return }

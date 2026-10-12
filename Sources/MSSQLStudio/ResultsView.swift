@@ -107,7 +107,46 @@ import SwiftUI
 }
 @MainActor final class CopyTable: NSTableView {
   weak var rowGutter: ResultRowGutter?
-  override func reloadData() { super.reloadData(); rowGutter?.needsDisplay=true }
+  var dataReloaded: (() -> Void)?
+  weak var selectionOwner: CopyTable?
+  var selectionColumnOrder: (() -> [Int])?
+  var navigateCell: ((Int) -> Void)?
+  var dragSelection: ((NSEvent) -> Bool)?
+  private var owner: CopyTable { selectionOwner ?? self }
+  func canonicalPosition(_ position:Int) -> Int? {
+    guard tableColumns.indices.contains(position) else { return nil }
+    guard let selectionOwner else {return position}
+    let canonical=selectionOwner.column(withIdentifier:tableColumns[position].identifier)
+    return canonical >= 0 ? canonical:nil
+  }
+  override func reloadData() { super.reloadData(); rowGutter?.needsDisplay=true; dataReloaded?() }
+  private func cellRange(_ from:Int,_ to:Int) -> IndexSet {
+    guard from != 0, to != 0 else { return IndexSet() }
+    let order=selectionColumnOrder?() ?? Array(1..<max(1,numberOfColumns))
+    guard let start=order.firstIndex(of:from), let end=order.firstIndex(of:to) else { return IndexSet(integer:to) }
+    return IndexSet(order[min(start,end)...max(start,end)])
+  }
+  func selectCell(row:Int,column:Int,extending:Bool=false) {
+    guard row >= 0, row < numberOfRows else { return }
+    if extending, let anchor {
+      selectRowIndexes(IndexSet(integersIn:min(row,anchor.row)...max(row,anchor.row)),byExtendingSelection:false)
+      cellColumns=cellRange(anchor.column,column)
+    } else {
+      anchor=(row,column); selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)
+      cellColumns=column == 0 ? IndexSet():IndexSet(integer:column)
+    }
+    needsDisplay=true
+  }
+  func remapSelectionAfterColumnMove(from:Int,to:Int) {
+    func moved(_ position:Int) -> Int {
+      if position == from {return to}
+      if from < to && position > from && position <= to {return position-1}
+      if from > to && position >= to && position < from {return position+1}
+      return position
+    }
+    cellColumns=IndexSet(cellColumns.map(moved))
+    if let anchor {self.anchor=(anchor.row,moved(anchor.column))}
+  }
   func selectGutterRow(_ row:Int, extending:Bool=false, dragging:Bool=false) {
     guard row >= 0, row < numberOfRows else { return }
     window?.makeFirstResponder(self)
@@ -161,49 +200,38 @@ import SwiftUI
   }
   override func highlightSelection(inClipRect clip: NSRect) {
     StudioTheme.selection.setFill()
-    let visible = rows(in:clip)
-    guard visible.location != NSNotFound, visible.length > 0 else { return }
+    let visible=rows(in:clip)
+    guard visible.location != NSNotFound, visible.length>0 else {return}
     for row in selectedRowIndexes.intersection(IndexSet(integersIn:visible.location..<NSMaxRange(visible))) {
-      let rowRect = rect(ofRow:row)
-      if cellColumns.isEmpty { NSIntersectionRect(rowRect,clip).fill() }
-      else { for column in cellColumns where column < numberOfColumns { NSIntersectionRect(NSIntersectionRect(rect(ofColumn:column),rowRect),clip).fill() } }
+      let rowRect=rect(ofRow:row)
+      if owner.cellColumns.isEmpty {NSIntersectionRect(rowRect,clip).fill()}
+      else {
+        for column in columnIndexes(in:clip) where canonicalPosition(column).map({owner.cellColumns.contains($0)}) == true {
+          NSIntersectionRect(NSIntersectionRect(rect(ofColumn:column),rowRect),clip).fill()
+        }
+      }
     }
   }
   private var anchor: (row: Int, column: Int)?
-  override func mouseDown(with event: NSEvent) {
-    let point = convert(event.locationInWindow, from: nil)
-    let r = row(at: point), c = column(at: point)
-    guard r >= 0, c >= 0 else { super.mouseDown(with: event); return }
+  override func mouseDown(with event:NSEvent) {
+    let point=convert(event.locationInWindow,from:nil), row=row(at:convert(event.locationInWindow,from:nil))
+    guard row >= 0, let column=canonicalPosition(column(at:point)) else {super.mouseDown(with:event);return}
     window?.makeFirstResponder(self)
-    if event.modifierFlags.contains(.shift), let anchor {
-      selectRowIndexes(IndexSet(integersIn: min(r, anchor.row)...max(r, anchor.row)), byExtendingSelection: false)
-      cellColumns = c == 0 || anchor.column == 0 ? IndexSet() : IndexSet(integersIn: min(c, anchor.column)...max(c, anchor.column))
-    } else {
-      anchor = (r, c)
-      selectRowIndexes(IndexSet(integer: r), byExtendingSelection: false)
-      cellColumns = c == 0 ? IndexSet() : IndexSet(integer: c)
-    }
-    needsDisplay = true
-    if event.clickCount == 2 { editCell?(r, c) }
+    owner.selectCell(row:row,column:column,extending:event.modifierFlags.contains(.shift))
+    if event.clickCount == 2 {editCell?(row,self.column(at:point))}
   }
-  override func mouseDragged(with event: NSEvent) {
-    guard let anchor else { return }
-    _ = autoscroll(with: event)
-    let p = convert(event.locationInWindow, from: nil)
-    let r = row(at: p), c = column(at: p)
-    guard r >= 0, c >= 0 else { return }
-    selectRowIndexes(IndexSet(integersIn: min(r, anchor.row)...max(r, anchor.row)), byExtendingSelection: false)
-    cellColumns = anchor.column == 0 || c == 0 ? IndexSet() : IndexSet(integersIn: min(c, anchor.column)...max(c, anchor.column))
+  override func mouseDragged(with event:NSEvent) {
+    if dragSelection?(event) == true {return}
+    guard owner.anchor != nil else {return}
+    _ = autoscroll(with:event)
+    let point=convert(event.locationInWindow,from:nil)
+    guard let column=canonicalPosition(column(at:point)) else {return}
+    owner.selectCell(row:row(at:point),column:column,extending:true)
   }
-  override func rightMouseDown(with event: NSEvent) {
-    let p = convert(event.locationInWindow, from: nil)
-    let r = row(at: p), c = column(at: p)
-    guard r >= 0, c >= 0 else { return }
-    if !selectedRowIndexes.contains(r) || (!cellColumns.isEmpty && !cellColumns.contains(c)) {
-      selectRowIndexes(IndexSet(integer: r), byExtendingSelection: false)
-      cellColumns = c == 0 ? IndexSet() : IndexSet(integer: c)
-      anchor = (r, c)
-    }
+  override func rightMouseDown(with event:NSEvent) {
+    let point=convert(event.locationInWindow,from:nil), row=row(at:convert(event.locationInWindow,from:nil))
+    guard row >= 0, let column=canonicalPosition(column(at:point)) else {return}
+    if !owner.selectedRowIndexes.contains(row) || (!owner.cellColumns.isEmpty && !owner.cellColumns.contains(column)) {owner.selectCell(row:row,column:column)}
     showSelectionMenu(with:event)
   }
   private func showSelectionMenu(with event:NSEvent) {
@@ -222,18 +250,14 @@ import SwiftUI
   override func keyDown(with event: NSEvent) {
     if GridShortcuts.matches(.columns,event) { searchColumns?(); return }
     if event.keyCode == 36 || event.keyCode == 76 {
-      if let c = cellColumns.first, selectedRow >= 0 { editCell?(selectedRow, c); return }
+      if let c=owner.cellColumns.first, let position=tableColumns.indices.first(where:{canonicalPosition($0) == c}), selectedRow >= 0 {editCell?(selectedRow,position);return}
     }
     if GridShortcuts.matchesHeaders(event) { copyHeaders?(); return }
     if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "c" { copyRows?(); return }
     if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "a" {
-      cellColumns = IndexSet(); selectAll(nil); return
+      owner.cellColumns = IndexSet(); owner.selectAll(nil); return
     }
-    if let anchor, let code = [123: -1, 124: 1][Int(event.keyCode)] {
-      let c = max(1, min(numberOfColumns - 1, anchor.column + code))
-      self.anchor = (max(0, selectedRow), c); cellColumns = IndexSet(integer: c)
-      scrollColumnToVisible(c); needsDisplay = true; return
-    }
+    if let step=[123:-1,124:1][Int(event.keyCode)], let navigateCell {navigateCell(step);return}
     super.keyDown(with: event)
   }
 }
@@ -335,6 +359,7 @@ import SwiftUI
 }
 @MainActor private final class FilterHeaderCell: NSTableHeaderCell {
   var active = false
+  var pinned = false
   var navigationTarget = false
   var typeSymbol = "textformat"
   var typeDetail = ""
@@ -360,14 +385,17 @@ import SwiftUI
     stringValue.draw(
       in: NSRect(
         x: cellFrame.minX + 24, y: typeDetail.isEmpty ? cellFrame.midY - font.pointSize / 2 - 2 : cellFrame.minY + 4,
-        width: max(0, cellFrame.width - 76), height: font.pointSize + 5),
+        width: max(0, cellFrame.width - (pinned ? 92:76)), height: font.pointSize + 5),
       withAttributes: [.font: font, .foregroundColor: StudioTheme.text, .paragraphStyle: label])
     if !typeDetail.isEmpty {
-      typeDetail.draw(in:NSRect(x:cellFrame.minX+24,y:cellFrame.minY+21,width:max(0,cellFrame.width-76),height:13),withAttributes:[.font:NSFont.systemFont(ofSize:9),.foregroundColor:StudioTheme.muted,.paragraphStyle:label])
+      typeDetail.draw(in:NSRect(x:cellFrame.minX+24,y:cellFrame.minY+21,width:max(0,cellFrame.width-(pinned ? 92:76)),height:13),withAttributes:[.font:NSFont.systemFont(ofSize:9),.foregroundColor:StudioTheme.muted,.paragraphStyle:label])
     }
     if let type = NSImage(systemSymbolName: typeSymbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(paletteColors: [StudioTheme.accent])) {
       StudioTheme.accent.set()
       type.draw(in: NSRect(x: cellFrame.minX + 6, y: cellFrame.midY - 6, width: 12, height: 12))
+    }
+    if pinned, let pin=NSImage(systemSymbolName:"pin.fill",accessibilityDescription:nil)?.withSymbolConfiguration(.init(paletteColors:[StudioTheme.accent])) {
+      pin.draw(in:NSRect(x:cellFrame.maxX-60,y:cellFrame.midY-5,width:9,height:10))
     }
     if let ascending, let sort = NSImage(systemSymbolName: ascending ? "chevron.up" : "chevron.down", accessibilityDescription: nil)?.withSymbolConfiguration(.init(paletteColors: [StudioTheme.accent])) {
       sort.draw(in: NSRect(x: cellFrame.maxX - 44, y: cellFrame.midY - 4, width: 8, height: 8))
@@ -425,28 +453,158 @@ import SwiftUI
 final class ResultController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
   let table = CopyTable()
   let rowGutter = ResultRowGutter()
+  // Both native tables read the same result/projection/staged edits; only presentation differs.
+  let frozenTable = CopyTable()
+  let frozenScroll = NSScrollView()
+  private(set) var pinnedColumns: [Int] = []
+  private var frozenWidth: NSLayoutConstraint?
+  private var synchronizingSelection=false
+  private var synchronizingScroll=false
+  private var synchronizingColumns=false
+  private var synchronizingSort=false
+  var visibleColumnOrdinals: [Int] {
+    pinnedColumns + table.tableColumns.compactMap {column in
+      guard !column.isHidden, let ordinal=Int(column.identifier.rawValue), !pinnedColumns.contains(ordinal) else {return nil}
+      return ordinal
+    }
+  }
+  func isColumnHidden(_ ordinal:Int) -> Bool {
+    !pinnedColumns.contains(ordinal) && (table.tableColumns.first {$0.identifier.rawValue == String(ordinal)}?.isHidden ?? true)
+  }
+  private func presentationColumn(_ ordinal:Int) -> (CopyTable,Int)? {
+    let target=pinnedColumns.contains(ordinal) ? frozenTable:table
+    guard let position=target.tableColumns.firstIndex(where:{$0.identifier.rawValue == String(ordinal)}) else {return nil}
+    return (target,position)
+  }
+  func setColumnPinned(_ ordinal:Int,pinned:Bool) {
+    _ = view
+    guard result.fields.indices.contains(ordinal), pinnedColumns.contains(ordinal) != pinned,
+      let column=table.tableColumns.first(where:{$0.identifier.rawValue == String(ordinal)}) else {return}
+    // Finish the native field editor before changing its column's presentation.
+    if let window=view.window, !window.makeFirstResponder(nil) {return}
+    popover?.close()
+    if pinned {pinnedColumns.append(ordinal)} else {pinnedColumns.removeAll {$0 == ordinal}}
+    column.isHidden=pinned
+    rebuildFrozenColumns()
+    view.layoutSubtreeIfNeeded()
+    if !pinned {table.scrollColumnToVisible(table.column(withIdentifier:column.identifier))}
+    editsChanged?()
+  }
+  private func rebuildFrozenColumns() {
+    synchronizingColumns=true
+    synchronizingSort=true
+    defer {synchronizingColumns=false; synchronizingSort=false}
+    for column in frozenTable.tableColumns {frozenTable.removeTableColumn(column)}
+    let row=NSTableColumn(identifier:.init("row")); row.isHidden=true; frozenTable.addTableColumn(row)
+    for ordinal in pinnedColumns {
+      guard let source=table.tableColumns.first(where:{$0.identifier.rawValue == String(ordinal)}) else {continue}
+      let column=NSTableColumn(identifier:source.identifier)
+      column.title=source.title; column.minWidth=max(96,source.minWidth); column.maxWidth=source.maxWidth; column.width=max(column.minWidth,source.width,GridColumnSizing.headerWidth(source.title)+16)
+      column.isEditable=source.isEditable; column.sortDescriptorPrototype=source.sortDescriptorPrototype
+      if let cell=source.dataCell as? NSCell {column.dataCell=cell.copy()}
+      column.headerCell=FilterHeaderCell(textCell:source.title)
+      frozenTable.addTableColumn(column)
+    }
+    frozenTable.sortDescriptors=table.sortDescriptors
+    refreshColumnHeaders()
+    frozenScroll.isHidden=pinnedColumns.isEmpty
+    frozenTable.reloadData()
+    synchronizeSelection(from:table)
+    updateFrozenWidth()
+    synchronizeVerticalScroll(from:table.enclosingScrollView?.contentView)
+  }
+  private func refreshColumnHeaders() {
+    for column in table.tableColumns+frozenTable.tableColumns {
+      guard let ordinal=Int(column.identifier.rawValue), result.fields.indices.contains(ordinal), let header=column.headerCell as? FilterHeaderCell else {continue}
+      let field=result.fields[ordinal], reason=readOnlyReason(column:ordinal)
+      header.typeSymbol=reason != nil ? "lock.fill":field.type == -7 ? "checkmark.square":field.numeric ? "number":([91,92,93,-9_101,-9_102].contains(Int(field.type)) ? "calendar":"textformat")
+      header.typeDetail=field.dataType; header.pinned=pinnedColumns.contains(ordinal)
+      header.active=rules[ordinal] != nil
+      header.navigationTarget=highlightedColumnOrdinal == ordinal
+      header.ascending=table.sortDescriptors.first?.key == String(ordinal) ? table.sortDescriptors.first?.ascending:nil
+      column.headerToolTip="\(field.name) · \(field.dataType)"+(header.pinned ? " · Sabitlenmiş kolon":"")+(reason.map {" · "+$0} ?? "")
+    }
+    table.headerView?.needsDisplay=true; frozenTable.headerView?.needsDisplay=true
+  }
+  override func viewDidLayout() {super.viewDidLayout();updateFrozenWidth()}
+  private func updateFrozenWidth() {
+    let total=frozenTable.tableColumns.filter {!$0.isHidden}.reduce(CGFloat(0)) {$0+$1.width+frozenTable.intercellSpacing.width}
+    // An oversized pinned group has its own horizontal scrollbar, keeping the other columns reachable.
+    let width=pinnedColumns.isEmpty ? 0:min(total,max(0,view.bounds.width-60-160))
+    if frozenWidth?.constant != width {frozenWidth?.constant=width}
+  }
+  @objc private func gridBoundsChanged(_ notification:Notification) {
+    synchronizeVerticalScroll(from:notification.object as? NSClipView)
+  }
+  private func synchronizeVerticalScroll(from source:NSClipView?) {
+    guard !synchronizingScroll, !pinnedColumns.isEmpty, let source, let main=table.enclosingScrollView?.contentView else {return}
+    let target=source === main ? frozenScroll.contentView:main
+    guard target.bounds.minY != source.bounds.minY else {return}
+    synchronizingScroll=true
+    target.scroll(to:NSPoint(x:target.bounds.minX,y:source.bounds.minY))
+    target.enclosingScrollView?.reflectScrolledClipView(target)
+    synchronizingScroll=false
+  }
+  private func synchronizeSelection(from source:NSTableView) {
+    guard !synchronizingSelection, !pinnedColumns.isEmpty else {return}
+    synchronizingSelection=true
+    let target=source === table ? frozenTable:table
+    target.selectRowIndexes(source.selectedRowIndexes,byExtendingSelection:false)
+    table.needsDisplay=true; frozenTable.needsDisplay=true; rowGutter.needsDisplay=true
+    synchronizingSelection=false
+  }
+  private func moveSelectedCell(_ step:Int) {
+    let order=visibleColumnOrdinals
+    guard !order.isEmpty, table.selectedRow >= 0 else {return}
+    let current=table.cellColumns.first.flatMap {table.tableColumns.indices.contains($0) ? Int(table.tableColumns[$0].identifier.rawValue):nil}
+    let index=current.flatMap {order.firstIndex(of:$0)} ?? (step>0 ? -1:order.count)
+    let ordinal=order[max(0,min(order.count-1,index+step))]
+    guard let canonical=table.tableColumns.firstIndex(where:{$0.identifier.rawValue == String(ordinal)}), let (target,position)=presentationColumn(ordinal) else {return}
+    table.selectCell(row:table.selectedRow,column:canonical)
+    target.scrollColumnToVisible(position); view.window?.makeFirstResponder(target)
+  }
+  private func selectDraggedCell(_ event:NSEvent) -> Bool {
+    for target in [frozenTable,table] where !target.isHiddenOrHasHiddenAncestor {
+      guard let clip=target.enclosingScrollView?.contentView else {continue}
+      let point=target.convert(event.locationInWindow,from:nil)
+      guard clip.documentVisibleRect.contains(point), let column=target.canonicalPosition(target.column(at:point)), target.row(at:point)>=0 else {continue}
+      table.selectCell(row:target.row(at:point),column:column,extending:true)
+      return true
+    }
+    return false
+  }
+  func tableViewColumnDidResize(_ notification:Notification) {
+    guard !synchronizingColumns, let source=notification.object as? NSTableView else {return}
+    synchronizingColumns=true
+    for ordinal in pinnedColumns {
+      guard let main=table.tableColumns.first(where:{$0.identifier.rawValue == String(ordinal)}), let fixed=frozenTable.tableColumns.first(where:{$0.identifier == main.identifier}) else {continue}
+      if source === frozenTable {main.width=fixed.width} else {fixed.width=main.width}
+    }
+    synchronizingColumns=false; updateFrozenWidth()
+  }
+  func tableViewColumnDidMove(_ notification:Notification) {
+    guard !synchronizingColumns, let source=notification.object as? NSTableView else {return}
+    if source === frozenTable {
+      pinnedColumns=frozenTable.tableColumns.compactMap {Int($0.identifier.rawValue)}
+    } else if let from=notification.userInfo?["NSOldColumn"] as? Int, let to=notification.userInfo?["NSNewColumn"] as? Int {
+      table.remapSelectionAfterColumnMove(from:from,to:to)
+    }
+    frozenTable.needsDisplay=true
+  }
   private var generation = -1
   var requestEditing: ((Int, Int) -> Bool)?
   var editDefinition: TableDefinition? {
-    didSet {
-      for column in table.tableColumns {
-        guard let ordinal = Int(column.identifier.rawValue), result.fields.indices.contains(ordinal),
-          let header = column.headerCell as? FilterHeaderCell else { continue }
-        let field = result.fields[ordinal]
-        let reason = readOnlyReason(column: ordinal)
-        header.typeSymbol = reason != nil ? "lock.fill" : field.type == -7 ? "checkmark.square" : field.numeric ? "number" : ([91, 92, 93, -9_101, -9_102].contains(Int(field.type)) ? "calendar" : "textformat")
-        column.headerToolTip = "\(field.name) · \(field.dataType)" + (reason.map { " · " + $0 } ?? "")
-      }
-      table.headerView?.needsDisplay = true
-    }
+    didSet {if isViewLoaded {refreshColumnHeaders()}}
   }
   var hasDraftChanges: Bool {
-    let row = table.editedRow, position = table.editedColumn
-    guard row >= 0, row < pageCount, table.tableColumns.indices.contains(position),
-      let ordinal = Int(table.tableColumns[position].identifier.rawValue),
-      let editor = table.currentEditor() as? NSTextView else { return false }
-    let current = values(at: sourceIndex(row))
-    return current.indices.contains(ordinal) && editor.string != (current[ordinal] ?? "NULL")
+    for target in [table,frozenTable] {
+      let row=target.editedRow, position=target.editedColumn
+      guard row >= 0, row < pageCount, target.tableColumns.indices.contains(position),
+        let ordinal=Int(target.tableColumns[position].identifier.rawValue), let editor=target.currentEditor() as? NSTextView else {continue}
+      let current=values(at:sourceIndex(row))
+      if current.indices.contains(ordinal) && editor.string != (current[ordinal] ?? "NULL") {return true}
+    }
+    return false
   }
   func readOnlyReason(column: Int) -> String? {
     guard let definition = editDefinition, definition.columns.indices.contains(column) else { return nil }
@@ -583,6 +741,43 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   var filter = "" { didSet { if filter != oldValue { reload() } } }
   deinit { job?.cancel() }
   var visibleCount: Int { visibleIndices?.count ?? result.values.count }
+  private func configureGrid(_ target:CopyTable,scroll:NSScrollView,identifier:String) {
+    target.dataSource=self; target.delegate=self; target.style = .plain
+    target.usesAlternatingRowBackgroundColors=true
+    target.backgroundColor=StudioTheme.canvas; target.gridColor=StudioTheme.border
+    target.rowHeight=24; target.usesAutomaticRowHeights=false
+    target.intercellSpacing=NSSize(width:1,height:1)
+    target.gridStyleMask=[.solidVerticalGridLineMask,.solidHorizontalGridLineMask]
+    target.columnAutoresizingStyle = .noColumnAutoresizing
+    target.allowsMultipleSelection=true; target.allowsColumnReordering=true
+    target.setAccessibilityIdentifier(identifier)
+    target.toolTip="Düzenlemek için çift tıklayın veya Enter’a basın. Değişiklikler yalnız SQL önizlemesinden onayla gönderilir."
+    target.focusRingType = .none; scroll.focusRingType = .none
+    scroll.horizontalScrollElasticity = .none; scroll.verticalScrollElasticity = .none
+    target.rowActions = { [weak self] in self?.editingMenu() ?? [] }
+    target.editCell = { [weak self, weak target] row,position in
+      guard let self, let canonical=target?.canonicalPosition(position) else {return}
+      inspectCell(row:row,position:canonical)
+    }
+    target.draftChanged = { [weak self] in self?.editsChanged?() }
+    target.copyRows = { [weak self] in self?.copySelectionData() }
+    target.copyHeaders = { [weak self] in self?.copySelectionData(includeHeaders:true) }
+    target.navigateCell = { [weak self] in self?.moveSelectedCell($0) }
+    target.dragSelection = { [weak self] in self?.selectDraggedCell($0) ?? false }
+    let header=FilterHeader(); header.frame.size.height=40
+    header.openFilter = { [weak self,weak target] position in
+      guard let target, target.tableColumns.indices.contains(position), let ordinal=Int(target.tableColumns[position].identifier.rawValue) else {return}
+      self?.openColumnOrdinal(ordinal)
+    }
+    header.openMenu = { [weak self,weak target,weak header] position,event in
+      guard let self, let target, let header else {return}
+      let ordinal=target.tableColumns.indices.contains(position) ? Int(target.tableColumns[position].identifier.rawValue):nil
+      NSMenu.popUpContextMenu(columnMenu(ordinal:ordinal),with:event,for:header)
+    }
+    target.headerView=header
+    scroll.contentView.postsBoundsChangedNotifications=true
+    NotificationCenter.default.addObserver(self,selector:#selector(gridBoundsChanged(_:)),name:NSView.boundsDidChangeNotification,object:scroll.contentView)
+  }
   override func loadView() {
     view = NSView()
     let scroll = NSScrollView()
@@ -599,36 +794,29 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       let index=sourceIndex(row)
       return (rowNumber(row),pendingEdits[index]?.deleted == true ? StudioTheme.danger:index < 0 ? StudioTheme.success:pendingEdits[index] != nil ? StudioTheme.warning:StudioTheme.muted)
     }
-    table.dataSource = self
-    table.delegate = self
-    table.style = .plain
-    table.usesAlternatingRowBackgroundColors = true
-    scroll.horizontalScrollElasticity = .none
-    scroll.verticalScrollElasticity = .none
-    table.toolTip = "Düzenlemek için çift tıklayın veya Enter’a basın. Değişiklikler yalnız SQL önizlemesinden onayla gönderilir."
-    table.backgroundColor = StudioTheme.canvas
-    table.gridColor = StudioTheme.border
-    table.rowHeight = 24
-    table.usesAutomaticRowHeights = false
-    table.intercellSpacing = NSSize(width: 1, height: 1)
-    table.gridStyleMask = [.solidVerticalGridLineMask, .solidHorizontalGridLineMask]
-    table.columnAutoresizingStyle = .noColumnAutoresizing
-    table.allowsMultipleSelection = true
-    table.allowsColumnReordering = true
-    table.setAccessibilityIdentifier("resultsGrid")
-    table.target = self
-    table.focusRingType = .none; scroll.focusRingType = .none
-    table.rowActions = { [weak self] in self?.editingMenu() ?? [] }
-    table.editCell = { [weak self] row, column in self?.inspectCell(row: row, position: column) }
-    table.draftChanged = { [weak self] in self?.editsChanged?() }
-    table.cellSelectionChanged = { [weak self] in self?.editsChanged?() }
-    table.copyRows = { [weak self] in self?.copySelectionData() }
-    table.copyHeaders = { [weak self] in self?.copySelectionData(includeHeaders: true) }
-    let head = FilterHeader()
-    head.openFilter = { [weak self] c in self?.openColumn(c) }
-    head.openMenu = { [weak self] column, event in self?.showColumnMenu(column, event: event) }
-    head.frame.size.height = 40
-    table.headerView = head
+    configureGrid(table,scroll:scroll,identifier:"resultsGrid")
+    frozenScroll.documentView=frozenTable
+    frozenScroll.hasHorizontalScroller=true; frozenScroll.hasVerticalScroller=false
+    frozenScroll.autohidesScrollers=false; frozenScroll.scrollerStyle = .legacy
+    frozenScroll.automaticallyAdjustsContentInsets=false
+    frozenScroll.contentInsets=NSEdgeInsets(top:0,left:0,bottom:0,right:0)
+    frozenScroll.usesPredominantAxisScrolling=true; frozenScroll.isHidden=true
+    frozenScroll.setAccessibilityLabel("Sabitlenmiş sonuç kolonları")
+    frozenTable.selectionOwner=table
+    configureGrid(frozenTable,scroll:frozenScroll,identifier:"resultsFrozenGrid")
+    frozenTable.searchColumns = { [weak self] in self?.table.searchColumns?() }
+    table.cellSelectionChanged = { [weak self] in
+      self?.frozenTable.needsDisplay=true; self?.editsChanged?()
+    }
+    table.selectionColumnOrder = { [weak self] in
+      guard let self else {return []}
+      return visibleColumnOrdinals.compactMap {ordinal in table.tableColumns.firstIndex {$0.identifier.rawValue == String(ordinal)}}
+    }
+    table.dataReloaded = { [weak self] in
+      guard let self, !pinnedColumns.isEmpty else {return}
+      frozenTable.reloadData(); synchronizeSelection(from:table)
+      synchronizeVerticalScroll(from:table.enclosingScrollView?.contentView)
+    }
     let clear = StudioToolbarButton(symbol: "line.3.horizontal.decrease.circle", label: "Filtreleri temizle", tone: .warning)
     clear.target = self; clear.action = #selector(clearFilters)
     clear.controlSize = .small
@@ -667,11 +855,12 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     chips.spacing = 5
     chips.edgeInsets = NSEdgeInsets(top: 2, left: 6, bottom: 2, right: 6)
     chips.setContentHuggingPriority(.required, for: .horizontal)
-    for child in (toolbarHosted ? [chipScroll, rowGutter, scroll] : [bar, chipScroll, rowGutter, scroll]) {
+    for child in (toolbarHosted ? [chipScroll, rowGutter, frozenScroll, scroll] : [bar, chipScroll, rowGutter, frozenScroll, scroll]) {
       view.addSubview(child)
       child.translatesAutoresizingMaskIntoConstraints = false
     }
     chips.translatesAutoresizingMaskIntoConstraints = false
+    frozenWidth=frozenScroll.widthAnchor.constraint(equalToConstant:0)
     chipsHeight = chipScroll.heightAnchor.constraint(equalToConstant: 0)
     NSLayoutConstraint.activate([
       chipsHeight!,
@@ -685,7 +874,11 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       rowGutter.topAnchor.constraint(equalTo:scroll.topAnchor),
       rowGutter.bottomAnchor.constraint(equalTo:scroll.bottomAnchor),
       rowGutter.widthAnchor.constraint(equalToConstant:60),
-      scroll.leadingAnchor.constraint(equalTo: rowGutter.trailingAnchor),
+      frozenScroll.leadingAnchor.constraint(equalTo:rowGutter.trailingAnchor),
+      frozenScroll.topAnchor.constraint(equalTo:scroll.topAnchor),
+      frozenScroll.bottomAnchor.constraint(equalTo:scroll.bottomAnchor),
+      frozenWidth!,
+      scroll.leadingAnchor.constraint(equalTo: frozenScroll.trailingAnchor),
       scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       scroll.topAnchor.constraint(equalTo: chipScroll.bottomAnchor),
       scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -731,6 +924,11 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     highlightColumn(nil)
     if editDefinition != nil { discardEdits() }
     if changedFields {
+      synchronizingSort=true
+      defer {synchronizingSort=false}
+      pinnedColumns=[]
+      for column in frozenTable.tableColumns {frozenTable.removeTableColumn(column)}
+      frozenScroll.isHidden=true; frozenWidth?.constant=0
       for c in table.tableColumns { table.removeTableColumn(c) }
       let n = NSTableColumn(identifier: .init("row"))
       let numberHeader = FilterHeaderCell(textCell: "#")
@@ -763,6 +961,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       visibleIndices = nil
     }
     result = rows
+    refreshColumnHeaders()
     if needsAutoFit && !rows.values.isEmpty { autoFitColumns(); needsAutoFit = false }
     reload()
   }
@@ -844,13 +1043,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       chips.addArrangedSubview(b)
     }
     chipsHeight?.constant = rules.isEmpty ? 0 : 28
-    for c in table.tableColumns {
-      if let i = Int(c.identifier.rawValue), result.fields.indices.contains(i) {
-        c.title = result.fields[i].name
-        (c.headerCell as? FilterHeaderCell)?.active = rules[i] != nil
-        (c.headerCell as? FilterHeaderCell)?.ascending = table.sortDescriptors.first?.key == String(i) ? table.sortDescriptors.first?.ascending : nil
-      }
-    }
+    refreshColumnHeaders()
   }
   @objc private func removeRule(_ sender: NSButton) {
     rules[sender.tag] = nil
@@ -862,64 +1055,57 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     clearSearch?()
     reload()
   }
-  func revealColumn(_ ordinal: Int) {
-    guard let position=table.tableColumns.firstIndex(where:{ $0.identifier.rawValue == String(ordinal) }) else { return }
-    table.tableColumns[position].isHidden=false
-    view.layoutSubtreeIfNeeded()
-    table.scrollColumnToVisible(position)
-    highlightColumn(ordinal)
-    table.window?.makeFirstResponder(table)
+  func revealColumn(_ ordinal:Int) {
+    guard let (target,position)=presentationColumn(ordinal) else {return}
+    target.tableColumns[position].isHidden=false
+    view.layoutSubtreeIfNeeded(); target.scrollColumnToVisible(position)
+    highlightColumn(ordinal); view.window?.makeFirstResponder(target)
   }
   private func highlightColumn(_ ordinal:Int?) {
     highlightedColumnOrdinal=ordinal
-    for column in table.tableColumns {(column.headerCell as? FilterHeaderCell)?.navigationTarget=Int(column.identifier.rawValue) == ordinal && ordinal != nil}
-    table.headerView?.setAccessibilityHelp(ordinal.flatMap {result.fields.indices.contains($0) ? "Gidilen kolon: "+result.fields[$0].name:nil})
-    table.headerView?.needsDisplay=true
+    refreshColumnHeaders()
+    let help=ordinal.flatMap {result.fields.indices.contains($0) ? "Gidilen kolon: "+result.fields[$0].name:nil}
+    table.headerView?.setAccessibilityHelp(help); frozenTable.headerView?.setAccessibilityHelp(help)
   }
-  private func showColumnMenu(_ position: Int, event: NSEvent) {
-    let menu = NSMenu()
-    func add(_ title: String, _ action: Selector, _ index: Int, to parent: NSMenu) -> NSMenuItem {
-      let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-      item.target = self
-      item.tag = index
-      let symbol = action == #selector(filterColumnMenu(_:)) ? "line.3.horizontal.decrease.circle" : action == #selector(fitColumn(_:)) ? "arrow.left.and.right" : "eye"
-      item.image=NSImage(systemSymbolName:symbol,accessibilityDescription:title)
-      parent.addItem(item)
-      return item
+  func columnMenu(ordinal:Int?) -> NSMenu {
+    let menu=NSMenu()
+    func add(_ title:String,_ action:Selector,_ index:Int,_ symbol:String,to parent:NSMenu) -> NSMenuItem {
+      let item=NSMenuItem(title:title,action:action,keyEquivalent:"")
+      item.target=self; item.tag=index; item.image=NSImage(systemSymbolName:symbol,accessibilityDescription:title)
+      parent.addItem(item); return item
     }
-    if table.tableColumns.indices.contains(position),
-      let index = Int(table.tableColumns[position].identifier.rawValue)
-    {
-      _ = add("Kolon Filtresi…", #selector(filterColumnMenu(_:)), index, to: menu)
-      _ = add("İçeriğe Sığdır", #selector(fitColumn(_:)), index, to: menu)
-      _ = add("Kolonu Gizle", #selector(toggleColumn(_:)), index, to: menu)
+    if let ordinal, result.fields.indices.contains(ordinal) {
+      _ = add("Kolon Filtresi…",#selector(filterColumnMenu(_:)),ordinal,"line.3.horizontal.decrease.circle",to:menu)
+      _ = add("İçeriğe Sığdır",#selector(fitColumn(_:)),ordinal,"arrow.left.and.right",to:menu)
+      let pinned=pinnedColumns.contains(ordinal)
+      _ = add(pinned ? "Sabitlemeyi Kaldır":"Kolonu Sabitle",#selector(togglePinnedColumn(_:)),ordinal,pinned ? "pin.slash":"pin",to:menu)
+      _ = add("Kolonu Gizle",#selector(toggleColumn(_:)),ordinal,"eye.slash",to:menu)
       menu.addItem(.separator())
     }
-    let list = NSMenu()
-    let parent = NSMenuItem(title: "Kolonları Göster / Gizle", action: nil, keyEquivalent: "")
-    parent.image=NSImage(systemSymbolName:"tablecells",accessibilityDescription:"Kolon görünürlüğü")
-    parent.submenu = list
-    menu.addItem(parent)
-    for (index, field) in result.fields.enumerated() {
-      let item = add("\(index+1). \(field.name)", #selector(toggleColumn(_:)), index, to: list)
-      item.state =
-        table.tableColumns.first(where: { $0.identifier.rawValue == String(index) })?.isHidden
-          == false ? .on : .off
+    if !pinnedColumns.isEmpty {
+      _ = add("Tüm Sabitlemeleri Kaldır",#selector(unpinAllColumns),-1,"pin.slash",to:menu)
+      menu.addItem(.separator())
     }
-    if let header = table.headerView { NSMenu.popUpContextMenu(menu, with: event, for: header) }
-  }
-  @objc private func toggleColumn(_ sender: NSMenuItem) {
-    if let column = table.tableColumns.first(where: { $0.identifier.rawValue == String(sender.tag) }
-    ) {
-      column.isHidden.toggle()
+    let parent=NSMenuItem(title:"Kolonları Göster / Gizle",action:nil,keyEquivalent:"")
+    let list=NSMenu(); parent.submenu=list
+    parent.image=NSImage(systemSymbolName:"tablecells",accessibilityDescription:parent.title); menu.addItem(parent)
+    for (index,field) in result.fields.enumerated() {
+      let item=add("\(index+1). \(field.name)",#selector(toggleColumn(_:)),index,"eye",to:list)
+      item.state=isColumnHidden(index) ? .off:.on
     }
+    return menu
   }
-  @objc private func filterColumnMenu(_ sender: NSMenuItem) {
-    if let i = table.tableColumns.firstIndex(where: { $0.identifier.rawValue == String(sender.tag) }
-    ) {
-      openColumn(i)
-    }
+  @objc private func togglePinnedColumn(_ sender:NSMenuItem) {setColumnPinned(sender.tag,pinned:!pinnedColumns.contains(sender.tag))}
+  @objc private func unpinAllColumns() {
+    for ordinal in pinnedColumns {setColumnPinned(ordinal,pinned:false)}
   }
+  @objc private func toggleColumn(_ sender:NSMenuItem) {
+    let hidden=isColumnHidden(sender.tag)
+    if pinnedColumns.contains(sender.tag) {setColumnPinned(sender.tag,pinned:false); guard !pinnedColumns.contains(sender.tag) else {return}}
+    table.tableColumns.first {$0.identifier.rawValue == String(sender.tag)}?.isHidden = !hidden
+    table.cellSelectionChanged?()
+  }
+  @objc private func filterColumnMenu(_ sender:NSMenuItem) {openColumnOrdinal(sender.tag)}
   private func autoFitColumns() {
     let count = result.fields.count
     guard count > 0 else { return }
@@ -942,7 +1128,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       let column = table.tableColumns.first(where: { $0.identifier.rawValue == String(sender.tag) })
     else { return }
     let attributes: [NSAttributedString.Key: Any] = [.font: StudioTheme.uiFont]
-    let headerWidth = GridColumnSizing.headerWidth(column.title)
+    let headerWidth = GridColumnSizing.headerWidth(column.title)+(pinnedColumns.contains(sender.tag) ? 16:0)
     var width = headerWidth
     for i in 0..<min(200, pageCount) {
       let row = values(at: sourceIndex(i))
@@ -950,28 +1136,35 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       width = max(width, String(value.prefix(1000)).size(withAttributes: attributes).width + 16)
     }
     column.width = max(headerWidth,min(600, max(80, width)))
+    tableViewColumnDidResize(Notification(name:NSTableView.columnDidResizeNotification,object:table))
   }
-  private func openColumn(_ position: Int) {
-    guard table.tableColumns.indices.contains(position),
-      let i = Int(table.tableColumns[position].identifier.rawValue),
-      result.fields.indices.contains(i)
-    else { return }
+  private func openColumnOrdinal(_ ordinal:Int) {
+    guard result.fields.indices.contains(ordinal), let (target,position)=presentationColumn(ordinal) else {return}
     popover?.close()
     let popup=NSPopover()
-    let panel=ColumnFilterPanel(rows:result,column:i,initial:rules[i] ?? ColumnRule()) { [weak self,weak popup] rule in
-      try self?.setRule(rule,column:i);popup?.close()
+    let panel=ColumnFilterPanel(rows:result,column:ordinal,initial:rules[ordinal] ?? ColumnRule()) { [weak self,weak popup] rule in
+      try self?.setRule(rule,column:ordinal);popup?.close()
     }.studioPanel()
     popover=popup
-    let header=table.headerView
-    let anchor=table.tableColumns[position].isHidden ? table:header ?? table
-    let rect=anchor === table ? table.visibleRect:header?.headerRect(ofColumn:position)
+    let header=target.headerView
+    let anchor=target.tableColumns[position].isHidden ? target:header ?? target
+    let rect=anchor === target ? target.visibleRect:header?.headerRect(ofColumn:position)
     StudioPopover.show(popup,content:panel,from:anchor,rect:rect,size:NSSize(width:400,height:540))
   }
-  func tableViewSelectionDidChange(_ notification: Notification) { editsChanged?() }
+  func tableViewSelectionDidChange(_ notification:Notification) {
+    guard !synchronizingSelection, let source=notification.object as? NSTableView else {return}
+    synchronizeSelection(from:source); editsChanged?()
+  }
   func numberOfRows(in tableView: NSTableView) -> Int { pageCount }
   func tableView(
     _ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]
-  ) { reload() }
+  ) {
+    guard !synchronizingSort else {return}
+    synchronizingSort=true
+    let other=tableView === table ? frozenTable:table
+    other.sortDescriptors=tableView.sortDescriptors
+    synchronizingSort=false; reload()
+  }
   func tableView(_ tableView: NSTableView, shouldReorderColumn columnIndex: Int, toColumn newColumnIndex: Int) -> Bool {
     columnIndex != 0 && newColumnIndex != 0
   }
@@ -1018,9 +1211,8 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   func copySelectionData(includeHeaders: Bool = false) {
     let chosen = table.selectedRowIndexes
     guard !chosen.isEmpty else { return }
-    let ordinals = table.tableColumns.enumerated().compactMap { index, column -> Int? in
-      guard !column.isHidden, table.cellColumns.isEmpty || table.cellColumns.contains(index) else { return nil }
-      return Int(column.identifier.rawValue)
+    let ordinals=visibleColumnOrdinals.filter {ordinal in
+      table.cellColumns.isEmpty || table.tableColumns.firstIndex(where:{$0.identifier.rawValue == String(ordinal)}).map {table.cellColumns.contains($0)} == true
     }
     guard chosen.count <= 10_000 else {
       let a = NSAlert()
@@ -1066,7 +1258,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       let i = Int(table.tableColumns[c].identifier.rawValue)
     else { return }
     if editDefinition == nil, requestEditing?(r, c) == true { return }
-    if canEdit(row: r, column: i) { table.editColumn(c, row: r, with: nil, select: true); return }
+    if canEdit(row:r,column:i), let (target,position)=presentationColumn(i) {target.editColumn(position,row:r,with:nil,select:true);return}
     let values = values(at: sourceIndex(r))
     guard values.indices.contains(i) else { return }
     let alert = NSAlert()
@@ -1327,6 +1519,7 @@ private struct ColumnFilterPanel: View {
     submitModuleButton.setAccessibilityIdentifier("submitModule")
     submitModuleButton.isHidden=document.moduleOriginal == nil
     submitModuleButton.isEnabled=document.canSubmitModule
+    favoriteButton.tracksActiveState=true;editDataButton.tracksActiveState=true;autoRefreshButton.tracksActiveState=true
     favoriteButton.target=self;favoriteButton.action=#selector(addQueryFavorite)
     favoriteButton.setAccessibilityIdentifier("queryFavorite")
     let header = NSStackView(views: [connectionBadge, NSView(), favoriteButton, compareModuleButton, submitModuleButton, actual, position, toggle])
@@ -1430,6 +1623,7 @@ private struct ColumnFilterPanel: View {
     resultHeader.setAccessibilityIdentifier("gridToolbar")
     navigationHost.spacing = 0
     copyHeadersButton.target = self; copyHeadersButton.action = #selector(copyHeadersSelection)
+    copyHeadersButton.setAccessibilityIdentifier("gridCopyHeaders")
     updateShortcutHints()
     NotificationCenter.default.addObserver(self, selector: #selector(updateShortcutHints), name: GridShortcuts.changed, object: nil)
     filter.toolTip = "Yalnızca yüklenen sonuçlarda ara; sunucuya sorgu göndermez"
@@ -1961,7 +2155,7 @@ private struct ColumnFilterPanel: View {
     guard let grid=selectedGrid else {return}
     optionsPopover?.close()
     let columns=grid.result.fields.enumerated().map {ordinal,field in
-      ResultColumnChoice(id:ordinal,name:field.name,type:field.dataType,hidden:grid.table.tableColumns.first {$0.identifier.rawValue == String(ordinal)}?.isHidden ?? false)
+      ResultColumnChoice(id:ordinal,name:field.name,type:field.dataType,hidden:grid.isColumnHidden(ordinal))
     }
     let popup=NSPopover()
     let panel=ResultColumnSearch(columns:columns,select:{ [weak grid,weak popup] ordinal in

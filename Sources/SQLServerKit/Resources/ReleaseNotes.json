@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.2.71",
+    "date": "2026-10-12",
+    "title": "Sabit kolonlar ve güvenilir SQL tamamlama",
+    "changes": [
+      "Sonuç kolonları başlığa sağ tıklayıp sabitlenebilir. Birden fazla kolon yatay kaydırmada solda kalır; Sabitlemeyi Kaldır ve Tüm Sabitlemeleri Kaldır seçenekleri eklendi.",
+      "Sabit kolonlarda filtreleme, sıralama, yeniden boyutlandırma, kolon araması, seçim, kopyalama ve hücre düzenleme korunur. Aynı kolonlarla yenileme sabitlemeleri korur.",
+      "SQL tamamlama penceresi ekran alanına uyarlanır ve en çok 10 tam öneri gösterir. Ok tuşları, Page Up/Down, Home/End ile gezinme, Tab/Enter ile kabul ve Escape ile kapatma desteklenir.",
+      "Kolon tamamlama sorguda tanımlanmamış alias eklemez. Alias bulunmayan tek tabloda kolon adı, diğer sorgularda gerçekten tanımlı tablo veya alias kullanılır.",
+      "Explorer bağlantı durumu görünür pencerede düzenli kontrol edilir. Bağlantı kopunca etiket ve ikon güncellenir; kopmuş sorgu oturumu hazır görünmez, diğer sorgu oturumları korunur.",
+      "Kopyalama, satır ekleme, çoğaltma ve geri alma gibi anlık işlem düğmeleri seçili kalmaz. Düzenleme, favori ve otomatik yenileme modlarının aktif görünümü korunur."
+    ]
+  },
+  {
     "version": "0.2.70",
     "date": "2026-10-12",
     "title": "Şık SQL tamamlama ve sabit satır numaraları",

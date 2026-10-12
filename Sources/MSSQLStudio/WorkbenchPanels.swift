@@ -869,6 +869,7 @@ struct StudioFormField<Content: View>: View {
   enum Tone { case neutral, accent, success, warning, danger }
   var tone: Tone { didSet { refreshStyle() } }
   var prominent: Bool { didSet { refreshStyle() } }
+  var tracksActiveState = false
   private var hovered = false
   private var pressed = false
   private var hoverArea: NSTrackingArea?
@@ -879,6 +880,8 @@ struct StudioFormField<Content: View>: View {
     self.tone = tone; self.prominent = prominent
     super.init(frame: .zero)
     cell = StudioToolbarButtonCell()
+    setButtonType(.momentaryPushIn)
+    focusRingType = .none
     self.title = title
     image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)?
       .withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
@@ -902,12 +905,19 @@ struct StudioFormField<Content: View>: View {
     case .warning: color = StudioTheme.warning
     case .danger: color = StudioTheme.danger
     }
-    let active = prominent || state == .on
+    let active = prominent || tracksActiveState && state == .on
     contentTintColor = isEnabled ? prominent ? (StudioTheme.dark ? StudioTheme.canvas : .white) : color : StudioTheme.muted.withAlphaComponent(0.4)
     layer?.backgroundColor = (isEnabled
       ? color.withAlphaComponent(prominent ? pressed ? 0.80 : hovered ? 0.92 : 1 : pressed ? 0.20 : hovered ? 0.12 : active ? 0.12 : 0.035)
       : StudioTheme.muted.withAlphaComponent(0.015)).cgColor
     layer?.borderColor = (isEnabled ? color.withAlphaComponent(active || hovered ? 0.28 : 0) : NSColor.clear).cgColor
+  }
+  override func sendAction(_ action:Selector?, to target:Any?) -> Bool {
+    // Native momentary cells may leave their last state behind. Only controls
+    // representing a model mode (editing, favorites, refresh) retain that state.
+    if !tracksActiveState {state = .off}
+    defer {if !tracksActiveState {state = .off}}
+    return super.sendAction(action,to:target)
   }
   override func updateTrackingAreas() {
     super.updateTrackingAreas()

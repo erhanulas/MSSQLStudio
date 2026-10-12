@@ -45,7 +45,7 @@ import Testing
     query.view.layoutSubtreeIfNeeded()
     func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
     let views = descendants(query.view)
-    let grid = try #require(views.compactMap { $0 as? CopyTable }.first)
+    let grid = try #require(views.compactMap { $0 as? CopyTable }.first {$0.accessibilityIdentifier() == "resultsGrid"})
     let heading = try #require(views.compactMap { $0 as? NSTextField }.first { $0.accessibilityIdentifier() == "queryConnectionBadge" })
     let originalFont = heading.font
     grid.tableColumns[1].width = 214
@@ -91,7 +91,7 @@ import Testing
         #expect(rect.minX >= 0 && rect.maxX <= size.width + 1, "\(id): \(rect) in \(size)")
         #expect(rect.minY >= 0 && rect.maxY <= size.height + 1)
       }
-      let grid = try #require(views.compactMap { $0 as? CopyTable }.first)
+      let grid = try #require(views.compactMap { $0 as? CopyTable }.first {$0.accessibilityIdentifier() == "resultsGrid"})
       #expect(try #require(grid.enclosingScrollView).frame.height > 100)
     }
   }

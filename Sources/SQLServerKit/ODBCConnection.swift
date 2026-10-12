@@ -51,9 +51,11 @@ public final class ODBCConnection: @unchecked Sendable {
               SQLUSMALLINT(SQL_DRIVER_NOPROMPT))
           }
           do { try check(rc, kind: SQLSMALLINT(SQL_HANDLE_DBC), handle: connection) } catch {
-            let safe = error.localizedDescription.replacingOccurrences(
+            let safe = ((error as? SQLFailure)?.message ?? error.localizedDescription).replacingOccurrences(
               of: password.isEmpty ? "\0" : password, with: "••••")
-            throw SQLFailure(safe)
+            throw SQLFailure(safe, diagnostics: (error as? SQLFailure)?.diagnostics.map {
+              Diagnostic(state:$0.state,code:$0.code,message:$0.message.replacingOccurrences(of:password.isEmpty ? "\0" : password,with:"••••"))
+            } ?? [])
           }
           continuation.resume()
         } catch {
@@ -123,7 +125,7 @@ public final class ODBCConnection: @unchecked Sendable {
   private func executeSync(
     _ text: String, limits: Limits, events: (@Sendable (QueryEvent) -> Void)?
   ) throws -> Execution {
-    guard let connection else { throw SQLFailure("Oturum bağlı değil.") }
+    guard let connection else { throw SQLFailure("Oturum bağlı değil.", diagnostics:[Diagnostic(state:"08003",code:0,message:"ODBC oturumu kapalı.")]) }
     let start = Date()
     var output = Execution()
     var handle: SQLHANDLE?

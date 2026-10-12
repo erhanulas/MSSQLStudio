@@ -1,6 +1,11 @@
 import AppKit
 import SQLServerKit
 
+private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
+  let token:Any
+  init(_ token:Any) {self.token=token}
+  deinit {NSEvent.removeMonitor(token)}
+}
 @MainActor final class SuggestionTable: NSTableView {
   override var acceptsFirstResponder: Bool { false }
 }
@@ -146,10 +151,17 @@ import SQLServerKit
     self.items=items; self.prefix=prefix; _ = view
     (view as? SQLSuggestionSurface)?.count=items.count
     table.reloadData(); if !items.isEmpty { table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false) }
-    preferredContentSize=NSSize(width:500,height:CGFloat(max(1,min(8,items.count)))*42+66)
+    preferredContentSize=NSSize(width:500,height:CGFloat(max(1,min(10,items.count)))*42+66)
     view.frame.size=preferredContentSize; view.needsLayout=true
     view.layoutSubtreeIfNeeded(); if !items.isEmpty { table.scrollRowToVisible(0) }
   }
+  func fit(maximumHeight:CGFloat) {
+    // Keep full rows between the fixed heading and keyboard hint footer.
+    let rows=max(1,min(10,Int((maximumHeight-66)/42),max(1,items.count)))
+    preferredContentSize=NSSize(width:500,height:CGFloat(rows)*42+66)
+    view.frame.size=preferredContentSize; view.needsLayout=true; view.layoutSubtreeIfNeeded()
+  }
+  var visibleRowCount:Int {max(1,Int((view.bounds.height-66)/42))}
   func move(_ step: Int) {
     guard !items.isEmpty else { return }
     let row = max(0,min(items.count-1,table.selectedRow+step))
@@ -510,7 +522,7 @@ import SQLServerKit
     }
   }
 }
-@MainActor final class EditorController: NSObject, NSTextViewDelegate {
+@MainActor final class EditorController: NSObject, NSTextViewDelegate, NSPopoverDelegate {
   let surface = NSView()
   let scroll = SQLEditorScrollView()
   let editor = SQLTextView(usingTextLayoutManager: true)
@@ -524,6 +536,10 @@ import SQLServerKit
   private var intelligenceGeneration = UUID()
   private let suggestionList = SQLSuggestionList()
   private let suggestionPopover = NSPopover()
+  private var suggestionKeyMonitor: SQLSuggestionKeyMonitor?
+  private var analysisCaret = -1
+  var completionSize:NSSize {suggestionPopover.contentSize}
+  var completionShown:Bool {suggestionPopover.isShown}
   private var currentAnalysis: SQLIntelligence.Analysis?
   private var analysisSource = ""
   private var cachedTokens: [Lexeme]?
@@ -635,6 +651,7 @@ import SQLServerKit
     ruler.toggle = { [weak self] in self?.toggleFold($0) }
     ruler.selectLine = { [weak self] in self?.selectSourceLine($0) }
     suggestionPopover.contentViewController = suggestionList
+    suggestionPopover.delegate = self
     suggestionPopover.animates = false; suggestionPopover.behavior = .semitransient
     suggestionList.accept = { [weak self] in self?.acceptSuggestion($0) }
     editor.requestSuggestions = { [weak self] in self?.scheduleIntelligence(manual:true) }
@@ -804,7 +821,7 @@ import SQLServerKit
     position?(
       prefix.filter { $0 == "\n" }.count + 1,
       (prefix.split(separator: "\n", omittingEmptySubsequences: false).last?.utf16.count ?? 0) + 1)
-    if !changingPresentation && editor.string == analysisSource { suggestionPopover.close(); scheduleIntelligence(allowPopup:false) }
+    if !changingPresentation && editor.string == analysisSource && range.location != analysisCaret { suggestionPopover.close(); scheduleIntelligence(allowPopup:false) }
   }
   private var paintingOccurrences = false
   private(set) var occurrenceRanges: [NSRange] = []
@@ -1019,7 +1036,7 @@ import SQLServerKit
         self.regions = regions; ruler.needsDisplay = true
         diagnostics = validate ? analysis.diagnostics : []
         cachedTokens = analysis.tokens; cachedTokenSource = source
-        currentAnalysis = analysis; analysisSource = source
+        currentAnalysis = analysis; analysisSource = source; analysisCaret = caret
         highlight()
         let prefixLength = caret-analysis.replacement.location
         let dot = analysis.replacement.location > 0 && (source as NSString).substring(with:NSRange(location:analysis.replacement.location-1,length:1)) == "."
@@ -1027,8 +1044,15 @@ import SQLServerKit
           suggestionList.update(analysis.suggestions,prefix:(source as NSString).substring(with:NSRange(location:analysis.replacement.location,length:prefixLength)))
           guard let anchor = suggestionAnchor(), let host = window.contentView else { return }
           let hostAnchor = host.convert(anchor,from:editor)
+          if let screen=window.screen {
+            let screenAnchor=window.convertToScreen(host.convert(hostAnchor,to:nil))
+            let space=max(screen.visibleFrame.maxY-screenAnchor.maxY,screenAnchor.minY-screen.visibleFrame.minY)-32
+            suggestionList.fit(maximumHeight:space)
+          }
+          suggestionPopover.contentSize=suggestionList.preferredContentSize
           suggestionPopover.show(relativeTo:hostAnchor,of:host,preferredEdge:host.isFlipped ? .maxY : .minY)
           window.makeFirstResponder(editor)
+          installSuggestionKeys()
         } else { suggestionPopover.close() }
       } catch { /* Superseded edits never publish stale diagnostics or suggestions. */ }
     }
@@ -1047,12 +1071,33 @@ import SQLServerKit
     }
     return anchor
   }
+  private func installSuggestionKeys() {
+    guard suggestionKeyMonitor == nil else {return}
+    let token=NSEvent.addLocalMonitorForEvents(matching:.keyDown) { [weak self] event in
+      let handled=MainActor.assumeIsolated {
+        guard let self, self.suggestionPopover.isShown,
+          let eventWindow=event.window,
+          eventWindow === self.suggestionList.view.window || eventWindow === self.editor.window && self.editor.window?.firstResponder === self.editor else {return false}
+        return self.handleSuggestionKey(event)
+      }
+      return handled ? nil:event
+    }
+    if let token {suggestionKeyMonitor=SQLSuggestionKeyMonitor(token)}
+  }
+  func popoverWillClose(_ notification:Notification) {
+    suggestionKeyMonitor=nil
+  }
   private func handleSuggestionKey(_ event: NSEvent) -> Bool {
-    guard suggestionPopover.isShown else { return false }
+    guard suggestionPopover.isShown, event.modifierFlags.intersection([.command,.control,.option]).isEmpty else { return false }
     switch event.keyCode {
     case 125: suggestionList.move(1); return true
     case 126: suggestionList.move(-1); return true
-    case 48,36: acceptSuggestion(suggestionList.table.selectedRow); return true
+    case 116: suggestionList.move(-suggestionList.visibleRowCount); return true
+    case 121: suggestionList.move(suggestionList.visibleRowCount); return true
+    case 115: suggestionList.move(-suggestionList.items.count); return true
+    case 119: suggestionList.move(suggestionList.items.count); return true
+    case 48 where event.modifierFlags.contains(.shift): suggestionList.move(-1); return true
+    case 48,36,76: acceptSuggestion(suggestionList.table.selectedRow); return true
     case 53: suggestionPopover.close(); intelligenceTask?.cancel(); return true
     default: return false
     }

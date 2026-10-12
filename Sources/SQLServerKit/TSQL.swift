@@ -264,7 +264,10 @@ public enum TSQL {
         if output.stoppedEarly { break }
       } catch {
         let message = "Batch başlangıç satırı \(batch.line): \(error.localizedDescription)"
-        guard !output.results.isEmpty else { throw SQLFailure(message) }
+        guard !output.results.isEmpty else {
+          let failure=error as? SQLFailure
+          throw SQLFailure("Batch başlangıç satırı \(batch.line): \(failure?.message ?? error.localizedDescription)",diagnostics:failure?.diagnostics ?? [])
+        }
         output.partial = true
         output.stoppedEarly = true
         output.messages.append(message)

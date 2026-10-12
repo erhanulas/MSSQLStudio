@@ -24,7 +24,7 @@ import Testing
       StudioTheme.apply(theme)
       list.view.frame.size=list.preferredContentSize
       list.view.layoutSubtreeIfNeeded()
-      #expect(list.preferredContentSize == NSSize(width:500,height:402))
+      #expect(list.preferredContentSize == NSSize(width:500,height:486))
       #expect(list.table.enclosingScrollView!.frame.minY == 34)
       #expect(list.table.rowHeight == 40 && !list.table.acceptsFirstResponder)
       let cell=try #require(list.tableView(list.table,viewFor:list.table.tableColumns[0],row:0))
@@ -44,6 +44,43 @@ import Testing
     list.update(Array(suggestions.prefix(1))); #expect(list.table.selectedRow == 0)
     #expect(list.preferredContentSize.height == 108)
     #expect(list.table.enclosingScrollView!.documentVisibleRect.contains(list.table.rect(ofRow:0)))
+  }
+
+  @Test func actualPopoverKeepsUsableSizeAndKeyboardSelectionVisible() async throws {
+    _ = NSApplication.shared
+    let server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false
+    let doc=QueryDocument(server:server,database:"master",title:"Keyboard completion")
+    doc.sql="SELECT * FROM TBLSTSABIT WHERE STOK_"
+    doc.intelligenceCatalog=SQLIntelligence.Catalog(snapshot:.init(symbols:[CatalogSymbol(schema:"dbo",name:"TBLSTSABIT",columns:(0..<30).map {"STOK_\($0)"})],synchronizedAt:Date()))
+    doc.catalogDatabase="master";doc.catalogVerified=true
+    let editor=EditorController(document:doc)
+    let window=NSWindow(contentRect:NSRect(x:50,y:50,width:900,height:680),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=editor.surface
+    defer {editor.editor.dismissSuggestions?();window.close()}
+    window.makeKeyAndOrderFront(nil);window.makeFirstResponder(editor.editor)
+    editor.editor.setSelectedRange(NSRange(location:(doc.sql as NSString).length,length:0))
+    editor.scheduleIntelligence(manual:true)
+    for _ in 0..<200 where !editor.completionShown {try await Task.sleep(for:.milliseconds(10))}
+    #expect(editor.completionShown && editor.completionSize.width == 500 && editor.completionSize.height >= 318)
+    func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+    let table=try #require(NSApp.windows.flatMap {$0.contentView.map(descendants) ?? []}.compactMap {$0 as? SuggestionTable}.first {$0.numberOfRows == 30})
+    func key(_ code:UInt16) throws {
+      let event=try #require(NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,characters:"",charactersIgnoringModifiers:"",isARepeat:false,keyCode:code))
+      editor.editor.keyDown(with:event)
+    }
+    let caret=editor.editor.selectedRange()
+    try key(121);#expect(table.selectedRow >= 6)
+    try key(119);#expect(table.selectedRow == 29)
+    #expect(table.enclosingScrollView!.documentVisibleRect.contains(table.rect(ofRow:29)))
+    try key(126);#expect(table.selectedRow == 28)
+    try key(115);#expect(table.selectedRow == 0)
+    try key(125);#expect(table.selectedRow == 1)
+    #expect(editor.editor.selectedRange() == caret && window.firstResponder === editor.editor)
+    try key(48)
+    #expect(editor.editor.string == "SELECT * FROM TBLSTSABIT WHERE [STOK_1]")
+    #expect(!editor.completionShown)
+    editor.editor.undoManager?.undo()
+    #expect(editor.editor.string == "SELECT * FROM TBLSTSABIT WHERE STOK_")
   }
 
   @Test func fixedGutterTracksVerticalScrollFilterSortPagingAndEditsWithoutEnteringClipboard() async throws {
