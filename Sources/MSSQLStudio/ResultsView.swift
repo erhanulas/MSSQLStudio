@@ -1399,6 +1399,11 @@ private struct ColumnFilterPanel: View {
     for (index,item) in resultTabs.tabViewItems.enumerated() {
       guard let button = resultStrip.arrangedSubviews[index] as? NSButton else { continue }
       if button.title != item.label { button.title = item.label }
+      button.setAccessibilityLabel(item.label)
+      if let tab = button as? StudioResultTabButton {
+        let ordinal = (item.identifier as? NSNumber)?.intValue
+        tab.source = ordinal.flatMap { document.results.indices.contains($0) ? document.results[$0].source : nil }
+      }
       button.contentTintColor = item === resultTabs.selectedTabViewItem ? StudioTheme.accent : StudioTheme.muted
       button.state = item === resultTabs.selectedTabViewItem ? .on : .off
       button.setAccessibilityValue(button.state == .on ? "Seçili" : "")

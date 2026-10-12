@@ -84,6 +84,8 @@ import SwiftUI
         var first = Rows(fields:[Field("object_id",type:4)],values:(1...10).map {[String($0)]})
         first.truncated = true
         document.results = [first, Rows(fields:[Field("Missing",type:4)],values:[[nil]]), Rows(fields:[Field("Last",type:4)],values:[["2"]])]
+        let sources = ResultSourceMap(sql: document.sql).sources(for: document.results)
+        for index in document.results.indices { document.results[index].source = sources[index] }
         document.rowCount = 12; document.partial = true
         document.messages = "Sentetik çoklu sonuç: ilk sonuç 10 satırla sınırlandı; sonraki iki sonuç korundu."
       }

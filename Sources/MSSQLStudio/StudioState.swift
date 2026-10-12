@@ -336,6 +336,9 @@ struct ObjectEditorKey: Codable, Equatable {
   private func receive(_ event: QueryEvent) {
     guard acceptingEvents else { return }
     switch event {
+    case .source(let index, let source):
+      while results.count <= index { results.append(Rows()) }
+      results[index].source = source
     case .result(let index, let fields):
       while results.count <= index { results.append(Rows()) }
       results[index].fields = fields

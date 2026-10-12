@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.68",
+    "date": "2026-10-12",
+    "title": "Results sekmelerinde kaynak SQL önizlemesi",
+    "changes": [
+      "Results ve Execution Plan sekmelerinin üzerine gelince kaynağa ait SQL önizlemesi açılır. Önizleme açık/koyu SSMS renklerini kullanır ve fare ayrılınca kapanır.",
+      "Kaynak SQL yürütme sonucuyla birlikte tutulur; editörde sonradan yapılan değişiklikler eski sonucun açıklamasını değiştirmez. GO grupları ve tekrarları ayrı grup numarası taşır.",
+      "Ayrı SELECT sorguları, CTE/UNION ve iç içe SELECT yapıları sonuçlarla eşleştirilir. Tek prosedür çağrısının sonuçlarında çağrı SQL’i, belirsiz veya dinamik çoklu çıktılarda kaynak SQL grubu açıkça gösterilir.",
+      "Önizleme ekran içinde konumlanır, uzun SQL görünümü sınırlandırılır ve erişilebilir yardım sunulur. Sorgular ek olarak çalıştırılmaz, batch yürütmesi bölünmez ve sonuç değerleri değiştirilmez."
+    ]
+  },
+  {
     "version": "0.2.67",
     "date": "2026-10-12",
     "title": "Çoklu sonuçlar, favoriler ve editör iyileştirmeleri",

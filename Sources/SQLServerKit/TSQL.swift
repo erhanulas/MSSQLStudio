@@ -225,7 +225,7 @@ public enum TSQL {
     let start = Date()
     var output = Execution()
     var budget = limits
-    for batch in try batches(sql) {
+    for (batchIndex, batch) in try batches(sql).enumerated() {
       if budget.resultSets <= 0 || budget.totalBytes <= 0 {
         output.partial = true
         output.stoppedEarly = true
@@ -235,16 +235,25 @@ public enum TSQL {
       do {
         try Task.checkCancellation()
         let offset = output.results.count
-        let result = try await execute(
+        let sourceMap = ResultSourceMap(sql: batch.text, batch: batchIndex + 1)
+        var result = try await execute(
           batch.text, budget,
           { event in
             switch event {
-            case .result(let index, let fields): events?(.result(offset + index, fields))
+            case .source(let index, let source): events?(.source(offset + index, source))
+            case .result(let index, let fields):
+              events?(.source(offset + index, sourceMap.batchSource))
+              events?(.result(offset + index, fields))
             case .rows(let index, let rows): events?(.rows(offset + index, rows))
             case .snapshot(let index, let rows): events?(.snapshot(offset + index, rows))
             case .message(let text): events?(.message(text))
             }
           })
+        let sources = sourceMap.sources(for: result.results)
+        for index in result.results.indices {
+          result.results[index].source = sources[index]
+          if let source = sources[index] { events?(.source(offset + index, source)) }
+        }
         output.results += result.results
         output.messages += result.messages
         output.partial = output.partial || result.partial

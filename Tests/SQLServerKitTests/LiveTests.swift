@@ -89,6 +89,9 @@ import Testing
     let result = try await TSQL.run("PRINT N'Türkçe'; SELECT 1 AS a;\nGO 2\nSELECT 2 AS b;", on: c)
     #expect(result.results.filter { !$0.fields.isEmpty }.count == 3)
     #expect(result.messages.contains { $0.contains("Türkçe") })
+    let sources = result.results.filter { !$0.fields.isEmpty }.compactMap(\.source)
+    #expect(sources.map(\.sql) == ["SELECT 1 AS a;", "SELECT 1 AS a;", "SELECT 2 AS b;"])
+    #expect(sources.map(\.batch) == [1, 2, 3])
     await c.disconnect()
   }
   @Test(.enabled(if: ProcessInfo.processInfo.environment["MSSQL_TEST_PASSWORD"] != nil))

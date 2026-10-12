@@ -130,6 +130,7 @@ public struct Rows: Sendable {
   public var fields: [Field]
   public var values: RowCollection
   public var affected: Int
+  public var source: SQLResultSource?
   /// This rowset is incomplete because of its row limit or a fetch failure.
   public var truncated = false
   public var isPlan: Bool {
@@ -163,6 +164,7 @@ public struct Limits: Sendable {
   public init() {}
 }
 public enum QueryEvent: Sendable {
+  case source(Int, SQLResultSource)
   case result(Int, [Field])
   case rows(Int, [[String?]])
   case snapshot(Int, RowCollection)
