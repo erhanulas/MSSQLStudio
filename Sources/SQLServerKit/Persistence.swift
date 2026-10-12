@@ -8,8 +8,22 @@ public struct SavedServer: Codable, Sendable {
 public struct ServerVault: Sendable {
   private let service: String
   private let keychainPath: String?
-  public init(service: String = "local.mssqlstudio.servers", keychainPath: String? = nil) {
-    self.service = service; self.keychainPath = keychainPath
+  private let credentialAgentURL: URL?
+  public init(service: String = "local.mssqlstudio.servers", keychainPath: String? = nil, credentialAgentURL: URL? = nil) {
+    self.service = service; self.keychainPath = keychainPath; self.credentialAgentURL = credentialAgentURL
+  }
+  private func agent() throws -> CredentialAgent? {
+    if let credentialAgentURL {
+      guard let keychainPath, service.hasPrefix("local.mssqlstudio.signing-test.") else {
+        throw SQLFailure("Parola bileşeni test kapsamı geçersiz.")
+      }
+      return CredentialAgent(executable: credentialAgentURL, testService: service, testKeychain: keychainPath)
+    }
+    if service == "local.mssqlstudio.servers", keychainPath == nil,
+      Bundle.main.bundleIdentifier == "local.mssqlstudio.app" {
+      return try CredentialAgent.installed()
+    }
+    return nil // Explicit isolated fixtures/unsigned Swift test tools retain their own vault.
   }
   private func searchQuery() throws -> [String:Any] {
     var result:[String:Any] = [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service]
@@ -36,6 +50,7 @@ public struct ServerVault: Sendable {
   /// The OS may request authorization for old ACLs; subsequent signed updates
   /// match the same designated requirement.
   public func renewApplicationAccess() throws -> Int {
+    if let agent = try agent() { return try agent.request("renew").count }
     var code:SecCode?
     try check(SecCodeCopySelf([], &code))
     var requirement:SecRequirement?
@@ -60,6 +75,7 @@ public struct ServerVault: Sendable {
   }
   public func save(_ profile: ServerProfile, password: String) throws {
     let data = try JSONEncoder().encode(SavedServer(profile: profile, password: password))
+    if let agent = try agent() { _ = try agent.request("save", account: profile.id, data: data); return }
     var attributes = try query(profile.id)
     if let keychainPath {
       var keychain:SecKeychain?
@@ -81,6 +97,10 @@ public struct ServerVault: Sendable {
     }
   }
   public func list() throws -> [SavedServer] {
+    if let agent = try agent() {
+      return try agent.request("list").records.map { try JSONDecoder().decode(SavedServer.self, from: $0) }
+        .sorted { $0.profile.name < $1.profile.name }
+    }
     var query = try searchQuery()
     query[kSecMatchLimit as String]=kSecMatchLimitAll
     query[kSecReturnAttributes as String]=true
@@ -104,6 +124,7 @@ public struct ServerVault: Sendable {
     return records.sorted { $0.profile.name < $1.profile.name }
   }
   public func delete(_ id: UUID) throws {
+    if let agent = try agent() { _ = try agent.request("delete", account: id); return }
     let code = SecItemDelete(try query(id) as CFDictionary)
     if code != errSecItemNotFound { try check(code) }
   }

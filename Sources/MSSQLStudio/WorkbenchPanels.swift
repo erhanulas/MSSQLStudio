@@ -200,14 +200,14 @@ private struct SettingsPanel: View {
       Text("Herkese açık Releases kullanılır. Depoyu girip Uygula’ya basın; ardından MSSQL Studio → Güncellemeleri Kontrol Et. Bağlantı parolaları ve sorgular GitHub’a gönderilmez. Boş bırakırsanız uygulamanın yayın adresi kullanılır.").font(.caption).foregroundStyle(.secondary)
         }.tabItem { Label("Güncellemeler", systemImage: "arrow.down.circle") }.tag("updates")
         settingsPage(title: "Güvenlik", subtitle: "Bağlantı parolaları ve uygulama erişimi", icon: "lock.shield") {
-      Text("Güncellemelerden sonra tekrarlayan Keychain izni için eski kayıtların uygulama erişimini bir kez yenileyin. macOS bu işlemde parola isteyebilir. Kalıcı imzalı MSSQL Studio'nun erişimi yenilenir; parolalar silinmez veya dışarı aktarılmaz. Önceki izin girdileri otomatik temizlenmez.").font(.caption).foregroundStyle(.secondary)
+      Text("Parolalara sürümler arasında aynı kalan imzalı MSSQL Studio parola bileşeni erişir. Eski kayıtların ilk geçişinde macOS onay isterse Her Zaman İzin Ver’i seçin. Anahtar zinciri kilitliyse macOS ayrıca parola isteyebilir. Erişim sorunu sürerse aşağıdan izinleri yenileyebilirsiniz; bağlantılarınız silinmez.").font(.caption).foregroundStyle(.secondary)
       StudioActionButton(renewingKeychain ? "İzinler yenileniyor…" : "Keychain izinlerini yenile",icon:"key",tint:.accentColor) {
         renewingKeychain=true;keychainMessage=""
         Task {
           defer {renewingKeychain=false}
           do {
             let count=try await Task.detached {try ServerVault().renewApplicationAccess()}.value
-            keychainMessage=count == 0 ? "Kayıtlı bağlantı bulunamadı." : "\(count) bağlantının erişim izni yenilendi. Aynı imzalı güncellemeler için erişim kuralı yenilendi; kilitli anahtar zinciri ayrıca macOS onayı isteyebilir."
+            keychainMessage=count == 0 ? "Kayıtlı bağlantı bulunamadı." : "\(count) bağlantının parola bileşeni erişimi yenilendi. macOS ilk erişimde veya kilitli anahtar zincirinde ayrıca onay isteyebilir."
           } catch {keychainMessage="İzinler tamamen yenilenemedi: "+error.localizedDescription}
         }
       }.disabled(renewingKeychain).accessibilityIdentifier("renewKeychainAccess")

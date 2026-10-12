@@ -64,6 +64,13 @@ public actor ApplicationUpdate {
   public nonisolated static func installationCompleted(expected:String,runningVersion:String,bundleURL:URL) -> Bool {
     bundleURL.standardizedFileURL.path == "/Applications/MSSQLStudio.app" && (runningVersion == expected || isNewer(runningVersion,than:expected))
   }
+  /// Successful installation is acknowledged silently; failed/incomplete installs retain their marker.
+  public nonisolated static func consumeCompletedInstallation(in defaults: UserDefaults, runningVersion: String, bundleURL: URL) -> Bool {
+    guard let expected = defaults.string(forKey: "pendingInstallerVersion"),
+      installationCompleted(expected: expected, runningVersion: runningVersion, bundleURL: bundleURL) else { return false }
+    defaults.removeObject(forKey: "pendingInstallerVersion")
+    return true
+  }
   public init() {}
   public nonisolated static func isNewer(_ candidate: String, than current: String) -> Bool {
     let allowed = CharacterSet(charactersIn:"0123456789.")

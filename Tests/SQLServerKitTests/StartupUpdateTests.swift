@@ -114,3 +114,24 @@ extension StartupUpdateTests {
     #expect(!ApplicationUpdate.installationCompleted(expected:"0.2.52",runningVersion:"0.2.52",bundleURL:URL(fileURLWithPath:"/tmp/MSSQLStudio.app")))
   }
 }
+
+@Suite struct SilentInstallationTests {
+  @Test func acknowledgesOnlyCompletedCanonicalInstallation() throws {
+    let name = "local.mssqlstudio.install-test." + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: name))
+    defer { defaults.removePersistentDomain(forName: name) }
+    let canonical = URL(fileURLWithPath: "/Applications/MSSQLStudio.app")
+    defaults.set("0.2.66", forKey: "pendingInstallerVersion")
+    #expect(!ApplicationUpdate.consumeCompletedInstallation(in: defaults, runningVersion: "0.2.65", bundleURL: canonical))
+    #expect(defaults.string(forKey: "pendingInstallerVersion") == "0.2.66")
+    #expect(!ApplicationUpdate.consumeCompletedInstallation(in: defaults, runningVersion: "0.2.69", bundleURL: URL(fileURLWithPath: "/tmp/MSSQLStudio.app")))
+    #expect(defaults.string(forKey: "pendingInstallerVersion") == "0.2.66")
+    #expect(ApplicationUpdate.consumeCompletedInstallation(in: defaults, runningVersion: "0.2.69", bundleURL: canonical))
+    #expect(defaults.string(forKey: "pendingInstallerVersion") == nil)
+    #expect(!ApplicationUpdate.consumeCompletedInstallation(in: defaults, runningVersion: "0.2.69", bundleURL: canonical))
+  }
+  @Test func rejectsUnsignedCredentialAgentBeforeSendingData() throws {
+    let agent = CredentialAgent(executable: URL(fileURLWithPath: "/usr/bin/true"), testService: nil, testKeychain: nil)
+    #expect(throws: SQLFailure.self) { try agent.request("save", account: UUID(), data: Data("synthetic-only".utf8)) }
+  }
+}

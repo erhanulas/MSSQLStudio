@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 """Prove two distinct signed binaries share a synthetic Keychain item without UI."""
 from pathlib import Path
+import importlib.util
+import os
 import shutil
 import subprocess
 import tempfile
 import uuid
 from signing import sign, verify, requirement
+
+_spec=importlib.util.spec_from_file_location('credential_agent',Path(__file__).parent/'credential-agent.py')
+_agent=importlib.util.module_from_spec(_spec);_spec.loader.exec_module(_agent)
+if not os.environ.get('RUNNER_TEMP'):
+    raise RuntimeError('Partition audit runs only in disposable CI; never use the real user login keychain')
+agent, agent_archive = _agent.prepare(Path(os.environ['RUNNER_TEMP'])/'MSSQLStudio-credential-v1')
 
 VAULT_SOURCE = (Path(__file__).resolve().parent.parent / 'Sources/SQLServerKit/Persistence.swift').read_text().split('public struct QueryRecord:')[0]
 SOURCE = r'''
@@ -19,16 +27,24 @@ public struct SQLFailure: Error {public init(_ message:String) {}}
 public enum PersonalSigningIdentity {
   public static func requirement() throws -> String { #"PINNED_REQUIREMENT"# }
 }
+AGENT_SOURCE
 VAULT_SOURCE
 SecKeychainSetUserInteractionAllowed(false)
 let service = CommandLine.arguments[1]
 let operation = CommandLine.arguments[2]
-let vault=ServerVault(service:service,keychainPath:CommandLine.arguments[3])
+let vault=ServerVault(service:service,keychainPath:CommandLine.arguments[3],credentialAgentURL:CommandLine.arguments[4] == "-" ? nil : URL(fileURLWithPath:CommandLine.arguments[4]))
 let profile=ServerProfile()
 var keychain:SecKeychain?
 guard SecKeychainOpen(CommandLine.arguments[3],&keychain) == errSecSuccess,let keychain else {exit(4)}
 do {
   switch operation {
+  case "partition":
+    let query:[String:Any] = [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:profile.id.uuidString,kSecMatchSearchList as String:[keychain],kSecReturnRef as String:true]
+    var item:CFTypeRef?,access:SecAccess?
+    guard SecItemCopyMatching(query as CFDictionary,&item) == errSecSuccess, let item else {exit(8)}
+    guard SecKeychainItemCopyAccess(item as! SecKeychainItem,&access) == errSecSuccess, let access else {exit(9)}
+    let partitions=SecAccessCopyMatchingACLList(access,kSecACLAuthorizationPartitionID) as? [SecACL] ?? []
+    guard partitions.count == 1 else {exit(10)}
   case "renew":
     guard try vault.renewApplicationAccess() == 1 else {exit(5)}
   case "read":
@@ -40,20 +56,19 @@ do {
   }
   print(0)
 } catch {print(-1)}
-'''.replace('VAULT_SOURCE',VAULT_SOURCE).replace('PINNED_REQUIREMENT',requirement('local.mssqlstudio.signing-regression'))
+'''.replace('AGENT_SOURCE',(Path(__file__).resolve().parent.parent/'Sources/SQLServerKit/CredentialAgent.swift').read_text()).replace('VAULT_SOURCE',VAULT_SOURCE).replace('PINNED_REQUIREMENT',requirement())
 
 
 
-def status(binary, service, operation):
-    result = subprocess.run([str(binary), service, operation, str(test_keychain)], capture_output=True, text=True, check=True, timeout=20)
+def status(binary, service, operation, helper=False):
+    result = subprocess.run([str(binary), service, operation, str(test_keychain), str(agent) if helper else "-"], capture_output=True, text=True, check=True, timeout=20)
     return int(result.stdout.strip())
 
 with tempfile.TemporaryDirectory(prefix='StudioSigningRegression-', dir='/tmp') as folder:
     root = Path(folder)
     first, second, adhoc = root/'first', root/'second', root/'adhoc'
-    test_keychain = root/'synthetic.keychain-db'
-    subprocess.run(['security','create-keychain','-p','synthetic-isolated-test',str(test_keychain)],check=True)
-    identifier = 'local.mssqlstudio.signing-regression'
+    test_keychain = Path.home()/'Library/Keychains'/('MSSQLStudio-signing-test-'+str(uuid.uuid4())+'.keychain')
+    identifier = 'local.mssqlstudio.app'
     for name, binary in [('FIRST_BUILD', first), ('SECOND_BUILD', second)]:
         source = root/(name+'.swift')
         source.write_text(SOURCE.replace('BUILD_MARKER', name))
@@ -73,27 +88,40 @@ with tempfile.TemporaryDirectory(prefix='StudioSigningRegression-', dir='/tmp') 
     installed = root/'installed'
     shutil.copy2(first,installed)
     created = False
+    subprocess.run(['security','create-keychain','-p','synthetic-isolated-test',str(test_keychain)],check=True)
     try:
         assert status(installed, service, 'save') == 0, 'Cannot create isolated Keychain fixture'
         created = True
-        assert status(installed, service, 'save') == 0, 'Vault update failed'
+        assert status(installed, service, 'partition') == 0, 'Audit fixture lacks enforced modern partitions'
+        assert status(installed, service, 'read') == 0, 'Creating build cannot read its own item'
         shutil.copy2(second,installed)
-        read_status = status(installed, service, 'read')
-        assert read_status == 0, 'Second signed build required Keychain authorization: '+str(read_status)
-        assert status(installed, service, 'save') == 0, 'Updated build could not save credentials'
+        assert status(installed, service, 'read') != 0, 'Control: personal certificate alone unexpectedly bypassed CDHash partition'
+        # A one-time user approval for the helper is simulated only on this disposable synthetic item.
+        # Production never calls security, asks for a keychain password, or edits partition lists.
+        helper_details = subprocess.run(['codesign','-d','--verbose=4',str(agent)],capture_output=True,text=True,check=True).stderr
+        helper_cdhash = next(line.split('=',1)[1] for line in helper_details.splitlines() if line.startswith('CDHash='))
+        subprocess.run(['security','set-generic-password-partition-list','-S','cdhash:'+helper_cdhash,
+            '-a','11111111-2222-3333-4444-555555555555','-s',service,'-k','synthetic-isolated-test',str(test_keychain)],
+            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=True)
+        assert status(installed, service, 'read', True) == 0, 'Frozen helper could not read migrated item'
+        assert status(installed, service, 'save', True) == 0, 'Helper password update failed'
         moved = root/'moved-installation'
-        shutil.copy2(second,moved)
-        assert status(moved, service, 'read') == 0, 'Stable identity depended on installation path'
-        shutil.copy2(first,installed)
-        assert status(installed, service, 'read') == 0, 'Updated credentials did not preserve cross-build access'
+        shutil.copy2(first,moved)
+        assert status(moved, service, 'read', True) == 0, 'Another build/path lost helper access'
+        assert status(moved, service, 'save', True) == 0, 'Another build could not update via helper'
+        assert status(installed, service, 'read', True) == 0, 'Updated credentials lost cross-build access'
         shutil.copy2(adhoc,installed)
-        assert status(installed, service, 'read') != 0, 'Unrelated ad-hoc binary gained access'
-        assert status(installed, service, 'renew') != 0, 'Unrelated ad-hoc binary renewed access'
+        assert status(installed, service, 'read', True) != 0, 'Frozen helper accepted an ad-hoc parent'
+        assert status(installed, service, 'save', True) != 0, 'Ad-hoc parent overwrote credentials'
+        assert status(installed, service, 'renew', True) != 0, 'Ad-hoc parent renewed access'
+        shutil.copy2(second, installed)
+        assert status(installed, service, 'read', True) == 0, 'Rejected client modified the record'
+        assert status(installed, service, 'delete', True) == 0, 'Helper could not delete synthetic record'
+        created = False
+        assert status(installed, service, 'save', True) == 0, 'Helper could not create fresh synthetic record'
+        created = True
+        assert status(moved, service, 'read', True) == 0, 'New helper-created record did not survive app upgrade'
     finally:
-        try:
-            if created:
-                shutil.copy2(first,installed)
-                assert status(installed, service, 'delete') == 0, 'Synthetic Keychain cleanup failed'
-        finally:
-            subprocess.run(['security','delete-keychain',str(test_keychain)],check=True)
-print('PASS: distinct builds, stable certificate/requirement, real ServerVault create/update, credentials preserved, prompt-free cross-build and moved-path isolated-keychain read, ad-hoc rejection, synthetic item cleanup.')
+        # Delete only this UUID-named synthetic keychain, even when a control assertion fails.
+        subprocess.run(['security','delete-keychain',str(test_keychain)],check=True)
+print('PASS: modern partition enforced; changing app CDHash reproduces the old prompt; frozen signed helper preserves create/read/update/delete across distinct builds/paths; ad-hoc parents rejected; synthetic fixtures removed.')

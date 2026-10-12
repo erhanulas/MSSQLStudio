@@ -45,7 +45,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="${RELEASE_TAG#v}"
-          gh release create "$RELEASE_TAG" "releases/MSSQLStudio-$version.zip" "releases/MSSQLStudio-$version.pkg" releases/update.json --verify-tag --title "MSSQL Studio $version" --notes-file releases/release-notes.md --draft
+          gh release create "$RELEASE_TAG" "releases/MSSQLStudio-$version.zip" "releases/MSSQLStudio-$version.pkg" releases/update.json releases/MSSQLStudio-CredentialAgent-v1.zip --verify-tag --title "MSSQL Studio $version" --notes-file releases/release-notes.md --draft
           gh release edit "$RELEASE_TAG" --draft=false --latest
       - name: Remove temporary signing identity
         if: always()

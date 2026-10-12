@@ -10,6 +10,10 @@ import subprocess
 import tempfile
 import zipfile
 from signing import verify
+import importlib.util
+_agent_spec = importlib.util.spec_from_file_location("credential_agent", Path(__file__).parent / "credential-agent.py")
+_agent = importlib.util.module_from_spec(_agent_spec)
+_agent_spec.loader.exec_module(_agent)
 
 
 def prepare(repository, tag, output):
@@ -52,6 +56,21 @@ def prepare(repository, tag, output):
         subprocess.run(['pkgutil','--expand-full',str(package),str(expanded)],check=True)
         payload=expanded/'MSSQLStudio-component.pkg/Payload/Applications/MSSQLStudio.app'
         verify(payload)
+        if tuple(map(int, version.split('.'))) >= (0, 2, 69):
+            config = json.loads(_agent.CONFIG.read_text())
+            helper = Path(temp)/'MSSQLStudio.app/Contents/Helpers/MSSQLStudioCredentials'
+            package_helper = payload/'Contents/Helpers/MSSQLStudioCredentials'
+            verify(helper)
+            verify(package_helper)
+            if helper.read_bytes() != package_helper.read_bytes():
+                raise ValueError('PKG and ZIP credential executables differ')
+            if config['binarySHA256'] and hashlib.sha256(helper.read_bytes()).hexdigest() != config['binarySHA256']:
+                raise ValueError('Frozen credential executable changed')
+            helper_archive = output / _agent.ARCHIVE
+            if helper_archive.exists():
+                with zipfile.ZipFile(helper_archive) as z:
+                    if z.namelist() != [_agent.NAME] or z.read(_agent.NAME) != helper.read_bytes():
+                        raise ValueError('Published credential archive does not match packaged executable')
         relative_history = Path(resources[0]).relative_to('MSSQLStudio.app')
         if (payload/relative_history).read_bytes() != history_bytes:
             raise ValueError('PKG and ZIP release notes do not match')
