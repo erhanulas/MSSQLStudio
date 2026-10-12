@@ -17,9 +17,13 @@ struct CredentialAgent: Sendable {
 
   func request(_ operation: String, account: UUID? = nil, data: Data? = nil) throws -> (records: [Data], count: Int) {
     var code: SecStaticCode?, requirement: SecRequirement?
+    var caller: SecCode?
     try check(SecRequirementCreateWithString(try PersonalSigningIdentity.requirement() as CFString, [], &requirement))
+    try check(SecCodeCopySelf([], &caller))
+    guard let caller, let requirement else { throw SQLFailure("Uygulama imzası doğrulanamadı.") }
+    try check(SecCodeCheckValidity(caller, [], requirement))
     try check(SecStaticCodeCreateWithPath(executable as CFURL, [], &code))
-    guard let code, let requirement else { throw SQLFailure("Güvenli parola bileşeni bulunamadı. Uygulamayı yeniden kurun.") }
+    guard let code else { throw SQLFailure("Güvenli parola bileşeni bulunamadı. Uygulamayı yeniden kurun.") }
     try check(SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSCheckAllArchitectures | kSecCSStrictValidate), requirement))
     var payload: [String: Any] = ["protocol": 1, "operation": operation]
     if let account { payload["account"] = account.uuidString }

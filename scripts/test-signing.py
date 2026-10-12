@@ -14,6 +14,8 @@ _agent=importlib.util.module_from_spec(_spec);_spec.loader.exec_module(_agent)
 if not os.environ.get('RUNNER_TEMP'):
     raise RuntimeError('Partition audit runs only in disposable CI; never use the real user login keychain')
 agent, agent_archive = _agent.prepare(Path(os.environ['RUNNER_TEMP'])/'MSSQLStudio-credential-v1')
+unauthorized = subprocess.run([str(agent)],input=b'{}',capture_output=True,timeout=20)
+assert unauthorized.returncode == 77 and not unauthorized.stdout, 'Helper accepted an unauthorized launcher'
 
 VAULT_SOURCE = (Path(__file__).resolve().parent.parent / 'Sources/SQLServerKit/Persistence.swift').read_text().split('public struct QueryRecord:')[0]
 SOURCE = r'''
