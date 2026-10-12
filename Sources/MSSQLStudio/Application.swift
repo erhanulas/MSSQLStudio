@@ -102,6 +102,22 @@ import SwiftUI
       document.savedText = document.sql
       document.intelligenceCatalog = SQLIntelligence.Catalog(snapshot:SQLCatalogSnapshot(symbols:[CatalogSymbol(schema:"dbo",name:"Customers",columns:["CustomerID","Name","City"]),CatalogSymbol(schema:"dbo",name:"Orders",columns:["OrderID","CustomerID","Amount"]),CatalogSymbol(schema:"dbo",name:"usp_GetCustomerDetails",columns:[],kind:"SQL_STORED_PROCEDURE"),CatalogSymbol(schema:"dbo",name:"ufn_GetCustomerName",columns:[],kind:"SQL_SCALAR_FUNCTION")]))
       document.catalogDatabase = "master"; document.catalogVerified = true
+      if let sql=Bundle.main.object(forInfoDictionaryKey:"StudioRefreshSmokeSQL") as? String {
+        document.sql=sql;document.savedText=sql;document.state = .ready
+        var executionCount=0
+        document.executionFixture = {sql,_ in
+          executionCount+=1
+          var output=Execution()
+          output.results=[Rows(fields:[Field("RefreshRun",type:4)],values:[[String(executionCount)]])]
+          output.results[0].source=ResultSourceMap(sql:sql).sources(for:output.results).first ?? nil
+          return output
+        }
+        document.sessionProbeFixture = {_,_ in
+          var output=Execution()
+          output.results=[Rows(fields:[Field("TranCount"),Field("Database")],values:[["0","master"]])]
+          return output
+        }
+      }
       if Bundle.main.object(forInfoDictionaryKey:"StudioGridSmoke") as? Bool == true {
         do {
           let spool = try ResultSpool()
@@ -148,6 +164,7 @@ import SwiftUI
       if Bundle.main.object(forInfoDictionaryKey:"StudioSettingsSmoke") as? Bool == true {
         workbench.showSettingsWindow()
       }
+      if Bundle.main.object(forInfoDictionaryKey:"StudioRefreshSmokeSQL") is String {document.execute()}
       return
     }
     studio.loadHistory()

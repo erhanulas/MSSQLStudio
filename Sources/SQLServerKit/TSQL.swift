@@ -83,7 +83,8 @@ public enum TSQL {
   public static func canRepeatRead(_ sql: String) -> Bool {
     let allTokens = lex(sql).filter { $0.kind != .space && $0.kind != .comment }
     // Monitoring scripts often start with local filter parameters. Parse only
-    // built-in scalar declarations with literal/NULL initializers, then apply
+    // built-in scalar declarations with literal/NULL initializers and the
+    // count-message setting SET NOCOUNT ON/OFF, then apply
     // the existing read-only policy to the complete remaining script. Merely
     // removing DECLARE from the forbidden words would also admit table/cursor
     // variables, executable expressions and arbitrary user-defined types.
@@ -134,6 +135,13 @@ public enum TSQL {
     }
     while true {
       while text(i) == ";" { i += 1 }
+      if text(i) == "SET" {
+        // Only the literal row-count-message option is harmless to repeat.
+        // Keep every other SET, and all settings after the SELECT body, blocked.
+        guard text(i+1) == "NOCOUNT", ["ON", "OFF"].contains(text(i+2)) else { return nil }
+        i += 3
+        continue
+      }
       guard text(i) == "DECLARE" else { return tokens[i...] }
       i += 1
       while true {
@@ -167,7 +175,7 @@ public enum TSQL {
             i += 1
           } else {
             let first = i
-            while i < tokens.count, ![",", ";", "DECLARE", "SELECT", "WITH"].contains(text(i)) { i += 1 }
+            while i < tokens.count, ![",", ";", "DECLARE", "SET", "SELECT", "WITH"].contains(text(i)) { i += 1 }
             let literal = tokens[first..<i].map(\.text).joined()
             // Deliberately no variable, function, subquery or expression calls.
             guard literal.range(of: #"^(?:0[xX][0-9A-Fa-f]*|[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)$"#, options: .regularExpression) != nil else { return nil }
@@ -175,7 +183,7 @@ public enum TSQL {
         }
         if text(i) == "," { i += 1; continue }
         // SQL Server permits an omitted terminator before the next statement.
-        guard i == tokens.count || [";", "DECLARE", "SELECT", "WITH"].contains(text(i)) else { return nil }
+        guard i == tokens.count || [";", "DECLARE", "SET", "SELECT", "WITH"].contains(text(i)) else { return nil }
         break
       }
     }

@@ -3,6 +3,32 @@ import SQLServerKit
 import Testing
 
 struct RepeatReadTests {
+  @Test func noCountPrefixSupportsReadOnlyMonitoringWithoutAllowingOtherSettings() throws {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("Fixtures/ParameterizedMonitoring.sql")
+    let monitoring = try String(contentsOf: url, encoding: .utf8)
+    for sql in [
+      "SET NOCOUNT ON;\n" + monitoring,
+      "SET NOCOUNT ON;\n" + monitoring.replacingOccurrences(of: ";WITH Blockers AS", with: "WITH Blockers AS"),
+      "SET NOCOUNT OFF; SELECT 1; SELECT 2;",
+      ";set /* count messages */ nocount on\nDECLARE @a INT=0\nSET NOCOUNT OFF\n;WITH c AS (SELECT @a AS n) SELECT * FROM c;",
+      "SET NOCOUNT ON SET NOCOUNT OFF SELECT 1;",
+    ] { #expect(TSQL.canRepeatRead(sql), Comment(rawValue: sql.hasPrefix("SET NOCOUNT ON;") ? "NOCOUNT monitoring prefix" : sql)) }
+    for sql in [
+      "SET NOCOUNT ON;", "SET NOCOUNT @flag; SELECT 1;", "SET NOCOUNT 1; SELECT 1;",
+      "SET NOCOUNT ON, ANSI_NULLS ON; SELECT 1;", "SET NOCOUNT ON OFF; SELECT 1;",
+      "SET LANGUAGE English; SELECT 1;", "SET IMPLICIT_TRANSACTIONS ON; SELECT 1;",
+      "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; SELECT 1;", "SET @a=1; SELECT 1;",
+      "SET NOCOUNT ON; SET XACT_ABORT ON; SELECT 1;", "SET NOCOUNT ON; USE OtherDB; SELECT 1;",
+      "SET NOCOUNT ON; SELECT 1; SET NOCOUNT OFF;", "SET NOCOUNT ON; EXEC dbo.p; SELECT 1;",
+      "SET NOCOUNT ON; DECLARE @a INT=dbo.SideEffect(); SELECT @a;",
+      "SET NOCOUNT ON; SELECT * INTO #new FROM t;", "SET NOCOUNT ON; SELECT 1\nGO\nSELECT 2;",
+      "SET NOCOUNT ON; SELECT * FROM t WITH (UPDLOCK);",
+      "SET NOCOUNT ON; SELECT 1; UPDATE t SET n=2;",
+    ] { #expect(!TSQL.canRepeatRead(sql), Comment(rawValue: sql)) }
+    #expect(throws: SQLFailure.self) { try ResultEditSource.metadata("SET NOCOUNT ON; SELECT * FROM dbo.T;") }
+  }
+
   @Test func literalScalarFilterParametersRemainRepeatableBeforeReadOnlyQueries() {
     for sql in [
       "DECLARE @OnlyBlocking BIT=0; DECLARE @DBNameFilter SYSNAME=NULL; ;WITH c AS (SELECT @OnlyBlocking AS n) SELECT * FROM c;",

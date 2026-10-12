@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.97",
+    "date": "2026-10-13",
+    "title": "İzleme sorgularında güvenilir sonuç yenileme",
+    "changes": [
+      "SET NOCOUNT ON/OFF ile başlayıp sabit DECLARE parametreleri ve CTE/SELECT içeren izleme sorgularında Sonuçları Yenile etkinleşir. Yalnız bu başlangıç ayarı desteklenir; diğer SET komutları ve yazma işlemleri otomatik tekrarlanmaz.",
+      "SQL Server’ın yürütme sonrası bildirdiği gerçek veritabanı adı, başarılı okumanın yenileme kaydına işlenir. Harf duyarlı veritabanı adları birbirine eşit sayılmadan sorgunun gerçek bağlamı korunur.",
+      "Sonuçları Yenile pasifken nedeni yardım metninde görünür: işlem sürmesi, bağlantı, transaction, veritabanı değişimi veya tekrar okunamayan SQL."
+    ]
+  },
+  {
     "version": "0.2.96",
     "date": "2026-10-13",
     "title": "Daha sakin sekmeler, yenilenen Ayarlar ve güvenilir indeks temizliği",

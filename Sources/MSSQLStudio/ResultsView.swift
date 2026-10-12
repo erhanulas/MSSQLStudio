@@ -1973,6 +1973,9 @@ private struct ColumnFilterPanel: View {
       defaultRefreshApplied=true; applyRefreshSeconds(document.initialRefreshSeconds ?? ResultReadPreferences.refreshSeconds)
     }
     refreshButton.isEnabled = document.canRefresh
+    refreshButton.toolTip = document.refreshDisabledReason.map { "Sonuçları yenile · " + $0 }
+      ?? "Son başarılı sorguyu aynı veritabanında yeniden çalıştır"
+    refreshButton.setAccessibilityHelp(refreshButton.toolTip)
     autoRefreshButton.isEnabled = !document.busy && !submittingData && !tables.values.contains(where: { $0.editDefinition != nil })
     if !document.busy && !document.canRefresh { applyRefreshSeconds(0) }
   }

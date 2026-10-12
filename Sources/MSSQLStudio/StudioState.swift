@@ -188,10 +188,21 @@ struct ObjectEditorKey: Codable, Equatable {
   private(set) var lastExecutedDatabase: String?
   // In-process test injection; normal documents always use their independent ODBC session.
   var executionFixture: ((String, Limits) async throws -> Execution)?
-  var canRefresh: Bool {
-    lastExecutionSucceeded && state == .ready && transactionCount == 0 && lastExecutedDatabase == database
-      && lastExecutedSQL.map(TSQL.canRepeatRead) == true
+  var sessionProbeFixture: ((String, Limits) async throws -> Execution)?
+  var refreshDisabledReason: String? {
+    switch state {
+    case .running, .cancelling: return "Sorgu işlemi sürerken sonuçlar yenilenemez."
+    case .connecting: return "Bağlantı kurulurken sonuçlar yenilenemez."
+    case .disconnected: return "Sorgu bağlantısı kapalı. Önce bu sorgu sekmesini yeniden bağlayın."
+    case .ready: break
+    }
+    guard lastExecutionSucceeded, let lastExecutedSQL else { return "Önce bu sekmede bir okuma sorgusunu başarıyla çalıştırın." }
+    guard transactionCount == 0 else { return "Açık transaction var (\(transactionCount)). Yenilemeden önce COMMIT veya ROLLBACK ile tamamlayın." }
+    guard lastExecutedDatabase == database else { return "Veritabanı değişti. Bu veritabanında sorguyu yeniden çalıştırın." }
+    guard TSQL.canRepeatRead(lastExecutedSQL) else { return "Bu sorgu güvenli bir salt okunur sorgu olarak tekrarlanamıyor. Çalıştır düğmesini kullanın." }
+    return nil
   }
+  var canRefresh: Bool { refreshDisabledReason == nil }
   var favoriteID: UUID?
   var file: URL?
   var state = State.disconnected
@@ -352,6 +363,7 @@ struct ObjectEditorKey: Codable, Equatable {
       ?? (selectedRange.length > 0 && NSMaxRange(selectedRange) <= source.length
         ? source.substring(with: selectedRange) : sql)
     guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    let executionServer=server,executionServerGeneration=server.generation,executionDatabase=database
     repeating = repeatRead
     resultGeneration += 1
     lastExecutionSucceeded = false
@@ -371,6 +383,7 @@ struct ObjectEditorKey: Codable, Equatable {
     let start = Date()
     let captureActual = actualPlan && !estimated
     let executionFixture = self.executionFixture
+    let sessionProbeFixture = self.sessionProbeFixture
     task = Task { [weak self] in
       guard let self else { return }
       defer {
@@ -434,21 +447,39 @@ struct ObjectEditorKey: Codable, Equatable {
         completed?(query, nil, error.localizedDescription)
         await recordConnectionFailure(error)
       }
-      if state != .disconnected && executionFixture == nil {
-        if estimated { _ = try? await connection.execute("SET SHOWPLAN_XML OFF;") }
-        if captureActual { _ = try? await connection.execute("SET STATISTICS XML OFF;") }
+      if state != .disconnected && (executionFixture == nil || sessionProbeFixture != nil) {
+        if estimated && executionFixture == nil { _ = try? await connection.execute("SET SHOWPLAN_XML OFF;") }
+        if captureActual && executionFixture == nil { _ = try? await connection.execute("SET STATISTICS XML OFF;") }
         do {
           var limits=Limits();limits.rows=1;limits.timeout=5
-          let result = try await connection.execute("SELECT @@TRANCOUNT, DB_NAME();",limits:limits)
+          let result:Execution
+          if let sessionProbeFixture {result=try await sessionProbeFixture("SELECT @@TRANCOUNT, DB_NAME();",limits)}
+          else {result=try await connection.execute("SELECT @@TRANCOUNT, DB_NAME();",limits:limits)}
+          // This response belongs to the session that just executed the SQL.
+          // A late reply must not authorize refresh or overwrite another target.
+          guard executionID==token,server === executionServer,server.generation==executionServerGeneration,self.database==executionDatabase else {
+            if executionID==token {lastExecutedDatabase=nil}
+            return
+          }
           if let row = result.results.first?.values.first, row.count > 1 {
             transactionCount = row[0].flatMap(Int.init) ?? 0
-            if let database = row[1], self.database != database {
-              self.database = database
-              clearSymbols()
-              Task { [weak self] in await self?.loadSymbols() }
+            if let database = row[1] {
+              // DB_NAME is the actual SQL session identity, not a case-insensitive
+              // guess from profile text. Read-only SQL cannot change that identity.
+              if lastExecutionSucceeded,!estimated,lastExecutedSQL==query,lastExecutedDatabase==executionDatabase,TSQL.canRepeatRead(query) {
+                lastExecutedDatabase=database
+              }
+              if self.database != database {
+                self.database = database
+                clearSymbols()
+                Task { [weak self] in await self?.loadSymbols() }
+              }
             }
           }
-        } catch {await recordConnectionFailure(error)}
+        } catch {
+          if executionID==token,server === executionServer,server.generation==executionServerGeneration,self.database==executionDatabase {await recordConnectionFailure(error)}
+          else if executionID==token {lastExecutedDatabase=nil}
+        }
       }
     }
   }

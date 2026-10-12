@@ -396,7 +396,7 @@ public struct ResultEditSource: Sendable {
   public static func metadata(_ sql: String) throws -> String {
     let tokens = TSQL.lex(sql).filter { $0.kind != .space && $0.kind != .comment }
     guard TSQL.canRepeatRead(sql), tokens.filter({ $0.text.uppercased() == "SELECT" }).count == 1,
-      !tokens.contains(where: { $0.kind != .string && ["DECLARE", "JOIN", "APPLY", "UNION", "EXCEPT", "INTERSECT", "GROUP", "DISTINCT", "OVER"].contains($0.text.uppercased()) })
+      !tokens.contains(where: { $0.kind != .string && ["DECLARE", "SET", "JOIN", "APPLY", "UNION", "EXCEPT", "INTERSECT", "GROUP", "DISTINCT", "OVER"].contains($0.text.uppercased()) })
     else { throw SQLFailure("Düzenleme yalnızca tek tabloyu okuyan bir SELECT için desteklenir; JOIN, toplama ve çoklu sorgular salt okunur.") }
     return "SELECT name,source_server,source_database,source_schema,source_table,source_column,error_number,error_message,column_ordinal FROM sys.dm_exec_describe_first_result_set(\(SQL.literal(sql)),NULL,1) WHERE is_hidden=0 OR error_number IS NOT NULL ORDER BY column_ordinal;"
   }
