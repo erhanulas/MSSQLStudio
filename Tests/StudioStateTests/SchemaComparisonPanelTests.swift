@@ -110,7 +110,9 @@ import SQLServerKit
   @Test func viewProjectionAdditionAppearsInFilteredListAndInlineCode() async throws {
     let model=model(reader:{endpoint,sql in
       var result=try SchemaComparisonUIFixture.catalog(endpoint.database,sql)
-      let definition="CREATE VIEW dbo.v_ActiveBalance AS\nSELECT A.CustomerID, C.InvoiceDate,\n"+(endpoint.database=="SourceDB" ? "    C.INCKEYNO AS ExternalOrderId,\n":"")+"    A.Amount\nFROM dbo.Customers A JOIN dbo.Orders C ON C.CustomerID=A.CustomerID;"
+      let source=endpoint.database=="SourceDB"
+      let rows=["CREATE VIEW dbo.v_ActiveBalance AS","SELECT A.CustomerID, C.InvoiceDate,  -- Fatura tarihi"]+(source ? ["    C.INCKEYNO AS ExternalOrderId,"]:[])+["    A.Amount","FROM dbo.Customers A JOIN dbo.Orders C ON C.CustomerID=A.CustomerID;"]
+      let definition=rows.map {$0+(source ? "    ":"  ")}.joined(separator:source ? "\n":"\r\n")
       if sql.contains("StudioSchemaRefinement") {
         var rows=Array(result.results[0].values)
         for i in rows.indices where rows[i][0]=="109" {rows[i][1]=definition;rows[i][6]=String(repeating:"0",count:64)}
@@ -126,7 +128,12 @@ import SQLServerKit
     #expect(!model.visible.contains {$0.key.name=="v_Balance"})
     model.detailMode = .code;model.focused=row.key;await model.loadDetail()
     #expect(model.sourceSQL.contains("C.INCKEYNO AS ExternalOrderId"))
-    #expect(!model.targetSQL.contains("ExternalOrderId") && !model.changedGroups.isEmpty)
+    #expect(!model.targetSQL.contains("ExternalOrderId") && model.changedGroups.count==1)
+    let comparison=try #require(model.detailComparison)
+    #expect(comparison.added==1 && comparison.removed==0)
+    #expect(comparison.lines.filter(\.changed).count==1)
+    #expect(comparison.lines.first(where:\.changed)?.new?.contains("ExternalOrderId")==true)
+    #expect(model.targetSQL.contains("\r\n") && !model.sourceSQL.contains("\r\n"))
     #expect(model.detailMode == .code && model.error.isEmpty)
   }
   @Test func readableViewWithMissingServerHashReportsFailureInsteadOfAnEmptyDifferenceList() async throws {

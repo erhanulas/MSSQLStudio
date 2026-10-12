@@ -31,6 +31,8 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
   fileprivate var rowStyles: [SQLInlineDiffRowStyle] = []
   fileprivate var rowRanges: [NSRange] = []
   fileprivate var copyRanges: [NSRange] = []
+  fileprivate var copySourceRanges: [NSRange?] = []
+  fileprivate var sourceSQL: NSString = ""
   fileprivate var sourceNumbers: [Int?] = []
   func backgroundFrame(forRow row: Int) -> NSRect {
     NSRect(x:0,y:textContainerOrigin.y+CGFloat(row)*SQLInlineDiffView.lineHeight,width:bounds.width,height:SQLInlineDiffView.lineHeight)
@@ -62,11 +64,16 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
   }
   /// Alignment-only rows and the painted ruler never become SQL clipboard text.
   func selectedSQL(in range: NSRange) -> String {
-    let source=string as NSString
     var pieces: [String] = []
     for (row, lineRange) in copyRanges.enumerated() where sourceNumbers[row] != nil {
       let intersection=NSIntersectionRange(range, lineRange)
-      if intersection.length > 0 { pieces.append(source.substring(with: intersection)) }
+      guard intersection.length>0,let sourceRange=copySourceRanges[row] else {continue}
+      let contentLength=rowRanges[row].length-1,relative=intersection.location-lineRange.location
+      let length=min(intersection.length,max(0,contentLength-relative))
+      if length>0 {pieces.append(sourceSQL.substring(with:NSRange(location:sourceRange.location+relative,length:length)))}
+      if NSMaxRange(intersection)>lineRange.location+contentLength,sourceRange.length>contentLength {
+        pieces.append(sourceSQL.substring(with:NSRange(location:sourceRange.location+contentLength,length:sourceRange.length-contentLength)))
+      }
     }
     return pieces.joined()
   }
@@ -170,7 +177,7 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
     return rows
   }
   func display(comparison: SQLTextDiff.Comparison, original: String, edited: String, changeIndex: Int) {
-    if cachedOriginal != original || cachedEdited != edited {
+    if cachedOriginal.map({!$0.utf8.elementsEqual(original.utf8)}) ?? true || cachedEdited.map({!$0.utf8.elementsEqual(edited.utf8)}) ?? true || cachedComparison != comparison {
       cachedComparison=comparison; cachedOriginal=original; cachedEdited=edited
       render(preservingViewport: false)
       lastChangeIndex=changeIndex
@@ -261,26 +268,39 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
     let attributed=NSMutableAttributedString(string: ""), colored=SQLSourceHighlighting.attributed(source)
     var offsets: [Int] = [], offset=0
     for line in source.components(separatedBy: "\n") { offsets.append(offset); offset += line.utf16.count+1 }
-    var ranges: [NSRange] = [], copyRanges: [NSRange] = [], numbers: [Int?] = [], styles: [SQLInlineDiffRowStyle] = [], maximumWidth: CGFloat = 0
+    var ranges: [NSRange] = [], copyRanges: [NSRange] = [], copySourceRanges:[NSRange?]=[], numbers: [Int?] = [], styles: [SQLInlineDiffRowStyle] = [], maximumWidth: CGFloat = 0
     let paragraph=NSMutableParagraphStyle(); paragraph.minimumLineHeight=Self.lineHeight; paragraph.maximumLineHeight=Self.lineHeight
     paragraph.lineBreakMode = .byClipping; paragraph.tabStops=[]
     paragraph.defaultTabInterval=(" " as NSString).size(withAttributes:[.font:StudioTheme.codeFont]).width*4
     for row in rows {
       let number=old ? row.oldNumber : row.newNumber, value=old ? row.old : row.new
+      let sourceRange=old ? row.oldSourceRange:row.newSourceRange,ending=old ? row.oldLineEnding:row.newLineEnding
+      let meaningfulChanges=old ? row.oldChanges:row.newChanges,sideChanged=old ? row.oldChanged:row.newChanged
       let start=attributed.length
-      if let value, let number, offsets.indices.contains(number-1) {
-        attributed.append(colored.attributedSubstring(from: NSRange(location:offsets[number-1],length:value.utf16.count)))
+      if let value, let number, sourceRange != nil || offsets.indices.contains(number-1) {
+        attributed.append(colored.attributedSubstring(from:sourceRange ?? NSRange(location:offsets[number-1],length:value.utf16.count)))
         maximumWidth=max(maximumWidth,(value as NSString).size(withAttributes:[.font:StudioTheme.codeFont,.paragraphStyle:paragraph]).width)
       }
       attributed.append(NSAttributedString(string: "\n", attributes:[.font:StudioTheme.codeFont,.foregroundColor:StudioTheme.editorText]))
-      let style: SQLInlineDiffRowStyle = row.changed ? (value == nil ? .placeholder : old ? .removed : .added) : .unchanged
+      let style: SQLInlineDiffRowStyle = sideChanged ? (old ? .removed:.added) : row.changed && value == nil ? .placeholder:.unchanged
       ranges.append(NSRange(location: start, length: attributed.length-start)); numbers.append(number); styles.append(style)
       // The final aligned display row has a layout newline, even if the source does not.
-      let copyLength=(value?.utf16.count ?? 0)+(number.map { $0 < offsets.count ? 1 : 0 } ?? 0)
+      let hasEnding=ending.map {!$0.isEmpty} ?? (number.map {$0<offsets.count} ?? false)
+      let copyLength=(value?.utf16.count ?? 0)+(hasEnding ? 1:0)
       copyRanges.append(NSRange(location:start,length:copyLength))
-      if row.changed {
+      if let number,let value {
+        let range=sourceRange ?? NSRange(location:offsets[number-1],length:value.utf16.count)
+        copySourceRanges.append(NSRange(location:range.location,length:range.length+(ending?.utf16.count ?? (hasEnding ? 1:0))))
+      } else {copySourceRanges.append(nil)}
+      if sideChanged {
         attributed.addAttribute(.backgroundColor, value: style.background, range: ranges.last!)
         if let value {
+          if let meaningfulChanges {
+            for raw in meaningfulChanges where raw.length>0 {
+              let changed=(value as NSString).rangeOfComposedCharacterSequences(for:raw)
+              attributed.addAttribute(.backgroundColor,value:old ? StudioTheme.color(0xF2BABA,0x784150):StudioTheme.color(0xACE0C4,0x3B7154),range:NSRange(location:start+changed.location,length:changed.length))
+            }
+          } else {
           let a=Array(value.utf16), b=Array(((old ? row.new : row.old) ?? "").utf16)
           var prefix=0,suffix=0
           while prefix < min(a.count,b.count), a[prefix] == b[prefix] { prefix += 1 }
@@ -290,11 +310,12 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
             let changed=(value as NSString).rangeOfComposedCharacterSequences(for:raw)
             attributed.addAttribute(.backgroundColor, value: old ? StudioTheme.color(0xF2BABA,0x784150) : StudioTheme.color(0xACE0C4,0x3B7154), range:NSRange(location:start+changed.location,length:changed.length))
           }
+          }
         }
       }
     }
     attributed.addAttribute(.paragraphStyle, value: paragraph, range:NSRange(location:0,length:attributed.length))
-    text.defaultParagraphStyle=paragraph; text.rowRanges=ranges; text.copyRanges=copyRanges; text.sourceNumbers=numbers; text.rowStyles=styles
+    text.defaultParagraphStyle=paragraph; text.rowRanges=ranges; text.copyRanges=copyRanges;text.copySourceRanges=copySourceRanges;text.sourceSQL=source as NSString; text.sourceNumbers=numbers; text.rowStyles=styles
     text.textContentStorage?.textStorage?.setAttributedString(attributed); text.needsDisplay=true
     scroll.backgroundColor=StudioTheme.editorCanvas
     if let ruler=scroll.verticalRulerView as? SQLInlineDiffRuler {

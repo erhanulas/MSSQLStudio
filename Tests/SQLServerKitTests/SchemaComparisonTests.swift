@@ -213,6 +213,41 @@ struct SchemaComparisonTests {
     #expect(try SchemaComparison.compare(source:a,target:deliveryOnly).first?.status == .equal)
     #expect(try ExplorerScripts.module(sourceSQL,verb:"CREATE",qualified:source.key.qualified).contains("C.INCKEYNO AS ExternalOrderId,"))
   }
+  @Test func viewsIgnoreFormattingButKeepRealProjectionProtectedTextAndSessionDifferences() throws {
+    let source=object("TEDARIK_FIYAT_FARKI_VW",type:"V",id:41)
+    let target=object("TEDARIK_FIYAT_FARKI_VW",type:"V",digest:String(repeating:"b",count:64),id:83)
+    let original="CREATE VIEW oldName AS\nSELECT\n    C.STHAR_GCMIK AS OrderQuantity, -- Siparis Miktari      \n    C.STHAR_TARIH AS InvoiceDate, -- Fatura  Tarihi      \n    N'a  b' AS [Description Text]\nFROM dbo.T AS C\nWHERE C.STHAR_GCMIK >= 1.2e-3;"
+    let formatted="ALTER VIEW dbo.TEDARIK_FIYAT_FARKI_VW AS\r\n\r\n SELECT C.STHAR_GCMIK\tAS OrderQuantity ,    -- Siparis Miktari        \r\nC.STHAR_TARIH AS InvoiceDate, -- Fatura  Tarihi\t \r\n N'a  b' AS [Description Text]\r\nFROM dbo . T AS C WHERE C.STHAR_GCMIK>=1.2e-3 ;\r\n"
+    func refined(_ object:SchemaObject,_ sql:String,ansi:String="1",quoted:String="1") throws -> SchemaSnapshot {
+      var execution=Execution();execution.results=[Rows(values:[[String(object.objectID),sql,ansi,quoted,"0",nil,String(repeating:"c",count:64)]])]
+      return try SchemaComparison.refine(.init(objects:[object]),objects:[object],result:execution)
+    }
+    let a=try refined(source,original),b=try refined(target,formatted)
+    let equal=try #require(SchemaComparison.compare(source:a,target:b).first)
+    #expect(equal.status == .equal && !equal.canStage)
+    #expect(a.objects[source.key]?.digest==source.digest && b.objects[target.key]?.digest==target.digest)
+    #expect(throws:SQLFailure.self) {try SchemaMigration.validateBaseline(a,current:b,keys:[source.key])}
+    let added=formatted.replacingOccurrences(of:" N'a  b'",with:" C.INCKEYNO AS ExternalOrderId,\r\n N'a  b'")
+    #expect(try SchemaComparison.compare(source:a,target:refined(target,added)).first?.status == .changed)
+    for changed in [
+      formatted.replacingOccurrences(of:"N'a  b'",with:"N'a b'"),
+      formatted.replacingOccurrences(of:"[Description Text]",with:"[Description  Text]"),
+      formatted.replacingOccurrences(of:"-- Siparis Miktari",with:"-- Siparis  Miktari"),
+      formatted.replacingOccurrences(of:"C.STHAR_GCMIK>=",with:"C.STHAR_GCMIK>=".lowercased())
+    ] {#expect(try SchemaComparison.compare(source:a,target:refined(target,changed)).first?.status == .changed)}
+    #expect(try SchemaComparison.compare(source:a,target:refined(target,formatted,ansi:"0")).first?.status == .changed)
+    #expect(try SchemaComparison.compare(source:a,target:refined(target,formatted,quoted:"0")).first?.status == .changed)
+    let procedure=object("p",type:"P"),function=object("f",type:"FN")
+    for module in [procedure,function] {
+      let kind=module.type=="P" ? "PROC":"FUNCTION"
+      let compact="CREATE \(kind) dbo.\(module.key.name) AS SELECT 1;"
+      #expect(try SchemaComparison.compare(source:refined(module,compact),target:refined(module,compact.replacingOccurrences(of:"SELECT 1",with:"SELECT\n  1"))).first?.status == .changed)
+    }
+    var content=Execution();content.results=[Rows(values:[[added,"1","1","0",nil]])]
+    let decoded=try SchemaComparison.decodeContent(content,object:target)
+    #expect(decoded.definition.utf8.elementsEqual(added.utf8))
+    #expect(decoded.sql.contains("C.INCKEYNO AS ExternalOrderId,\r\n"))
+  }
   @Test func migrationOrdersDependenciesEscapesSQLAndNeverDropsModules() throws {
     let table=object("T",type:"U",id:10),view=object("v",type:"V",id:11),proc=object("p']\n--",id:12)
     let source=try SchemaSnapshot(objects:[table,view,proc],dependencies:[view.key:[table.key],proc.key:[view.key]])

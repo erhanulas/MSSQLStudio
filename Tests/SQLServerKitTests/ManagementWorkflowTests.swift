@@ -19,6 +19,74 @@ import Testing
     #expect(diff.lines.compactMap(\.old).joined(separator:"\n") == old)
     #expect(diff.lines.compactMap(\.new).joined(separator:"\n") == new)
   }
+  @Test func viewWhitespaceDiffHighlightsOnlyAddedProjectionAndKeepsOriginalPhysicalRows() throws {
+    let original="CREATE VIEW dbo.v AS   \r\nSELECT    A.ID,  -- Müşteri kodu  \r\n    C.InvoiceDate,   \r\n    A.Amount   -- Fatura tutarı  \r\nFROM dbo.T A;  "
+    let edited="CREATE VIEW dbo.v AS     \nSELECT A.ID, -- Müşteri kodu    \n\tC.InvoiceDate,\n\tC.INCKEYNO AS ExternalOrderId,\n\tA.Amount -- Fatura tutarı    \nFROM dbo.T A;    "
+    let diff=SQLTextDiff.compareIgnoringSQLWhitespace(original,edited)
+    #expect(diff.added==1 && diff.removed==0 && !diff.simplified)
+    let changed=try #require(diff.lines.filter(\.changed).first)
+    #expect(diff.lines.filter(\.changed).count==1)
+    #expect(changed.old==nil && changed.new=="\tC.INCKEYNO AS ExternalOrderId,")
+    #expect(changed.newNumber==4 && changed.newChanged && !changed.oldChanged)
+    #expect(diff.lines.compactMap(\.oldNumber)==[1,2,3,4,5])
+    #expect(diff.lines.compactMap(\.newNumber)==[1,2,3,4,5,6])
+    #expect(diff.lines.compactMap(\.old).joined(separator:"\r\n")==original)
+    #expect(diff.lines.compactMap(\.new).joined(separator:"\n")==edited)
+    #expect(diff.lines.first?.oldLineEnding=="\r\n")
+    #expect(diff.lines.filter {!$0.changed}.allSatisfy {$0.oldChanges?.isEmpty==true && $0.newChanges?.isEmpty==true})
+    #expect(SQLTextDiff.compare(original,edited).removed>1)
+  }
+  @Test func viewWhitespaceDiffIgnoresReflowBlankLinesAndLineDelimiterStyle() {
+    let original="CREATE VIEW dbo.v AS SELECT A.ID,A.Name FROM dbo.T A; -- comment"
+    let edited="CREATE\rVIEW dbo.v AS\r\rSELECT\r    A.ID,\r    A.Name\rFROM dbo.T A; -- comment  \r"
+    let diff=SQLTextDiff.compareIgnoringSQLWhitespace(original,edited)
+    #expect(diff.added==0 && diff.removed==0 && diff.lines.allSatisfy {!$0.changed})
+    #expect(diff.lines.compactMap(\.oldNumber)==[1])
+    #expect(diff.lines.compactMap(\.newNumber)==Array(1...8))
+    #expect(diff.lines.compactMap(\.new).joined(separator:"\r")==edited)
+  }
+  @Test func viewWhitespaceDiffKeepsRealChangesLocalizedWhenOtherExpressionsWrap() {
+    let original="CREATE VIEW dbo.v AS\nSELECT A.ID, A.Name,\n    C.InvoiceDate,\n    A.Amount\nFROM dbo.T A;"
+    let edited="CREATE VIEW dbo.v\nAS SELECT A.ID,\n    A.Name,\n    C.InvoiceDate,\n    C.INCKEYNO AS ExternalOrderId,\n    A.Amount\nFROM\n    dbo.T A;"
+    let diff=SQLTextDiff.compareIgnoringSQLWhitespace(original,edited)
+    #expect(diff.removed==0 && diff.added==1)
+    #expect(diff.lines.filter(\.changed).count==1)
+    #expect(diff.lines.first(where:\.changed)?.new?.contains("ExternalOrderId")==true)
+  }
+  @Test func viewWhitespaceDiffPreservesProtectedMultilineWhitespaceAndLineCommentBoundaries() {
+    for (original,edited) in [
+      ("SELECT N'a  b';","SELECT N'a b';"),
+      ("SELECT [a  b];","SELECT [a b];"),
+      ("SELECT \"a  b\";","SELECT \"a b\";"),
+      ("SELECT N'a\n\nb';","SELECT N'a\nb';"),
+      ("SELECT /* a\n\n b */ 1;","SELECT /* a\n b */ 1;"),
+      ("SELECT N'a\r\nb';","SELECT N'a\nb';"),
+      ("SELECT 1; -- comment\nSELECT 2;","SELECT 1; -- comment SELECT 2;")
+    ] {
+      let diff=SQLTextDiff.compareIgnoringSQLWhitespace(original,edited)
+      #expect(diff.lines.contains(where:\.changed) && diff.added+diff.removed>0)
+    }
+    let equal=SQLTextDiff.compareIgnoringSQLWhitespace("SELECT N'a\n\nb', 1;"," SELECT N'a\n\nb',\n 1; ")
+    #expect(equal.lines.allSatisfy {!$0.changed})
+    #expect(equal.lines.compactMap(\.oldNumber)==[1,2,3])
+  }
+  @Test func viewWhitespaceDiffKeepsByteDistinctCanonicallyEquivalentLiteralsMeaningful() {
+    for (a,b) in [("é","e\u{301}"),("Å","Å")] {
+      let original="SELECT N'\(a)' AS [Name];",edited="SELECT N'\(b)' AS [Name];"
+      let diff=SQLTextDiff.compareIgnoringSQLWhitespace(original,edited)
+      #expect(diff.added==1 && diff.removed==1 && diff.lines.first?.changed==true)
+      #expect(Data((diff.lines.first?.old ?? "").utf8)==Data(original.utf8))
+      #expect(Data((diff.lines.first?.new ?? "").utf8)==Data(edited.utf8))
+    }
+  }
+  @Test func viewWhitespaceDiffHasBoundedFallbackForDenseSemanticReplacements() {
+    let original=(0..<1001).map {"SELECT [old\($0)] + \($0);"}.joined(separator:"\n")
+    let edited=(0..<1001).map {"SELECT [new\($0)] - \($0+1);"}.joined(separator:"\n")
+    let diff=SQLTextDiff.compareIgnoringSQLWhitespace(original,edited)
+    #expect(diff.simplified && diff.added==1001 && diff.removed==1001)
+    #expect(diff.lines.compactMap(\.old).joined(separator:"\n")==original)
+    #expect(diff.lines.compactMap(\.new).joined(separator:"\n")==edited)
+  }
   @Test func jobCommandsUseValidatedGUIDAndPreserveSharedSchedules() throws {
     let id=UUID().uuidString
     #expect(try SQLAgent.command(.enable,id:id).contains("@enabled=1"))

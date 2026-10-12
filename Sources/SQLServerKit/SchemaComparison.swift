@@ -477,8 +477,10 @@ extension SchemaComparison {
       var execution=Execution();execution.results=[Rows(values:[Array(row[1...5])])]
       let content=try decodeContent(execution,object:object)
       // CREATE / ALTER and stale names retained by sp_rename are delivery details.
-      // Preserve all body whitespace, comments, literal text and case exactly.
-      let canonical=content.sql+"\n--trigger-state:"+String(content.disabled)+"|"+content.triggerParent
+      // Views ignore formatting-only whitespace, with protected SQL text and
+      // lexical boundaries retained. Other module bodies keep exact comparison.
+      let code=object.type=="V" ? SQLWhitespaceComparison.key(content.sql):content.sql
+      let canonical=code+"\n--trigger-state:"+String(content.disabled)+"|"+content.triggerParent
       func hash(_ value:String)->String {SHA256.hash(data:Data(value.utf8)).map {String(format:"%02x",$0)}.joined()}
       let definitionDigest=hash(canonical)
       // Views enter the list for code changes only. Their output/index metadata still

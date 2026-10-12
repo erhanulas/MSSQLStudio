@@ -5,10 +5,11 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct SQLDiffPreviewTests {
-  private func preview(_ original: String, _ edited: String, index: Int = -1, width: CGFloat = 900, height: CGFloat = 240) -> SQLInlineDiffView {
+  private func preview(_ original: String, _ edited: String, index: Int = -1, width: CGFloat = 900, height: CGFloat = 240, ignoringWhitespace:Bool=false) -> SQLInlineDiffView {
     _=NSApplication.shared
     let view=SQLInlineDiffView(frame:NSRect(x:0,y:0,width:width,height:height))
-    view.display(comparison:SQLTextDiff.compare(original,edited),original:original,edited:edited,changeIndex:index)
+    let comparison=ignoringWhitespace ? SQLTextDiff.compareIgnoringSQLWhitespace(original,edited):SQLTextDiff.compare(original,edited)
+    view.display(comparison:comparison,original:original,edited:edited,changeIndex:index)
     view.layoutSubtreeIfNeeded()
     return view
   }
@@ -30,6 +31,67 @@ import Testing
     let reversed=preview(edited,original)
     #expect(reversed.rightText.string==view.leftText.string)
     #expect(reversed.rightText.selectedSQL(in:NSRange(location:0,length:reversed.rightText.string.utf16.count))==original)
+  }
+  @Test func viewWhitespaceOnlyRowsStayNeutralAndAddedProjectionKeepsExactCopiedSQL() throws {
+    let previous=UserDefaults.standard.string(forKey:"ssmsTheme")
+    defer {StudioTheme.apply(previous ?? "light")}
+    StudioTheme.apply("light")
+    let original="CREATE VIEW dbo.v AS   \r\nSELECT    A.ID,  -- Müşteri kodu  \r\n    C.InvoiceDate,   \r\n    A.Amount   -- Fatura tutarı  \r\nFROM dbo.T A;  "
+    let edited="CREATE VIEW dbo.v AS     \nSELECT A.ID, -- Müşteri kodu    \n\tC.InvoiceDate,\n\tC.INCKEYNO AS ExternalOrderId,\n\tA.Amount -- Fatura tutarı    \nFROM dbo.T A;    "
+    let view=preview(original,edited,ignoringWhitespace:true)
+    #expect(view.renderedRows==6 && view.changeRows==[3])
+    #expect(!view.leftText.string.contains("\r") && !view.rightText.string.contains("\r"))
+    #expect(view.leftText.selectedSQL(in:NSRange(location:0,length:view.leftText.string.utf16.count))==original)
+    #expect(view.rightText.selectedSQL(in:NSRange(location:0,length:view.rightText.string.utf16.count))==edited)
+    let old=try #require(view.leftText.textContentStorage?.textStorage),new=try #require(view.rightText.textContentStorage?.textStorage)
+    for (storage,needle) in [(old,"SELECT"),(new,"SELECT"),(old,"Amount"),(new,"Amount")] {
+      #expect(storage.attribute(.backgroundColor,at:(storage.string as NSString).range(of:needle).location,effectiveRange:nil)==nil)
+    }
+    let added=(new.string as NSString).range(of:"ExternalOrderId")
+    #expect(hex(new.attribute(.backgroundColor,at:added.location,effectiveRange:nil) as? NSColor)==0xACE0C4)
+    let indentation=(new.string as NSString).range(of:"\tC.INCKEYNO")
+    #expect(hex(new.attribute(.backgroundColor,at:indentation.location,effectiveRange:nil) as? NSColor)==0xE3F3EA)
+    let oldRuler=try #require(view.left.verticalRulerView as? SQLInlineDiffRuler),newRuler=try #require(view.right.verticalRulerView as? SQLInlineDiffRuler)
+    #expect(oldRuler.numbers==[1,2,3,nil,4,5] && newRuler.numbers==[1,2,3,4,5,6])
+    let select=(view.leftText.string as NSString).range(of:"SELECT    A.ID,  -- Müşteri kodu  \n")
+    #expect(view.leftText.selectedSQL(in:select)=="SELECT    A.ID,  -- Müşteri kodu  \r\n")
+  }
+  @Test func viewCRLineDelimitersAndProtectedBlankLinesRenderAndCopyWithStableGeometry() throws {
+    let original="CREATE VIEW dbo.v AS\rSELECT N'Bir\r\rİki' AS [Name],\r    1 AS [Count];\r"
+    let edited="CREATE VIEW dbo.v AS\rSELECT N'Bir\r\rİki' AS [Name],\r    2 AS [Count];\r"
+    let view=preview(original,edited,height:300,ignoringWhitespace:true)
+    #expect(view.renderedRows==6 && view.changeRows==[4])
+    #expect(view.leftText.string.contains("SELECT N'Bir\n\nİki' AS [Name],\n    1 AS [Count];"))
+    #expect(!view.leftText.string.contains("\r"))
+    #expect(view.leftText.selectedSQL(in:NSRange(location:0,length:view.leftText.string.utf16.count))==original)
+    #expect(view.rightText.selectedSQL(in:NSRange(location:0,length:view.rightText.string.utf16.count))==edited)
+    for row in [0,2,4,5] {
+      let geometry=try #require(view.leftText.lineGeometry(forRow:row))
+      #expect(abs(geometry.rect.minY-(8+CGFloat(row)*20))<0.01)
+    }
+  }
+  @Test func changingDiffPolicyForSameSQLRefreshesStylesWithoutReformattingSources() {
+    let original="SELECT  1;",edited=" SELECT 1;  "
+    let view=preview(original,edited)
+    #expect(view.changeRows==[0])
+    let count=view.renderCount
+    view.display(comparison:SQLTextDiff.compareIgnoringSQLWhitespace(original,edited),original:original,edited:edited,changeIndex:-1)
+    #expect(view.renderCount==count+1 && view.changeRows.isEmpty)
+    #expect(view.leftText.selectedSQL(in:NSRange(location:0,length:view.leftText.string.utf16.count))==original)
+    #expect(view.rightText.selectedSQL(in:NSRange(location:0,length:view.rightText.string.utf16.count))==edited)
+  }
+  @Test func canonicallyEquivalentLiteralUpdatesRefreshNativeColorAndByteExactCopy() throws {
+    let original="SELECT N'base';",first="SELECT N'Å';",second="SELECT N'Å';"
+    let view=preview(original,first,ignoringWhitespace:true),count=view.renderCount
+    let comparison=SQLTextDiff.compareIgnoringSQLWhitespace(original,second)
+    view.display(comparison:comparison,original:original,edited:second,changeIndex:-1)
+    #expect(view.renderCount==count+1 && view.changeRows==[0])
+    let copied=view.rightText.selectedSQL(in:NSRange(location:0,length:view.rightText.string.utf16.count))
+    #expect(Data(copied.utf8)==Data(second.utf8))
+    let storage=try #require(view.rightText.textContentStorage?.textStorage)
+    #expect(storage.attribute(.backgroundColor,at:(storage.string as NSString).range(of:"Å").location,effectiveRange:nil) != nil)
+    let canonical=SQLTextDiff.compareIgnoringSQLWhitespace("SELECT N'é';","SELECT N'e\u{301}';")
+    #expect(canonical.lines.first?.changed==true)
   }
   @Test func lightAndDarkSSMSColorsCoexistWithLineAndComposedCharacterDiffHighlights() throws {
     let previous=UserDefaults.standard.string(forKey:"ssmsTheme")

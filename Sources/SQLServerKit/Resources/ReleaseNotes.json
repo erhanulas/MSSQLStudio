@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.88",
+    "date": "2026-10-12",
+    "title": "View karşılaştırmasında gerçek kod farklarına odaklanma",
+    "changes": [
+      "View kod karşılaştırmasında girinti, gereksiz boşluk, boş satır ve satır sonu farkları yok sayılır. Yalnız biçimi farklı view’lar fark listesine eklenmez.",
+      "Kod Farkı görünümünde boşluk değişiklikleri tüm satırları boyamaz; ExternalOrderId gibi eklenen kolonlar ve gerçek SQL değişiklikleri belirgin kalır.",
+      "SQL metin değerleri, tırnaklı nesne adları ve yorumlar korunur. Kaynak SQL, kopyalama ve taşıma için kullanılan özgün tanımlar ile gönderim öncesi tam nesne doğrulaması değiştirilmez."
+    ]
+  },
+  {
     "version": "0.2.87",
     "date": "2026-10-12",
     "title": "İndekssiz view ve boş şema listelerinde DDL farkı düzeltmesi",

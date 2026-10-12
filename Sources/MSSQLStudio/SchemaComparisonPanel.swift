@@ -196,7 +196,10 @@ enum SchemaDetailMode: String,CaseIterable {case code="Kod Farkı",columns="Kolo
       guard contextCurrent else {throw SQLFailure("Bağlantı değişti. Yeniden karşılaştırın.")}
       if codeFailures.isEmpty {
         let limitedOld=String(old.prefix(200_000)),limitedNew=String(new.prefix(200_000))
-        let comparison=await Task.detached(priority:.userInitiated) {SQLTextDiff.compare(limitedOld,limitedNew)}.value
+        let viewCode=(difference.source ?? difference.target)?.type=="V"
+        let comparison=await Task.detached(priority:.userInitiated) {
+          viewCode ? SQLTextDiff.compareIgnoringSQLWhitespace(limitedOld,limitedNew):SQLTextDiff.compare(limitedOld,limitedNew)
+        }.value
         guard token==detailRevision,context==revision else {return}
         guard contextCurrent else {throw SQLFailure("Bağlantı değişti. Yeniden karşılaştırın.")}
         try Task.checkCancellation()
@@ -357,6 +360,7 @@ struct SchemaComparisonPanel: View {
         }
         if model.effectiveDetailMode == .code,let comparison=model.detailComparison {
           Text("−\(comparison.removed)  +\(comparison.added)").monospacedDigit().font(.caption).foregroundStyle(.secondary)
+            .help((model.currentDifference?.source ?? model.currentDifference?.target)?.type=="V" ? "Gereksiz boşluk ve satır sonları yok sayılır; özgün SQL korunur.":"Değişen SQL satırları")
           Text(model.changedGroups.isEmpty ? "Kod aynı":"\(model.changeIndex+1)/\(model.changedGroups.count)").font(.caption).foregroundStyle(.secondary)
           StudioActionButton("Önceki kod farkı",icon:"chevron.up") {model.moveChange(-1)}.labelStyle(.iconOnly).disabled(model.changedGroups.isEmpty).accessibilityIdentifier("schemaPreviousDifference")
           StudioActionButton("Sonraki kod farkı",icon:"chevron.down") {model.moveChange(1)}.labelStyle(.iconOnly).disabled(model.changedGroups.isEmpty).accessibilityIdentifier("schemaNextDifference")
@@ -373,7 +377,7 @@ struct SchemaComparisonPanel: View {
           sideTitle("Kaynak",name:model.source?.title ?? "",color:StudioTheme.success)
         }
         SQLInlineDiffPreview(comparison:comparison,original:String(model.targetSQL.prefix(200_000)),edited:String(model.sourceSQL.prefix(200_000)),changeIndex:model.changeIndex).accessibilityIdentifier("schemaInlineDiff")
-        if model.diffTruncated {Text("Büyük tanım için sınırlı önizleme gösteriliyor; tam kaynak kodunu SQL sekmesinde açabilirsiniz.").font(.caption2).foregroundStyle(.secondary)}
+        if model.diffTruncated || comparison.simplified {Text("Büyük tanım için sınırlı önizleme gösteriliyor; tam kaynak kodunu SQL sekmesinde açabilirsiniz.").font(.caption2).foregroundStyle(.secondary)}
         else if model.changedGroups.isEmpty,model.currentDifference?.status == .changed {
           Text(model.hasColumns ? "SQL kodu aynı; farkları Kolonlar görünümünde inceleyin.":"SQL kodu aynı; nesnenin çalışma durumu veya özellikleri farklı.").font(.caption2).foregroundStyle(.secondary)
         }
@@ -502,7 +506,20 @@ struct SchemaComparisonPanel: View {
       let columns:String?=row[3]=="U" ? (row[0]=="110" ? String(repeating:"c",count:64):row[4]):nil
       return row+[columns]
     }
-    func body(_ id:Int)->String {switch id {case 101:return "CREATE PROCEDURE [dbo].[usp_Customers]\nAS\nBEGIN\n    SET NOCOUNT ON;\n    SELECT [CustomerID], [Name]"+(source ? ", [City]":"")+"\n    FROM [dbo].[Customers];\nEND;";case 102:return "CREATE VIEW [dbo].[v_Orders] AS SELECT 1 AS [OrderID];";case 108:return "CREATE VIEW [dbo].[v_Balance] AS SELECT [CustomerID], [Amount] FROM [dbo].[Customers];";case 109:return "CREATE VIEW [dbo].[v_ActiveBalance] AS\nSELECT [CustomerID], [Amount]\nFROM [dbo].[Customers]\nWHERE [Amount] "+(source ? "> 0;":">= 0;");case 103:return "CREATE FUNCTION [dbo].[ufn_Total]() RETURNS int AS BEGIN RETURN 42; END;";default:return "CREATE PROCEDURE [dbo].[usp_Legacy] AS SELECT 1;"}}
+    func body(_ id:Int)->String {switch id {
+      case 101:return "CREATE PROCEDURE [dbo].[usp_Customers]\nAS\nBEGIN\n    SET NOCOUNT ON;\n    SELECT [CustomerID], [Name]"+(source ? ", [City]":"")+"\n    FROM [dbo].[Customers];\nEND;"
+      case 102:return "CREATE VIEW [dbo].[v_Orders] AS SELECT 1 AS [OrderID];"
+      case 108:return "CREATE VIEW [dbo].[v_Balance] AS SELECT [CustomerID], [Amount] FROM [dbo].[Customers];"
+      case 109:
+        let rows=["CREATE VIEW [dbo].[v_ActiveBalance] AS","SELECT",
+          "    A.CustomerID AS CustomerCode,  -- Müşteri kodu",
+          "    C.InvoiceDate AS InvoiceDate,"]+(source ? ["    C.INCKEYNO AS ExternalOrderId,"]:[])+[
+          "    A.Amount AS Amount  -- Fatura tutarı",
+          "FROM dbo.Customers A JOIN dbo.Orders C ON C.CustomerID = A.CustomerID;"]
+        return rows.map {$0+(source ? "    ":"  ")}.joined(separator:source ? "\n":"\r\n")
+      case 103:return "CREATE FUNCTION [dbo].[ufn_Total]() RETURNS int AS BEGIN RETURN 42; END;"
+      default:return "CREATE PROCEDURE [dbo].[usp_Legacy] AS SELECT 1;"
+    }}
     var result=Execution()
     if sql.contains("StudioSchemaInventory") {
       result.results=[Rows(values:[["1",database]]),Rows(values:objects),Rows(values:[])]
