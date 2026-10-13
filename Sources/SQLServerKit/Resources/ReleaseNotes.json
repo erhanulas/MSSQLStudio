@@ -2,7 +2,7 @@
   {
     "version": "0.2.102",
     "date": "2026-10-13",
-    "title": "Yerel önizleme: Explorer ve pencere deneyimi",
+    "title": "Explorer ve pencere deneyimi",
     "changes": [
       "Klasör ekleme ve yeniden adlandırma, hatayı form içinde gösteren bağımsız bir pencere kullanır. Enter, Tab, Shift+Tab ve Escape ile yönetilebilir; başka Explorer işlemlerini kilitlemez.",
       "Tümünü Kaydetmeden Kapat ayrı bir menü öğesi değildir. Close All Tabs veya uygulamadan çıkış sırasında kaydetme, toplu kaydetmeden kapatma ve vazgeçme seçenekleri birlikte sunulur.",
