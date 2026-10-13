@@ -1,3 +1,10 @@
+## 13 Ekim 2026 — v0.2.102 public yayın
+
+- Kullanıcı önizlemenin yayımlanmasını istedi. Kaynak main’e fast-forward gönderildi; yeni v0.2.102 etiketi `0f6218a0a8b769841a5e80593db5f8ce17df9499`. Yalnız sürüm notu başlığındaki yerel önizleme ifadesi kaldırıldı; ürün kodu aynı. Actions **38408125762** tüm adımlarıyla başarılı.
+- Release paket testleri: **296 app + 283 core = 579 test; 552 geçti / 27 dış koşullu atlandı, 0 issue**. İki tamamlanmış özet 72.283 / 6.540 sn. CI exact Foundation feed 0.2.102 kontrolü geçti.
+- Public latest v0.2.102 ve dört asset doğrulandı. ZIP SHA-256 `a57ed1fa9e785ad11362f926cc8f7144381ca289122afc070a1510ab0de87333`; PKG `53955a1475a4f2342449339f347d06b74f2527ba1cb31270eaff6fe7e04cfa9d`; update.json `92c5b0705d4ab611270a27a8fe92bdbb55dadae6b36791c43d9c716b8f727d48`; frozen helper archive `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`. İndirilen bytes GitHub digest ve manifest ile eşleşti; prepare-release.py strict app/helper imzaları, frozen binary, ZIP/PKG binary/metadata/not ve public release body eşitliğini doğruladı.
+- Yerel indirilen signed uygulama Foundation updater exact 0.2.102 kontrolü de geçti. Gerçek kullanıcı uygulaması kurulmadı/yeniden başlatılmadı. Önizleme turundaki CUA ve canlı SQL Server sınırlamaları aşağıdaki tarihsel kayıtta korunur.
+
 ## 13 Ekim 2026 — 0.2.102 yerel önizleme (yayımlanmadı)
 
 - Close All Tabs ve ⌘Q ortak Kaydet / Tümünü Kaydetmeden Kapat / Vazgeç kararı kullanır; ek menü maddesi kaldırıldı. Açık transaction, çalışan SQL ve devam eden grid yazmaları korunur. Native menülerde ikonlar/ayırıcılar, bağımsız adlandırma/hata pencereleri, Tab/Shift+Tab/Esc ve animasyonsuz açılış ortaklaştırıldı.
