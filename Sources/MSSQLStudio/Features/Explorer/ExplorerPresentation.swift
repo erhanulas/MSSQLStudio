@@ -266,10 +266,15 @@ extension WorkbenchController {
     if case .database = node.kind {
       let badge=DatabaseIndexButton();badge.node=node;badge.target=self;badge.action=#selector(showDatabaseIndex(_:))
       let ready=indexDetailsByDatabase[node.server.id.uuidString+"|"+node.database]?.contains("nesne indeksi") == true
-      badge.image=NSImage(systemSymbolName:node.server.indexErrors[node.database] != nil ? "exclamationmark.triangle" : node.server.indexingDatabases.contains(node.database) ? "arrow.triangle.2.circlepath":ready ? "externaldrive.badge.checkmark":"externaldrive",accessibilityDescription:nil)
-      badge.contentTintColor=node.server.indexErrors[node.database] != nil ? .systemOrange:ready ? .systemGreen:StudioTheme.accent
+      let activity=node.server.definitionIndex.activities[node.database]
+      let failed=node.server.indexErrors[node.database] != nil || activity?.phase == .failed || indexDetailsByDatabase[node.server.id.uuidString+"|"+node.database]?.contains("Kısmi indeks") == true
+      let building=node.server.indexingDatabases.contains(node.database) || activity?.phase == .building
+      badge.image=NSImage(systemSymbolName:failed ? "exclamationmark.triangle":building ? "arrow.triangle.2.circlepath":ready ? "externaldrive.badge.checkmark":"externaldrive",accessibilityDescription:nil)
+      badge.contentTintColor=failed ? .systemOrange:building ? StudioTheme.accent:ready ? .systemGreen:StudioTheme.accent
       badge.bezelStyle = .inline;badge.imagePosition = .imageOnly
-      badge.toolTip="\(node.database) · Yerel indeks durumu ve yenileme";badge.setAccessibilityLabel(badge.toolTip)
+      badge.toolTip=indexDetailsByDatabase[node.server.id.uuidString+"|"+node.database] ?? "\(node.database) · Yerel indeks durumu ve yenileme"
+      if let activity,activity.phase == .building {badge.toolTip=(badge.toolTip ?? "")+"\nNesne içerikleri: \(activity.processed) / \(activity.total.map(String.init) ?? "…")"}
+      badge.setAccessibilityLabel(badge.toolTip)
       badge.setAccessibilityIdentifier("databaseIndex_"+node.database)
       cell.addSubview(badge);badge.translatesAutoresizingMaskIntoConstraints=false
       NSLayoutConstraint.activate([badge.leadingAnchor.constraint(equalTo:label.trailingAnchor,constant:6),badge.centerYAnchor.constraint(equalTo:cell.centerYAnchor),badge.widthAnchor.constraint(equalToConstant:24),badge.heightAnchor.constraint(equalToConstant:24)])

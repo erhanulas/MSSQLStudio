@@ -8,6 +8,8 @@ import SQLServerKit
   private var lease: UUID?
   private var task: Task<Void, Never>?
   private var revision = UUID()
+  private(set) var activities: [String: DefinitionIndexActivity] = [:]
+  private var lastProgress = Date.distantPast
   private var synchronizedAt: [String: Date] = [:]
   private var configuration: Task<Void, Never>?
   private(set) var status = "Kapalı"
@@ -18,6 +20,11 @@ import SQLServerKit
   func pause() {
     task?.cancel()
     if task != nil { status = "Eşitleme duraklatıldı" }
+    for db in activities.keys
+    where activities[db]?.phase == .building || activities[db]?.phase == .waiting {
+      activities[db]?.phase = .paused
+      notify(db)
+    }
   }
   func configure(purge: Bool = false, enabled: Bool? = nil) async {
     let enabled = enabled ?? (server?.profile.indexObjectDefinitions == true)
@@ -25,6 +32,7 @@ import SQLServerKit
     revision = UUID()
     lease = nil
     synchronizedAt = [:]
+    activities = [:]
     if let task { await task.value }
     let previous = configuration
     let token = revision
@@ -59,6 +67,11 @@ import SQLServerKit
       lease != nil
     else { return }
     let token = revision
+    for db in server.databases.map(\.name) where server.allowsCatalogIndex(db) {
+      if force || Date().timeIntervalSince(synchronizedAt[db] ?? .distantPast) >= 300 {
+        activities[db] = .init(phase: .waiting)
+      }
+    }
     status = "Tanım indeksi hazırlanıyor…"
     NotificationCenter.default.post(name: .init("catalogIndexUpdated"), object: server)
     task = Task { [weak self] in
@@ -70,12 +83,16 @@ import SQLServerKit
       for db in server.databases.map(\.name) where server.allowsCatalogIndex(db) {
         if !force, Date().timeIntervalSince(synchronizedAt[db] ?? .distantPast) < 300 { continue }
         do {
+          activities[db] = .init(phase: .building)
+          notify(db)
           try await withReader(database: db) { read in
             try await self.synchronize(database: db, token: token, force: force, read: read)
           }
         } catch {
           if Task.isCancelled || token != revision { return }
           status = "Tanım indeksi: " + error.localizedDescription
+          activities[db] = .init(phase: .failed, error: error.localizedDescription)
+          notify(db)
         }
       }
     }
@@ -138,11 +155,18 @@ import SQLServerKit
     let scope = CatalogDiskIndex.scope(profile: server.profile, database: db)
     let generation = try await disk.generation(scope: scope)
     let stamps = try await disk.definitionStamps(scope: scope)
+    activities[db]?.total = rows.values.count
+    notify(db)
     var ids = Set<Int>()
     var unavailable = 0
     for (offset, row) in rows.values.enumerated() {
       if offset % 100 == 0 { await Task.yield() }
       try check(token)
+      activities[db]?.processed = offset
+      if Date().timeIntervalSince(lastProgress) >= 1 {
+        lastProgress = Date()
+        notify(db, progress: true)
+      }
       guard row.count == 6, let raw = row[0], let id = Int(raw), id > 0, let schema = row[1],
         let name = row[2], let type = row[3], let modified = row[4], ids.insert(id).inserted
       else { throw SQLFailure("Tanım envanteri doğrulanamadı.") }
@@ -194,8 +218,35 @@ import SQLServerKit
         scope: scope, ids: ids, owner: server.id, lease: lease, generation: generation,
         before: began)
     }
+    if let lease {
+      try await disk.finishDefinitionSync(
+        scope: scope, owner: server.id, lease: lease, generation: generation, expected: ids.count,
+        unavailable: unavailable)
+    }
+    try check(token)
+    activities[db] = nil
+    notify(db)
     synchronizedAt[db] = Date()
     status = "\(db) · Eşitleme tamamlandı · \(unavailable) okunamadı"
+  }
+  private func notify(_ database: String, progress: Bool = false) {
+    guard let server else { return }
+    NotificationCenter.default.post(
+      name: .init("catalogIndexUpdated"), object: server,
+      userInfo: ["database": database, "definitionsOnly": true, "definitionProgress": progress])
+  }
+  func presentation(database: String) async throws -> DefinitionIndexPresentation {
+    guard let server else { throw CancellationError() }
+    let profile = server.profile
+    let token = revision
+    let enabled = profile.indexObjectDefinitions == true && server.allowsCatalogIndex(database)
+    let stored =
+      enabled
+      ? try await disk.definitionStatus(
+        scope: CatalogDiskIndex.scope(profile: profile, database: database)) : nil
+    guard token == revision, server.profile == profile else { throw CancellationError() }
+    return .init(
+      enabled: enabled, online: server.online, stored: stored, activity: activities[database])
   }
   var isRefreshing: Bool { task != nil }
   private func check(_ token: UUID) throws {
@@ -214,9 +265,11 @@ import SQLServerKit
   }
   func record(_ value: IndexedObjectDefinition, database: String, generation: UUID) async {
     guard server?.generation == generation, lease != nil else { return }
-    do { try await save(value, database: database, token: revision) } catch {
+    do {try await save(value, database: database, token: revision);notify(database)} catch {
       if !(error is CancellationError) {
         status = "Tanım indeksi güncellenemedi: " + error.localizedDescription
+        activities[database] = .init(phase: .failed, error: error.localizedDescription)
+        notify(database)
       }
     }
   }

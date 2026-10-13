@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.110",
+    "date": "2026-10-14",
+    "title": "Veritabanı bazında nesne içeriği indeks durumu",
+    "changes": [
+      "Veritabanının indeks düğmesine ve yerel indeks penceresine Nesne içerikleri durumu eklendi. Kayıtlı tanım sayısı, son başarılı eşitleme ve son içerik okuma zamanı gösterilir; çevrimdışıyken son disk bilgileri korunur.",
+      "İçerik indeksinde sırada, eşitleniyor, duraklatıldı, hazır, kısmi indeks ve hata durumları veritabanı bazında ayrılır. İşlenen/toplam nesne ilerlemesi, okunamayan nesne sayısı ve eksik içerik açıklamaları görünürdür; başka veritabanının başarısı hatayı gizlemez.",
+      "Boş fakat başarıyla eşitlenmiş veritabanları hazır olarak gösterilir. Kalıcı durum bilgisi bağlantı kaldırma, indeks kapatma ve veritabanı gizleme sırasında ilgili kapsamla birlikte temizlenir.",
+      "İlerleme bildirimleri yalnız ilgili veritabanı satırı ve kartını yeniler; SQL tamamlama veya nesne araması başlatmaz. Durum okumaları büyük SQL gövdelerini okumayan metadata indekslerini kullanır."
+    ]
+  },
+  {
     "version": "0.2.109",
     "date": "2026-10-14",
     "title": "Çevrimdışı nesne tanımları ve ayarlanabilir indeks kotası",

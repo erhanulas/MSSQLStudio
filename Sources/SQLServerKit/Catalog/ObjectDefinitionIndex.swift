@@ -117,6 +117,7 @@ extension CatalogDiskIndex {
   {
     sourceLeases[owner] = nil
     if purge || !enabled, FileManager.default.fileExists(atPath: urlForDefinitions.path) {
+      try write("DELETE FROM source_sync WHERE scope IN (SELECT scope FROM catalog_owners WHERE owner=?)",[owner.uuidString])
       try write("DELETE FROM source_definitions WHERE owner=?", [owner.uuidString])
     }
     guard enabled else { return nil }

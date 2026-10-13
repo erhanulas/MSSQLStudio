@@ -244,6 +244,13 @@ extension WorkbenchController {
     }
   }
   @objc func catalogIndexUpdated(_ notification: Notification) {
+    if notification.userInfo?["definitionsOnly"] as? Bool == true {
+      if notification.userInfo?["definitionProgress"] as? Bool != true {lastIndexStatusCheck = .distantPast;updateIndexStatus()}
+      for row in 0..<outline.numberOfRows {
+        if let node=outline.item(atRow:row) as? TreeNode,case .database=node.kind,node.server === notification.object as? ConnectedServer,node.database==notification.userInfo?["database"] as? String {reloadExplorer(item:node)}
+      }
+      return
+    }
     lastIndexStatusCheck = .distantPast; updateIndexStatus()
     for row in 0..<outline.numberOfRows {
       if let node=outline.item(atRow:row) as? TreeNode,case .database=node.kind {reloadExplorer(item:node)}
@@ -303,10 +310,14 @@ extension WorkbenchController {
     lastIndexStatusScope = key; lastIndexStatusCheck = Date(); indexStatusTask?.cancel()
     let profile = scope.server.profile, server = scope.server
     indexStatusTask = Task { [weak self] in
-      var lines: [String] = ["Nesne tanımları: "+server.definitionIndex.status], ready = 0
+      var lines: [String] = [], ready = 0
+      var definitions:[String:DefinitionIndexPresentation]=[:]
       for db in databases {
         guard !Task.isCancelled else { return }
         do {
+          let definition=try await server.definitionIndex.presentation(database:db)
+          definitions[db]=definition
+          lines.append("\(db): nesne içerikleri · "+definition.detail)
           let objects = try await CatalogDiskIndex.shared.status(scope:CatalogDiskIndex.scope(profile:profile,database:db))
           let columns = try await SQLCatalogService.shared.cached(profile:profile,database:db)
           if let objects {
@@ -323,8 +334,8 @@ extension WorkbenchController {
         else if server.indexingDatabases.contains(db) { lines.append("\(db): indeks hazırlanıyor…") }
       }
       if let doc = state.active, doc.server === server, let error = doc.catalogError { lines.append("Editör doğrulaması kapalı: \(error)") }
-      let failed = databases.contains(where:{server.indexErrors[$0] != nil})
-      let building = !server.indexingDatabases.isDisjoint(with:databases)
+      let failed = databases.contains(where:{server.indexErrors[$0] != nil || definitions[$0]?.warning == true})
+      let building = !server.indexingDatabases.isDisjoint(with:databases) || definitions.values.contains(where: \.building)
       indexStatus.image=NSImage(systemSymbolName:failed ? "exclamationmark.triangle" : building ? "arrow.triangle.2.circlepath" : ready == databases.count && ready > 0 ? "externaldrive.badge.checkmark":"externaldrive",accessibilityDescription:nil)
       indexStatus.contentTintColor=failed ? .systemOrange : building ? StudioTheme.accent : ready > 0 ? .systemGreen:.secondaryLabelColor
       for db in databases {

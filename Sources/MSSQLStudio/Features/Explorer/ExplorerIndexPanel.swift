@@ -8,21 +8,24 @@ import UniformTypeIdentifiers
   let databases:[String]
   let refresh:()->Void
   @State private var revision=UUID()
+  @State private var definitionRevisions:[String:UUID]=[:]
   var body:some View {
     VStack(alignment:.leading,spacing:14) {
       Label("Yerel indeks",systemImage:"externaldrive").font(.title3.bold())
       Text(server.profile.name).foregroundStyle(.secondary)
       ScrollView {
         VStack(spacing:12) {
-          ForEach(databases,id:\.self) {db in ExplorerIndexCard(server:server,database:db).id(revision.uuidString+db)}
+          ForEach(databases,id:\.self) {db in ExplorerIndexCard(server:server,database:db).id(revision.uuidString+(definitionRevisions[db]?.uuidString ?? "")+db)}
         }
       }.frame(maxHeight:420)
-      Text("Nesne tanımları: "+server.definitionIndex.status).font(.caption).foregroundStyle(.secondary)
       Text("Bu Mac’teki arama ve SQL önerisi önbelleği.").font(.caption).foregroundStyle(.secondary)
       StudioActionButton("Yerel İndeksi Yenile",icon:"arrow.clockwise",tint:.accentColor,action:refresh).disabled(!server.online)
     }.padding(18).frame(maxWidth:.infinity,maxHeight:.infinity).studioPanel()
       .onReceive(NotificationCenter.default.publisher(for:.init("catalogIndexUpdated"))) {note in
-        if let updated=note.object as? ConnectedServer,updated === server {revision=UUID()}
+        if let updated=note.object as? ConnectedServer,updated === server {
+          if note.userInfo?["definitionsOnly"] as? Bool == true,let db=note.userInfo?["database"] as? String {definitionRevisions[db]=UUID()}
+          else {revision=UUID()}
+        }
       }
   }
 }
@@ -33,26 +36,36 @@ import UniformTypeIdentifiers
   @State private var count:Int?
   @State private var objectDate:Date?
   @State private var columnDate:Date?
+  @State private var definition:DefinitionIndexPresentation?
   @State private var fresh=false
   @State private var loading=true
   @State private var error:String?
+  private var sourcePending:Bool {definition?.building == true || definition?.activity?.phase == .waiting}
+  private var headerTitle:String {
+    if error != nil || definition?.failed == true {return "Hata"}
+    if server.indexingDatabases.contains(database) || sourcePending {return "Hazırlanıyor"}
+    if definition?.warning == true {return "Kısmi indeks"}
+    return count == nil ? "Hazır değil":"Hazır"
+  }
   var body:some View {
     VStack(alignment:.leading,spacing:12) {
       HStack {
         Label(database,systemImage:"cylinder.split.1x2").font(.headline)
         Spacer()
         if loading {ProgressView().controlSize(.small)}
-        else {Label(error != nil ? "Hata" : server.indexingDatabases.contains(database) ? "Hazırlanıyor" : count == nil ? "Hazır değil" : "Hazır",systemImage:error != nil ? "exclamationmark.triangle" : count == nil ? "clock" : "checkmark.circle.fill").foregroundStyle(error != nil ? .orange : count == nil ? .secondary : .green).font(.caption)}
+        else {Label(headerTitle,systemImage:error != nil || definition?.warning == true ? "exclamationmark.triangle":sourcePending ? "arrow.triangle.2.circlepath":count == nil ? "clock":"checkmark.circle.fill").foregroundStyle(error != nil || definition?.warning == true ? .orange:sourcePending || count == nil ? .secondary:.green).font(.caption)}
       }
       HStack(alignment:.top,spacing:12) {
         metric("Nesneler",value:count.map(String.init) ?? "—",icon:"square.stack.3d.up",date:objectDate)
         metric("SQL kolonları",value:columnDate == nil ? "Hazır değil" : fresh ? "Güncel" : "Yenileme gerekli",icon:"tablecells",date:columnDate)
       }
+      if let definition {DefinitionIndexMetric(value:definition)}
       if let error {Label(error,systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange).textSelection(.enabled)}
       if !server.online {Label("Bağlantı kapalı · önbellek bilgisi",systemImage:"network.slash").font(.caption).foregroundStyle(.secondary)}
     }.padding(14).frame(maxWidth:.infinity,alignment:.leading).explorerInfoCard()
       .task {
         do {
+          definition=try await server.definitionIndex.presentation(database:database)
           let objects=try await CatalogDiskIndex.shared.status(scope:CatalogDiskIndex.scope(profile:server.profile,database:database))
           let columns=try await SQLCatalogService.shared.cached(profile:server.profile,database:database)
           count=objects?.count;objectDate=objects?.synchronizedAt;columnDate=columns?.snapshot.synchronizedAt;fresh=columns?.fresh == true
@@ -125,7 +138,7 @@ import UniformTypeIdentifiers
   }
 }
 
-private extension View {
+extension View {
   func explorerInfoCard() -> some View {
     background(Color(nsColor:StudioTheme.canvas),in:RoundedRectangle(cornerRadius:8))
       .overlay(RoundedRectangle(cornerRadius:8).stroke(Color(nsColor:StudioTheme.border),lineWidth:1))
