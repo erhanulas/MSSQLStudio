@@ -70,6 +70,7 @@ enum SettingsSection: String, CaseIterable {
 
 struct SettingsPanel: View {
   let state: StudioState
+  @StateObject private var definitionStorage:DefinitionIndexStorageModel
   @State private var theme = UserDefaults.standard.string(forKey: "ssmsTheme") ?? "light"
   @State private var completion = UserDefaults.standard.object(forKey:"sqlAutomaticCompletion") as? Bool ?? true
   @State private var completionDelay = Double(SQLEditorPreferences.completionDelay())
@@ -91,8 +92,9 @@ struct SettingsPanel: View {
   @State private var search=""
   @State private var searchTarget:SettingsSearchEntry?
   @FocusState private var searchFocused:Bool
-  init(state: StudioState, initialTab: SettingsSection = .appearance) {
+  init(state: StudioState, initialTab: SettingsSection = .appearance, definitionStorage:DefinitionIndexStorageModel = DefinitionIndexStorageModel()) {
     self.state = state
+    _definitionStorage=StateObject(wrappedValue:definitionStorage)
     _selectedTab = State(initialValue: initialTab)
   }
   var body: some View {
@@ -108,6 +110,12 @@ struct SettingsPanel: View {
           Text("MSSQL Studio’yu çalışma biçiminize göre düzenleyin.").font(.callout).foregroundStyle(.secondary)
         }
         Spacer()
+        Button {selectedTab = .workspace} label: {
+          VStack(alignment:.trailing,spacing:3) {
+            Label("Tanım indeksi",systemImage:"internaldrive").font(.caption)
+            Text(definitionStorage.usageText).font(.caption2).monospacedDigit()
+          }
+        }.buttonStyle(.plain).foregroundStyle(.secondary).accessibilityIdentifier("definitionIndexUsageSummary")
       }
       HStack(spacing:8) {
         Image(systemName:"magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
@@ -231,6 +239,22 @@ struct SettingsPanel: View {
           settingsNote("⌘← / ⌘→ önce kodun başına / sonuna, ikinci basışta girinti / sondaki boşluk sınırına gider. ⇧ ekleyerek aynı hareketlerle seçim yapabilirsiniz.", icon: "selection.pin.in.out")
         }.tabItem { Label(SettingsSection.shortcuts.title, systemImage: SettingsSection.shortcuts.icon) }.tag(SettingsSection.shortcuts)
         settingsPage(.workspace, subtitle: "Bu Mac’te tutulan sorgu geçmişini ve oturum kurtarmayı yönetin.") {
+          settingsCard("Nesne tanım indeksi",icon:"externaldrive") {
+            StudioFormField("Toplam disk kotası") {
+              Stepper(value:$definitionStorage.quotaMB,in:128...65_536,step:128) {Text("\(definitionStorage.quotaMB) MB").monospacedDigit()}
+                .accessibilityIdentifier("definitionIndexQuota")
+            }.id("definitionQuota")
+            ProgressView(value:definitionStorage.usage?.fraction ?? 0).accessibilityLabel("Tanım indeksi doluluk oranı")
+            HStack {
+              Text(definitionStorage.usageText).monospacedDigit()
+              Spacer()
+              StudioActionButton("Yenile",icon:"arrow.clockwise") {Task {await definitionStorage.refresh()}}
+                .disabled(definitionStorage.busy)
+            }.font(.caption)
+            if let usage=definitionStorage.usage {Text("\(usage.count) nesne tanımı · Tüm bağlantıların ortak kotası").font(.caption).foregroundStyle(.secondary)}
+            if !definitionStorage.error.isEmpty {Label(definitionStorage.error,systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange)}
+            settingsNote("Varsayılan 1 GB (1024 MB). Kota Uygula ile kaydedilir; küçültülürse en eski tanımlar temizlenir. Doluluk tanım verisini ölçer; SQLite dosya/WAL ve diğer katalog alanları dahil değildir. İndeksleme bağlantı ayarlarından açılır.",icon:"info.circle")
+          }
           settingsCard("Geçmiş ve kurtarma", icon: "clock.arrow.circlepath") {
             settingsToggle("Sorgu geçmişini sakla", detail: "Çalıştırılan sorgular Timeline üzerinden yeniden açılabilir.", value: $history)
             StudioFormField("Saklama süresi") {
@@ -300,7 +324,7 @@ struct SettingsPanel: View {
           .accessibilityIdentifier("settingsMessage")
         Spacer(minLength: 12)
         StudioActionButton("Uygula", icon: "checkmark", action: applySettings).buttonStyle(StudioPrimaryButton())
-          .accessibilityIdentifier("settingsApply")
+          .accessibilityIdentifier("settingsApply").disabled(definitionStorage.busy)
       }.padding(14)
         .background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(nsColor: StudioTheme.border)))
@@ -308,7 +332,7 @@ struct SettingsPanel: View {
       history = state.historyEnabled
       historyDays = state.historyRetentionDays
       recovery = state.recoveryEnabled
-    }
+    }.task {await definitionStorage.refresh()}
   }
   private func settingsPage<Content: View>(_ section: SettingsSection, subtitle: String, @ViewBuilder content: @escaping () -> Content) -> some View {
     ScrollViewReader {proxy in
@@ -417,10 +441,12 @@ struct SettingsPanel: View {
     }
   }
   private func applySettings() {
+    Task {
           let source=updateRepository.trimmingCharacters(in:.whitespacesAndNewlines)
           if !source.isEmpty {
             do {updateRepository=try GitHubUpdateSource.repository(source)}catch {message=error.localizedDescription;return}
           }
+          guard await definitionStorage.apply() else {message=definitionStorage.error;return}
           if source.isEmpty {UserDefaults.standard.removeObject(forKey:"githubUpdateRepository")}
           else {UserDefaults.standard.set(updateRepository,forKey:"githubUpdateRepository")}
           StudioTheme.apply(theme)
@@ -442,6 +468,7 @@ struct SettingsPanel: View {
           UserDefaults.standard.set(recovery, forKey: "recoveryEnabled")
           state.scheduleSnapshot()
           message = "Ayarlar kaydedildi."
+    }
   }
 }
 

@@ -14,6 +14,13 @@ extension WorkbenchController {
     }
     if case .folder(.files)=node.kind {showDatabaseFiles(node.server);return}
     guard node.server.online else {
+      if node.supportsIndexedDefinition,node.server.profile.indexObjectDefinitions == true {
+        showOfflineObjectDefinition(node);return
+      }
+      if node.expandable {
+        if outline.isItemExpanded(node) {outline.collapseItem(node)} else {outline.expandItem(node)}
+        return
+      }
       Task { await state.reconnectExplorer(node.server) }
       return
     }
@@ -113,6 +120,9 @@ extension WorkbenchController {
     if case .database = node.kind {command("Favori Sorgular…",#selector(showFavoritesAtNode))}
 
     if !node.server.online || node.server.reconnecting {
+      if node.supportsIndexedDefinition,node.server.profile.indexObjectDefinitions == true {
+        command("İndekslenmiş Tanımı Gör…",#selector(showOfflineDefinitionAtContext))
+      }
       command(node.server.reconnecting ? "Bağlanıyor…" : "Yeniden Bağlan", #selector(reconnectServer))
       command("Bağlantı ayarları…", #selector(editConnection))
       if case .server = node.kind {

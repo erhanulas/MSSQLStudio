@@ -17,7 +17,15 @@ extension WorkbenchController {
   }
   func loadManagedTable(_ node:TreeNode) async throws -> TableDefinition {
     guard let item=node.item else { throw SQLFailure("Tablo seçin.") }
-    return try ObjectMetadata.decode(await node.server.catalog(ObjectMetadata.table(item.id),database:node.database),schema:item.schema,name:item.name)
+    let fetched=Date(),generation=node.server.generation
+    let table=try ObjectMetadata.decode(await node.server.catalog(ObjectMetadata.table(item.id),database:node.database),schema:item.schema,name:item.name)
+    if node.server.profile.indexObjectDefinitions == true {
+      let indexed=try? await Task.detached(priority:.utility) {
+        IndexedObjectDefinition(id:item.id,schema:item.schema,name:item.name,type:"U",sql:try table.createScript(),fetchedAt:fetched)
+      }.value
+      if let indexed {await node.server.definitionIndex.record(indexed,database:node.database,generation:generation)}
+    }
+    return table
   }
   func showManagedTable(_ node:TreeNode?,create:Bool=false,initialKind:String="") {
     guard let node else { return }
@@ -31,10 +39,15 @@ extension WorkbenchController {
     draft.sql=create ? "CREATE VIEW [dbo].[NewView]\nAS\nSELECT 1 AS [Value];" : ""
     let load:(() async throws -> String)? = create ? nil : {
       guard let item=node.item else { throw SQLFailure("View seçin.") }
+      let fetched=Date(),generation=node.server.generation
       let execution=try await node.server.catalog(Catalog.definition(item.id),database:node.database)
       guard !execution.partial, let source=execution.results.first?.values.first?.first, let source else { throw SQLFailure("View tanımı alınamadı; VIEW DEFINITION izni / şifreleme durumunu kontrol edin.") }
       let settings=try await node.server.catalog("SELECT uses_ansi_nulls,uses_quoted_identifier FROM sys.sql_modules WHERE object_id=\(item.id);",database:node.database)
       guard !settings.partial, let row=settings.results.first?.values.first, row.count == 2 else { throw SQLFailure("View session ayarları okunamadı.") }
+      if node.server.profile.indexObjectDefinitions == true {
+        let preview=try ExplorerScripts.module(source,verb:"CREATE",qualified:item.qualified,ansi:row[0]=="1",quoted:row[1]=="1")
+        await node.server.definitionIndex.record(.init(id:item.id,schema:item.schema,name:item.name,type:"V",sql:preview,original:source,fetchedAt:fetched),database:node.database,generation:generation)
+      }
       draft.moduleOriginal=source
       return "SET ANSI_NULLS \(row[0] == "1" ? "ON" : "OFF");\nGO\nSET QUOTED_IDENTIFIER \(row[1] == "1" ? "ON" : "OFF");\nGO\n" + (try ObjectScripts.module(source,verb:"ALTER"))
     }
@@ -87,6 +100,7 @@ extension WorkbenchController {
   }
   func loadManagedModule(_ node:TreeNode,verb:String) async throws -> (script:String, original:String) {
     guard let item=node.item else {throw SQLFailure("Nesne seçin.")}
+    let fetched=Date(),generation=node.server.generation
     let execution=try await node.server.catalog(Catalog.definition(item.id),database:node.database)
     guard !execution.partial,let source=execution.results.first?.values.first?.first,let source else {throw SQLFailure("T-SQL tanımı alınamadı; şifreli/CLR modülü veya VIEW DEFINITION iznini kontrol edin.")}
     let settings=try await node.server.catalog("SELECT uses_ansi_nulls,uses_quoted_identifier FROM sys.sql_modules WHERE object_id=\(item.id);",database:node.database)
@@ -95,6 +109,12 @@ extension WorkbenchController {
     if node.objectFolder == .triggers {
       let trigger=try TriggerDefinition.decode(await node.server.catalog(TriggerDefinition.metadata(item.id),database:node.database))
       script += "\nGO\n"+(try trigger.stateScript(enabled:!trigger.disabled))
+    }
+    if node.server.profile.indexObjectDefinitions == true {
+      let preview=try ExplorerScripts.module(source,verb:"CREATE",qualified:item.qualified,ansi:row[0]=="1",quoted:row[1]=="1")
+      let type:String
+      switch node.objectFolder {case .views:type="V";case .procedures:type="P";case .functions:type=item.detail.contains("INLINE") ? "IF":item.detail.contains("TABLE") ? "TF":"FN";default:type=item.schema.isEmpty ? "TRD":"TR"}
+      await node.server.definitionIndex.record(.init(id:item.id,schema:item.schema,name:item.name,type:type,sql:preview,original:source,parentID:node.ownerObject?.item?.id,fetchedAt:fetched),database:node.database,generation:generation)
     }
     return (script,source)
   }
@@ -113,9 +133,13 @@ extension WorkbenchController {
         case "CREATE","ALTER","CREATE OR ALTER","DROP And CREATE","MODIFY":
           if [.views,.procedures,.functions,.triggers].contains(folder) {let loaded=try await loadManagedModule(node,verb:mode == "DROP And CREATE" ? "CREATE" : mode == "MODIFY" ? "ALTER" : mode);script=loaded.script;moduleSource=loaded.original}
           else if folder == .synonyms {
+            let fetched=Date(),generation=node.server.generation
             let r=try await node.server.catalog("SELECT base_object_name FROM sys.synonyms WHERE object_id=\(item.id);",database:node.database)
             guard !r.partial,let target=r.results.first?.values.first?.first,let target else {throw SQLFailure("Synonym hedefi alınamadı.")}
             script=try ExplorerScripts.synonym(qualified:item.qualified,target:target)
+            if node.server.profile.indexObjectDefinitions == true {
+              await node.server.definitionIndex.record(.init(id:item.id,schema:item.schema,name:item.name,type:"SN",sql:script,fetchedAt:fetched),database:node.database,generation:generation)
+            }
           } else if [.indexes,.keys,.constraints].contains(folder) {script=try await structureScript(node,drop:false)}
           else {script=try await loadManagedTable(node).createScript()}
           if mode == "DROP And CREATE" {
@@ -172,8 +196,14 @@ extension WorkbenchController {
   func showSynonymDesigner(_ node:TreeNode?,create:Bool=false) {
     guard let node else {return}
     present(SynonymDesignerPanel(schema:node.item?.schema ?? "dbo",name:create ? "NewSynonym" : node.item?.name ?? "NewSynonym",existing:!create,load:create ? nil : {
-      guard let item=node.item else {return ""};let r=try await node.server.catalog("SELECT base_object_name FROM sys.synonyms WHERE object_id=\(item.id);",database:node.database)
-      guard !r.partial,let target=r.results.first?.values.first?.first,let target else {throw SQLFailure("Synonym hedefi alınamadı.")};return target
+      guard let item=node.item else {return ""}
+      let fetched=Date(),generation=node.server.generation
+      let r=try await node.server.catalog("SELECT base_object_name FROM sys.synonyms WHERE object_id=\(item.id);",database:node.database)
+      guard !r.partial,let target=r.results.first?.values.first?.first,let target else {throw SQLFailure("Synonym hedefi alınamadı.")}
+      if node.server.profile.indexObjectDefinitions == true,let sql=try? ExplorerScripts.synonym(qualified:item.qualified,target:target) {
+        await node.server.definitionIndex.record(.init(id:item.id,schema:item.schema,name:item.name,type:"SN",sql:sql,fetchedAt:fetched),database:node.database,generation:generation)
+      }
+      return target
     },open:{[weak self] sql in self?.openManagedSQL(sql,node:node,title:"Synonym")}),title:create ? "New Synonym" : "Modify Synonym",width:700,height:480)
   }
   func showChildStructure(_ node:TreeNode?) {

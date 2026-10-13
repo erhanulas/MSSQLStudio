@@ -17,6 +17,7 @@ import UniformTypeIdentifiers
           ForEach(databases,id:\.self) {db in ExplorerIndexCard(server:server,database:db).id(revision.uuidString+db)}
         }
       }.frame(maxHeight:420)
+      Text("Nesne tanımları: "+server.definitionIndex.status).font(.caption).foregroundStyle(.secondary)
       Text("Bu Mac’teki arama ve SQL önerisi önbelleği.").font(.caption).foregroundStyle(.secondary)
       StudioActionButton("Yerel İndeksi Yenile",icon:"arrow.clockwise",tint:.accentColor,action:refresh).disabled(!server.online)
     }.padding(18).frame(maxWidth:.infinity,maxHeight:.infinity).studioPanel()

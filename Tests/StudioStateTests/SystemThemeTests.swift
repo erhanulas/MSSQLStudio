@@ -92,7 +92,7 @@ import Testing
     }
     StudioTheme.apply("system")
     let state = StudioState(); state.historyEnabled = false; state.recoveryEnabled = false
-    let host = NSHostingController(rootView: SettingsPanel(state: state)); host.sizingOptions = []
+    let host = NSHostingController(rootView: SettingsPanel(state: state, definitionStorage:DefinitionIndexStorageModel(disk:CatalogDiskIndex(url:URL(fileURLWithPath:"/tmp/SettingsStorage-"+UUID().uuidString+"/index.sqlite"))))); host.sizingOptions = []
     let window = NSWindow(contentViewController: host); window.isReleasedWhenClosed = false
     defer { window.close() }
     window.setFrame(window.frameRect(forContentRect: NSRect(x: -3000, y: 0, width: 780, height: 600)), display: true)

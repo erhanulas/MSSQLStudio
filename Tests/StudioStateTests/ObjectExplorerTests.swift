@@ -269,7 +269,10 @@ import SQLServerKit
     let old=defaults.object(forKey:key)
     defer {if let old {defaults.set(old,forKey:key)} else {defaults.removeObject(forKey:key)}}
     let state=StudioState()
-    let server=ConnectedServer(profile:ServerProfile(),password:"fixture-only")
+    let indexURL=URL(fileURLWithPath:"/tmp/ExplorerRemoval-"+UUID().uuidString).appendingPathComponent("index.sqlite")
+    defer {try? FileManager.default.removeItem(at:indexURL.deletingLastPathComponent())}
+    let disk=CatalogDiskIndex(url:indexURL)
+    let server=ConnectedServer(profile:ServerProfile(),password:"fixture-only",diskIndex:disk,objectIndexService:CatalogIndexService(index:disk),completionIndexService:SQLCatalogService(index:disk))
     server.remembered=true;state.servers=[server]
     defaults.set([server.id.uuidString],forKey:key)
     let doc=QueryDocument(server:server,database:"master",title:"Keep")

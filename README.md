@@ -56,3 +56,7 @@ Bu yerel build imzasızdır; kurulu uygulamanın yerine koymayın. İmzalı pake
 - [ReleaseNotes.json](Sources/SQLServerKit/Resources/ReleaseNotes.json): uygulama ve GitHub için ortak sürüm notları.
 
 Eski mimari/tasarım/imzalama belgeleri AGENTS.md içinde birleştirildi; önceki içerikler Git geçmişinde korunur.
+
+Bağlantı ayarlarının **Gelişmiş** bölümündeki **CREATE / ALTER tanımlarını indeksle** seçeneği, seçili veritabanlarının nesne kodlarını bu Mac’te saklar (varsayılan kapalı). Bağlıyken tanım daima sunucudan okunur ve indeks güncellenir. Explorer bağlantısı kapalıyken nesneye çift tıklayarak son indekslenmiş tanımı tarih bilgisiyle salt okunur görebilirsiniz. Seçeneği kapatmak tanım indeksini; Explorer’dan kaldırmak bağlantının yerel indekslerini temizler. Kod içinde kelime araması sonraki aşamadır.
+
+Tanım indeksi kotası varsayılan **1 GB**’tır. **Ayarlar → Çalışma Alanı → Nesne tanım indeksi** altında 128 MB–64 GB arasında değiştirip Uygula ile kaydedebilirsiniz. Ayarlar başlığı kullanılan alanı ve doluluk yüzdesini gösterir. Kota tüm bağlantılar için ortaktır; dolduğunda en eski tanımlar temizlenir. Ölçüm tanım verisidir, SQLite dosya/WAL ve diğer katalog alanlarını kapsamaz.

@@ -28,7 +28,10 @@ import Testing
     #expect(a.profile.name=="Offline A" && a.generation==original.generation)
   }
   @Test func offlineProfileRenameAndEndpointEditingNeverRequireAConnection() async throws {
-    let state=StudioState(),server=ConnectedServer(profile:ServerProfile(name:"Offline",host:"offline.invalid"),password:"")
+    let url=URL(fileURLWithPath:"/tmp/OfflineProfile-"+UUID().uuidString).appendingPathComponent("index.sqlite")
+    defer {try? FileManager.default.removeItem(at:url.deletingLastPathComponent())}
+    let disk=CatalogDiskIndex(url:url)
+    let state=StudioState(),server=ConnectedServer(profile:ServerProfile(name:"Offline",host:"offline.invalid"),password:"",diskIndex:disk,objectIndexService:CatalogIndexService(index:disk),completionIndexService:SQLCatalogService(index:disk))
     server.online=false;state.servers=[server];state.historyEnabled=false;state.recoveryEnabled=false
     let doc=QueryDocument(server:server,database:"master",title:"Keep SQL");doc.sql="SELECT N'local draft';";doc.state = .ready;state.documents=[doc]
     let generation=server.generation

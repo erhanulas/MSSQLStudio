@@ -16,9 +16,15 @@ public actor CatalogDiskIndex {
   public static let shared = CatalogDiskIndex(url: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("MSSQLStudio/CatalogIndex/catalog-v1.sqlite"))
   private let url: URL
   private var handle: CatalogSQLiteHandle?
+  var registeredCatalogOwners=Set<String>()
+  var urlForDefinitions:URL {url}
+  var sourceLeases: [UUID: UUID] = [:]
   private var excludedScopes = Set<String>()
   private var generations: [String: UUID] = [:]
-  public init(url: URL) { self.url = url }
+  var cachedDefinitionQuota:Int?
+  let definitionByteLimit:Int?
+  public init(url: URL) { self.url = url;definitionByteLimit=nil }
+  init(url:URL,definitionByteLimit:Int) {self.url=url;self.definitionByteLimit=max(1024,definitionByteLimit)}
   /// Excluding an Explorer database removes only its derived local records.
   /// The generation also revokes writes already waiting on network metadata.
   public func setExcluded(_ excluded: Bool, scope: String) throws {
@@ -32,6 +38,7 @@ public actor CatalogDiskIndex {
     do {
       try write("DELETE FROM objects WHERE scope=? OR substr(scope,1,length(?)+1)=?||':'",[scope,scope,scope])
       try write("DELETE FROM builds WHERE staging=? OR substr(staging,1,length(?)+1)=?||':'",[scope,scope,scope])
+      try write("DELETE FROM source_definitions WHERE scope=?",[scope])
       try write("DELETE FROM scopes WHERE scope=?",[scope])
       try write("DELETE FROM editing_metadata WHERE scope=?",[scope])
       try write("DELETE FROM completion_snapshots WHERE scope=?",[scope])
@@ -43,11 +50,11 @@ public actor CatalogDiskIndex {
     if let value=generations[scope] { return value }
     let value=UUID(); generations[scope]=value; return value
   }
-  private func validate(scope: String, generation: UUID? = nil) throws {
+  func validate(scope: String, generation: UUID? = nil) throws {
     guard !excludedScopes.contains(scope), generation == nil || generations[scope] == generation else { throw CancellationError() }
   }
   public nonisolated static func scope(profile: ServerProfile, database: String) -> String {
-    // JSON preserves field boundaries. Passwords and SQL definitions never enter the file.
+    // JSON preserves field boundaries. Passwords never enter the file.
     let fields = [profile.id.uuidString, profile.host, String(profile.port), profile.login, String(profile.kerberos), database]
     let data = (try? JSONEncoder().encode(fields)) ?? Data()
     return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
@@ -70,15 +77,17 @@ public actor CatalogDiskIndex {
     try execute("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-4096; PRAGMA temp_store=FILE;")
     try execute("CREATE TABLE IF NOT EXISTS scopes(scope TEXT PRIMARY KEY, synced REAL NOT NULL, count INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS builds(staging TEXT PRIMARY KEY, created REAL NOT NULL); CREATE TABLE IF NOT EXISTS objects(scope TEXT NOT NULL, id INTEGER NOT NULL, name TEXT NOT NULL, schema_name TEXT NOT NULL, kind TEXT NOT NULL, folded_name TEXT NOT NULL, folded_qualified TEXT NOT NULL, PRIMARY KEY(scope,id)) WITHOUT ROWID; CREATE INDEX IF NOT EXISTS catalog_name ON objects(scope,folded_name); CREATE INDEX IF NOT EXISTS catalog_qualified ON objects(scope,folded_qualified); CREATE INDEX IF NOT EXISTS catalog_kind ON objects(scope,kind);")
     try execute("CREATE TABLE IF NOT EXISTS editing_metadata(scope TEXT NOT NULL, fingerprint TEXT NOT NULL, saved REAL NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(scope,fingerprint)) WITHOUT ROWID;")
+    try prepareDefinitionSchema()
+    try execute("CREATE INDEX IF NOT EXISTS source_fetched ON source_definitions(fetched); CREATE TABLE IF NOT EXISTS source_budget(id INTEGER PRIMARY KEY,total INTEGER NOT NULL); INSERT OR IGNORE INTO source_budget SELECT 1,(SELECT COALESCE(SUM(length(CAST(payload AS BLOB))),0) FROM source_definitions) WHERE NOT EXISTS(SELECT 1 FROM source_budget WHERE id=1); CREATE TRIGGER IF NOT EXISTS source_insert AFTER INSERT ON source_definitions BEGIN UPDATE source_budget SET total=total+length(CAST(NEW.payload AS BLOB)) WHERE id=1; END; CREATE TRIGGER IF NOT EXISTS source_delete AFTER DELETE ON source_definitions BEGIN UPDATE source_budget SET total=total-length(CAST(OLD.payload AS BLOB)) WHERE id=1; END; CREATE TRIGGER IF NOT EXISTS source_update AFTER UPDATE OF payload ON source_definitions BEGIN UPDATE source_budget SET total=total+length(CAST(NEW.payload AS BLOB))-length(CAST(OLD.payload AS BLOB)) WHERE id=1; END;")
     try execute("CREATE TABLE IF NOT EXISTS completion_snapshots(scope TEXT PRIMARY KEY,payload TEXT NOT NULL)")
     try execute("DELETE FROM objects WHERE scope IN (SELECT staging FROM builds WHERE created<CAST(strftime('%s','now') AS REAL)-86400); DELETE FROM builds WHERE created<CAST(strftime('%s','now') AS REAL)-86400;")
     return raw
   }
-  private func execute(_ sql: String) throws {
+  func execute(_ sql: String) throws {
     let db = try open()
     guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else { throw SQLFailure("Yerel katalog indeksi yazılamadı (SQLite \(sqlite3_errcode(db))).") }
   }
-  private func statement(_ sql: String, _ args: [String] = []) throws -> OpaquePointer {
+  func statement(_ sql: String, _ args: [String] = []) throws -> OpaquePointer {
     let db = try open()
     var value: OpaquePointer?
     guard sqlite3_prepare_v2(db, sql, -1, &value, nil) == SQLITE_OK, let value else { throw SQLFailure("Yerel katalog sorgusu hazırlanamadı.") }
@@ -89,7 +98,7 @@ public actor CatalogDiskIndex {
     }
     return value
   }
-  private func write(_ sql: String, _ args: [String] = []) throws {
+  func write(_ sql: String, _ args: [String] = []) throws {
     let s = try statement(sql,args); defer { sqlite3_finalize(s) }
     guard sqlite3_step(s) == SQLITE_DONE else { throw SQLFailure("Yerel katalog güncellenemedi.") }
   }
@@ -246,6 +255,7 @@ public actor CatalogIndexService {
   @discardableResult public func refresh(profile: ServerProfile, password: String, database: String, force: Bool = false) async throws -> CatalogIndexStatus {
     guard profile.visibleDatabases?.contains(database) != false else {throw CancellationError()}
     let scope = CatalogDiskIndex.scope(profile: profile, database: database)
+    try await index.registerCatalogOwner(profile.id,scope:scope)
     let generation=try await index.generation(scope:scope)
     if let build = builds[scope] {
       try await build.task.value
@@ -305,6 +315,7 @@ public actor CatalogIndexService {
   public func replaceTarget(profile: ServerProfile, database: String, name: String, folder: Folder, items: [CatalogItem]) async throws {
     guard profile.visibleDatabases?.contains(database) != false else {return}
     let scope = CatalogDiskIndex.scope(profile: profile,database: database)
+    try await index.registerCatalogOwner(profile.id,scope:scope)
     let generation=try await index.generation(scope:scope)
     // Publish targeted DDL after an in-flight full build, avoiding lost local updates.
     if let build = builds[scope] { _ = try? await build.task.value }
@@ -366,6 +377,7 @@ public actor SQLCatalogService {
   public func cached(profile: ServerProfile, database: String) async throws -> SQLIntelligence.Catalog? {
     guard profile.visibleDatabases?.contains(database) != false else {return nil}
     let scope = CatalogDiskIndex.scope(profile:profile,database:database)
+    try await index.registerCatalogOwner(profile.id,scope:scope)
     let generation=try await index.generation(scope:scope)
     if let value = memory[scope] { return value }
     if let snapshot = try await index.completionSnapshot(scope:scope) {
@@ -391,6 +403,7 @@ public actor SQLCatalogService {
       $0.schema.utf8.elementsEqual(schema.utf8) && $0.name.utf8.elementsEqual(name.utf8) && valid($0.kind) && $0.columns.count<=250_000 && $0.columns.allSatisfy {valid($0)}
     }) ?? true else {throw SQLFailure("Hedef kolon indeksi bilgisi geçersiz veya boyut sınırını aşıyor.")}
     let scope=CatalogDiskIndex.scope(profile:profile,database:database)
+    try await index.registerCatalogOwner(profile.id,scope:scope)
     let generation=try await index.generation(scope:scope)
     let previous=targets[scope]
     let id=UUID()
@@ -426,6 +439,7 @@ public actor SQLCatalogService {
   public func refresh(profile: ServerProfile, password: String, database: String, force: Bool = false) async throws -> SQLIntelligence.Catalog {
     guard profile.visibleDatabases?.contains(database) != false else {throw CancellationError()}
     let scope = CatalogDiskIndex.scope(profile:profile,database:database)
+    try await index.registerCatalogOwner(profile.id,scope:scope)
     let generation=try await index.generation(scope:scope)
     while true {
       while let target=targets[scope] {

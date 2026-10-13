@@ -236,6 +236,10 @@ struct ConnectionForm: View {
               .orange)
           }
           Divider()
+          Text("Nesne tanım indeksi").font(.headline)
+          Toggle("CREATE / ALTER tanımlarını indeksle",isOn:Binding(get:{profile.indexObjectDefinitions == true},set:{profile.indexObjectDefinitions=$0})).toggleStyle(.checkbox).accessibilityIdentifier("indexObjectDefinitions")
+          Text("Seçili veritabanlarının nesne kodlarını bu Mac’te saklar. Bağlıyken tanım her zaman sunucudan okunur; çevrimdışıyken son indeks salt okunur gösterilir. Kapatınca tanım indeksi silinir.").font(.caption).foregroundStyle(.secondary)
+          Divider()
           Text("Ortam ve renk").font(.headline)
           ConnectionAppearanceFields(appearance: appearance)
           }

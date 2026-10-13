@@ -31,14 +31,18 @@ extension WorkbenchController {
           existing.definitionSymbol=symbol;return
         }
         target.objectEditorKey=key
+        let fetched=Date()
         let sql:String,original:String?
         if symbol.kind == "USER_TABLE" {
           let table=try ObjectMetadata.decode(await server.catalog(ObjectMetadata.table(id),database:db),schema:symbol.schema,name:symbol.name)
           sql=try table.createScript();original=nil
+          if server.profile.indexObjectDefinitions == true {await server.definitionIndex.record(.init(id:id,schema:symbol.schema,name:symbol.name,type:"U",sql:sql,fetchedAt:fetched),database:db,generation:generation)}
         } else {
           let result=try await server.catalog(Catalog.definition(id),database:db)
           guard let text=result.results.first?.values.first?.first,let text else {throw SQLFailure("Tanım alınamadı; VIEW DEFINITION iznini veya şifreli modülü kontrol edin.")}
           sql=ModuleEditing.alter(text);original=text
+          let type=symbol.kind == "VIEW" ? "V":symbol.kind.contains("PROCEDURE") ? "P":symbol.kind.contains("INLINE") ? "IF":symbol.kind.contains("TABLE_VALUED") ? "TF":"FN"
+          if server.profile.indexObjectDefinitions == true {await server.definitionIndex.record(.init(id:id,schema:symbol.schema,name:symbol.name,type:type,sql:text,original:text,fetchedAt:fetched),database:db,generation:generation)}
         }
         guard current() else {return}
         guard server.generation == generation else {throw SQLFailure("Bağlantı değişti; nesne tanımını yeniden açın.")}

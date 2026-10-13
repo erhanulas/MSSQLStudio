@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.109",
+    "date": "2026-10-14",
+    "title": "Çevrimdışı nesne tanımları ve ayarlanabilir indeks kotası",
+    "changes": [
+      "Bağlantı ayarlarının Gelişmiş bölümüne CREATE / ALTER tanımlarını indeksle seçeneği eklendi. Varsayılan kapalıdır; seçili veritabanlarının tablo, view, T-SQL procedure/function, trigger ve synonym kodları yerel SQLite indeksinde tutulur.",
+      "Çevrimiçi nesne açılışı her zaman sunucudan okur ve ilgili indeksi günceller; okuma hatasında eski indeks sunucu yanıtı olarak gösterilmez. Çevrimdışı Explorer nesneleri son okuma tarihini gösteren salt okunur SQL önizlemesiyle açılır.",
+      "Tanım indeksi kotası varsayılan 1 GB’dır. Ayarlar → Çalışma Alanı bölümünden 128 MB–64 GB arasında ayarlanabilir; Ayarlar başlığı doluluk yüzdesini ve kullanılan alanı gösterir. Kota tüm bağlantılar için ortaktır, Uygula ile kaydedilir; küçültülürse en eski tanımlar temizlenir. Ölçüm tanım verisini kapsar; SQLite dosya/WAL ve diğer katalog alanları dahil değildir.",
+      "İndeksleme ayrı metadata bağlantısında sıralı ve yalnız değişen nesneler için yapılır. Küçük kimlik/tarih indeksleri büyük kod gövdeleri okunmadan taranır; iptal, generation ve boyut sınırları korunur.",
+      "Explorer’dan kaldırılan bağlantının nesne, kolon ve tanım indeksleri temizlenir; kayıtlı profil, parola ve açık sorgu oturumları korunur. Tanım indeksleme seçeneğini kapatmak yalnız tanım kayıtlarını temizler."
+    ]
+  },
+  {
     "version": "0.2.108",
     "date": "2026-10-14",
     "title": "Okunabilir SQL formatlama ve INSERT kolon yardımı",

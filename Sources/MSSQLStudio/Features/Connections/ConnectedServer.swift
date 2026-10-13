@@ -38,7 +38,7 @@ import UniformTypeIdentifiers
   }
   var updatingProfile=false
   var reconnecting = false
-  func pauseIndexing() { indexPreparation?.cancel() }
+  func pauseIndexing() { indexPreparation?.cancel(); definitionIndex.pause() }
   func recordExplorerFailure(_ error: Error) {
     startupError = error.localizedDescription
     if let failure = error as? SQLFailure,
@@ -66,6 +66,7 @@ import UniformTypeIdentifiers
   private var indexPreparationID=UUID()
   private(set) var catalogIndexRevision=UUID()
   private var visibilityApplication:(revision:UUID,task:Task<Void,Never>)?
+  lazy var definitionIndex=ObjectDefinitionIndexController(server:self,disk:diskIndex)
   private let diskIndex:CatalogDiskIndex
   private let objectIndexService:CatalogIndexService
   private let completionIndexService:SQLCatalogService
@@ -83,6 +84,7 @@ import UniformTypeIdentifiers
   func synchronizeCatalogVisibility(available:[CatalogItem],previousProfile:ServerProfile?=nil,previousDatabases:[CatalogItem]=[]) async {
     indexPreparation?.cancel();indexPreparationID=UUID();catalogIndexRevision=UUID()
     let profile=profile,revision=catalogIndexRevision
+    let purgeDefinitions=previousProfile.map { !$0.hasSameConnectionSettings(as:profile) } ?? false
     let known=Set(available.map(\.name)).union(previousDatabases.map(\.name)).union(previousProfile?.visibleDatabases ?? [])
     let previous=visibilityApplication?.task
     // MainActor isolation does not order calls across service/index actor hops.
@@ -91,13 +93,14 @@ import UniformTypeIdentifiers
     let application=Task { [weak self] in
       if let previous {await previous.value}
       guard let self else {return}
-      await applyCatalogVisibility(profile:profile,known:known,revision:revision)
+      await applyCatalogVisibility(profile:profile,known:known,revision:revision,purgeDefinitions:purgeDefinitions)
     }
     visibilityApplication=(revision,application)
     await application.value
     if visibilityApplication?.revision==revision {visibilityApplication=nil}
   }
-  private func applyCatalogVisibility(profile:ServerProfile,known:Set<String>,revision:UUID) async {
+  private func applyCatalogVisibility(profile:ServerProfile,known:Set<String>,revision:UUID,purgeDefinitions:Bool) async {
+    await definitionIndex.configure(purge:purgeDefinitions,enabled:profile.indexObjectDefinitions == true)
     let excluded=known.filter {profile.visibleDatabases?.contains($0) == false}
     for database in excluded.sorted() {
       if catalogIndexRevision==revision {indexingDatabases.remove(database);indexErrors[database]=nil}
@@ -118,11 +121,27 @@ import UniformTypeIdentifiers
       catch {if catalogIndexRevision==revision {indexErrors[database]=error.localizedDescription}}
     }
   }
+  func removeCatalogIndexes() async {
+    pauseIndexing();catalogIndexRevision=UUID();indexPreparationID=UUID()
+    if let visibilityApplication {await visibilityApplication.task.value}
+    do {try await diskIndex.removeOwnedCatalogs(id)}
+    catch {startupError="Yerel indeksler silinemedi: "+error.localizedDescription}
+    await definitionIndex.remove()
+    let names=Set(databases.map(\.name)).union(profile.visibleDatabases ?? [profile.database])
+    for database in names {
+      do {
+        try await objectIndexService.exclude(profile:profile,database:database)
+      } catch {startupError="Yerel indeksler silinemedi: "+error.localizedDescription}
+      do {try await completionIndexService.exclude(profile:profile,database:database)}
+      catch {startupError="Yerel indeksler silinemedi: "+error.localizedDescription}
+    }
+  }
   func prepareCatalogIndexes(force: Bool = false) {
     guard visibilityApplication == nil else {return}
     indexPreparation?.cancel()
     let preparationID=UUID();indexPreparationID=preparationID
     let profile = profile, password = password, databases = databases.map(\.name)
+    definitionIndex.refresh(force:force)
     indexPreparation = Task { [weak self] in
       for database in databases {
         guard !Task.isCancelled, let self, self.online,self.indexPreparationID==preparationID else { return }

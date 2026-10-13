@@ -121,7 +121,7 @@ extension WorkbenchController {
     guard !server.reconnecting, let window = view.window else { return }
     let alert = StudioAlert()
     alert.messageText = "Bağlantı Explorer’dan kaldırılsın mı?"
-    alert.informativeText = "\(server.profile.name) bağlantısı Explorer’dan kaldırılacak. Kayıtlı bağlantı bilgileri ve açık sorgu sekmeleri korunur."
+    alert.informativeText = "\(server.profile.name) bağlantısı Explorer’dan ve yerel nesne/kolon/tanım indeksleri diskten kaldırılacak. Kayıtlı bağlantı bilgileri ve açık sorgu sekmeleri korunur."
     alert.addButton(withTitle:"Kaldır"); alert.addButton(withTitle:"Vazgeç")
     alert.beginSheetModal(for:window) { [weak self] response in
       guard response == .alertFirstButtonReturn else { return }
@@ -263,6 +263,7 @@ extension WorkbenchController {
   func refreshIndexInBackground(server: ConnectedServer, database: String, force: Bool = false) {
     guard server.online,server.allowsCatalogIndex(database), !server.indexingDatabases.contains(database) else {return}
     let revision=server.catalogIndexRevision
+    server.definitionIndex.refresh(force:force)
     server.indexingDatabases.insert(database)
     NotificationCenter.default.post(name:.init("catalogIndexUpdated"),object:server,userInfo:["database":database])
     lastIndexStatusCheck = .distantPast; updateIndexStatus()
@@ -302,7 +303,7 @@ extension WorkbenchController {
     lastIndexStatusScope = key; lastIndexStatusCheck = Date(); indexStatusTask?.cancel()
     let profile = scope.server.profile, server = scope.server
     indexStatusTask = Task { [weak self] in
-      var lines: [String] = [], ready = 0
+      var lines: [String] = ["Nesne tanımları: "+server.definitionIndex.status], ready = 0
       for db in databases {
         guard !Task.isCancelled else { return }
         do {

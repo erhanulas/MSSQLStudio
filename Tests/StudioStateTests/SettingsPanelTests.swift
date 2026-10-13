@@ -1,3 +1,4 @@
+import SQLServerKit
 import AppKit
 import SwiftUI
 import Testing
@@ -7,7 +8,7 @@ import Testing
   private func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
   private func window(_ section: SettingsSection) -> (NSWindow, NSHostingController<SettingsPanel>) {
     let state = StudioState(); state.historyEnabled = false; state.recoveryEnabled = false
-    let host = NSHostingController(rootView: SettingsPanel(state: state, initialTab: section)); host.sizingOptions = []
+    let host = NSHostingController(rootView: SettingsPanel(state: state, initialTab: section, definitionStorage:DefinitionIndexStorageModel(disk:CatalogDiskIndex(url:URL(fileURLWithPath:"/tmp/SettingsStorage-"+UUID().uuidString+"/index.sqlite"))))); host.sizingOptions = []
     let window = NSWindow(contentViewController: host); window.isReleasedWhenClosed = false
     window.setFrame(window.frameRect(forContentRect: NSRect(x: -2000, y: -2000, width: 780, height: 600)), display: true)
     host.view.frame = NSRect(x: 0, y: 0, width: 780, height: 600)

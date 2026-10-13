@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 extension WorkbenchController {
   func serverTree(_ server:ConnectedServer) -> TreeNode {explorerTree.serverTree(server)}
   func load(_ node: TreeNode) {
-    guard !node.loading, !node.loaded, node.server.online || node.server.catalogFixture != nil else { return }
+    guard !node.loading, !node.loaded, node.server.online || node.server.catalogFixture != nil || node.server.profile.indexObjectDefinitions == true else { return }
     if node.linked != nil || node.objectFolder == .linkedServers {loadLinked(node);return}
     if case .object(let kind) = node.kind {
       node.loaded = true
@@ -34,7 +34,13 @@ extension WorkbenchController {
       do {
         let sql =
           node.item.map { Catalog.children(folder, object: $0.id) } ?? Catalog.objects(folder)
-        let rows = Catalog.rows(try await node.server.catalog(sql, database: node.database))
+        let rows:[CatalogItem]
+        if node.server.online || node.server.catalogFixture != nil {
+          rows=Catalog.rows(try await node.server.catalog(sql,database:node.database))
+        } else {
+          guard [.tables,.views,.procedures,.functions,.triggers,.synonyms].contains(folder) else {throw SQLFailure("Bu ayrıntı çevrimdışı indeks kapsamında değil.")}
+          rows=try await node.server.definitionIndex.items(database:node.database,folder:folder,parentID:node.item?.id)
+        }
         node.children = rows.map { item in
           TreeNode(
             item.schema.isEmpty

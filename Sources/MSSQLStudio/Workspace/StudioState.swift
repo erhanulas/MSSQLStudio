@@ -58,8 +58,16 @@ import UniformTypeIdentifiers
       for doc in affected {await doc.connection.disconnect();doc.state = .disconnected;doc.results=[];doc.rowCount=0;doc.clearSymbols();doc.changed?()}
       await metadata.disconnect()
     }
+    let oldProfile=server.profile
     server.profile=profile;server.password=password;server.remembered = server.remembered || remember
     if server.remembered {rememberExplorer(server.id,selected:true)}
+    if reset || oldProfile.visibleDatabases != profile.visibleDatabases {
+      await server.synchronizeCatalogVisibility(available:server.databases,previousProfile:oldProfile)
+      if server.online {server.prepareCatalogIndexes()}
+    } else if oldProfile.indexObjectDefinitions != profile.indexObjectDefinitions {
+      await server.definitionIndex.configure()
+      server.definitionIndex.refresh()
+    }
     scheduleSnapshot()
   }
   func deleteConnectionProfile(_ server:ConnectedServer) async throws {
@@ -80,8 +88,12 @@ import UniformTypeIdentifiers
   var historyRetentionDays = QueryHistoryPolicy.days(UserDefaults.standard.object(forKey: "historyRetentionDays") as? Int ?? QueryHistoryPolicy.defaultDays)
   private var snapshotTask: Task<Void, Never>?
   var recoveryEnabled = UserDefaults.standard.bool(forKey: "recoveryEnabled")
-  let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-    .appendingPathComponent("MSSQLStudio")
+  let folder:URL = {
+    if Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" || ProcessInfo.processInfo.arguments.contains("--ui-smoke") || ProcessInfo.processInfo.arguments.contains(where:{$0.contains(".xctest")}) {
+      return URL(fileURLWithPath:"/tmp/MSSQLStudio-UI-\(ProcessInfo.processInfo.processIdentifier)")
+    }
+    return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("MSSQLStudio")
+  }()
   func connect(_ profile: ServerProfile, password: String, save: Bool) async throws
     -> ConnectedServer
   {
@@ -193,6 +205,8 @@ import UniformTypeIdentifiers
     servers.removeAll { $0 === server }
     rememberExplorer(server.id, selected:false)
     await disconnectExplorer(server)
+    await server.removeCatalogIndexes()
+    if let error=server.startupError {showError(error)}
     changed?()
   }
   func reconnectExplorer(_ server: ConnectedServer) async {

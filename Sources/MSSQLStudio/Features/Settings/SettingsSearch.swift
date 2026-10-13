@@ -39,6 +39,7 @@ struct SettingsSearchEntry:Identifiable,Equatable {
         ("history","Sorgu geçmişini sakla","timeline sql yerel kayıt"),
         ("retention","Saklama süresi","geçmiş gün 30 3650 history retention"),
         ("recovery","Sorgu sekmelerini kurtar","oturum yeniden açılış recovery restore")]),
+      (.workspace,"Nesne tanım indeksi",[("definitionQuota","Tanım indeksi disk kotası ve doluluk","index indeks sqlite disk depolama kota quota yüzde doluluk 1 gb 1024 mb offline çevrimdışı")]),
       (.workspace,"Yerel kayıtlar",[("removeRecords","Yerel Kayıtları Sil","geçmiş kurtarma temizle disk history tabs")]),
       (.updates,"GitHub yayınları",[("repository","Yayın deposu","github repo repository url güncelleme adres kaynak")]),
       (.updates,"Güncelleme kontrolü",[("update","Güncellemeleri Kontrol Et","yeni sürüm yayın kurulum paket installer update")]),
