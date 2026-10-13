@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.108 / build 109 public yayın doğrulandı
+
+- [Public/latest v0.2.108](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.108), kaynak `4843210d42674d2cbb0c9ed45b5f5bb05a05eb3a`; [Actions 38471443309](https://github.com/erhanulas/MSSQLStudio/actions/runs/38471443309) başarılı. Prosedürel formatlama, özelleştirilebilir satır genişliği ve INSERT kolon/değer vurgusu/kompakt önizleme yayımlandı.
+- CI gerçek yayın paketleriyle **327 app +310 core +8 text =645 test; 618 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 83.376 /7.565 /0.008 sn; geçici imza kimliği temizliği tamamlandı. CI logları `/tmp/MSSQLStudio-108-ci-logs.zip`, özet `/tmp/MSSQLStudio-108-ci-evidence.log`.
+- İndirilen dört public asset'in SHA-256 değerleri GitHub digest'leriyle aynı; ZIP/PKG URL/hash eşliği public manifest ile doğrulandı. Exact 0.2.108/build 109, ZIP/PKG metadata/binary/notlar eşliği, kaynak ReleaseNotes byte eşliği ve GitHub yayın metni geçti. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği doğrulandı; helper v1 yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed app kendi Foundation/URLSession updater yoluyla `Foundation updater feed verified: 0.2.108` verdi. Kanıt `/tmp/MSSQLStudio-108-public-verification/verification.json` altında.
+- Yerel/native ve 14 ScriptDOM grammar kanıtları aşağıdadır. Canlı SQL Server, gerçek CUA fiziksel fare akışı ve Installer/yeniden açma denenmedi. Kurulu uygulama, gerçek SQL oturumları/verileri, kullanıcı Keychain'i ve `.vscode/` değiştirilmedi.
+
+İndirilen public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.108.pkg`: `9e71a704bfe4411bd796b6706d583100c8c15cc09e4b7544d72179f58f52d813`.
+- `MSSQLStudio-0.2.108.zip`: `6b37837406b8cd5ccaec2b5d6afc9b34aa8c6098bd3a9abd28a4f7b0e15e5f9f`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `d8a67e9122e15e1332d145e990688c86f3d429fdd2ef6079bdd271850dd7dd94`.
+
 ## 14 Ekim 2026 — v0.2.108 / build 109 yayın hazırlığı
 
 - Kullanıcının açık yayın isteğiyle kullanılmamış v0.2.108 hazırlanır. Son kaynak tam suite 645 test: 618 geçti /27 dış koşullu atlandı; Release ve 14 ScriptDOM grammar kontrolü geçti. Sürüm/resource sonrası 16 ilgili test geçti ve Release BUILD SUCCEEDED; mimari/kaynak eşliği, whitespace ve frozen helper/imza dosyalarının v0.2.107 ile değişmezliği doğrulandı. CI/public paket ve exact Foundation feed kanıtı yayın sonrasında kaydedilecektir.
