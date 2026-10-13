@@ -808,8 +808,12 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       case .running: phase = "Executing…"
       case .cancelling: phase = "Cancelling…"
       }
+      let loaded = doc.results.filter { !$0.isPlan }.reduce(0) { $0 + $1.values.count }
+      let shown = doc.results.filter { !$0.isPlan }.reduce(0) { $0 + min($1.values.count, max(1, doc.limits.rows)) }
+      let rows = shown < loaded ? "\(shown.formatted()) gösterilen · \(loaded.formatted()) yüklenen" : "\(doc.rowCount.formatted()) rows"
+      status.setAccessibilityIdentifier("queryStatus")
       status.stringValue =
-        "\(phase)   |   \(doc.database)   |   \(doc.rowCount.formatted()) rows   |   \(String(format:"%.3f",doc.elapsed)) s\(doc.partial ? "   |   PARTIAL" : "")\(doc.transactionCount > 0 ? "   |   TRAN: \(doc.transactionCount)" : "")"
+        "\(phase)   |   \(doc.database)   |   \(rows)   |   \(String(format:"%.3f",doc.elapsed)) s\(doc.partial ? "   |   PARTIAL" : "")\(doc.transactionCount > 0 ? "   |   TRAN: \(doc.transactionCount)" : "")"
     } else {
       database.isEnabled = false
       context.stringValue = ""
@@ -2350,7 +2354,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   @objc private func showFavoritesAtNode() {if let node=contextNode {presentFavorites(server:node.server,database:Self.queryDatabase(for:node))}}
   private func presentFavorites(server:ConnectedServer?,database:String) {
-    present(FavoriteQueriesPanel(state:state,model:state.favorites,contextServerID:server?.id,contextDatabase:database,didOpen:{[weak self] in self?.view.window?.makeKeyAndOrderFront(nil)}),
+    present(FavoriteQueriesPanel(state:state,model:state.favorites,contextServerID:server?.id,contextDatabase:database,didOpen:{[weak self] in self?.view.window?.makeKeyAndOrderFront(nil)},
+      editFavorite:{[weak self] favorite,serverID,database in self?.presentFavoriteEditor(favorite:favorite,serverID:serverID,database:database)}),
       title:"Favori Sorgular",width:1100,height:760,minWidth:900,minHeight:660,identity:"favorites|\(server?.id.uuidString ?? "global")|\(database)")
   }
   @objc func addFavorite() {if let doc=favoriteContextDocument {presentFavoriteEditor(for:doc)}}

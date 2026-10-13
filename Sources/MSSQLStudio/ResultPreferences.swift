@@ -26,6 +26,7 @@ struct ResultLoadingPanel: View {
   @State var page: Int
   @State var refresh: Int
   var refreshAllowed = true
+  var readLimitAllowed = true
   var apply: (Int,Int,Int,Bool) -> Void
   @State private var saveDefault = false
   @State private var message = ""
@@ -34,10 +35,11 @@ struct ResultLoadingPanel: View {
       StudioPanelHeading(title:"Sonuç Yükleme",icon:"slider.horizontal.3",subtitle:"Bu sorgu için okuma ve görüntüleme")
       ScrollView {
         VStack(alignment:.leading,spacing:14) {
-          StudioFormField("Sonuç başına okuma sınırı") {TextField("Satır",value:$rows,format:.number.grouping(.never)).textFieldStyle(.roundedBorder)}
+          StudioFormField("Sonuç başına satır sınırı") {TextField("Satır",value:$rows,format:.number.grouping(.never)).textFieldStyle(.roundedBorder)}.disabled(!readLimitAllowed)
           StudioFormField("Sayfa boyutu") {TextField("Satır",value:$page,format:.number.grouping(.never)).textFieldStyle(.roundedBorder)}
           StudioFormField("Yenileme aralığı") {HStack {TextField("Saniye",value:$refresh,format:.number.grouping(.never)).textFieldStyle(.roundedBorder);Text("sn").foregroundStyle(.secondary)}}.disabled(!refreshAllowed)
-          Text("Her sonuç için okuma: 1–5.000.000 satır · Sayfa: 0–1.000.000 (0 = tüm yüklenenler) · Yenileme: 0–3.600 sn (0 = kapalı). Okuma sınırı sonraki çalıştırmada her sonuç kümesine ayrı uygulanır.").font(.caption).foregroundStyle(.secondary)
+          Text("Her sonuç için sınır: 1–5.000.000 satır · Sayfa: 0–1.000.000 (0 = sınır içindeki tüm satırlar) · Yenileme: 0–3.600 sn (0 = kapalı). Sınır mevcut önbelleğin ilk satırlarına hemen uygulanır; Çalıştır/Yenile de bu sınırla okur. Sınırı büyütmek yalnızca önceden yüklenen satırları geri gösterir.").font(.caption).foregroundStyle(.secondary)
+          if !readLimitAllowed {Label("Satır sınırı için düzenleme modunu ve dışa aktarmayı tamamlayın.",systemImage:"lock").font(.caption).foregroundStyle(.secondary)}
           if !refreshAllowed {Label("Düzenleme sırasında otomatik yenileme kapalıdır.",systemImage:"pause.circle").font(.caption).foregroundStyle(.secondary)}
           Toggle("Yeni sorgular için varsayılan yap",isOn:$saveDefault)
           if !message.isEmpty {Text(message).font(.caption).foregroundStyle(.red)}

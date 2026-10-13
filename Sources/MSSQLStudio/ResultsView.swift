@@ -751,6 +751,10 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     setEditValue(nil, row: table.selectedRow, column: ordinal)
   }
   private(set) var result = Rows()
+  private var loadedResult = Rows()
+  private(set) var readLimit=Int.max
+  var loadedRowCount:Int {loadedResult.values.count}
+  var isReadLimited:Bool {result.values.count < loadedRowCount}
   private(set) var visibleIndices: [Int]?
   private(set) var rules: [Int: ColumnRule] = [:]
   private var job: Task<Void, Never>?
@@ -935,6 +939,26 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     pageSize = size; pageStart = 0
     table.deselectAll(nil); table.reloadData(); updateRange()
   }
+  @discardableResult func applyReadLimit(_ value:Int)->Bool {
+    guard value > 0 else {return false}
+    guard readLimit != value else {return true}
+    // Even unchanged native drafts must retain their original row mapping until
+    // editing is explicitly closed. Never hide staged UPDATE/DELETE rows.
+    guard editDefinition == nil else {return false}
+    readLimit=value
+    let rows=loadedResult.values.prefixSnapshot(value)
+    guard result.values.count != rows.count else {return true}
+    popover?.close()
+    result.values=rows
+    visibleIndices=nil;pageStart=0
+    table.deselectAll(nil)
+    updateRange();table.reloadData()
+    if let clip=table.enclosingScrollView?.contentView {
+      clip.scroll(to:NSPoint(x:clip.bounds.minX,y:0));clip.enclosingScrollView?.reflectScrolledClipView(clip)
+    }
+    reload(debounce:false)
+    return true
+  }
   @objc private func navigate(_ sender: NSButton) {
     guard visibleCount > 0, pageSize > 0 else { return }
     let last = ((visibleCount - 1) / pageSize) * pageSize
@@ -949,13 +973,14 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     pageStart = pageSize == 0 || visibleCount == 0 ? 0 : min(((visibleCount - 1) / pageSize) * pageSize, pageStart)
     let label = (visibleCount == 0 ? "0 / 0" : "\(pageStart + 1)–\(pageStart + basePageCount) / \(visibleCount.formatted())\(partial ? "+" : "")") + (newRowOrder.isEmpty ? "" : " + \(newRowOrder.count) yeni")
     if rangeLabel.stringValue != label { rangeLabel.stringValue = label }
-    rangeLabel.toolTip = "Geçerli sayfa / yüklenen satırlar. \(visibleCount.formatted()) gösterilen / \(result.values.count.formatted()) yüklenen satır. All yalnızca yüklenen sonuçları kapsar."
+    rangeLabel.toolTip = "Geçerli sayfa / sınır içindeki satırlar. \(visibleCount.formatted()) filtrelenen · \(result.values.count.formatted()) sınır içinde · \(loadedRowCount.formatted()) önbellekte."
     for button in navigation { button.isEnabled = pageSize > 0 && visibleCount > 0 && (button.tag < 2 ? pageStart > 0 : pageStart + basePageCount < visibleCount) }
   }
   func update(_ rows: Rows, generation: Int = 0) {
     _ = view
     let changedFields = result.fields != rows.fields
-    guard changedFields || self.generation != generation || result.values.count != rows.values.count else { return }
+    guard changedFields || self.generation != generation || loadedResult.values.count != rows.values.count else { return }
+    let changedGeneration=self.generation != generation,previousCount=result.values.count
     self.generation = generation
     highlightColumn(nil)
     if editDefinition != nil { discardEdits() }
@@ -996,7 +1021,9 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       rules = [:]
       visibleIndices = nil
     }
-    result = rows
+    loadedResult=rows
+    result=rows;result.values=rows.values.prefixSnapshot(readLimit)
+    if changedFields || changedGeneration || result.values.count < previousCount {visibleIndices=nil}
     refreshColumnHeaders()
     if needsAutoFit && !rows.values.isEmpty { autoFitColumns(); needsAutoFit = false }
     reload()
@@ -1007,7 +1034,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     rules[column] = rule.active ? rule : nil
     reload()
   }
-  private func reload() {
+  private func reload(debounce:Bool=true) {
     guard isViewLoaded else { return }
     revision += 1
     let version = revision
@@ -1031,7 +1058,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     updateInfo()
     job = Task { [weak self] in
       do {
-        try await Task.sleep(for: .milliseconds(220))
+        if debounce {try await Task.sleep(for: .milliseconds(220))}
         let worker = Task.detached(priority: .userInitiated) {
           try ResultFiltering.projection(
             rows, search: search, rules: rules, sortColumn: sort, ascending: ascending)
@@ -1059,9 +1086,9 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   }
   private func updateInfo() {
     guard isViewLoaded else { return }
-    info.stringValue = busy ? "İşleniyor…" : (partial ? "Kısmi sonuç" : "")
+    info.stringValue = busy ? "İşleniyor…" : (partial ? "Kısmi sonuç" : isReadLimited ? "Sınırlandı" : "")
     info.isHidden = info.stringValue.isEmpty
-    info.toolTip = "\(result.values.count.formatted()) yüklenen satırdan \(visibleCount.formatted()) gösteriliyor · Filtreler yalnızca yüklenmiş satırlara uygulanır."
+    info.toolTip = "\(loadedRowCount.formatted()) önbellekte · ilk \(result.values.count.formatted()) satır sınırında \(visibleCount.formatted()) eşleşme · Filtre/sıralama yalnızca sınır içindeki satırlara uygulanır."
     updateRange()
   }
   private func rebuildChips() {
@@ -1628,12 +1655,12 @@ private struct ColumnFilterPanel: View {
     filter.target = self
     filter.action = #selector(filterChanged)
     export.addItems(withTitles: [
-      "Dışa Aktar", "Geçerli sayfa · CSV…", "Geçerli sayfa · JSON…", "Tüm yüklenen · CSV…",
-      "Tüm yüklenen · JSON…",
+      "Dışa Aktar", "Geçerli sayfa · CSV…", "Geçerli sayfa · JSON…", "Sınır içindeki tüm satırlar · CSV…",
+      "Sınır içindeki tüm satırlar · JSON…",
     ])
     export.item(at: 0)?.title = ""
     export.item(at: 0)?.image = NSImage(systemSymbolName: "arrow.down.document", accessibilityDescription: "Sonuçları dışa aktar")
-    export.toolTip = "Görünen veya tüm yüklenen sonuçları CSV / JSON olarak dışa aktar"
+    export.toolTip = "Geçerli sayfayı veya satır sınırı içindeki tüm sonuçları CSV / JSON olarak dışa aktar"
     export.widthAnchor.constraint(equalToConstant: 38).isActive = true
     configurePageMenu()
     rowLimit.controlSize = .small
@@ -1815,6 +1842,7 @@ private struct ColumnFilterPanel: View {
     return tables[index]
   }
   private var hasDataEdits: Bool { tables.values.contains { !$0.pendingEdits.isEmpty } }
+  private var canChangeReadLimit:Bool {!tables.values.contains {$0.editDefinition != nil} && exportJob == nil}
   private func syncDataActions() {
     let grid = selectedGrid
     let editing = grid?.editDefinition != nil
@@ -2157,11 +2185,12 @@ private struct ColumnFilterPanel: View {
           displayed.insert(index)
           if displayed.count == 1 { resultTabs.selectTabViewItem(item) }
         }
+        controller.applyReadLimit(document.limits.rows)
         controller.update(result, generation: document.resultGeneration)
         controller.partial = result.truncated
         controller.filter = filter.stringValue
         resultTabs.tabViewItems.first(where: { ($0.identifier as? NSNumber)?.intValue == index })?
-          .label = "Results \(index + 1) (\(result.values.count.formatted()))\(result.truncated ? " · KISMİ" : "")"
+          .label = "Results \(index + 1) (\(controller.result.values.count.formatted()))\(result.truncated ? " · KISMİ" : controller.isReadLimited ? " · SINIRLI" : "")"
       }
     }
     if !document.busy {
@@ -2236,7 +2265,7 @@ private struct ColumnFilterPanel: View {
   @objc private func showLoadingOptions() {
     optionsPopover?.close()
     let popup=NSPopover()
-    let panel=ResultLoadingPanel(rows:document.limits.rows,page:selectedPageSize,refresh:effectiveRefreshSeconds,refreshAllowed:!tables.values.contains {$0.editDefinition != nil}) { [weak self,weak popup] rows,page,refresh,save in
+    let panel=ResultLoadingPanel(rows:document.limits.rows,page:selectedPageSize,refresh:effectiveRefreshSeconds,refreshAllowed:!tables.values.contains {$0.editDefinition != nil},readLimitAllowed:canChangeReadLimit) { [weak self,weak popup] rows,page,refresh,save in
       guard let self,!document.busy,!submittingData else {return}
       applyLoadingPreferences(rows:rows,page:page,refresh:refresh,save:save);popup?.close()
     }
@@ -2261,6 +2290,7 @@ private struct ColumnFilterPanel: View {
   private var effectiveRefreshSeconds:Int {defaultRefreshApplied ? selectedRefreshSeconds : document.initialRefreshSeconds ?? ResultReadPreferences.refreshSeconds}
   func applyLoadingPreferences(rows:Int,page:Int,refresh:Int,save:Bool) {
     guard !document.busy,!submittingData,(1...5_000_000).contains(rows),(0...1_000_000).contains(page),(0...3600).contains(refresh) else {return}
+    guard rows == document.limits.rows || canChangeReadLimit else {return}
     let seconds=tables.values.contains {$0.editDefinition != nil} ? 0:refresh
     document.limits=ResultReadPreferences.limits(rows:rows)
     document.initialRefreshSeconds=seconds
@@ -2268,6 +2298,7 @@ private struct ColumnFilterPanel: View {
     applyPageSize(page);applyRefreshSeconds(seconds)
     if save {ResultReadPreferences.save(rows:rows,page:page,refresh:seconds)}
     syncPageMenu()
+    update();changed?()
   }
   private func syncReadOptions() {
     let seconds=effectiveRefreshSeconds
@@ -2292,24 +2323,26 @@ private struct ColumnFilterPanel: View {
   }
   private func syncPageMenu() {
     syncReadOptions()
-    let menu=NSMenu()
+    let menu=NSMenu();menu.autoenablesItems=false
     func compact(_ value:Int) -> String {value>=1000 && value%1000 == 0 ? "\(value/1000)k":value.formatted()}
     let pageTitle=selectedPageSize == 0 ? "Tümü":compact(selectedPageSize)
     let title=NSMenuItem(title:"\(pageTitle) · \(compact(document.limits.rows))",action:nil,keyEquivalent:"")
     title.image=NSImage(systemSymbolName:"tablecells",accessibilityDescription:nil);menu.addItem(title)
     func section(_ label:String,values:[Int],selected:Int,action:Selector,identifier:String) {
       let item=NSMenuItem(title:label,action:nil,keyEquivalent:"");item.identifier = .init(identifier)
-      let choices=NSMenu()
+      let choices=NSMenu();choices.autoenablesItems=false
       for value in values + (values.contains(selected) ? []:[selected]) {
-        let option=NSMenuItem(title:value == 0 ? "Tüm yüklenenler":value.formatted(),action:action,keyEquivalent:"")
+        let option=NSMenuItem(title:value == 0 ? "Sınır içindeki tüm satırlar":value.formatted(),action:action,keyEquivalent:"")
         option.target=self;option.tag=value;option.state=value == selected ? .on:.off;choices.addItem(option)
       }
       choices.addItem(.separator())
       let custom=NSMenuItem(title:"Özel…",action:#selector(showLoadingOptions),keyEquivalent:"");custom.target=self;choices.addItem(custom)
       item.submenu=choices;menu.addItem(item)
     }
-    section("Sayfa boyutu · \(selectedPageSize == 0 ? "Tüm yüklenenler":selectedPageSize.formatted())",values:GridPaging.choices,selected:selectedPageSize,action:#selector(changeRowLimit(_:)),identifier:"gridPageChoices")
-    section("Sonraki okuma · \(document.limits.rows.formatted()) / sonuç",values:[10,100,500,1000,10_000,50_000,100_000,1_000_000,5_000_000],selected:document.limits.rows,action:#selector(changeReadLimit(_:)),identifier:"gridReadChoices")
+    section("Sayfa boyutu · \(selectedPageSize == 0 ? "Sınır içindeki tümü":selectedPageSize.formatted())",values:GridPaging.choices,selected:selectedPageSize,action:#selector(changeRowLimit(_:)),identifier:"gridPageChoices")
+    section("Satır sınırı · \(document.limits.rows.formatted()) / sonuç",values:[10,100,500,1000,10_000,50_000,100_000,1_000_000,5_000_000],selected:document.limits.rows,action:#selector(changeReadLimit(_:)),identifier:"gridReadChoices")
+    let readChoices=menu.items.first {$0.identifier?.rawValue == "gridReadChoices"}
+    readChoices?.isEnabled=canChangeReadLimit
     menu.addItem(.separator())
     let custom=NSMenuItem(title:"Özel değerler…",action:#selector(showLoadingOptions),keyEquivalent:"");custom.target=self;custom.tag = -1;menu.addItem(custom)
     let save=NSMenuItem(title:"Varsayılan Yap",action:#selector(saveLoadingDefaults),keyEquivalent:"");save.target=self;save.tag = -2;menu.addItem(save)
@@ -2317,16 +2350,20 @@ private struct ColumnFilterPanel: View {
     syncReadOptionsHelp()
   }
   private func syncReadOptionsHelp() {
-    rowLimit.toolTip="Sayfa: \(selectedPageSize == 0 ? "Tüm yüklenenler":selectedPageSize.formatted()) · Her sonuç için okuma sınırı: \(document.limits.rows.formatted()) (sonraki çalıştırma) · Sayfa değişimi yalnız yüklenen sonuçları gösterir."
+    rowLimit.toolTip="Sayfa: \(selectedPageSize == 0 ? "Sınır içindeki tümü":selectedPageSize.formatted()) · Her sonuç için satır sınırı: \(document.limits.rows.formatted()) · Mevcut önbelleğin ilk satırlarına hemen uygulanır; filtre/sıralama bu sınır içinde yapılır. Çalıştır/Yenile aynı sınırla okur."
     if let previous=document.lastExecutedReadLimit,previous != document.limits.rows,!document.results.isEmpty {
-      rowLimit.toolTip! += "\nMevcut sonuçlar \(previous.formatted()) satır sınırıyla okundu. Yeni sınırı uygulamak için Sonuçları yenile veya Çalıştır’a basın."
+      rowLimit.toolTip! += "\nSon okuma sınırı: \(previous.formatted()). Sınırı büyütmek yalnızca önbellekteki satırları geri gösterir; ek satır okumak için Sonuçları yenile veya Çalıştır’a basın."
     }
+    if !canChangeReadLimit {rowLimit.toolTip! += "\nSatır sınırını değiştirmek için düzenleme modunu ve devam eden dışa aktarmayı tamamlayın."}
+    rowLimit.menu?.items.first {$0.identifier?.rawValue == "gridReadChoices"}?.isEnabled=canChangeReadLimit
+    for item in rowLimit.menu?.items.first(where:{$0.identifier?.rawValue == "gridReadChoices"})?.submenu?.items ?? [] {item.isEnabled=canChangeReadLimit}
     rowLimit.setAccessibilityHelp(rowLimit.toolTip)
   }
   @objc private func changeReadLimit(_ item:NSMenuItem) {
-    guard !document.busy,!submittingData,(1...5_000_000).contains(item.tag) else {return}
+    guard !document.busy,!submittingData,canChangeReadLimit,(1...5_000_000).contains(item.tag) else {return}
     document.limits=ResultReadPreferences.limits(rows:item.tag)
     syncPageMenu()
+    update();changed?()
   }
   @objc private func saveLoadingDefaults() {
     guard !document.busy,!submittingData else {return}
@@ -2416,6 +2453,7 @@ private struct ColumnFilterPanel: View {
       self?.exportJob = nil
       self?.syncNavigation()
     }
+    syncDataActions()
   }
 
 }

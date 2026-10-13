@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.100",
+    "date": "2026-10-13",
+    "title": "Anlık sonuç sınırı ve güvenilir favori kaydı",
+    "changes": [
+      "Satır sınırını düşürdüğünüzde mevcut sonuçlar sorguyu yeniden çalıştırmadan hemen sınırlanır. Sınırı büyütmek önceden yüklenmiş satırları geri gösterir; filtreleme, sıralama, kopyalama ve dışa aktarma aynı sınırı kullanır.",
+      "Favoriyi Kaydet sonrası liste güncellenirken uygulamanın tıklamalara yanıt vermemesine yol açan tema hatası düzeltildi. Çizgisiz listelerin sistem tarafından yönetilen ayırıcı rengi korunur.",
+      "Favori yönetimindeki Yeni ve Düzenle bağımsız bir pencere açar. Kayıt ilerlemesi, hata sonrası tekrar deneme ve güvenli kapanış korunur.",
+      "Sonuç sekmeleri ve durum çubuğu gösterilen satırlar ile önbellekteki satırları ayırır. Düzenleme veya dışa aktarma sürerken satır sınırı değiştirilmez; Çalıştır ve Yenile yeni sınırla okumaya devam eder."
+    ]
+  },
+  {
     "version": "0.2.99",
     "date": "2026-10-13",
     "title": "Akıllı tamamlama, sistem teması ve hızlı favoriler",

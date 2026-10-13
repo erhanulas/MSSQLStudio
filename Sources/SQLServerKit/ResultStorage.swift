@@ -26,12 +26,20 @@ public struct RowCollection: RandomAccessCollection, ExpressibleByArrayLiteral, 
     precondition(index >= 0 && index < count)
     return disk?.row(index) ?? memory[index]
   }
+  /// A constant-space view of the first loaded rows. The full backing snapshot
+  /// remains owned by its caller, so a later larger limit can reveal it again.
+  public func prefixSnapshot(_ maximumCount:Int) -> Self {
+    var snapshot=self
+    snapshot.count=Swift.min(count,Swift.max(0,maximumCount))
+    return snapshot
+  }
   public func index(after i: Int) -> Int { i + 1 }
   public func index(before i: Int) -> Int { i - 1 }
   public mutating func append(_ row: Element) {
     if disk != nil {
       self = RowCollection(Array(self) + [row])
     } else {
+      if count < memory.count {memory=Array(memory.prefix(count))}
       memory.append(row)
       count = memory.count
     }
@@ -40,6 +48,7 @@ public struct RowCollection: RandomAccessCollection, ExpressibleByArrayLiteral, 
     if disk != nil {
       self = RowCollection(Array(self) + rows)
     } else {
+      if count < memory.count {memory=Array(memory.prefix(count))}
       memory.append(contentsOf: rows)
       count = memory.count
     }

@@ -93,7 +93,7 @@ import Testing
     let grid=try #require(controller.children.compactMap {$0 as? ResultController}.first)
     #expect(grid.pageCount == 100 && doc.limits.rows == 1_234_567)
     try choose("gridReadChoices",10)
-    #expect(doc.limits.rows == 10 && grid.pageCount == 100 && grid.result.values.count == 1200)
+    #expect(doc.limits.rows == 10 && grid.pageCount == 10 && grid.result.values.count == 10 && grid.loadedRowCount == 1200)
     #expect(doc.lastExecutedSQL == nil && doc.sql == "SELECT 1")
     controller.applyLoadingPreferences(rows:5_000_000,page:77,refresh:10,save:false)
     #expect(doc.limits.rows == 5_000_000 && doc.initialRefreshSeconds == 10 && doc.lastExecutedSQL == nil)

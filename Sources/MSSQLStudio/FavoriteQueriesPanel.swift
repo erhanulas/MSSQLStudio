@@ -199,11 +199,10 @@ struct FavoriteQueriesPanel:View {
   @State var contextServerID:UUID?
   @State var contextDatabase:String
   var didOpen:()->Void = {}
+  var editFavorite:((FavoriteQuery?,UUID?,String)->Void)?
   @State private var all=false
   @State private var search=""
   @State private var selected:UUID?
-  @State private var edit:FavoriteQuery?
-  @State private var creating=false
   @State private var deleting=false
   @State private var openError=""
   private var current:FavoriteQuery? {visible.first {$0.id == selected}}
@@ -221,7 +220,8 @@ struct FavoriteQueriesPanel:View {
       HStack {
         TextField("Favori adı ara",text:$search)
         Toggle("Bütün kapsamlar",isOn:$all).fixedSize()
-        StudioActionButton("Yeni",icon:"plus") {creating=true}
+        FavoriteNativeAction(title:"Yeni",icon:"plus",identifier:"favoriteNew",width:72) {editFavorite?(nil,contextServerID,contextDatabase)}
+          .frame(width:72,height:30).disabled(editFavorite == nil)
       }
       HSplitView {
         List(visible,selection:$selected) {item in
@@ -242,7 +242,8 @@ struct FavoriteQueriesPanel:View {
       if !model.error.isEmpty {Text(model.error).foregroundStyle(Color(nsColor:StudioTheme.danger)).textSelection(.enabled)}
       if !openError.isEmpty {Text(openError).foregroundStyle(Color(nsColor:StudioTheme.danger))}
       HStack {
-        StudioActionButton("Düzenle",icon:"pencil") {edit=current}.disabled(current == nil)
+        FavoriteNativeAction(title:"Düzenle",icon:"pencil",identifier:"favoriteEdit",width:90) {if let current {editFavorite?(current,contextServerID,contextDatabase)}}
+          .frame(width:90,height:30).disabled(current == nil || editFavorite == nil)
         StudioActionButton("Sil",icon:"trash",tint:Color(nsColor:StudioTheme.danger)) {deleting=true}.disabled(current == nil)
         Spacer()
         StudioActionButton("Sorguda Aç",icon:"arrow.up.right.square") {
@@ -253,8 +254,6 @@ struct FavoriteQueriesPanel:View {
       }
       Text("Favoriler bu Mac’te saklanır. Sorguda Aç yeni bir sekme açar; SQL otomatik çalıştırılmaz.").font(.caption).foregroundStyle(.secondary)
     }.padding(20).studioPanel().task {await model.load()}
-      .sheet(isPresented:$creating) {FavoriteQueryEditor(model:model,servers:state.servers,contextServerID:contextServerID,database:contextDatabase,close:{creating=false})}
-      .sheet(item:$edit) {favorite in FavoriteQueryEditor(model:model,servers:state.servers,contextServerID:contextServerID,database:contextDatabase,favorite:favorite,close:{edit=nil})}
       .confirmationDialog("Seçili favori silinsin mi?",isPresented:$deleting,titleVisibility:.visible) {
         Button("Favoriyi Sil",role:.destructive) {if let current {Task {await model.remove(current.id);selected=nil}}}
         Button("Vazgeç",role:.cancel) {}
@@ -273,6 +272,32 @@ struct FavoriteQueriesPanel:View {
   private func targetLabel(_ favorite:FavoriteQuery) -> String {
     let id=favorite.scope == .global ? contextServerID:favorite.serverID
     return (state.servers.first {$0.id == id}?.profile.name ?? "Bağlantı seçilmedi")+" / "+targetDatabase(favorite)
+  }
+}
+
+/// Keep favorite actions on explicit AppKit targets shared by the management and editor windows.
+struct FavoriteNativeAction:NSViewRepresentable {
+  let title:String
+  let icon:String
+  let identifier:String
+  let width:CGFloat
+  var primary=false
+  let action:()->Void
+  @Environment(\.isEnabled) private var enabled
+  @MainActor final class Coordinator:NSObject {
+    var action:()->Void
+    init(action:@escaping ()->Void) {self.action=action}
+    @objc func performAction() {action()}
+  }
+  func makeCoordinator()->Coordinator {Coordinator(action:action)}
+  func makeNSView(context:Context)->StudioToolbarButton {
+    let button=StudioToolbarButton(symbol:icon,label:title,tone:primary ? .accent:.neutral,title:title,width:width,prominent:primary)
+    button.target=context.coordinator;button.action = #selector(Coordinator.performAction)
+    button.setAccessibilityIdentifier(identifier);button.isEnabled=enabled
+    return button
+  }
+  func updateNSView(_ button:StudioToolbarButton,context:Context) {
+    context.coordinator.action=action;button.isEnabled=enabled;button.refreshStyle()
   }
 }
 
@@ -343,12 +368,12 @@ struct FavoriteQueryEditor:View {
           ProgressView().controlSize(.small)
           Text("Favori kaydediliyor…").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("favoriteSaveProgress")
         }
-        StudioActionButton("Favoriyi Kaydet",icon:"star.fill") {
+        FavoriteNativeAction(title:"Favoriyi Kaydet",icon:"star.fill",identifier:"favoriteSave",width:154,primary:true) {
           do {
             let value=try FavoriteQuery(id:id,name:name,sql:sql,scope:scope,serverID:serverID,database:database)
             submission.save(value,close:close)
           } catch {submission.report(error.localizedDescription)}
-        }.buttonStyle(StudioPrimaryButton()).disabled(submission.saving).accessibilityIdentifier("favoriteSave")
+        }.frame(width:154,height:30).disabled(submission.saving)
       }
     }.padding(20).frame(width:720,height:660).studioPanel()
       .onChange(of:serverID) {_,id in database=servers.first {$0.id == id}?.profile.database ?? ""}

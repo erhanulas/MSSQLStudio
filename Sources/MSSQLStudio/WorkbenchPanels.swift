@@ -1415,7 +1415,8 @@ extension View {
     if view is NSTextField || view is NSPopUpButton || view is NSSegmentedControl { return }
     if let table = view as? NSTableView {
       table.backgroundColor = table is NSOutlineView ? panel : canvas
-      table.gridColor = border
+      // Gridless SwiftUI lists own their separators; setting gridColor can inspect unbuilt cells.
+      if !table.gridStyleMask.isEmpty {table.gridColor = border}
       table.headerView?.needsDisplay = true
       table.enumerateAvailableRowViews { row, _ in row.needsDisplay = true }
     } else if let scroll = view as? NSScrollView {
