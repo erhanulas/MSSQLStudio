@@ -3,6 +3,14 @@ import SwiftUI
 import SQLServerKit
 
 @MainActor enum SQLEditorPreferences {
+  static let formattingKey = "sqlFormattingOptions"
+  static func formatting(in defaults: UserDefaults = .standard) -> SQLFormattingOptions {
+    guard let data = defaults.data(forKey: formattingKey), let options = try? JSONDecoder().decode(SQLFormattingOptions.self, from: data) else { return .init() }
+    return options
+  }
+  static func saveFormatting(_ options: SQLFormattingOptions, in defaults: UserDefaults = .standard) {
+    if let data = try? JSONEncoder().encode(options) { defaults.set(data,forKey:formattingKey) }
+  }
   static let completionDelayKey = "sqlCompletionDelayMilliseconds"
   static let defaultCompletionDelay = 260
   static let completionSchemaKey = "sqlCompletionIncludeSchema"

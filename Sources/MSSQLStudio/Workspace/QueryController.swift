@@ -615,7 +615,7 @@ import SwiftUI
   }
   func focusEditor() { view.window?.makeFirstResponder(editor.editor) }
   func setText() { editor.setText() }
-  func format() { editor.replaceText(SQLServerKit.TSQL.format(document.sql)) }
+  func format() { editor.formatSQL(options: SQLEditorPreferences.formatting()) }
   @objc private func refreshTheme() {
     StudioTheme.decorate(view)
     for controller in tables.values {

@@ -452,7 +452,7 @@ public enum SQLIntelligence {
     let returnAssignment=context.count>=3 && context.last?.text == "=" && context[context.count-2].kind == .variable && ["EXEC","EXECUTE"].contains(context[context.count-3].text.uppercased())
     let execution = !inDefinitionHeader && (["EXEC","EXECUTE"].contains(context.last?.text.uppercased() ?? "") || returnAssignment) && !prefix.hasPrefix("@")
     var clauses=[""]
-    let clauseWords=Set(["SELECT","FROM","JOIN","APPLY","WHERE","ON","HAVING","SET","ORDER","GROUP","BY","OUTPUT","VALUES","RETURN","EXEC","EXECUTE","DECLARE","CREATE","ALTER","DROP","INSERT","UPDATE","DELETE","INTO","AS","UNION"])
+    let clauseWords=Set(["SELECT","FROM","JOIN","APPLY","WHERE","ON","HAVING","SET","ORDER","GROUP","BY","OUTPUT","VALUES","RETURN","EXEC","EXECUTE","DECLARE","CREATE","ALTER","DROP","INSERT","UPDATE","DELETE","INTO","UNION"])
     for (index,token) in before.enumerated() {
       if token.text == "(" {
         var inherited=clauses.last ?? ""
@@ -473,7 +473,7 @@ public enum SQLIntelligence {
     let priorIsOperand=prior.map {[Lexeme.Kind.word,.variable,.number,.string].contains($0.kind) || $0.text == ")"} ?? false
     let topNumber=context.count>=2 && context[context.count-2].text.uppercased() == "TOP"
     let topParenthesis=prior?.text == ")" && closes.contains {open,close in open>0 && tokens[open-1].text.uppercased() == "TOP" && tokens[close].range == prior?.range}
-    let scalarPosition = !remoteQualifier && !inDefinitionHeader && ["SELECT","WHERE","ON","HAVING","SET","ORDER","GROUP","BY","OUTPUT","VALUES","RETURN","CALL"].contains(clause) && (!priorIsOperand || topNumber || topParenthesis)
+    let scalarPosition = !remoteQualifier && !inDefinitionHeader && context.last?.text.uppercased() != "AS" && ["SELECT","WHERE","ON","HAVING","SET","ORDER","GROUP","BY","OUTPUT","VALUES","RETURN","CALL"].contains(clause) && (!priorIsOperand || topNumber || topParenthesis)
     let nextToken=tokens.first {$0.range.location>=NSMaxRange(replacement) && $0.range.location>replacement.location}
     func objectSuggestion(_ item:CatalogSymbol,call:Bool)->Suggestion {
       let schemaRequired=includeSchema || catalog?.needsSchema(item) == true
@@ -486,7 +486,10 @@ public enum SQLIntelligence {
     func appendScalarFunctions()throws {
       guard scalarPosition,!prefix.hasPrefix("@") else {return}
       let functions=try catalog?.matchingScalarFunctions(prefix,schema:qualifier,limit:qualifier == nil ? 25:100) ?? []
-      suggestions=Array(suggestions.prefix(100-functions.count))+functions.map {objectSuggestion($0,call:true)}
+      // Retain one reachable function in a full column list, after the columns.
+      // A function-heavy catalog must never evict 25 matching column slots.
+      let budget = suggestions.count >= 100 ? min(1,functions.count) : min(100-suggestions.count,functions.count)
+      suggestions = Array(suggestions.prefix(100-budget)) + functions.prefix(budget).map {objectSuggestion($0,call:true)}
     }
     if !inLiteral {
       if prefix.hasPrefix("@"),!prefix.hasPrefix("@@") {
@@ -514,16 +517,29 @@ public enum SQLIntelligence {
           try appendColumns(from:[binding],alreadyQualified:true)
         } else {try appendScalarFunctions()}
       } else {
-        try appendColumns(from:visible,alreadyQualified:false)
+        if scalarPosition || ["INSERT","INTO"].contains(clause) && prior?.text == "(" {try appendColumns(from:visible,alreadyQualified:false)}
         try appendScalarFunctions()
         if suggestions.count < 100 {
-          suggestions += (Array(TSQL.keywords)+TSQL.functions).sorted().filter { $0.lowercased().hasPrefix(prefix.lowercased()) }.prefix(100-suggestions.count).map { Suggestion(text:$0,label:$0,kind:TSQL.functions.contains($0) ? .function : .keyword) }
+          let preferred: [String]
+          switch clause {
+          case "FROM", "JOIN", "APPLY": preferred = ["WHERE", "JOIN", "LEFT", "INNER", "ON", "GROUP", "ORDER"]
+          case "WHERE", "ON", "HAVING": preferred = ["AND", "OR", "IS", "IN", "EXISTS", "LIKE", "GROUP", "ORDER"]
+          case "GROUP", "ORDER": preferred = ["BY"]
+          case "UPDATE": preferred = ["SET"]
+          case "DELETE": preferred = ["FROM"]
+          case "SELECT": preferred = ["DISTINCT", "TOP", "FROM", "AS"]
+          default: preferred = []
+          }
+          let words = preferred + Array(TSQL.keywords).sorted() + (scalarPosition || clause.isEmpty ? TSQL.functions : [])
+          var seenWords = Set<String>()
+          suggestions += words.filter {seenWords.insert($0).inserted && $0.lowercased().hasPrefix(needle)}
+            .prefix(100-suggestions.count).map { Suggestion(text:$0,label:$0,kind:TSQL.functions.contains($0) ? .function : .keyword) }
         }
       }
     }
     try Task.checkCancellation()
     var seen = Set<String>()
     suggestions = suggestions.filter { seen.insert($0.text).inserted }.prefix(100).map { $0 }
-    return Analysis(tokens:all,diagnostics:Array(diagnostics.prefix(200)),suggestions:suggestions,replacement:replacement,procedureCompletion:execution && !inLiteral,variableCompletion:prefix.hasPrefix("@") && !inLiteral,objectCompletion:!inLiteral && (objectPosition || scalarPosition && !prefix.isEmpty && suggestions.contains {$0.kind == .function && !$0.detail.isEmpty}))
+    return Analysis(tokens:all,diagnostics:Array(diagnostics.prefix(200)),suggestions:suggestions,replacement:replacement,procedureCompletion:execution && !inLiteral,variableCompletion:prefix.hasPrefix("@") && !inLiteral,objectCompletion:!inLiteral && (objectPosition || scalarPosition && !prefix.isEmpty && suggestions.contains {$0.kind == .column || $0.kind == .function && !$0.detail.isEmpty}))
   }
 }

@@ -22,6 +22,12 @@ struct SettingsSearchEntry:Identifiable,Equatable {
         ("delay","Öneri gecikmesi","süre milisaniye ms hız bekleme"),
         ("schema","Tamamlamada şema adını ekle","schema dbo"),
         ("brackets","Tamamlamada köşeli parantez kullan","tırnak identifier quote brackets")]),
+      (.editor,"SQL biçimlendirme",[
+        ("formatCase","Anahtar kelime harfleri","formatter format büyük küçük upper lower preserve code style"),
+        ("formatIndent","Girinti boşluk sayısı","formatter format indentation tab boşluk"),
+        ("formatComma","Virgül yerleşimi","formatter format comma leading trailing"),
+        ("formatLists","Kolon listelerini satırlara ayır","formatter select insert cte liste satır kırma"),
+        ("formatConditions","Koşulları satırlara ayır","formatter where on having and or koşul")]),
       (.editor,"Kod yardımcıları",[
         ("validation","Eksik tablo ve kolonları vurgula","doğrulama kırmızı hata referans validation"),
         ("undeclared","Tanımsız parametre vurgusu","declare edilmemiş değişken kırmızı @ parametre undefined undeclared"),

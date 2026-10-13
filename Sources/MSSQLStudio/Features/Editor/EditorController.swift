@@ -7,7 +7,7 @@ import SQLServerKit
   let scroll = SQLEditorScrollView()
   let editor = SQLTextView(usingTextLayoutManager: true)
   let occurrenceHighlights = OccurrenceHighlights()
-  let commentHint=StudioToolbarButton(symbol:"text.bubble",label:"Seçili satırları yorum yap / kaldır",title:"Yorum Yap",width:240)
+  let commentHint=StudioToolbarButton(symbol:"text.bubble",label:"Seçili satırları yorum yap / kaldır",title:"",width:28)
   private let ruler: LineNumbers
   private var rulerWidth:NSLayoutConstraint?
   private let document: QueryDocument
@@ -39,6 +39,8 @@ import SQLServerKit
   private var folded: [SQLFolding.Region] = []
   private var projection: SQLFolding.Projection?
   private var changingPresentation = false
+  private var formattingTask: Task<Void,Never>?
+  private var textRevision = UUID()
   private var lineStarts = [0]
   private func updateOutline(refreshRegions: Bool = true) {
     if refreshRegions { regions = SQLFolding.regions(document.sql) }
@@ -256,6 +258,37 @@ import SQLServerKit
     occurrenceHighlights.frame=scroll.contentView.bounds
     occurrenceHighlights.needsDisplay=true
   }
+  func formatSQL(options: SQLFormattingOptions) {
+    guard editor.isEditable, !editor.hasMarkedText() else { return }
+    let selection = editor.selectedRange()
+    let source = projection?.source ?? editor.string
+    let range = projection?.sourceRange(selection) ?? selection
+    let target = range.length > 0 ? range : NSRange(location:0,length:source.utf16.count)
+    let input = (source as NSString).substring(with:target)
+    let revision = textRevision
+    formattingTask?.cancel()
+    func apply(_ text: String) {
+      guard text != input, textRevision == revision, (projection?.source ?? editor.string) == source,
+        editor.selectedRange() == selection, !editor.hasMarkedText() else { return }
+      let candidate = (source as NSString).replacingCharacters(in:target,with:text)
+      guard SQLFormatter.preservesSQLTokens(source,formatted:candidate) else { return }
+      expandAll(); highlightedSource = nil
+      editor.finishUndoInput()
+      editor.insertText(text,replacementRange:target)
+      editor.finishUndoInput()
+      if range.length > 0 { editor.setSelectedRange(NSRange(location:target.location,length:text.utf16.count)) }
+      highlight(); resizeToViewport()
+    }
+    if input.utf16.count <= 50000 { apply(TSQL.format(input,options:options)) }
+    else {
+      formattingTask = Task { [weak self] in
+        let worker = Task.detached(priority:.userInitiated) { TSQL.format(input,options:options) }
+        let formatted = await worker.value
+        guard !Task.isCancelled, self != nil else {return}
+        apply(formatted)
+      }
+    }
+  }
   func replaceText(_ text: String) {
     expandAll()
     guard text != editor.string else {return}
@@ -285,8 +318,17 @@ import SQLServerKit
     let selection=editor.selectedRange(),source=projection?.source ?? editor.string
     guard !changingPresentation,editor.isEditable,!editor.hasMarkedText(),!editor.trackingMouseSelection,
       editor.window?.isKeyWindow == true,editor.window?.firstResponder === editor,selection.length>0,
-      editor.selectedRanges.count == 1,source.utf16.count <= 250_000,
+      editor.selectedRanges.count == 1,source.utf16.count <= 250_000, !completionShown, !parameterShown,
       let layout=editor.textLayoutManager else {hideCommentHint();return}
+    // A word selection is for navigation/copying. Offer the compact action only
+    // for complete physical lines or a selection spanning more than one line.
+    let selected = (editor.string as NSString).substring(with:selection)
+    let line = (editor.string as NSString).lineRange(for:selection)
+    let ns = editor.string as NSString
+    let remainder = ns.substring(with:NSRange(location:line.location,length:selection.location-line.location))
+      + ns.substring(with:NSRange(location:NSMaxRange(selection),length:NSMaxRange(line)-NSMaxRange(selection)))
+    guard !selected.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,
+      selected.contains("\n") || selected.contains("\r") || remainder.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else {hideCommentHint();return}
     func caretRect(_ offset:Int)->NSRect? {
       guard let range=textRange(NSRange(location:offset,length:0)) else {return nil}
       var result:NSRect?
@@ -306,9 +348,9 @@ import SQLServerKit
     let sourceRange=projection?.sourceRange(selection) ?? selection
     let remove=SQLComments.isCommented(source,selection:sourceRange)
     let label=(remove ? "Yorumu Kaldır":"Yorum Yap")+"  "+GridShortcuts.binding(.comment).label
-    commentHint.title=label;commentHint.toolTip=label+" · Seçimin kapsadığı SQL satırlarına uygulanır."
+    commentHint.title="";commentHint.toolTip=label+" · Seçimin kapsadığı SQL satırlarına uygulanır."
     commentHint.setAccessibilityLabel(label);commentHint.refreshStyle()
-    commentHint.frame=NSRect(x:max(viewport.minX,min(anchor.minX,viewport.maxX-240)),y:y,width:240,height:26)
+    commentHint.frame=NSRect(x:max(viewport.minX,min(anchor.minX,viewport.maxX-28)),y:y,width:28,height:26)
     commentHint.isHidden=false
   }
   func setText() {
@@ -336,6 +378,7 @@ import SQLServerKit
     scheduleIntelligence()
   }
   func textDidChange(_ notification: Notification) {
+    textRevision = UUID()
     guard !changingPresentation else { return }
     clearOccurrences()
     document.sql = editor.string

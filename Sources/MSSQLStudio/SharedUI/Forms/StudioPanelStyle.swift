@@ -48,13 +48,15 @@ private struct StudioButtonSurface: View {
   let primary: Bool
   @Environment(\.isEnabled) private var enabled
   @Environment(\.controlSize) private var size
+  @Environment(\.colorScheme) private var colorScheme
   @State private var hovered = false
   private var compact: Bool { size == .small || size == .mini }
   private var ink: Color {
     enabled ? (primary ? Color(nsColor: StudioTheme.dark ? StudioTheme.canvas : .white) : Color(nsColor: StudioTheme.text)) : Color.secondary
   }
   var body: some View {
-    configuration.label
+    let _ = colorScheme // Recompute semantic tokens when an open form changes theme.
+    return configuration.label
       .font(.system(size: compact ? 11 : 12, weight: .medium))
       .symbolRenderingMode(.hierarchical)
       .padding(.horizontal, primary ? 14 : compact ? 8 : 10)
@@ -158,11 +160,19 @@ struct StudioPanelStyle: ViewModifier {
       .overlay(alignment: .top) { Rectangle().fill(Color(nsColor: StudioTheme.border)).frame(height: 1).allowsHitTesting(false) }
   }
 }
+private struct StudioCardStyle: ViewModifier {
+  let padding: CGFloat
+  @Environment(\.colorScheme) private var colorScheme
+  func body(content: Content) -> some View {
+    let _ = colorScheme
+    return content.padding(padding).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 12))
+      .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(nsColor: StudioTheme.border)))
+  }
+}
 extension View {
   func studioPanel() -> some View { modifier(StudioPanelStyle()) }
   func studioCard(padding: CGFloat = 16) -> some View {
-    self.padding(padding).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 12))
-      .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(nsColor: StudioTheme.border)))
+    modifier(StudioCardStyle(padding:padding))
   }
   func studioEditor() -> some View {
     padding(8).background(Color(nsColor: StudioTheme.editorCanvas), in: RoundedRectangle(cornerRadius: 8))

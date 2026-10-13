@@ -77,6 +77,39 @@ import Testing
       #expect(doc.lastExecutedSQL == nil)
     }
   }
+  @Test func formattingSelectionPreservesSurroundingSQLAndUsesIsolatedPreferences() throws {
+    _=NSApplication.shared
+    let source="-- outside\nselect a,b from dbo.t where a=1 and b=2\n-- suffix"
+    let doc=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Selection format")
+    doc.server.online=false;doc.sql=source
+    let controller=EditorController(document:doc)
+    let range=(source as NSString).range(of:"select a,b from dbo.t where a=1 and b=2")
+    controller.editor.setSelectedRange(range)
+    let undo=try #require(controller.editor.undoManager)
+    undo.beginUndoGrouping();controller.formatSQL(options:.init(indentWidth:2,keywordCase:.upper,commaStyle:.leading));undo.endUndoGrouping()
+    #expect(doc.sql.hasPrefix("-- outside\nSELECT a\n  , b\nFROM"))
+    #expect(doc.sql.hasSuffix("\n-- suffix") && controller.editor.selectedRange().length > range.length)
+    undo.undo();#expect(doc.sql==source)
+    undo.redo();#expect(doc.sql.contains("SELECT a"))
+    let suite="local.mssqlstudio.format-test-"+UUID().uuidString
+    let defaults=try #require(UserDefaults(suiteName:suite));defer {defaults.removePersistentDomain(forName:suite)}
+    let options=SQLFormattingOptions(indentWidth:2,keywordCase:.preserve,commaStyle:.leading)
+    SQLEditorPreferences.saveFormatting(options,in:defaults)
+    #expect(SQLEditorPreferences.formatting(in:defaults)==options)
+    #expect(SettingsSearch.results("formatter virgül").contains {$0.id=="formatComma"})
+  }
+  @Test func partialLiteralCommentAndIdentifierSelectionsCannotChangeSQLMeaning() {
+    _=NSApplication.shared
+    let source="SELECT N'from where', selectName FROM dbo.t; -- select from"
+    let doc=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Safe selection")
+    doc.server.online=false;doc.sql=source
+    let controller=EditorController(document:doc)
+    for needle in ["from where","selectName","select from"] {
+      controller.editor.setSelectedRange((source as NSString).range(of:needle))
+      controller.formatSQL(options:.init())
+      #expect(doc.sql == source)
+    }
+  }
   @Test func unusedDeclarationColorsUpdateWithoutChangingSourceAndSurviveFolds() throws {
     let doc=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Unused variables")
     doc.server.online=false

@@ -131,11 +131,12 @@ struct ConnectionForm: View {
   var saveProfile:((ServerProfile,String,Bool) async throws->Void)?
   var loadingChanged:(Bool)->Void
   var cancel: () -> Void
+  var draftChanged: () -> Void = {}
+  @StateObject private var driver = DriverSetupModel()
   @State private var profile = ServerProfile(visibleDatabases: [])
   @State private var password = ""
   @State private var remember = false
   @State private var loading = false
-  @State private var tested = false
   @State private var listed = false
   @State private var phase = ""
   @State private var status = ""
@@ -149,12 +150,14 @@ struct ConnectionForm: View {
     connect: @escaping (ServerProfile, String, Bool) async throws -> Void,
     saveProfile:((ServerProfile,String,Bool) async throws->Void)?=nil,
     loadingChanged:@escaping (Bool)->Void={_ in},
-    cancel: @escaping () -> Void
+    cancel: @escaping () -> Void,
+    draftChanged: @escaping () -> Void = {}
   ) {
     self.connect = connect
     self.saveProfile=saveProfile
     self.loadingChanged=loadingChanged
     self.cancel = cancel
+    self.draftChanged = draftChanged
     editing = initial != nil
     _profile = State(initialValue: initial?.profile ?? ServerProfile(visibleDatabases: []))
     _password = State(initialValue: initial?.password ?? "")
@@ -217,6 +220,7 @@ struct ConnectionForm: View {
                 )
             }
           }.textFieldStyle(.roundedBorder)
+          DriverSetupView(model: driver)
           if profile.kerberos {
             Text("Geçerli Kerberos bileti ve sunucu SPN ayarı gerekir.").font(.caption)
               .foregroundStyle(.secondary)
@@ -243,9 +247,7 @@ struct ConnectionForm: View {
           HStack {
             Text("Object Explorer veritabanları").font(.headline)
             Spacer()
-            if listed {
-              StudioActionButton("Listeyi Yenile",icon:"arrow.clockwise",tint:.accentColor,action:list).disabled(loading)
-            }
+            StudioActionButton(listed ? "Test Et / Yenile" : "Test Et ve Yükle",icon:"arrow.clockwise",tint:.accentColor,action:test).disabled(loading || driver.busy)
           }
           if listed {
             DatabaseChoices(items: items, chosen: $chosen, defaultDatabase: $defaultDatabase)
@@ -256,7 +258,7 @@ struct ConnectionForm: View {
                 .foregroundStyle(.secondary)
               Text("Görmek istediğin veritabanlarını seç").font(.headline)
               Text(
-                "Bağlantı bilgilerini girip Veritabanlarını Yükle’ye basın. Ardından görünür veritabanlarını ve varsayılanı seçin."
+                "Bağlantı bilgilerini girip Test Et ve Yükle’ye basın. Ardından görünür veritabanlarını ve varsayılanı seçin."
               )
               .foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 320)
 
@@ -275,27 +277,33 @@ struct ConnectionForm: View {
           else {Text("Bilgileri girip veritabanlarını yükleyin.").font(.caption).foregroundStyle(.secondary)}
         }
         Spacer()
-        StudioActionButton("Vazgeç",icon:"xmark",action:cancel).disabled(loading)
+        StudioActionButton("Vazgeç",icon:"xmark",action:cancel).disabled(loading || driver.busy)
         if editing,saveProfile != nil {
-          StudioActionButton("Veritabanlarını Yükle",icon:"arrow.clockwise",action:test).disabled(loading)
-          StudioActionButton("Kaydet",icon:"checkmark",action:saveLocal).buttonStyle(StudioPrimaryButton()).disabled(loading).accessibilityIdentifier("saveConnectionProfile")
-        } else if tested && listed {
+          StudioActionButton("Bağlan",icon:"bolt.horizontal",action:submit)
+            .disabled(loading || driver.busy || !listed || chosen.isEmpty)
+          StudioActionButton("Kaydet",icon:"checkmark",action:saveLocal).buttonStyle(StudioPrimaryButton()).disabled(loading || driver.busy).accessibilityIdentifier("saveConnectionProfile")
+        } else if listed {
           StudioActionButton(editing ? "Uygula" : "Bağlan",icon:editing ? "checkmark":"bolt.horizontal",action:submit)
-            .buttonStyle(StudioPrimaryButton()).disabled(loading || chosen.isEmpty)
+            .buttonStyle(StudioPrimaryButton()).disabled(loading || driver.busy || chosen.isEmpty)
         } else {
-          StudioActionButton("Veritabanlarını Yükle",icon:"arrow.right",action:test)
-            .buttonStyle(StudioPrimaryButton()).disabled(loading)
+          StudioActionButton("Bağlan",icon:"bolt.horizontal",action:submit)
+            .buttonStyle(StudioPrimaryButton()).disabled(true)
         }
       }
-    }.padding(22).studioPanel().frame(width: 980, height: 700)
+    }.padding(22).studioPanel().frame(width: 940, height: 620)
       .onChange(of: profile) { old, new in
         var previous = old
         previous.name = new.name
         previous.appearance = new.appearance
+        draftChanged()
         if previous != new { invalidate() }
       }
-      .onChange(of: password) { _, _ in invalidate() }
-      .onChange(of: loading) {_,value in loadingChanged(value)}
+      .onChange(of: password) { _, _ in draftChanged();invalidate() }
+      .onChange(of: remember) { _, _ in draftChanged() }
+      .onChange(of: chosen) { _, _ in draftChanged() }
+      .onChange(of: defaultDatabase) { _, _ in draftChanged() }
+      .onChange(of: driver.busy) { _, value in loadingChanged(loading || value) }
+      .onChange(of: loading) {_,value in loadingChanged(value || driver.busy)}
   }
   private func saveLocal() {
     guard let saveProfile,!loading else {return}
@@ -313,7 +321,6 @@ struct ConnectionForm: View {
     }
   }
   private func invalidate() {
-    tested = false
     listed = false
     items = []
     chosen = []
@@ -322,30 +329,15 @@ struct ConnectionForm: View {
     error = ""
   }
   private func test() {
-    loading = true
-    phase = "Test ediliyor…"
-    tested = false
-    status = ""
-    error = ""
-    let input = profile
-    let secret = password
+    guard !loading, !driver.busy else { return }
+    loading = true; phase = "Bağlantı test ediliyor ve veritabanları yükleniyor…"
+    status = ""; error = ""
     Task { @MainActor in
       defer { loading = false }
       do {
-        let database = try await ServerDiscovery.test(input, password: secret)
-        tested = true
-        status = "Bağlantı başarılı · \(database)"
         try await discover()
+        status = "Bağlantı başarılı · \(items.count) veritabanı"
       } catch { self.error = error.localizedDescription }
-    }
-  }
-  private func list() {
-    guard tested, !loading else { return }
-    loading = true
-    error = ""
-    Task { @MainActor in
-      defer { loading = false }
-      do { try await discover() } catch { self.error = error.localizedDescription }
     }
   }
   private func discover() async throws {

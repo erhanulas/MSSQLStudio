@@ -45,15 +45,21 @@ import Testing
     let (controller,document,window)=fixture(source);defer {window.close()}
     let editor=controller.editor,undo=try #require(editor.undoManager)
     editor.setSelectedRange(NSRange(location:0,length:source.utf16.count));controller.updateCommentHint()
-    #expect(!controller.commentHint.isHidden && controller.commentHint.title.contains("Yorum Yap"))
+    #expect(!controller.commentHint.isHidden && controller.commentHint.toolTip?.contains("Yorum Yap") == true)
     for rect in editor.rects(forCharacterRange:editor.selectedRange()) ?? [] {
       #expect(!controller.commentHint.frame.intersects(controller.surface.convert(rect.rectValue,from:editor)))
     }
+    #expect(controller.commentHint.frame.width == 28)
+    editor.setSelectedRange(NSRange(location:0,length:6));controller.updateCommentHint()
+    #expect(controller.commentHint.isHidden)
+    editor.setSelectedRange((source as NSString).range(of:"\n"));controller.updateCommentHint()
+    #expect(controller.commentHint.isHidden)
+    editor.setSelectedRange(NSRange(location:0,length:source.utf16.count));controller.updateCommentHint()
     let binding=GridShortcuts.binding(.comment)
     let event=try #require(NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:binding.flags,timestamp:0,windowNumber:window.windowNumber,context:nil,characters:binding.key,charactersIgnoringModifiers:binding.key,isARepeat:false,keyCode:44))
     undo.beginUndoGrouping();#expect(editor.performKeyEquivalent(with:event));undo.endUndoGrouping()
     #expect(editor.string=="-- SELECT @missing;\n-- SELECT 2;" && document.sql==editor.string)
-    #expect(controller.commentHint.title.contains("Yorumu Kaldır"))
+    #expect(controller.commentHint.toolTip?.contains("Yorumu Kaldır") == true)
     let storage=try #require(editor.textContentStorage?.textStorage)
     #expect(storage.attribute(.foregroundColor,at:10,effectiveRange:nil) as? NSColor == StudioTheme.syntax(.comment))
     undo.undo();#expect(editor.string==source && document.sql==source)

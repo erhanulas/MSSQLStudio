@@ -634,8 +634,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private func presentConnection(editing server: ConnectedServer? = nil) {
     guard sheet == nil, let window = view.window else { return }
     connectionSheetBusy=false
-    let form = ConnectionForm(
-      initial: server,
+    let form = ConnectionManager(
+      servers: state.servers, initial: server,
       connect: { [weak self] profile, password, save in
         guard let self else { throw SQLFailure("Çalışma alanı kapandı.") }
         let server = try await state.connect(profile, password: password, save: save)
@@ -649,17 +649,17 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
           )
         }
         reloadWorkspace()
-      }, saveProfile:server.map {editingServer in { [weak self] profile,password,remember in
+      }, save: { [weak self] editingServer,profile,password,remember in
         guard let self else {throw SQLFailure("Çalışma alanı kapandı.")}
         try await state.saveConnectionProfile(editingServer,profile:profile,password:password,remember:remember)
         finishSheet();reloadWorkspace()
-      }}, loadingChanged:{[weak self] busy in self?.connectionSheetBusy=busy}, cancel: { [weak self] in self?.finishSheet() })
+      }, loadingChanged:{[weak self] busy in self?.connectionSheetBusy=busy}, cancel: { [weak self] in self?.finishSheet() })
     let controller = NSHostingController(
       rootView: form.font(.custom(StudioTheme.uiFont.fontName, size: 12)))
     let sheet = StudioPanelWindow(contentViewController: controller)
     sheet.animationBehavior = .none
     sheet.cancelAction={ [weak self] in guard let self,!connectionSheetBusy else {return};finishSheet() }
-    sheet.title = server == nil ? "Yeni bağlantı" : "Bağlantı ayarları"
+    sheet.title = "Bağlantılar"
     sheet.styleMask = [.titled]
     self.sheet = sheet
     window.beginSheet(sheet)

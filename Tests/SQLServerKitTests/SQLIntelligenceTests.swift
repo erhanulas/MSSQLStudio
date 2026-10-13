@@ -7,6 +7,28 @@ struct SQLIntelligenceTests {
     try SQLIntelligence.analyze(source:source,caret:caret ?? (source as NSString).length,catalog:.init(snapshot:.init(symbols:symbols,synchronizedAt:date)),verified:verified,automaticAliases:aliases)
   }
   func marked(_ sql: String) throws -> [String] { let value = try analyze(sql); return value.diagnostics.map { (sql as NSString).substring(with:$0.range) } }
+  @Test func stockColumnsLeadHintedPredicatesAndWideTablesKeepTheirSlots() throws {
+    let columns=(0..<110).map {String(format:"STOK_%03d",$0)}
+    let catalog=SQLIntelligence.Catalog(snapshot:.init(symbols:[
+      CatalogSymbol(schema:"dbo",name:"TBLSTSABIT",columns:columns),
+      CatalogSymbol(schema:"dbo",name:"STOK_LOOKUP",columns:[],kind:"SQL_SCALAR_FUNCTION")]))
+    for clause in ["WHERE", "ON", "GROUP BY", "ORDER BY", "HAVING"] {
+      let sql="SELECT * FROM TBLSTSABIT AS T WITH(NOLOCK) "+clause+" STOK_"
+      let result=try SQLIntelligence.analyze(source:sql,caret:sql.utf16.count,catalog:catalog,verified:true)
+      #expect(result.suggestions.count == 100)
+      #expect(result.suggestions.prefix(99).allSatisfy {$0.kind == .column && $0.text.hasPrefix("[T].[STOK_")})
+    }
+  }
+  @Test func aliasesDoNotHideExpressionContextAndOperandsDoNotSuggestColumns() throws {
+    let sql="SELECT Name AS DisplayName, COA FROM dbo.Customers AS c"
+    let result=try analyze(sql,caret:(sql as NSString).range(of:"COA").location+3)
+    #expect(result.suggestions.contains {$0.text == "COALESCE"})
+    for sql in ["SELECT Name AS Na FROM dbo.Customers c", "SELECT Name FR FROM dbo.Customers c"] {
+      let marker=sql.contains(" AS ") ? "Na FROM":"FR FROM"
+      let caret=(sql as NSString).range(of:marker).location+2
+      #expect(try analyze(sql,caret:caret).suggestions.allSatisfy {$0.kind != .column && $0.kind != .function})
+    }
+  }
   @Test func typedPresentationMetadataNeverChangesCompletionSQL() throws {
     let table=try #require(analyze("SELECT * FROM Cus").suggestions.first)
     #expect(table.kind == .table && table.label == "[dbo].[Customers]")

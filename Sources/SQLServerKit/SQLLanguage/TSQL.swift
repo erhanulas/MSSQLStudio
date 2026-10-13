@@ -387,43 +387,8 @@ public enum TSQL {
     }
     return result
   }
-  public static func format(_ sql: String) -> String {
-    let tokens = lex(sql)
-    var text = ""
-    var depth = 0
-    var previous = [String?](repeating: nil, count: tokens.count)
-    var next = previous
-    var last: String?
-    for i in tokens.indices {
-      previous[i] = last
-      if tokens[i].kind != .space { last = tokens[i].text }
-    }
-    last = nil
-    for i in tokens.indices.reversed() {
-      next[i] = last
-      if tokens[i].kind != .space { last = tokens[i].text }
-    }
-    let clauses: Set<String> = [
-      "SELECT", "FROM", "WHERE", "GROUP", "HAVING", "ORDER", "UNION", "JOIN", "LEFT", "RIGHT",
-      "INNER", "OUTER", "CROSS",
-    ]
-    for (i, token) in tokens.enumerated() {
-      let word =
-        token.kind == .keyword && previous[i] != "." && next[i] != "."
-        ? token.text.uppercased() : token.text
-      if word == ")" { depth = max(0, depth - 1) }
-      if token.kind == .keyword && depth == 0 && clauses.contains(word) && !text.isEmpty
-        && text.last != "\n"
-      {
-        text += "\n"
-      }
-      if text.isEmpty || text.last == "\n" {
-        if token.kind != .space { text += String(repeating: "    ", count: min(depth, 10)) }
-      }
-      text += word
-      if word == "(" { depth += 1 }
-    }
-    return text
+  public static func format(_ sql: String, options: SQLFormattingOptions = .init()) -> String {
+    SQLFormatter.format(sql,options:options)
   }
   public static func completions(
     prefix: String, before: String, script: String, symbols: [CatalogSymbol]

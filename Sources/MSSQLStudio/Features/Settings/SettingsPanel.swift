@@ -75,6 +75,7 @@ struct SettingsPanel: View {
   @State private var completionDelay = Double(SQLEditorPreferences.completionDelay())
   @State private var completionSchema = SQLEditorPreferences.includeSchema()
   @State private var completionBrackets = SQLEditorPreferences.quoteIdentifiers()
+  @State private var formatting = SQLEditorPreferences.formatting()
   @State private var validation = UserDefaults.standard.object(forKey:"sqlValidateReferences") as? Bool ?? true
   @State private var aliases = UserDefaults.standard.object(forKey:"sqlAutomaticAliases") as? Bool ?? true
   @State private var noLock = UserDefaults.standard.bool(forKey:"sqlAutomaticNoLock")
@@ -175,9 +176,32 @@ struct SettingsPanel: View {
             settingsToggle("Tamamlamada köşeli parantez kullan", detail: "Kapalıyken sade adlar kullanılır; boşluk, ayrılmış sözcük ve özel karakter içeren adlar SQL’in geçerli kalması için korunur.", value: $completionBrackets)
               .accessibilityIdentifier("settingsCompletionBrackets")
           }
+          settingsCard("SQL biçimlendirme", icon: "text.alignleft") {
+            StudioFormField("Anahtar kelimeler") {
+              Picker("Anahtar kelime harfleri", selection: $formatting.keywordCase) {
+                Text("BÜYÜK").tag(SQLFormattingOptions.KeywordCase.upper)
+                Text("küçük").tag(SQLFormattingOptions.KeywordCase.lower)
+                Text("Koru").tag(SQLFormattingOptions.KeywordCase.preserve)
+              }.labelsHidden().pickerStyle(.segmented)
+            }.id("formatCase")
+            StudioFormField("Girinti") {
+              Picker("Girinti boşluk sayısı", selection: $formatting.indentWidth) {
+                Text("2 boşluk").tag(2); Text("4 boşluk").tag(4); Text("8 boşluk").tag(8)
+              }.labelsHidden()
+            }.id("formatIndent")
+            StudioFormField("Virgül") {
+              Picker("Virgül yerleşimi", selection: $formatting.commaStyle) {
+                Text("Satır sonunda").tag(SQLFormattingOptions.CommaStyle.trailing)
+                Text("Satır başında").tag(SQLFormattingOptions.CommaStyle.leading)
+              }.labelsHidden().pickerStyle(.segmented)
+            }.id("formatComma")
+            settingsToggle("Kolon listelerini satırlara ayır", detail: "SELECT, SET, INSERT ve CTE listelerinde okunabilir satır kırma.", value: $formatting.multilineLists)
+            settingsToggle("Koşulları satırlara ayır", detail: "WHERE / ON / HAVING içinde AND / OR ifadelerini hizalar.", value: $formatting.breakConditions)
+            settingsNote("Formatla seçili SQL’i, seçim yoksa tüm editörü biçimlendirir. Identifier, alias, literal ve yorum metni korunur; işlem tek adımda geri alınır.", icon: "arrow.uturn.backward")
+          }
           settingsCard("Kod yardımcıları", icon: "checkmark.seal") {
             settingsNote("Tanımlanmamış @parametreler kırmızı görünür. DECLARE, prosedür/fonksiyon parametreleri ve GO batch sınırları dikkate alınır.",icon:"at")
-            settingsNote("Seçili satırları yorum yap / kaldır: \(GridShortcuts.binding(.comment).label). Yalnız yorumu kaldır: \(GridShortcuts.binding(.uncomment).label). İşlemler seçim yanındaki düğmeden de açılır.",icon:"text.bubble")
+            settingsNote("Seçili satırları yorum yap / kaldır: \(GridShortcuts.binding(.comment).label). Yalnız yorumu kaldır: \(GridShortcuts.binding(.uncomment).label). Tam satır veya çok satırlı seçimde küçük yorum simgesi görünür; kelime seçimlerinde açılmaz.",icon:"text.bubble")
             settingsToggle("Eksik tablo ve kolonları vurgula", detail: "Güncel, doğrulanmış veritabanı indeksiyle kırmızı işaretler.", value: $validation)
             Divider()
             settingsToggle("Otomatik alias ekle", detail: "FROM / JOIN içinde tablo veya view önerisi kabul edildiğinde eklenir.", value: $aliases)
@@ -399,6 +423,7 @@ struct SettingsPanel: View {
           UserDefaults.standard.set(Int(completionDelay),forKey:SQLEditorPreferences.completionDelayKey)
           UserDefaults.standard.set(completionSchema,forKey:SQLEditorPreferences.completionSchemaKey)
           UserDefaults.standard.set(completionBrackets,forKey:SQLEditorPreferences.completionBracketsKey)
+          SQLEditorPreferences.saveFormatting(formatting)
           UserDefaults.standard.set(validation,forKey:"sqlValidateReferences")
           UserDefaults.standard.set(aliases,forKey:"sqlAutomaticAliases")
           UserDefaults.standard.set(noLock,forKey:"sqlAutomaticNoLock")
