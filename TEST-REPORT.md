@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.109 / build 110 public yayın doğrulandı
+
+- [Public/latest v0.2.109](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.109), kaynak `7f10f999ab612f0ede3ea6c79aa0484d560069a1`; [Actions 38481945231](https://github.com/erhanulas/MSSQLStudio/actions/runs/38481945231) bütün adımlarıyla başarılı. Bağlantı opt-in nesne tanım indeksi/çevrimdışı kaynak, 1 GB varsayılan ayarlanabilir kota ve Ayarlar doluluk görünümü yayımlandı.
+- CI gerçek yayın ZIP/PKG ile **332 app +316 core +8 text =656 test; 629 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış üç özet 78.304 /7.665 /0.004 sn. Sabit kimlik/izole Keychain fixture, paket testleri ve geçici CI kimliği temizliği geçti. Loglar `/tmp/MSSQLStudio-109-ci-tests.log`, `109-ci-feed.log`, `109-ci-logs.zip`.
+- İndirilen dört public asset SHA-256 değerleri GitHub digest'leriyle aynı; ZIP/PKG URL/hash eşliği public manifest ile geçti. Exact 0.2.109/build 110, ZIP/PKG metadata/binary/notlar eşliği, kaynak ReleaseNotes byte eşliği ve GitHub yayın metni doğrulandı. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği geçti; helper v1 yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed app kendi Foundation/URLSession updater yoluyla `Foundation updater feed verified: 0.2.109` verdi. Public/latest ve indirilen bütünlük kanıtı `/tmp/MSSQLStudio-109-public-verification/verification.json` altında.
+- Yerel/native/CUA ve kota sınır kanıtları aşağıdadır. İlk smoke Uygula gerçek history.json'a boş dizi yazdı; bu yan etki kullanıcıya bildirildi ve test/smoke klasör izolasyonu regresyonla düzeltildi. Önceki geçmişin geri kaydedilmesi henüz doğrulanmadı; yayımlama bu geri yüklemeyi tamamlanmış saymaz. Kurulu uygulama/SQL oturumları/Keychain veya Installer değiştirilmedi; canlı SQL Server/büyük gerçek DB performansı ve gerçek Installer denenmedi.
+
+Public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.109.pkg`: `28815b9916d2213f14e0ebfc9cd68ea4a62f8eaac2537427e49796fbcadaffce`.
+- `MSSQLStudio-0.2.109.zip`: `514db9d237ea14607dc8bc18b8509dac4dbefb62a5985153454ae890b7852515`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `bafc4ac8d3ea1e97515f905d5bdbf1fb3c242220cd97041733599a9403607499`.
+
 ## 14 Ekim 2026 — v0.2.109 / build 110 yayın hazırlığı ve kota doğrulaması
 
 - Önceki yerel nesne tanım indeksiyle birlikte ayarlanabilir kota yayıma hazırlanır. Varsayılan 1 GB (1024 MB), aralık 128 MB–64 GB, tüm bağlantılar için ortak SQLite source_settings kaydıdır. Ayarlar başlığı her sekmede kullanılan/kota/yüzde özetini, Çalışma Alanı ilk kartı kota/ilerleme/nesne sayısı/Yenile alanlarını sunar. Değişiklik Uygula ile atomik kaydedilir; küçültmede en eski tanımlar temizlenir. Ölçüm yalnız tanım payload byte sayısıdır, SQLite dosya/WAL ve diğer katalog alanları dahil değildir. Arama kataloğuna kota/doluluk eklendi; yükleme/error ve kaydedilmemiş kota taslağı korunur.
