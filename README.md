@@ -6,21 +6,21 @@ SQL Server için native macOS çalışma alanı. Solda Object Explorer, ortada S
 
 [Son GitHub yayınından](https://github.com/erhanulas/MSSQLStudio/releases/latest) PKG'yi indirip uygulama kapalıyken kurun. Hedef `/Applications/MSSQLStudio.app` konumudur. Güncel yayın için GitHub Releases sayfasını ve uygulamanın Hakkında ekranını kullanın.
 
-Microsoft ODBC Driver 18, unixODBC ve OpenSSL 3 ayrı kurulur; sürücüler app paketinde dağıtılmaz. [Microsoft macOS kurulum yönergesi](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos) kullanılabilir. Apple Silicon bağımlılık yolları `/opt/homebrew` altındadır.
+Microsoft ODBC Driver 18, unixODBC ve OpenSSL 3 ayrı kurulur; sürücüler app paketinde dağıtılmaz. [Microsoft macOS kurulum yönergesi](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos) kullanılabilir. Apple Silicon bağımlılık yolları `/opt/homebrew` altındadır. Bağlantı ekranı Driver 18 durumunu ve sürümünü otomatik denetler; eksikse **Kur…** ile lisans/kaynak onayından sonra Homebrew kurulumunu başlatabilirsiniz. Homebrew yoksa resmî kurulum yönergesi açılır; yönetici yetkisi otomatik alınmaz.
 
-1. Sunucu bilgilerini girip **Bağlantıyı Test Et ve Listele** ile erişilebilir veritabanlarını alın.
+1. Sunucu bilgilerini girip **Test Et ve Yükle** ile erişilebilir veritabanlarını alın.
 2. Görünecek veritabanlarını seçin, yıldızla varsayılanı belirleyip **Bağlan** kullanın. Görünürlük seçimi sunucu yetkilerini değiştirmez.
 3. Sorguyu F5 / ⌘Return ile çalıştırın; seçim varsa yalnız seçim gönderilir. ⌘. iptal eder; iptal transaction rollback değildir.
-4. Ctrl+Space önerileri açar; Tab/Enter kabul eder. Ctrl+F / ⌘F seçili metinle bulmayı, ⌘⇧F biçimlendirmeyi açar.
+4. Ctrl+Space önerileri açar; Tab/Enter kabul eder. Ctrl+F / ⌘F seçili metinle bulmayı, ⌘⇧F seçili SQL’i veya seçim yoksa tüm editörü biçimlendirmeyi açar. Girinti, harf biçimi, virgül ve satır kırma tercihleri Ayarlar → SQL Editörü içindedir.
 5. Nesne/Agent tasarım ekranları değişiklikleri önce SQL olarak incelemeye açar. Nesne önizlemesindeki **Veritabanına Gönder** ve Agent komut penceresinin açık onayı ayrıca yürütme yapar.
 
-Bağlantı ekranında Genel/Gelişmiş seçenekleri ve tek ana işlem kullanılır. Explorer’da **Nesneleri Yenile** sunucudaki yüklenmiş nesne listelerini yeniden okur; **Yerel İndeksi Yenile** arama/tamamlama önbelleğini yeniler. İndeks ayrıntıları veritabanı adının yanındaki düğmeden açılır.
+Bağlantılar ekranındaki seçiciden yeni veya mevcut Explorer profilini açabilirsiniz. Genel/Gelişmiş seçenekleri korunur; test/liste yükleme tek eylemdir, mevcut profil çevrimdışı kaydedilebilir. Explorer’da **Nesneleri Yenile** sunucudaki yüklenmiş nesne listelerini yeniden okur; **Yerel İndeksi Yenile** arama/tamamlama önbelleğini yeniler. İndeks ayrıntıları veritabanı adının yanındaki düğmeden açılır.
 
 Ayarlar (⌘,) altı sekmede tema, editör, kısayollar, yerel kayıt, güncelleme kaynağı ve Keychain erişimini yönetir. v0.2.52 ile yeni güncelleme akışı, uygulama menüsündeki **Güncellemeleri Kontrol Et** ile PKG indirip içindeki uygulamanın sabit imzasını doğrular ve macOS Kurulum ekranını açar. Kurulumu tamamlayıp uygulamayı Uygulamalar’dan yeniden açın; önceki sürüm yedeği oluşturulmaz. **Hakkında** ekranındaki sürüm notları çevrimdışı okunabilir.
 
 ## Kapsam ve sınırlar
 
-Editörde tanımlanmamış `@parametreler` kırmızı görünür. Seçili satırlarda `⌘/` yorum yapar/kaldırır; `⌥⌘/` yalnız yorumu kaldırır. Seçimin yanındaki düğme aynı işlemi sunar; kısayollar Ayarlar’dan değiştirilebilir. Ayarlar’ın üstündeki arama tüm sekmelerdeki seçenekleri bulup ilgili ayara götürür.
+Editörde tanımlanmamış `@parametreler` kırmızı görünür. Seçili satırlarda `⌘/` yorum yapar/kaldırır; `⌥⌘/` yalnız yorumu kaldırır. Tam satır veya çok satırlı seçimin yanındaki küçük simge aynı işlemi sunar; kelime/boşluk seçiminde açılmaz; kısayollar Ayarlar’dan değiştirilebilir. Ayarlar’ın üstündeki arama tüm sekmelerdeki seçenekleri bulup ilgili ayara götürür.
 
 Türkçe Q klavyede `/` için `⇧7` kullanıldığından yorum aç/kapat `⌘⇧7`, yalnız yorum kaldırma `⌥⌘⇧7` ile de çalışır.
 

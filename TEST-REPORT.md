@@ -1,3 +1,18 @@
+## 13 Ekim 2026 — v0.2.107 / build 108 public yayın doğrulandı
+
+- [Public/latest v0.2.107](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.107), kaynak `efbcff093593f0f8bb22464f433e1b9a102e765e`; [Actions 38446340574](https://github.com/erhanulas/MSSQLStudio/actions/runs/38446340574) bütün adımlarıyla başarılı. IntelliSense sıralaması, kompakt yorum, merkezî bağlantı formu/ODBC kontrol-kurulum seçeneği ve güvenli özelleştirilebilir formatter bu yayındadır. v0.2.106 public yayınlanmadı; iptal edilen etiketi korunur.
+- CI gerçek yayın ZIP/PKG ile **325 app +305 core +8 text =638 test; 611 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış üç özet 101.390 /9.796 /0.015 sn. Sabit kimlik/izole Keychain fixture'ı, paket kontrolleri ve geçici CI kimliği temizliği geçti. Loglar `/tmp/MSSQLStudio-107-ci-tests.log`, `107-ci-feed.log`, `107-ci-logs.zip`.
+- GitHub'dan indirilen dört asset'in SHA-256 değerleri GitHub digest'leriyle aynı; ZIP/PKG URL ve hash'leri public manifest ile eşleşti. ZIP/PKG metadata/binary/notlar eşliği, exact 0.2.107/build 108, kaynak ReleaseNotes byte eşliği ve GitHub yayın metni doğrulandı. App/helper strict/deep sabit sertifika/DR kontrolleri ve frozen helper byte eşliği geçti. Helper v1 yeniden derlenmedi/imzalanmadı; v0.2.69 pinleri değişmez. PKG kapsayıcısının Developer ID Installer/notarization güvencesi olduğu iddia edilmez.
+- CI signed app ve bağımsız indirilen signed app, kendi Foundation/URLSession updater yoluyla `Foundation updater feed verified: 0.2.107` verdi. Public/latest, indirilen bütünlük ve exact feed kanıtı `/tmp/MSSQLStudio-107-public-verification/verification.json` altında.
+- Yerel native görünüm, token/undo/alias ve ScriptDOM grammar kanıtları aşağıdadır. Canlı SQL Server bağlantı/metadata/formatter yürütmesi, gerçek Homebrew sürücü kurulumu/yönetici koşulları, CUA fare akışı ve Installer/yeniden açma denenmedi. Kurulu uygulama, gerçek SQL oturumları/verileri, kullanıcı Keychain'i ve `.vscode/` değiştirilmedi.
+
+İndirilen public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.107.pkg`: `028183ee276c722859f6cd5d1d80e3baf1671b92a42be2d9710edda7c4253105`.
+- `MSSQLStudio-0.2.107.zip`: `7ee164f0ce0e50c02d5a4eb76107f6aa5db5e28547208ddb61650cdf5c17c1f3`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `f8b5d748b40bce3b8844d5fcefacb678621b83943348fa0ffc275e552648cc37`.
+
 ## 13 Ekim 2026 — v0.2.107 / build 108 yayın hazırlığı
 
 - v0.2.106 Actions [38444648968](https://github.com/erhanulas/MSSQLStudio/actions/runs/38444648968), public yayın öncesindeki son audit'te formatter'ın `AS Go`, `AS Try`, `AS Catch` alias'larının harf biçimini değiştirdiği görüldüğünden iptal istendi. Yeni regresyon mevcut kaynakta **1 test / 6 issue** ile kusuru kanıtladı (`/tmp/MSSQLStudio-107-alias-red.log`). Actions cancelled ile tamamlandı; Publish/feed adımları atlandı ve geçici CI imza kimliği temizliği geçti. Release API 404 ve public latest v0.2.105 doğrulandı. Eski v0.2.106 etiketi korunur; yeniden yazılmaz.
