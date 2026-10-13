@@ -1,3 +1,18 @@
+## 13 Ekim 2026 — v0.2.104 / build 105 public yayın doğrulandı
+
+- [Public/latest v0.2.104](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.104), kaynak `513f61588c6ecc26e7478dbf15653d9ed37de914`; [Actions 38429373205](https://github.com/erhanulas/MSSQLStudio/actions/runs/38429373205) başarılı. Eski v0.2.103 etiketi değiştirilmedi; bu başarısız denemede public release oluşmadı.
+- CI gerçek imzalı ZIP/PKG ile **311 app + 291 core + 8 text = 610 test; 583 geçti / 27 dış koşullu atlandı, 0 issue**. Üç suite özeti 72.844 / 6.415 / 0.003 sn; paket doğrulaması, sabit kimlik/izole Keychain fixture'ı ve geçici CI kimliği temizliği geçti. Yerel loglar `/tmp/MSSQLStudio-104-ci-tests.log`, `104-ci-feed.log`, `104-ci-logs.zip`.
+- GitHub'dan indirilen dört asset'in SHA-256 değerleri GitHub digest'leriyle eşleşti; ZIP/PKG hash'leri public manifest ile aynı. ZIP/PKG metadata/binary/sürüm notu eşliği, exact 0.2.104/build 105, kaynak ReleaseNotes byte eşliği ve GitHub yayın metni doğrulandı. App/helper deep/strict sabit sertifika ve designated requirement kontrolleri geçti; PKG/ZIP helper'ları ve public helper archive birebir eşleşti. Helper v1 yeniden derlenmedi/imzalanmadı; v0.2.69 archive/source/binary pinleri korunur.
+- CI signed app ve bağımsız indirilen signed app, kendi Foundation/URLSession updater yoluyla `Foundation updater feed verified: 0.2.104` verdi. Public/latest, exact feed ve bütünlük kanıtı `/tmp/MSSQLStudio-104-public-verification/verification.json` altında; yalnız API veya Python manifest kontrolüne dayanmaz.
+- Canlı SQL Server ve gerçek Installer/yeniden açma denenmedi. Önceki Explorer screenshot/pencere otomasyonu sınırları geçerlidir; native testlerin geçmesi bu açık görsel koşulu çözülmüş saymaz. Kurulu kullanıcı uygulaması, gerçek SQL oturumları, kullanıcı Keychain'i ve `.vscode/` değiştirilmedi.
+
+İndirilen public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.104.pkg`: `720ac6e66f46de8ab49e48daf69f02acc7ed0954f149d4e71f40a3d1e17e6008`.
+- `MSSQLStudio-0.2.104.zip`: `16ddbd89605cbee9cdb55759273fb718a0d5341efc6f9567d62384fbdbcd32da`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `4f82d3f0ef4b619d29ed34da50b5d5d405c8b2acec3213dc3165e685a1b62874`.
+
 ## 13 Ekim 2026 — v0.2.104 / build 105 yayın hazırlığı
 
 - v0.2.103 etiketindeki Actions [38428786223](https://github.com/erhanulas/MSSQLStudio/actions/runs/38428786223), imzalama fixture'ının eski `Persistence.swift` kaynak yolunda FileNotFoundError ile paket üretmeden durdu. Public release oluşturulmadı; v0.2.103 etiketi korunur.
