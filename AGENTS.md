@@ -151,6 +151,7 @@ Aşağıdaki yollar `Sources/SQLServerKit/` altındadır.
 | `ExplorerTreeModel` | Kararlı node kimlikleri, klasör/favori düzeni ve genişletme kaydı |
 | `ExplorerSearchController` | Debounce, iptal/generation, tek uçuş ve en son bekleyen disk araması |
 | `EditorController` | Tek SQLTextView/undo, source-fold projection ve syntax sunumu |
+| `EditorInsertPresentation` | Source/generation kontrollü INSERT ordinal snapshot, caret/kolon eşleşmesi ve odağı almayan tıklama önizlemesi |
 | `EditorCompletionController` | Analiz task/generation, öneri popup'ı ve key monitor yaşam döngüsü |
 | `ResultController` | loadedResult/prefix, kolon/selection/sayfa/pin ve staged edit durumu |
 | `ResultProjectionController` | Değişmez Rows/rule/sort snapshot'ında arka plan filtre/sıralama işi |
@@ -347,9 +348,16 @@ Koyu palet uygulama uyarlamasıdır; Microsoft'un birebir koyu paleti diye sunul
 ### SQL biçimlendirme
 
 - SQLFormatter lexer temelli boşluk/keyword-case düzenler; alias/identifier/literal/comment/operator/virgül/statement token’ı üretmez veya silmez. Keyword ile aynı yazılan bağlamsal identifier’lar (AS Go/Try/Catch, dbo.Go ve standalone olmayan GO) harf biçimini korur; tam belge eşlik denetimi bu adların değişmesini de reddeder. Palette keyword sayılan fakat SQL Server’da reserved olmayan belirsiz adlar ihtiyatlı korunur; tam parser olmadan OFFSET/ROWS/ONLY/OUTPUT/INCLUDE gibi sözcüklerin harf biçimi zorlanmaz. CTE/SELECT/JOIN/ON/CASE/nested query/INSERT/UPDATE/DELETE girinti ve liste kuralları aynı bounded yoldadır. SQLCMD direktifleri değişmeden korunur; tam parser/semantik düzeltme değildir.
-- SQLFormattingOptions keyword upper/lower/preserve, 2/4/8 boşluk, leading/trailing virgül, çok satırlı liste ve koşul kırma tercihlerini taşır. Ayarlar taslağı Uygula’ya kadar saklanır; seçenekler genel aramada bulunur. TSQL.format API’si varsayılanlarla uyumludur.
+- SQLFormattingOptions keyword upper/lower/preserve, 2/4/8 boşluk, leading/trailing virgül, çok satırlı liste/koşul kırma ve 60–240 karakter satır genişliği tercihlerini taşır (varsayılan 120). Eski kayıtların eksik optional lineWidth alanı 120 olarak uygulanır. IF/WHILE, BEGIN/END, TRY/CATCH ve RETURN/DECLARE ayrı satır sınırlarını kullanır; uzun üst düzey aritmetik/string birleştirmeleri devam girintisiyle kırılır, mevcut operatör devam satırları korunur; literal ve scientific notation parçalanmaz. Ayarlar taslağı Uygula’ya kadar saklanır; seçenekler genel aramada bulunur. TSQL.format API’si varsayılanlarla uyumludur.
 - Seçim varsa yalnız source-projected aralık, yoksa tüm editör biçimlenir. Parça ve yerine yerleştirilmiş tam belge lexical token/yorum/literal/identifier ve GO separator satır eşliğini geçmelidir; literal/yorum/identifier içinden başlayan riskli seçim değiştirilmez. CRLF ve GO tekrarları korunur. Tek undo, syntax/IME/read-only/fold sahipliği korunur; SQL otomatik yürütülmez.
 - İş bütçesi 250.000 UTF-16 / 30.000 token’dır; büyük giriş özgün kalır. 50.000 üstü biçimlendirme detached worker’dadır; source/revision/selection değişmişse geç sonuç uygulanmaz. Diğer editör işlemleri bekletilmez.
+
+### INSERT kolon/değer eşleştirmesi
+
+- SQLInsertMapping yalnız açık kolon listeli INSERT ... VALUES ordinal'lerini source UTF-16 aralıklarıyla çözer. TOP/INTO/quoted target/hint/OUTPUT, çok satırlı VALUES, nested function/subquery/CASE ve literal/comment virgülleri ayrılır; GO ve diğer INSERT'ler kapsamı geçmez. Bütçe 250k UTF-16 /30k token, en çok 2.100 kolon/1.000 VALUES satırıdır. Eksik/fazla kolon, implicit fiziksel sıra veya INSERT SELECT metadata’dan tahmin edilmez; kapanmamış VALUES listesi tamamlanana kadar eşleştirme sunulmaz.
+- Tek caret/değer içi veya tek ifade seçimi hedef kolon ve o satırın değerini accent viewport dekorasyonuyla eşler. Kolona tıklama bütün VALUES satırlarındaki aynı ordinal'i vurgular. Fold'da gizli aralıklar çizilmez. SQL/typing attributes/syntax/undo/dirty/odak ve gerçek yürütme değiştirilmez; highlight katmanı mouse-transparent'tır.
+- Küçük native önizleme yalnız fare seçimi tamamlanınca açılır; hedef tablo, kolon, ordinal/satır ve değeri gösterir. Yazımda kendiliğinden açılmaz; Escape, scroll, kapsam dışı seçim, completion veya routine yardımında kapanır. Preview için SQL/metadata/Keychain/ağ okunmaz. Kaynak snapshot'ı önbellektedir; 50k üstü analiz detached worker'da, source/generation/iptal kontrollü yayınlanır; eski cevap yeni metne uygulanmaz.
+- Referans: [DataGrip INSERT column hints](https://www.jetbrains.com/help/datagrip/inlay-hints.html). Bu uygulama source içine inlay metni enjekte etmez; caret eşleştirme ve tıklama önizlemesi ayrı native dekorasyondur.
 
 ### Tamamlama ve parametre yardımı
 

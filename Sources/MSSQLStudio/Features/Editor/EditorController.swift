@@ -7,6 +7,7 @@ import SQLServerKit
   let scroll = SQLEditorScrollView()
   let editor = SQLTextView(usingTextLayoutManager: true)
   let occurrenceHighlights = OccurrenceHighlights()
+  let insertPresentation = EditorInsertPresentation()
   let commentHint=StudioToolbarButton(symbol:"text.bubble",label:"Seçili satırları yorum yap / kaldır",title:"",width:28)
   private let ruler: LineNumbers
   private var rulerWidth:NSLayoutConstraint?
@@ -104,7 +105,7 @@ import SQLServerKit
     editor.requestParameterInfo = { [weak self] in self?.scheduleParameters(manual:true) }
     editor.jumpToMatchingPair = { [weak self] in self?.jumpToMatchingPair() }
     editor.navigateDefinition = { [weak self] in self?.navigateDefinition() }
-    editor.mouseSelectionEnded = { [weak self] in self?.occurrenceTask?.cancel();self?.updateOccurrences();self?.updateCommentHint() }
+    editor.mouseSelectionEnded = { [weak self] in self?.occurrenceTask?.cancel();self?.insertPresentation.requestPreview();self?.updateOccurrences();self?.updateCommentHint() }
     editor.unfoldSelection = { [weak self] range in
       guard let self,let marker=collapsedMarkers.first(where:{NSIntersectionRange($0.range,range).length > 0}) else {return false}
       toggleFold(marker.region);return true
@@ -112,6 +113,7 @@ import SQLServerKit
     editor.run = { [weak document] in document?.execute() }
     editor.setAccessibilityIdentifier("sqlEditor")
     scroll.documentView = editor
+    insertPresentation.didResolve = { [weak self] in self?.updateOccurrences() }
     occurrenceHighlights.editor=editor
     occurrenceHighlights.frame=scroll.contentView.bounds
     occurrenceHighlights.wantsLayer=true
@@ -144,6 +146,7 @@ import SQLServerKit
     ruler.toggle = { [weak self] in self?.toggleFold($0) }
     ruler.selectLine = { [weak self] in self?.selectSourceLine($0) }
     completion.isProjected = { [weak self] in self?.projection != nil }
+    completion.willShow = { [weak self] in self?.insertPresentation.hidePreview() }
     completion.parametersShown = { [weak self] in self?.parameterPopover.isShown ?? false }
     completion.anchor = { [weak self] in self?.suggestionAnchor() }
     completion.willAccept = { [weak self] in self?.suppressNextPopup = true }
@@ -155,7 +158,7 @@ import SQLServerKit
       highlight()
     }
     editor.requestSuggestions = { [weak self] in self?.scheduleIntelligence(manual:true) }
-    editor.dismissSuggestions = { [weak self] in self?.completion.close();self?.dismissParameterHelp() }
+    editor.dismissSuggestions = { [weak self] in self?.completion.close();self?.dismissParameterHelp();self?.insertPresentation.dismissPreview() }
     editor.suggestionKey = { [weak self] in self?.completion.handleSuggestionKey($0) ?? false }
     NotificationCenter.default.addObserver(self,selector:#selector(catalogChanged),name:.init("sqlCatalogChanged"),object:document)
     NotificationCenter.default.addObserver(self,selector:#selector(catalogChanged),name:.init("sqlEditorPreferencesChanged"),object:nil)
@@ -205,6 +208,7 @@ import SQLServerKit
     highlightedSource=nil;highlight()
   }
   @objc func applyTheme() {
+    insertPresentation.refreshTheme()
     highlightedSource = nil
     editor.backgroundColor = StudioTheme.editorCanvas
     editor.textColor = StudioTheme.editorText
@@ -303,6 +307,7 @@ import SQLServerKit
     resizeToViewport()
   }
   @objc private func scrolled() {
+    insertPresentation.hidePreview()
     let clip = scroll.contentView
     occurrenceHighlights.frame=clip.bounds
     occurrenceHighlights.needsDisplay=true
@@ -432,6 +437,7 @@ import SQLServerKit
     occurrenceHighlights.ranges=[]
     occurrenceHighlights.blockRanges=[]
     occurrenceHighlights.blockGuides.clear()
+    occurrenceHighlights.insertRanges=[];insertPresentation.clear()
   }
   func updateOccurrences() {
     guard !paintingOccurrences,!editor.trackingMouseSelection else {return}
@@ -451,6 +457,7 @@ import SQLServerKit
     }
     let sourceRange=projection?.sourceRange(range) ?? range
     occurrenceHighlights.blockRanges = occurrenceHighlights.blockGuides.update(source: document.sql, selection: sourceRange, projection: projection)
+    occurrenceHighlights.insertRanges=insertPresentation.update(source:document.sql,selection:sourceRange,projection:projection,editor:editor,allowPreview:!completionShown && !parameterShown)
     occurrenceRanges=updatedRanges
     occurrenceHighlights.ranges=updatedRanges
     // Also repaint when the selected occurrence changes within the same match set.
@@ -501,7 +508,7 @@ import SQLServerKit
   }
   private func showParameterHelp() {
     guard let call=parameterCall,let window=editor.window,window.firstResponder === editor,let anchor=suggestionAnchor() else {return}
-    completion.close()
+    completion.close();insertPresentation.hidePreview()
     let height=parameterStatus == nil && !parameterValues.isEmpty ? CGFloat(min(6,parameterValues.count))*28+62:104
     let content=SQLParameterHelp(name:call.symbol.schema+"."+call.symbol.name,parameters:parameterValues,active:call.activeIndex(in:parameterValues),status:parameterStatus)
     StudioPopover.show(parameterPopover,content:content,from:editor,rect:anchor,size:NSSize(width:480,height:height))

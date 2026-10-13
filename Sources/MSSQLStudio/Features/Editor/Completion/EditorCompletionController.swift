@@ -24,6 +24,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   var parametersShown:()->Bool = {false}
   var anchor:(()->NSRect?)?
   var publish:((SQLIntelligence.Analysis,[SQLFolding.Region],String,Bool)->Void)?
+  var willShow:(()->Void)?
   var willAccept:(()->Void)?
   var contentSize:NSSize {suggestionPopover.contentSize}
   var isShown:Bool {suggestionPopover.isShown}
@@ -93,6 +94,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
           if resizing {suggestionPopover.contentViewController=suggestionList}
           suggestionPopover.contentSize=suggestionList.preferredContentSize
           let edge:NSRectEdge=below ? (host.isFlipped ? .maxY:.minY):(host.isFlipped ? .minY:.maxY)
+          willShow?()
           suggestionPopover.show(relativeTo:hostAnchor,of:host,preferredEdge:edge)
           window.makeFirstResponder(editor)
           installSuggestionKeys()

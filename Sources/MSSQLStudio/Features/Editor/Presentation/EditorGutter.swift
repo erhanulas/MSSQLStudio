@@ -27,16 +27,17 @@ import SQLServerKit
 @MainActor final class OccurrenceHighlights: NSView {
   weak var editor: NSTextView?
   let blockGuides = EditorBlockGuides()
+  var insertRanges:[NSRange]=[] {didSet {if oldValue != insertRanges {needsDisplay=true}}}
   var findRanges:[NSRange]=[] {didSet {if oldValue != findRanges {needsDisplay=true}}}
   var blockRanges:[NSRange]=[] {didSet {if oldValue != blockRanges {needsDisplay=true}}}
   var ranges:[NSRange]=[] {didSet {if oldValue != ranges {needsDisplay=true}}}
   override var isFlipped: Bool {true}
   override func hitTest(_ point:NSPoint) -> NSView? {nil}
-  func highlightRects(in dirtyRect:NSRect) -> [NSRect] {
+  func highlightRects(in dirtyRect:NSRect, for supplied:[NSRange]? = nil) -> [NSRect] {
     guard let editor,let content=editor.textContentStorage,let layout=editor.textLayoutManager else {return []}
     var rects:[NSRect]=[]
     let viewport=layout.textViewportLayoutController.viewportRange
-    for range in ranges+blockRanges+findRanges where range != editor.selectedRange() {
+    for range in supplied ?? (ranges+blockRanges+findRanges) where range != editor.selectedRange() {
       guard NSMaxRange(range) <= (content.textStorage?.length ?? 0),
         let start=content.location(content.documentRange.location,offsetBy:range.location),
         let end=content.location(start,offsetBy:range.length),
@@ -57,6 +58,8 @@ import SQLServerKit
         segment.rect.fill()
       }
     }
+    StudioTheme.accent.withAlphaComponent(0.16).setFill()
+    for rect in highlightRects(in:dirtyRect,for:insertRanges) {NSBezierPath(roundedRect:rect,xRadius:2,yRadius:2).fill()}
     NSColor.systemYellow.withAlphaComponent(0.25).setFill()
     for rect in highlightRects(in:dirtyRect) {NSBezierPath(roundedRect:rect,xRadius:2,yRadius:2).fill()}
   }

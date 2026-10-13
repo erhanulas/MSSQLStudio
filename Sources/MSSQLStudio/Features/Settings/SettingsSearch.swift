@@ -24,6 +24,7 @@ struct SettingsSearchEntry:Identifiable,Equatable {
         ("brackets","Tamamlamada köşeli parantez kullan","tırnak identifier quote brackets")]),
       (.editor,"SQL biçimlendirme",[
         ("formatCase","Anahtar kelime harfleri","formatter format büyük küçük upper lower preserve code style"),
+        ("formatWidth","Satır genişliği","formatter format uzun satır wrap devam 120 karakter"),
         ("formatIndent","Girinti boşluk sayısı","formatter format indentation tab boşluk"),
         ("formatComma","Virgül yerleşimi","formatter format comma leading trailing"),
         ("formatLists","Kolon listelerini satırlara ayır","formatter select insert cte liste satır kırma"),

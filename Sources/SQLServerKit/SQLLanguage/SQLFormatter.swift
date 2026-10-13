@@ -7,10 +7,12 @@ public struct SQLFormattingOptions: Codable, Equatable, Sendable {
   public var keywordCase: KeywordCase
   public var commaStyle: CommaStyle
   public var multilineLists: Bool
+  public var lineWidth: Int?
   public var breakConditions: Bool
   public init(indentWidth: Int = 4, keywordCase: KeywordCase = .upper,
-              commaStyle: CommaStyle = .trailing, multilineLists: Bool = true, breakConditions: Bool = true) {
+              commaStyle: CommaStyle = .trailing, multilineLists: Bool = true, breakConditions: Bool = true, lineWidth: Int = 120) {
     self.indentWidth = max(2, min(8, indentWidth)); self.keywordCase = keywordCase
+    self.lineWidth = lineWidth == 0 ? 0 : max(60,min(240,lineWidth))
     self.commaStyle = commaStyle; self.multilineLists = multilineLists; self.breakConditions = breakConditions
   }
 }
@@ -39,6 +41,7 @@ public enum SQLFormatter {
     var caseBases: [Int] = []
     var lines: [String] = [], current = "", pendingIndent = 0, between = false
     let width = max(2, min(8, options.indentWidth))
+    let lineWidth = options.lineWidth ?? 120
     func newline(_ indent: Int? = nil) {
       if !current.isEmpty { lines.append(current); current = "" }
       pendingIndent = max(0, min(40, indent ?? (blockIndent + caseIndent + frames.last!.indent)))
@@ -51,6 +54,18 @@ public enum SQLFormatter {
       guard index > 0 else { return "" }
       let start = NSMaxRange(tokens[index-1].range)
       return ns.substring(with: NSRange(location: start, length: tokens[index].range.location-start))
+    }
+    func operandWidth(after index: Int) -> Int {
+      var depth=0, length=0
+      for j in index+1..<tokens.count {
+        let token=tokens[j], word=token.text.uppercased()
+        if depth == 0 && (["+","-","*","/",",",";"].contains(word) || token.kind == .keyword && clauseWords.contains(word)) { break }
+        if word == "(" { depth += 1 }
+        if word == ")" { if depth == 0 { break }; depth -= 1 }
+        length += token.text.utf16.count+1
+        if length > max(120,lineWidth) { break }
+      }
+      return length
     }
     for i in tokens.indices {
       let token = tokens[i], upper = token.text.uppercased()
@@ -75,7 +90,7 @@ public enum SQLFormatter {
       }
       let frameIndex = frames.count-1
       let queryLevel = frames[frameIndex].query
-      let isBlockEnd = keyword && upper == "END"
+      let isBlockEnd = keyword && upper == "END" && next != "CONVERSATION"
       if isBlockEnd {
         if let base = caseBases.popLast() { caseIndent -= 1; newline(base) }
         else { blockIndent = max(0,blockIndent-1); newline() }
@@ -83,6 +98,8 @@ public enum SQLFormatter {
       if keyword && upper == "CASE" { caseBases.append(max(pendingIndent,blockIndent + frames[frameIndex].indent)); caseIndent += 1 }
       if keyword && ["WHEN","ELSE"].contains(upper), caseIndent > 0 { newline((caseBases.last ?? 0) + 1) }
       if keyword && queryLevel && caseIndent == 0 {
+        let beginsBlock = upper == "BEGIN" && !["TRAN","TRANSACTION","DISTRIBUTED","DIALOG","CONVERSATION"].contains(next)
+        if beginsBlock || ["IF","WHILE","ELSE","RETURN","PRINT","THROW","RAISERROR","DECLARE"].contains(upper) { newline() }
         let joinModifiers = ["LEFT","RIGHT","FULL","INNER","OUTER","CROSS"]
         let joinStart = joinModifiers.contains(upper) && !joinModifiers.contains(previous)
         let clauseStart = ["SELECT","FROM","WHERE","GROUP","HAVING","ORDER","UNION","EXCEPT","INTERSECT","SET","VALUES","OUTPUT"].contains(upper)
@@ -109,6 +126,14 @@ public enum SQLFormatter {
       }
       let multilineComma = upper == "," && options.multilineLists && (frames[frameIndex].list || queryLevel && ["SELECT","SET","VALUES","WITH"].contains(frames[frameIndex].clause)) && caseIndent == 0
       if multilineComma && options.commaStyle == .leading { newline(blockIndent + frames[frameIndex].indent + 1) }
+      if token.kind == .symbol, ["+","-","*","/"].contains(upper), frames.count == 1, i > 0 {
+        let prior=tokens[i-1]
+        let binary=[Lexeme.Kind.variable,.word,.number,.string].contains(prior.kind) || previous == ")"
+        let exponent=prior.kind == .number && prior.text.lowercased().hasSuffix("e") && gap(i).isEmpty
+        if binary && !exponent && (gap(i).contains(where:\.isNewline) || lineWidth > 0 && current.utf16.count+operandWidth(after:i)+2 > lineWidth) {
+          newline(blockIndent+frames[frameIndex].indent+1)
+        }
+      }
       var text = token.text
       if keyword {
         switch options.keywordCase {
@@ -137,8 +162,11 @@ public enum SQLFormatter {
       }
       if multilineComma && options.commaStyle == .trailing { newline(blockIndent + frames[frameIndex].indent + 1) }
       if keyword && upper == "BEGIN" && !["TRAN","TRANSACTION","DISTRIBUTED","DIALOG","CONVERSATION"].contains(next) {
-        blockIndent += 1; newline()
+        blockIndent += 1
+        if !["TRY","CATCH"].contains(next) { newline() }
       }
+      if keyword && ["TRY","CATCH"].contains(upper) && ["BEGIN","END"].contains(previous) { newline() }
+      if isBlockEnd && ![";","TRY","CATCH","ELSE"].contains(next) { newline() }
       if upper == ";" { newline() }
       if batch, next != "" && tokens[i+1].kind != .number && tokens[i+1].kind != .comment { newline(0) }
     }

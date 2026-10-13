@@ -40,6 +40,36 @@ struct SQLFormatterTests {
       }
     }
   }
+  @Test func proceduralBlocksAndLongAssignmentsStayReadable() {
+    let sql="IF @delivered + @quantity > @ordered BEGIN SET @message = @code + 'ERROR' + CHAR(13) + CHAR(10) + 'A long readable explanation of the limit that was exceeded' + CHAR(13) + CHAR(10) + 'Ordered quantity: ' + CONVERT(VARCHAR(30), @ordered) + CHAR(13) + CHAR(10) + 'Delivered quantity: ' + CONVERT(VARCHAR(30), @delivered); END RETURN @message;"
+    let result=TSQL.format(sql)
+    if let directory=ProcessInfo.processInfo.environment["MSSQL_FORMAT_OUTPUT_DIRECTORY"] {
+      let folder=URL(fileURLWithPath:directory)
+      try? FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+      try? result.write(to:folder.appendingPathComponent("procedural-fragment.sql"),atomically:true,encoding:.utf8)
+      let routine="CREATE OR ALTER FUNCTION dbo.FormatFixture(@delivered int,@quantity int,@ordered int,@code nvarchar(40)) RETURNS nvarchar(max) AS BEGIN DECLARE @message nvarchar(max); "+sql+" END;"
+      try? TSQL.format(routine).write(to:folder.appendingPathComponent("procedural-function.sql"),atomically:true,encoding:.utf8)
+    }
+    #expect(result.contains("\nBEGIN\n    SET"))
+    #expect(result.contains("\nEND\nRETURN @message;"))
+    #expect(result.contains("\n        +"))
+    #expect(result.split(separator:"\n").allSatisfy {$0.utf16.count <= 120})
+    #expect(TSQL.format(result) == result)
+    #expect(SQLFormatter.preservesSQLTokens(sql,formatted:result))
+    let tries=TSQL.format("BEGIN TRY SELECT 1; END TRY BEGIN CATCH RETURN; END CATCH")
+    #expect(tries.contains("BEGIN TRY\n    SELECT") && tries.contains("END TRY\nBEGIN CATCH"))
+    let multiline="IF @x=1\nBEGIN\n SET @text='first'\n + 'second'\n + CHAR(13);\nEND"
+    let formatted=TSQL.format(multiline)
+    #expect(formatted.contains("\n        + 'second'\n        + CHAR"))
+    #expect(TSQL.format(formatted)==formatted)
+  }
+  @Test func oldFormattingPreferencesDecodeWithDefaultWrapping() throws {
+    var value=try #require(JSONSerialization.jsonObject(with:JSONEncoder().encode(SQLFormattingOptions())) as? [String:Any])
+    value.removeValue(forKey:"lineWidth")
+    let old=try JSONDecoder().decode(SQLFormattingOptions.self,from:JSONSerialization.data(withJSONObject:value))
+    #expect(old.lineWidth == nil)
+    #expect(TSQL.format("select a,b from dbo.t",options:old)==TSQL.format("select a,b from dbo.t"))
+  }
   @Test func preferencesAffectListsCaseAndIndentWithoutChangingAliases() {
     let source="select a,b from dbo.t AS Alias where a=1 and b=2"
     let upper=TSQL.format(source)

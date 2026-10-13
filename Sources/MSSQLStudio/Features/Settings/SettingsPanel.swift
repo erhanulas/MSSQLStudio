@@ -189,6 +189,11 @@ struct SettingsPanel: View {
                 Text("2 boşluk").tag(2); Text("4 boşluk").tag(4); Text("8 boşluk").tag(8)
               }.labelsHidden()
             }.id("formatIndent")
+            StudioFormField("Satır genişliği") {
+              Stepper(value:Binding(get:{formatting.lineWidth ?? 120},set:{formatting.lineWidth=$0}),in:60...240,step:10) {
+                Text("\(formatting.lineWidth ?? 120) karakter").monospacedDigit()
+              }
+            }.id("formatWidth")
             StudioFormField("Virgül") {
               Picker("Virgül yerleşimi", selection: $formatting.commaStyle) {
                 Text("Satır sonunda").tag(SQLFormattingOptions.CommaStyle.trailing)

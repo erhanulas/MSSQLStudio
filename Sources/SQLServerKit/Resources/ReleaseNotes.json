@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.108",
+    "date": "2026-10-14",
+    "title": "Okunabilir SQL formatlama ve INSERT kolon yardımı",
+    "changes": [
+      "SQL biçimlendirme IF/WHILE, BEGIN/END, TRY/CATCH ve RETURN sınırlarını ayrı satırlarda tutar. Uzun SET ifadeleri ve string birleştirmeleri devam girintisiyle kırılır; mevcut devam satırları korunur.",
+      "SQL biçimlendirme satır genişliği Ayarlar’dan 60–240 karakter arasında özelleştirilebilir. Varsayılan 120 karakterdir; seçili SQL, tek adımlı geri alma ve SQL token/yorum/literal güvenliği korunur.",
+      "Açık kolon listeli INSERT VALUES ifadelerinde kolona tıklayınca karşılık gelen değerler, değere tıklayınca hedef kolon vurgulanır. Çoklu VALUES satırları ve iç içe ifadeler desteklenir.",
+      "Fareyle seçilen INSERT kolon/değer eşleşmesi için hedef tablo, kolon, sıra ve değeri gösteren kompakt önizleme eklendi. Yazım sırasında kendiliğinden açılmaz; Escape veya kaydırmayla kapanır. Büyük metin analizi arka planda yapılır; SQL metni ve editör odağı korunur."
+    ]
+  },
+  {
     "version": "0.2.107",
     "date": "2026-10-13",
     "title": "Bağlama duyarlı öneriler, bağlantılar ve SQL biçimlendirme",

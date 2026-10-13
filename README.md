@@ -11,7 +11,7 @@ Microsoft ODBC Driver 18, unixODBC ve OpenSSL 3 ayrı kurulur; sürücüler app 
 1. Sunucu bilgilerini girip **Test Et ve Yükle** ile erişilebilir veritabanlarını alın.
 2. Görünecek veritabanlarını seçin, yıldızla varsayılanı belirleyip **Bağlan** kullanın. Görünürlük seçimi sunucu yetkilerini değiştirmez.
 3. Sorguyu F5 / ⌘Return ile çalıştırın; seçim varsa yalnız seçim gönderilir. ⌘. iptal eder; iptal transaction rollback değildir.
-4. Ctrl+Space önerileri açar; Tab/Enter kabul eder. Ctrl+F / ⌘F seçili metinle bulmayı, ⌘⇧F seçili SQL’i veya seçim yoksa tüm editörü biçimlendirmeyi açar. Girinti, harf biçimi, virgül ve satır kırma tercihleri Ayarlar → SQL Editörü içindedir.
+4. Ctrl+Space önerileri açar; Tab/Enter kabul eder. Ctrl+F / ⌘F seçili metinle bulmayı, ⌘⇧F seçili SQL’i veya seçim yoksa tüm editörü biçimlendirmeyi açar. Girinti, harf biçimi, virgül, satır kırma ve satır genişliği tercihleri Ayarlar → SQL Editörü içindedir.
 5. Nesne/Agent tasarım ekranları değişiklikleri önce SQL olarak incelemeye açar. Nesne önizlemesindeki **Veritabanına Gönder** ve Agent komut penceresinin açık onayı ayrıca yürütme yapar.
 
 Bağlantılar ekranındaki seçiciden yeni veya mevcut Explorer profilini açabilirsiniz. Genel/Gelişmiş seçenekleri korunur; test/liste yükleme tek eylemdir, mevcut profil çevrimdışı kaydedilebilir. Explorer’da **Nesneleri Yenile** sunucudaki yüklenmiş nesne listelerini yeniden okur; **Yerel İndeksi Yenile** arama/tamamlama önbelleğini yeniler. İndeks ayrıntıları veritabanı adının yanındaki düğmeden açılır.
@@ -21,6 +21,8 @@ Ayarlar (⌘,) altı sekmede tema, editör, kısayollar, yerel kayıt, güncelle
 ## Kapsam ve sınırlar
 
 Editörde tanımlanmamış `@parametreler` kırmızı görünür. Seçili satırlarda `⌘/` yorum yapar/kaldırır; `⌥⌘/` yalnız yorumu kaldırır. Tam satır veya çok satırlı seçimin yanındaki küçük simge aynı işlemi sunar; kelime/boşluk seçiminde açılmaz; kısayollar Ayarlar’dan değiştirilebilir. Ayarlar’ın üstündeki arama tüm sekmelerdeki seçenekleri bulup ilgili ayara götürür.
+
+Açık kolon listeli `INSERT ... VALUES` içinde kolona veya değere bir kez tıklamak karşılığını vurgular; küçük önizleme kolon adını ve sırasını gösterir. Kolon tıklaması çoklu VALUES satırlarını da eşler. Escape önizlemeyi kapatır; SQL metni değiştirilmez.
 
 Türkçe Q klavyede `/` için `⇧7` kullanıldığından yorum aç/kapat `⌘⇧7`, yalnız yorum kaldırma `⌥⌘⇧7` ile de çalışır.
 
