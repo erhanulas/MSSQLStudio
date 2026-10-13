@@ -222,6 +222,8 @@ struct SettingsPanel: View {
           }
           settingsNote("Değiştir’e basıp ⌘ veya ⌃ ile bir harf / rakam kullanın. Çakışan ve ayrılmış kısayollar reddedilir; Escape iptal eder. Değişiklikler hemen kaydedilir.", icon: "bolt.circle")
           settingsNote("Editörde ⌘Z / ⌘⇧Z ve ⌃Z / ⌃Y / ⌃⇧Z geri al / ileri al için kullanılabilir.", icon: "arrow.uturn.backward")
+          settingsNote("SQL editöründe ⌥← / ⌥→ değişken, kelime ve operatör sınırlarında ilerler. @ / @@ önekleri değişkenle birlikte kalır.", icon: "arrow.left.and.right")
+          settingsNote("⌘← / ⌘→ önce kodun başına / sonuna, ikinci basışta girinti / sondaki boşluk sınırına gider. ⇧ ekleyerek aynı hareketlerle seçim yapabilirsiniz.", icon: "selection.pin.in.out")
         }.tabItem { Label(SettingsSection.shortcuts.title, systemImage: SettingsSection.shortcuts.icon) }.tag(SettingsSection.shortcuts)
         settingsPage(.workspace, subtitle: "Bu Mac’te tutulan sorgu geçmişini ve oturum kurtarmayı yönetin.") {
           settingsCard("Geçmiş ve kurtarma", icon: "clock.arrow.circlepath") {

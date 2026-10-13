@@ -268,7 +268,7 @@ public enum TSQL {
     }
     return result
   }
-  /// Declaration names with no other lexical reference in their SQL Server batch.
+  /// Local DECLARE and SQL routine input names with no other lexical reference in their batch.
   /// Assignments count as references; this does not attempt dead-store/data-flow analysis.
   public static func unusedDeclaredVariables(_ sql: String) -> [NSRange] {
     guard sql.utf16.count <= 250_000 else { return [] }
@@ -280,15 +280,18 @@ public enum TSQL {
       for token in batch where token.kind == .variable {
         counts[token.text.lowercased(),default:0] += 1
       }
+      let formalLocations=Set(SQLRoutineDefinition.headers(in:batch,source:sql)
+        .filter(\.hasSQLBody).flatMap(\.parameters).map(\.location))
+      declarations=batch.filter {formalLocations.contains($0.range.location)}
       var i = 0
       while i < batch.count {
         guard batch[i].text.uppercased() == "DECLARE", i+2 < batch.count,
           batch[i+1].kind == .variable else { i += 1; continue }
-        var j = i+1, depth = 0
+        var j = i+1, depth = 0, caseDepth = 0
         var expectsName = true
         while j < batch.count {
           let token = batch[j], upper = token.text.uppercased()
-          if depth == 0 && (token.text == ";" ||
+          if depth == 0 && caseDepth == 0 && (token.text == ";" ||
             ["SELECT","SET","DECLARE","BEGIN","END","IF","WHILE","RETURN","PRINT","EXEC","EXECUTE","INSERT","UPDATE","DELETE","MERGE","CREATE","ALTER","DROP","FETCH","OPEN","CLOSE"].contains(upper)) { break }
           if expectsName {
             guard token.kind == .variable, !token.text.hasPrefix("@@"),
@@ -300,7 +303,9 @@ public enum TSQL {
           }
           if token.text == "(" { depth += 1 }
           if token.text == ")" { depth = max(0,depth-1) }
-          if token.text == "," && depth == 0 { expectsName = true }
+          if token.kind == .keyword && upper == "CASE" { caseDepth += 1 }
+          if token.kind == .keyword && upper == "END" { caseDepth = max(0,caseDepth-1) }
+          if token.text == "," && depth == 0 && caseDepth == 0 { expectsName = true }
           j += 1
         }
         i = max(i+1,j)
@@ -311,17 +316,13 @@ public enum TSQL {
     }
     for token in tokens {
       // GO is a separator only on its own line, optionally followed by a count/comment.
-      if token.text.uppercased() == "GO", token.kind == .keyword {
-        let line = source.substring(with:source.lineRange(for:token.range))
-        if line.range(of:#"^\s*GO(?:[ \t]+[0-9]+)?[ \t]*(?:--[^\r\n]*)?[\r\n]*$"#,
-                      options:[.regularExpression,.caseInsensitive]) != nil {
-          inspect(); batch=[]; continue
-        }
+      if SQLRoutineDefinition.isBatchSeparator(token,source:source) {
+        inspect(); batch=[]; continue
       }
       batch.append(token)
     }
     inspect()
-    return result
+    return result.sorted {$0.location < $1.location}
   }
   public static func batches(_ sql: String) throws -> [ScriptBatch] {
     let ns = sql as NSString

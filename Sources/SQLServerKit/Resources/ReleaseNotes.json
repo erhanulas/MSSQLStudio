@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.98",
+    "date": "2026-10-13",
+    "title": "SQL editöründe akıllı gezinme ve doğru parametre vurguları",
+    "changes": [
+      "Option ve yatay oklar SQL değişkenlerini önekleriyle birlikte geçer; operatör ve noktalama işaretlerinde durur. Command yatay okları önce kod sınırına, tekrar basışta girinti veya sondaki boşluğun fiziksel sınırına gider. Shift ile seçim yönü, Unicode, katlama ve geri alma korunur.",
+      "CREATE/ALTER fonksiyon ve procedure tanımlarının parametre başlığında çağrı yardımı açılmaz. Gövdedeki gerçek EXEC ve fonksiyon çağrılarında parametre bilgisi çalışmaya devam eder.",
+      "Kullanılmayan yerel DECLARE değişkenlerinin yanında fonksiyon ve procedure başlığındaki kullanılmayan parametreler de soluk görünür. Kullanım eklenip kaldırıldığında renk güncellenir; yorum ve metin içindeki adlar kullanım sayılmaz."
+    ]
+  },
+  {
     "version": "0.2.97",
     "date": "2026-10-13",
     "title": "İzleme sorgularında güvenilir sonuç yenileme",

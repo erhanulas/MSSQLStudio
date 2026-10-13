@@ -377,6 +377,55 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
       || (key == "z" && (flags == [.control,.shift] || flags == [.command,.shift])) {redoSQL(nil);return true}
     return false
   }
+  private enum CaretMovement { case word, line }
+  @discardableResult private func navigateSQL(_ movement:CaretMovement,_ direction:SQLCaretNavigation.Direction,extending:Bool=false)->Bool {
+    guard isSelectable,!hasMarkedText(),selectedRanges.count == 1 else {return false}
+    let range=selectedRange(),length=(string as NSString).length
+    guard range.location != NSNotFound,range.location <= length,range.length <= length-range.location else {return false}
+    // TextKit 2 affinity describes the non-anchored edge of a nonempty
+    // selection. Preserve it when Shift reverses or crosses the anchor.
+    let upstream=selectionAffinity == .upstream
+    let anchor=upstream ? NSMaxRange(range):range.location
+    let head=extending ? (upstream ? range.location:NSMaxRange(range))
+      : (direction == .backward ? range.location:NSMaxRange(range))
+    let destination:Int
+    if !extending,movement == .word,range.length > 0 {
+      destination=head
+    } else if movement == .word {
+      destination=SQLCaretNavigation.wordBoundary(in:string,from:head,direction:direction)
+    } else {
+      destination=SQLCaretNavigation.lineBoundary(in:string,from:head,direction:direction)
+    }
+    dismissSuggestions?();finishUndoInput()
+    let selection=extending ? NSRange(location:min(anchor,destination),length:abs(destination-anchor))
+      : NSRange(location:destination,length:0)
+    setSelectedRange(selection,affinity:extending && destination < anchor ? .upstream:.downstream,stillSelecting:false)
+    scrollRangeToVisible(NSRange(location:destination,length:0))
+    return true
+  }
+  private func handleSQLNavigationKey(_ event:NSEvent)->Bool {
+    guard event.keyCode == 123 || event.keyCode == 124 else {return false}
+    let flags=event.modifierFlags.intersection([.command,.control,.option,.shift])
+    let modifiers=flags.subtracting(.shift)
+    guard modifiers == .option || modifiers == .command else {return false}
+    return navigateSQL(modifiers == .option ? .word:.line,event.keyCode == 123 ? .backward:.forward,extending:flags.contains(.shift))
+  }
+  override func moveWordLeft(_ sender:Any?) {if !navigateSQL(.word,.backward) {super.moveWordLeft(sender)}}
+  override func moveWordRight(_ sender:Any?) {if !navigateSQL(.word,.forward) {super.moveWordRight(sender)}}
+  override func moveWordBackward(_ sender:Any?) {if !navigateSQL(.word,.backward) {super.moveWordBackward(sender)}}
+  override func moveWordForward(_ sender:Any?) {if !navigateSQL(.word,.forward) {super.moveWordForward(sender)}}
+  override func moveWordLeftAndModifySelection(_ sender:Any?) {if !navigateSQL(.word,.backward,extending:true) {super.moveWordLeftAndModifySelection(sender)}}
+  override func moveWordRightAndModifySelection(_ sender:Any?) {if !navigateSQL(.word,.forward,extending:true) {super.moveWordRightAndModifySelection(sender)}}
+  override func moveWordBackwardAndModifySelection(_ sender:Any?) {if !navigateSQL(.word,.backward,extending:true) {super.moveWordBackwardAndModifySelection(sender)}}
+  override func moveWordForwardAndModifySelection(_ sender:Any?) {if !navigateSQL(.word,.forward,extending:true) {super.moveWordForwardAndModifySelection(sender)}}
+  override func moveToBeginningOfLine(_ sender:Any?) {if !navigateSQL(.line,.backward) {super.moveToBeginningOfLine(sender)}}
+  override func moveToEndOfLine(_ sender:Any?) {if !navigateSQL(.line,.forward) {super.moveToEndOfLine(sender)}}
+  override func moveToLeftEndOfLine(_ sender:Any?) {if !navigateSQL(.line,.backward) {super.moveToLeftEndOfLine(sender)}}
+  override func moveToRightEndOfLine(_ sender:Any?) {if !navigateSQL(.line,.forward) {super.moveToRightEndOfLine(sender)}}
+  override func moveToBeginningOfLineAndModifySelection(_ sender:Any?) {if !navigateSQL(.line,.backward,extending:true) {super.moveToBeginningOfLineAndModifySelection(sender)}}
+  override func moveToEndOfLineAndModifySelection(_ sender:Any?) {if !navigateSQL(.line,.forward,extending:true) {super.moveToEndOfLineAndModifySelection(sender)}}
+  override func moveToLeftEndOfLineAndModifySelection(_ sender:Any?) {if !navigateSQL(.line,.backward,extending:true) {super.moveToLeftEndOfLineAndModifySelection(sender)}}
+  override func moveToRightEndOfLineAndModifySelection(_ sender:Any?) {if !navigateSQL(.line,.forward,extending:true) {super.moveToRightEndOfLineAndModifySelection(sender)}}
   private var quoteClosers:[Int:UInt16] = [:]
   private var quoteSource=""
   // Declared native edit ranges distinguish typing from replacing/pasting whole SQL.
@@ -598,6 +647,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     if GridShortcuts.matches(.parameterInfo,event) {requestParameterInfo?();return}
     if isFindShortcut(event) {showSelectionFind();return}
     if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control, event.charactersIgnoringModifiers?.lowercased() == "a" { selectAll(nil); return }
+    if handleSQLNavigationKey(event) {return}
     if suggestionKey?(event) == true { return }
     if event.keyCode == 49 && event.modifierFlags.contains(.control), let requestSuggestions { requestSuggestions(); return }
     if event.modifierFlags.contains([.command,.option]), event.keyCode == 33 { toggleOutline?(); return }
@@ -1178,7 +1228,7 @@ private struct SQLParameterHelp:View {
         let call=await Task.detached(priority:.userInitiated) {SQLRoutineCall.context(source:source,caret:caret,catalog:catalog)}.value
         guard let self else {return}
         guard !Task.isCancelled,parameterGeneration == generation,editor.string == source,editor.selectedRange().location == caret,document.database == db,document.server === server,server.generation == serverGeneration else {return}
-        guard let call else {parameterCall=nil;parameterPopover.close();return}
+        guard let call else {parameterCall=nil;parameterValues=[];parameterStatus=nil;parameterPopover.close();return}
         parameterCall=call
         let key=server.id.uuidString+"|"+db+"|"+serverGeneration.uuidString+"|"+call.key
         if let cached=parameterCache[key],Date().timeIntervalSince(cached.0)<300 {
