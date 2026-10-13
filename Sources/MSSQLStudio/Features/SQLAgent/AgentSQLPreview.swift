@@ -16,4 +16,3 @@ struct AgentSQLPreview:NSViewRepresentable {
     text.backgroundColor=StudioTheme.canvas
   }
 }
-

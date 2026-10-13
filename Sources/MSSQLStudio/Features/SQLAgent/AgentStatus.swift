@@ -13,4 +13,3 @@ struct AgentStatus:View {
   }
   private var label:String {switch status {case 0:"Failed";case 1:"Succeeded";case 2:"Retry";case 3:"Canceled";case 4:"Running";default:"—"}}
 }
-

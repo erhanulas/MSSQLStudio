@@ -33,7 +33,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   var savedExpanded: [TreeNode] = []
   var savedTreeSelection: TreeNode?
   var savedTreeOrigin = NSPoint.zero
-  var searchResults: [TreeNode]? 
+  var searchResults: [TreeNode]?
   let explorerSearchController = ExplorerSearchController()
   let explorerToggle = StudioToolbarButton(symbol: "sidebar.left", label: "Object Explorer’ı Göster / Gizle", tone: .neutral)
   let tabs = QueryTabStrip()
@@ -814,4 +814,3 @@ struct WelcomeView: View {
     }.frame(maxWidth: .infinity, maxHeight: .infinity).studioPanel()
   }
 }
-

@@ -169,4 +169,3 @@ extension View {
       .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: StudioTheme.border)))
   }
 }
-

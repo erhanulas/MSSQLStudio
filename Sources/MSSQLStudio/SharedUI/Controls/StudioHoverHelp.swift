@@ -65,4 +65,3 @@ import SwiftUI
     panel = nil; source = nil; visibleTitle = nil; visibleDetail = nil
   }
 }
-

@@ -56,4 +56,3 @@ struct AgentActionPanel:View {
     }
   }
 }
-

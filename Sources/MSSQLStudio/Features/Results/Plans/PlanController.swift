@@ -110,5 +110,3 @@ final class PlanController: NSViewController, NSOutlineViewDataSource, NSOutline
     }
   }
 }
-
-

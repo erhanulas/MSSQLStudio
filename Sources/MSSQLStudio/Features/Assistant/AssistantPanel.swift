@@ -64,4 +64,3 @@ struct AssistantPanel: View {
     }.padding(20).studioPanel().onDisappear { task?.cancel() }
   }
 }
-

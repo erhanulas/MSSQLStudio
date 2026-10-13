@@ -19,4 +19,3 @@ import SwiftUI
     return result
   }
 }
-

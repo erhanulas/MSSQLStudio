@@ -83,4 +83,3 @@ struct StructureObjectsPanel:View {
     } catch { self.error=error.localizedDescription }
   }
 }
-

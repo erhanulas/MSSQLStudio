@@ -128,4 +128,3 @@ import UniformTypeIdentifiers
   }
   override func draggingEnded(_ sender: NSDraggingInfo) { indicator.isHidden = true }
 }
-

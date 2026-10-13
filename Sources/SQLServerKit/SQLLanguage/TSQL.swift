@@ -563,4 +563,3 @@ extension TSQL {
     }
   }
 }
-

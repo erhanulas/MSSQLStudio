@@ -213,4 +213,3 @@ struct AgentPropertiesPanel:View {
     else {stage {try SQLAgent.notifications(jobID:job.id,emailLevel:emailLevel,operatorName:emailOperator,eventLogLevel:eventLogLevel,deleteLevel:deleteLevel)}}
   }
 }
-

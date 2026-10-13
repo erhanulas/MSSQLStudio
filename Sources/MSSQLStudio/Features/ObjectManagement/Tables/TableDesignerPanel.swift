@@ -89,4 +89,3 @@ struct TableDesignerPanel: View {
     catch { preview=""; self.error=error.localizedDescription }
   }
 }
-

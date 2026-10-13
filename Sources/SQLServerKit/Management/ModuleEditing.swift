@@ -26,4 +26,3 @@ public enum ModuleEditing {
     return "@@ Satır \(prefix + 1) · −\(a.count-prefix-suffix) / +\(b.count-prefix-suffix) @@\n" + (old + new).joined(separator: "\n") + "\n(Önizleme: her tarafta en fazla 1.000 satır; aradaki değişmeyen satırlar da blokta olabilir.)"
   }
 }
-

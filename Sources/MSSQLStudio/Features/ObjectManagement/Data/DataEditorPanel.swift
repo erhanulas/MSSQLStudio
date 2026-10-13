@@ -96,4 +96,3 @@ struct DataEditorPanel:View {
     catch { self.error=error.localizedDescription; ready=false }
   }
 }
-

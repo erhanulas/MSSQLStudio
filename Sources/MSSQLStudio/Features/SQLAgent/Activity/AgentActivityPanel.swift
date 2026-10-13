@@ -87,4 +87,3 @@ struct AgentActivityPanel:View {
     } catch is CancellationError {} catch {service="Servis durumu okunamadı: "+error.localizedDescription}
   }
 }
-

@@ -448,4 +448,3 @@ private struct SettingsThemePreview: View {
       .accessibilityElement(children: .ignore).accessibilityLabel(dark ? "Studio Koyu tema önizlemesi" : "Studio Açık tema önizlemesi")
   }
 }
-

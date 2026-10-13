@@ -186,4 +186,3 @@ import SwiftUI
   }
   func windowShouldClose(_ sender:NSWindow) -> Bool {dismiss();return false}
 }
-

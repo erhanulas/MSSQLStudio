@@ -173,4 +173,3 @@ import SQLServerKit
     table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false); table.scrollRowToVisible(row)
   }
 }
-

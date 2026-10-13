@@ -60,4 +60,3 @@ struct ViewDesignerPanel:View {
     error=""; ready.toggle(); ready=true
   }
 }
-

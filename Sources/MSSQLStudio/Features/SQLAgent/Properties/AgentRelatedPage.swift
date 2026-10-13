@@ -24,4 +24,3 @@ struct AgentRelatedPage:View {
     }
   }
 }
-

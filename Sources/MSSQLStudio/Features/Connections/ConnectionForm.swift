@@ -375,4 +375,3 @@ struct ConnectionForm: View {
     }
   }
 }
-

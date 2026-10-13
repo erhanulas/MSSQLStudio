@@ -68,4 +68,3 @@ struct HistoryPanel: View {
       .onReceive(NotificationCenter.default.publisher(for: .init("queryHistoryChanged"))) { _ in records = state.history }
   }
 }
-

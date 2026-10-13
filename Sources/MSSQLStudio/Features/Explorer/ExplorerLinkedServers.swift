@@ -116,5 +116,3 @@ extension WorkbenchController {
     contextNode=node;objectProperties()
   }
 }
-
-
