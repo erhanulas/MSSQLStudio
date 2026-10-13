@@ -71,13 +71,14 @@ struct SQLIntelligenceTests {
       CatalogSymbol(schema:"dbo",name:"CustomerProcedure",columns:[],kind:"SQL_STORED_PROCEDURE")]))
     func result(_ sql:String) throws -> SQLIntelligence.Analysis {try SQLIntelligence.analyze(source:sql,caret:(sql as NSString).length,catalog:catalog,verified:true,automaticAliases:true,automaticNoLock:true)}
     let items=try result("EXEC CUSTOMER").suggestions
-    #expect(items.count == 6 && items.first?.kind == .procedure)
+    #expect(items.count == 3 && items.first?.kind == .procedure)
     #expect(items.dropFirst().allSatisfy {$0.kind == .function && !$0.text.contains(" AS ") && !$0.text.contains("NOLOCK")})
-    #expect(try result("EXECUTE dbo.Customer").suggestions.count == 5)
-    #expect(try result("EXEC @status = [other].Customer").suggestions.map(\.text) == ["[ufn_GetCustomer4]"])
+    #expect(try result("EXECUTE dbo.Customer").suggestions.count == 3)
+    #expect(try result("EXEC @status = [other].Customer").suggestions.isEmpty)
     #expect(try result("EXEC dbo.ufn").suggestions.first?.text == "[ufn_GetCustomer0]")
-    #expect(try result("EXEC ").suggestions.count == 6)
-    for sql in ["EXEC @sql", "EXEC ('Customer", "-- EXEC Customer", "EXEC OtherDB.dbo.Customer", "SELECT * FROM ufn"] {
+    #expect(try result("EXEC ").suggestions.count == 3)
+    #expect(try result("SELECT * FROM ufn").suggestions.map(\.text)==["[dbo].[ufn_GetCustomer1]()","[dbo].[ufn_GetCustomer2]()","[other].[ufn_GetCustomer4]()"])
+    for sql in ["EXEC @sql", "EXEC ('Customer", "-- EXEC Customer", "EXEC OtherDB.dbo.Customer"] {
       #expect(try result(sql).suggestions.isEmpty, "\(sql)")
     }
     let crowded=SQLIntelligence.Catalog(snapshot:.init(symbols:(0..<200).map {CatalogSymbol(schema:"dbo",name:String(format:"ufn_%03d",$0),columns:[],kind:"SQL_SCALAR_FUNCTION")}))

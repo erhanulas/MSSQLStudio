@@ -78,12 +78,18 @@ import Testing
     let (window, host) = window(.updates); defer { window.close() }
     try await settle(host)
     func repositoryField() throws -> NSTextField {
-      try #require(descendants(host.view).compactMap { $0 as? NSTextField }.first { $0.isEditable && !$0.isHiddenOrHasHiddenAncestor })
+      try #require(descendants(host.view).compactMap { $0 as? NSTextField }.first { $0.isEditable && $0.placeholderString=="kullanıcı/depo veya GitHub depo adresi" })
     }
     let field = try repositoryField()
     #expect(field.stringValue == "erhanulas/MSSQLStudio")
     field.stringValue = "team/unsaved-repository"
     field.delegate?.controlTextDidChange?(Notification(name: NSControl.textDidChangeNotification, object: field))
+    let search=try #require(descendants(host.view).compactMap {$0 as? NSTextField}.first {$0.isEditable && $0.placeholderString=="Tüm ayarlarda ara…"})
+    for query in ["parola","tamamlama","", "bulunmayan ayar xyz", ""] {
+      search.stringValue=query;search.delegate?.controlTextDidChange?(Notification(name:NSControl.textDidChangeNotification,object:search))
+      try await settle(host)
+      #expect(try repositoryField().stringValue=="team/unsaved-repository")
+    }
     let tabs = try #require(descendants(host.view).compactMap { $0 as? NSTabView }.first)
     for section in [0, 1, 2, 3, 5] {
       tabs.selectTabViewItem(at: section)
@@ -94,5 +100,17 @@ import Testing
     try await settle(host)
     #expect(try repositoryField().stringValue == "team/unsaved-repository")
     #expect(UserDefaults.standard.string(forKey: "githubUpdateRepository") == "erhanulas/MSSQLStudio")
+  }
+  @Test func globalSearchFindsEverySectionAndTurkishAliasesWithoutChangingPreferences() {
+    let old=UserDefaults.standard.object(forKey:"ssmsTheme")
+    #expect(SettingsSearch.results("KOSELI PARANTEZ").contains {$0.id=="brackets"})
+    #expect(SettingsSearch.results("anahtar zinciri").contains {$0.section == .security})
+    #expect(SettingsSearch.results("Saklama SÜRESİ").map(\.id)==["retention"])
+    #expect(SettingsSearch.results("yorum").contains {$0.id=="shortcut.comment"})
+    #expect(SettingsSearch.results("guncelleme").contains {$0.section == .updates})
+    #expect(SettingsSearch.results("   ").isEmpty && SettingsSearch.results("xyz missing setting").isEmpty)
+    #expect(Set(SettingsSearch.entries.map(\.section))==Set(SettingsSection.allCases))
+    #expect(Set(SettingsSearch.entries.map(\.id)).count==SettingsSearch.entries.count)
+    #expect(UserDefaults.standard.object(forKey:"ssmsTheme") as? String == old as? String)
   }
 }

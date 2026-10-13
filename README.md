@@ -4,7 +4,7 @@ SQL Server için native macOS çalışma alanı. Solda Object Explorer, ortada S
 
 ## Kurulum ve başlangıç
 
-[Son GitHub yayınından](https://github.com/erhanulas/MSSQLStudio/releases/latest) PKG'yi indirip uygulama kapalıyken kurun. Hedef `/Applications/MSSQLStudio.app` konumudur. Son doğrulanmış sürüm **0.2.52 / build 53**.
+[Son GitHub yayınından](https://github.com/erhanulas/MSSQLStudio/releases/latest) PKG'yi indirip uygulama kapalıyken kurun. Hedef `/Applications/MSSQLStudio.app` konumudur. Güncel yayın için GitHub Releases sayfasını ve uygulamanın Hakkında ekranını kullanın.
 
 Microsoft ODBC Driver 18, unixODBC ve OpenSSL 3 ayrı kurulur; sürücüler app paketinde dağıtılmaz. [Microsoft macOS kurulum yönergesi](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos) kullanılabilir. Apple Silicon bağımlılık yolları `/opt/homebrew` altındadır.
 
@@ -20,6 +20,12 @@ Ayarlar (⌘,) altı sekmede tema, editör, kısayollar, yerel kayıt, güncelle
 
 ## Kapsam ve sınırlar
 
+Editörde tanımlanmamış `@parametreler` kırmızı görünür. Seçili satırlarda `⌘/` yorum yapar/kaldırır; `⌥⌘/` yalnız yorumu kaldırır. Seçimin yanındaki düğme aynı işlemi sunar; kısayollar Ayarlar’dan değiştirilebilir. Ayarlar’ın üstündeki arama tüm sekmelerdeki seçenekleri bulup ilgili ayara götürür.
+
+Türkçe Q klavyede `/` için `⇧7` kullanıldığından yorum aç/kapat `⌘⇧7`, yalnız yorum kaldırma `⌥⌘⇧7` ile de çalışır.
+
+DDL tamamlama `SELECT dbo.fonksiyon(...)`, `SELECT ... FROM tablo/view/tablo_döndüren_fonksiyon(...)` ve `EXEC prosedür` bağlamlarını ayırır. Fonksiyon kabulünde eksik çağrı parantezleri eklenir ve imleç argüman alanına gelir; mevcut parantezler korunur.
+
 - DDL indeksli T-SQL editörü, blok katlama, ortak SQL renkleri, kullanılmayan DECLARE vurgusu; disk destekli salt okunur sonuç grid'i, filtre/sıralama/sayfalama ve CSV/JSON dışa aktarma.
 - Tablo/view/index/constraint/trigger/routine/synonym ve izin scriptleri, sınırlı ayrı veri editörü; SQL Agent özellikleri, T-SQL adımları, zamanlamalar, geçmiş ve Activity Monitor.
 - Linked Server sağlayıcısının sunduğu katalog/table rowset nesneleri ve kolonları; uzak tasarım/rutin yönetimi yoktur.
@@ -31,9 +37,10 @@ Yayınlar sabit **kişisel self-signed sertifika** kullanır; Apple Developer ID
 
 ## Derleme ve test
 
-Xcode projesi `MSSQLStudio.xcodeproj`; core paket `SQLServerKit` ve uygulama SwiftPM hedefi `MSSQLStudio`'dur.
+Xcode projesi `MSSQLStudio.xcodeproj`; uygulama hedefi `MSSQLStudio`, veritabanı/core hedefi `SQLServerKit`, bağımsız SQL metin hedefi `SQLTextCore`'dur. Kaynaklar özellik klasörlerine ayrılmıştır; sorumluluk ve sahiplik haritası [geliştirme rehberindedir](AGENTS.md#platform-ve-kaynak-haritası).
 
 ```sh
+python3 scripts/check-architecture.py
 ./scripts/test.sh
 xcodebuild -project MSSQLStudio.xcodeproj -scheme MSSQLStudio -configuration Release -derivedDataPath /tmp/MSSQLStudio-check CODE_SIGNING_ALLOWED=NO build
 ```

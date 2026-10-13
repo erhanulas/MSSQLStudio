@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
+python3 "$project_dir/scripts/check-architecture.py"
 test_dir="$(mktemp -d /tmp/MSSQLStudio-tests.XXXXXX)"
 trap 'rm -rf "$test_dir"' EXIT
 swift_tool="$(xcrun --find swift)"

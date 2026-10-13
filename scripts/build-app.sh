@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
+python3 "$project_dir/scripts/check-architecture.py"
 output_dir="${1:-$project_dir/releases}"
 build_dir="$(mktemp -d /tmp/MSSQLStudio-build.XXXXXX)"
 trap 'rm -rf "$build_dir"' EXIT

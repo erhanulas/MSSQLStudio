@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.2.103",
+    "date": "2026-10-13",
+    "title": "Akıllı SQL editörü ve modüler mimari",
+    "changes": [
+      "SQL editörü, DECLARE veya rutin parametresi olarak tanımlanmamış @değişkenleri kırmızı ve açıklamalı gösterir. GO sınırları, sistem değişkenleri, yorumlar ve metin değerleri dikkate alınır.",
+      "Ayarlar’ın genel araması bütün sekmelerdeki seçenekleri bulur ve ilgili kontrole götürür; kaydedilmemiş girdiler korunur.",
+      "Seçili SQL satırlarını yorum yapmak ve yorumu kaldırmak için ⌘/ ve ⌥⌘/ kısayolları, menü ve seçim yanındaki düğme eklendi. Türkçe Q klavye desteklenir; işlem tek adımda geri alınabilir.",
+      "DDL tamamlaması SELECT ifadeleri, FROM/JOIN tablo ve view kaynakları, tablo döndüren fonksiyonlar ve EXEC prosedürlerini bağlamlarına göre ayırır. Fonksiyon kabulünde eksik parantezler eklenir ve imleç argüman alanına gelir.",
+      "Explorer sağ tık menüsündeki mükerrer ve etkisiz işlemler temizlendi; yenileme ve owning view düzenleme hedefleri düzeltildi.",
+      "Kaynak kodu özellik, ortak görünüm ve bağımsız SQL metin bileşenlerine ayrıldı. Geliştirme rehberi yenilendi; mimari ve kaynak eşliği denetimleri derleme/test akışına eklendi."
+    ]
+  },
+  {
     "version": "0.2.102",
     "date": "2026-10-13",
     "title": "Explorer ve pencere deneyimi",
