@@ -4,6 +4,9 @@ import SwiftUI
 
 @MainActor final class DefinitionIndexStorageModel: ObservableObject {
   @Published var quotaMB = 1024
+  @Published var automaticGrowth = false
+  @Published var incrementMB = 1024
+  @Published var maximumMB = 4096
   @Published private(set) var usage: DefinitionIndexUsage?
   @Published private(set) var busy = false
   @Published private(set) var error = ""
@@ -32,6 +35,10 @@ import SwiftUI
       let value = try await disk.definitionStorageUsage()
       usage = value
       if !loaded {
+        let growth = try await disk.definitionGrowth()
+        automaticGrowth = growth.enabled
+        incrementMB = growth.incrementBytes / 1_048_576
+        maximumMB = growth.maximumBytes / 1_048_576
         quotaMB = value.quotaBytes / 1_048_576
         loaded = true
       }
@@ -40,14 +47,16 @@ import SwiftUI
   }
   func apply() async -> Bool {
     guard !busy else { return false }
-    guard (128...65_536).contains(quotaMB) else {
-      error = "Kota 128–65.536 MB arasında olmalı."
+    guard (128...65_536).contains(quotaMB), (128...65_536).contains(incrementMB),
+      (128...65_536).contains(maximumMB), !automaticGrowth || maximumMB >= quotaMB else {
+      error = "Kota/artış 128–65.536 MB arasında; üst sınır mevcut kotadan küçük olmamalı."
       return false
     }
     busy = true
     defer { busy = false }
     do {
-      usage = try await disk.setDefinitionQuota(quotaMB * 1_048_576)
+      usage = try await disk.setDefinitionStorage(quota: quotaMB * 1_048_576,
+        growth: .init(enabled: automaticGrowth, incrementBytes: incrementMB * 1_048_576, maximumBytes: maximumMB * 1_048_576))
       loaded = true
       error = ""
       return true

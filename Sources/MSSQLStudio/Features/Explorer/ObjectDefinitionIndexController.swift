@@ -157,60 +157,33 @@ import SQLServerKit
     let stamps = try await disk.definitionStamps(scope: scope)
     activities[db]?.total = rows.values.count
     notify(db)
-    var ids = Set<Int>()
+    let entries = try await Task.detached(priority: .utility) {
+      try rows.values.map { try DefinitionIndexEntry($0) }
+    }.value
+    try check(token)
+    let ids = Set(entries.map { $0.object.objectID })
+    guard ids.count == entries.count else { throw SQLFailure("Yinelenen tanım kimliği.") }
+    let changed = entries.filter { force || stamps[$0.object.objectID] != $0.stamp }
+    var processed = entries.count - changed.count
+    activities[db]?.processed = processed
     var unavailable = 0
-    for (offset, row) in rows.values.enumerated() {
-      if offset % 100 == 0 { await Task.yield() }
-      try check(token)
-      activities[db]?.processed = offset
-      if Date().timeIntervalSince(lastProgress) >= 1 {
-        lastProgress = Date()
-        notify(db, progress: true)
-      }
-      guard row.count == 6, let raw = row[0], let id = Int(raw), id > 0, let schema = row[1],
-        let name = row[2], let type = row[3], let modified = row[4], ids.insert(id).inserted
-      else { throw SQLFailure("Tanım envanteri doğrulanamadı.") }
-      if !force,
-        stamps[id]
-          == IndexedObjectDefinition.stamp(
-            schema: schema, name: name, type: type, modified: modified)
-      {
-        continue
-      }
-      let object = SchemaObject(
-        key: .init(schema: schema, name: name, databaseTrigger: type == "TRD"), objectID: id,
-        type: type, digest: nil)
-      let fetched = Date()
-      var detailLimits = Limits()
-      detailLimits.timeout = 15
-      detailLimits.totalBytes = 8_388_608
-      let output = try await read(SchemaComparison.contentQuery(object), detailLimits)
-      try check(token)
-      guard !output.partial, !output.stoppedEarly, !output.results.contains(where: \.truncated)
-      else { throw SQLFailure("Nesne tanımı kısmi; önceki kayıt korundu.") }
-      do {
-        let content = try await Task.detached(priority: .utility) {
-          try SchemaComparison.decodeContent(output, object: object)
-        }.value
-        try await save(
-          .init(
-            id: id, schema: schema, name: name, type: type, sql: content.sql,
-            original: content.definition, parentID: row[5].flatMap(Int.init),
-            modified: IndexedObjectDefinition.stamp(
-              schema: schema, name: name, type: type, modified: modified), fetchedAt: fetched),
-          database: db, token: token)
-      } catch {
+    // Modules use a set-based catalog query. Complex table metadata shares one batch
+    // while retaining the existing seven-result decoder and its safety checks.
+    for module in [true, false] {
+      let subset = changed.filter { $0.isModule == module }
+      let size = module ? 64 : 8
+      for start in stride(from: 0, to: subset.count, by: size) {
         try check(token)
-        unavailable += 1
-        // An unreadable definition must not keep an old accessible body.
-        if let lease {
-          try await disk.removeDefinition(
-            scope: scope, id: id, owner: server.id, lease: lease, generation: generation,
-            before: Date())
+        let page = Array(subset[start..<min(start + size, subset.count)])
+        unavailable += try await fetchPage(page, database: db, scope: scope,
+          generation: generation, token: token, read: read)
+        processed += page.count
+        activities[db]?.processed = processed
+        if Date().timeIntervalSince(lastProgress) >= 1 {
+          lastProgress = Date(); notify(db, progress: true)
         }
+        await Task.yield()
       }
-      // One bounded metadata request at a time, yielding between objects.
-      try await Task.sleep(for: .milliseconds(25))
     }
     try check(token)
     if let lease {
@@ -228,6 +201,38 @@ import SQLServerKit
     notify(db)
     synchronizedAt[db] = Date()
     status = "\(db) · Eşitleme tamamlandı · \(unavailable) okunamadı"
+  }
+  private func fetchPage(
+    _ entries: [DefinitionIndexEntry], database: String, scope: String, generation: UUID, token: UUID,
+    read: @MainActor (String, Limits) async throws -> Execution
+  ) async throws -> Int {
+    try check(token)
+    let fetched = Date()
+    var limits = Limits(); limits.timeout = 30; limits.totalBytes = 8_388_608
+    let output = try await read(DefinitionIndexBatch.query(entries), limits)
+    try check(token)
+    if output.partial || output.stoppedEarly || output.results.contains(where: \.truncated) {
+      // Byte-heavy pages split adaptively. Never publish a partially fetched body.
+      guard entries.count > 1 else { throw SQLFailure("Nesne tanımı kısmi; önceki kayıt korundu.") }
+      let middle = entries.count / 2
+      let first = try await fetchPage(Array(entries[..<middle]), database: database, scope: scope,
+        generation: generation, token: token, read: read)
+      return first + (try await fetchPage(Array(entries[middle...]), database: database, scope: scope,
+        generation: generation, token: token, read: read))
+    }
+    let decoded = try await Task.detached(priority: .utility) {
+      try DefinitionIndexBatch.decode(output, entries: entries, fetched: fetched)
+    }.value
+    try check(token)
+    guard let server, let lease, server.allowsCatalogIndex(database) else { throw CancellationError() }
+    try await disk.saveDefinitions(decoded.values, owner: server.id, lease: lease,
+      scope: scope, generation: generation)
+    for id in decoded.unavailable {
+      try check(token)
+      try await disk.removeDefinition(scope: scope, id: id, owner: server.id, lease: lease,
+        generation: generation, before: fetched)
+    }
+    return decoded.unavailable.count
   }
   private func notify(_ database: String, progress: Bool = false) {
     guard let server else { return }

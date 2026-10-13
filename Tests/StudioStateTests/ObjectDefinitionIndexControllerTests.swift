@@ -38,7 +38,7 @@ import Testing
       }
       if sql.contains("m.definition") {
         reads += 1
-        return output([[body, "1", "1", "0", nil]])
+        return output([["9", body, "1", "1", "0", nil]])
       }
       if sql.contains("OBJECT_DEFINITION") {
         reads += 1
@@ -116,6 +116,61 @@ import Testing
     let scope = CatalogDiskIndex.scope(profile: profile, database: "master")
     #expect(try await disk.definition(scope: scope, id: 9) == nil)
     #expect(server.definitionIndex.status != "master · 1 tanım · 0 okunamadı")
+  }
+  @Test func partialPageSplitsWithoutPublishingPartialBodies() async throws {
+    let url = URL(fileURLWithPath: "/tmp/DefinitionSplit-" + UUID().uuidString).appendingPathComponent("index.sqlite")
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    let disk = CatalogDiskIndex(url: url)
+    let profile = ServerProfile(indexObjectDefinitions: true)
+    let server = ConnectedServer(profile: profile, password: "", diskIndex: disk)
+    server.databases = [.init(id: 1, name: "master")]
+    var reads = 0
+    server.catalogFixture = { sql in
+      if sql.contains("StudioObjectDefinitionInventory") {
+        return output([["1", "dbo", "P1", "P", "1", "0"], ["2", "dbo", "P2", "P", "1", "0"]])
+      }
+      reads += 1
+      if sql.contains("IN (1,2)") { var partial = output([["1", "incomplete", "1", "1", "0", nil]]); partial.partial = true; return partial }
+      let id = sql.contains("IN (1)") ? "1" : "2"
+      return output([[id, "CREATE PROC dbo.P" + id + " AS SELECT 1;", "1", "1", "0", nil]])
+    }
+    await server.definitionIndex.configure(); server.definitionIndex.refresh()
+    try await wait(server.definitionIndex)
+    #expect(reads == 3)
+    let scope = CatalogDiskIndex.scope(profile: profile, database: "master")
+    #expect(try await disk.definitionStatus(scope: scope).count == 2)
+    #expect(try await disk.definition(scope: scope, id: 1)?.sql.contains("incomplete") == false)
+  }
+  @Test func sevenThousandModulesUseBoundedPagesAndSkipUnchangedBodies() async throws {
+    let url = URL(fileURLWithPath: "/tmp/Definition7000-" + UUID().uuidString).appendingPathComponent("index.sqlite")
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    let disk = CatalogDiskIndex(url: url)
+    let profile = ServerProfile(indexObjectDefinitions: true)
+    let server = ConnectedServer(profile: profile, password: "", diskIndex: disk,
+      objectIndexService: CatalogIndexService(index: disk), completionIndexService: SQLCatalogService(index: disk))
+    server.databases = [.init(id: 1, name: "master")]
+    var reads = 0
+    server.catalogFixture = { sql in
+      if sql.contains("StudioObjectDefinitionInventory") {
+        return output((1...7000).map { [String($0), "dbo", "P" + String($0), "P", "1", "0"] })
+      }
+      reads += 1
+      let list = sql.components(separatedBy: "IN (").last!.components(separatedBy: ")").first!
+      let ids = list.split(separator: ",").map(String.init)
+      #expect(ids.count <= 64)
+      return output(ids.map { [$0, "CREATE PROCEDURE dbo.P" + $0 + " AS SELECT 1;", "1", "1", "0", nil] })
+    }
+    let began = Date()
+    await server.definitionIndex.configure(); server.definitionIndex.refresh()
+    for _ in 0..<6000 where server.definitionIndex.isRefreshing { try await Task.sleep(for: .milliseconds(5)) }
+    #expect(!server.definitionIndex.isRefreshing)
+    #expect(reads == 110)
+    let scope = CatalogDiskIndex.scope(profile: profile, database: "master")
+    #expect(try await disk.definitionStatus(scope: scope).count == 7000)
+    print("Definition7000: \(Date().timeIntervalSince(began)) seconds, \(reads) detail queries")
+    await server.definitionIndex.configure(); server.definitionIndex.refresh()
+    try await wait(server.definitionIndex)
+    #expect(reads == 110)
   }
   @Test func offlinePreviewUsesReadOnlyNativeSQLAndFitsLightAndDark() async throws {
     _ = NSApplication.shared

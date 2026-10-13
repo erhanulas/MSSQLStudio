@@ -59,6 +59,8 @@ Eski mimari/tasarım/imzalama belgeleri AGENTS.md içinde birleştirildi; öncek
 
 Bağlantı ayarlarının **Gelişmiş** bölümündeki **CREATE / ALTER tanımlarını indeksle** seçeneği, seçili veritabanlarının nesne kodlarını bu Mac’te saklar (varsayılan kapalı). Bağlıyken tanım daima sunucudan okunur ve indeks güncellenir. Explorer bağlantısı kapalıyken nesneye çift tıklayarak son indekslenmiş tanımı tarih bilgisiyle salt okunur görebilirsiniz. Seçeneği kapatmak tanım indeksini; Explorer’dan kaldırmak bağlantının yerel indekslerini temizler. Kod içinde kelime araması sonraki aşamadır.
 
-Tanım indeksi kotası varsayılan **1 GB**’tır. **Ayarlar → Çalışma Alanı → Nesne tanım indeksi** altında 128 MB–64 GB arasında değiştirip Uygula ile kaydedebilirsiniz. Ayarlar başlığı kullanılan alanı ve doluluk yüzdesini gösterir. Kota tüm bağlantılar için ortaktır; dolduğunda en eski tanımlar temizlenir. Ölçüm tanım verisidir, SQLite dosya/WAL ve diğer katalog alanlarını kapsamaz.
+Tanım indeksi kotası varsayılan **1 GB**’tır. **Ayarlar → Çalışma Alanı → Nesne tanım indeksi** altında 128 MB–64 GB arasında MB değerini elle girip Uygula ile kaydedebilirsiniz. İsteğe bağlı **Kota dolunca otomatik artır** seçeneğinde artış miktarını ve üst sınırı da elle belirleyebilirsiniz. Ayarlar başlığı kullanılan alanı ve doluluk yüzdesini gösterir. Kota tüm bağlantılar için ortaktır; otomatik artış kapalıyken veya üst sınıra ulaşıldığında en eski tanımlar temizlenir. Ölçüm tanım verisidir, SQLite dosya/WAL ve diğer katalog alanlarını kapsamaz.
 
 Veritabanı adının yanındaki indeks düğmesinde **Nesne içerikleri** durumu da bulunur: kayıtlı tanım sayısı, son eşitleme/okuma zamanı, ilerleme ve varsa hata/okunamayan nesneler gösterilir. Çevrimdışıyken son disk durumu korunur.
+
+Sorgu geçmişinin saklama gününü **Ayarlar → Çalışma Alanı → Geçmiş ve kurtarma** içinde elle girebilirsiniz (1–3650 gün).

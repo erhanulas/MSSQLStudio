@@ -241,9 +241,20 @@ struct SettingsPanel: View {
         settingsPage(.workspace, subtitle: "Bu Mac’te tutulan sorgu geçmişini ve oturum kurtarmayı yönetin.") {
           settingsCard("Nesne tanım indeksi",icon:"externaldrive") {
             StudioFormField("Toplam disk kotası") {
-              Stepper(value:$definitionStorage.quotaMB,in:128...65_536,step:128) {Text("\(definitionStorage.quotaMB) MB").monospacedDigit()}
+              HStack {
+                SettingsIntegerInput("MB", value: $definitionStorage.quotaMB)
+                Text("MB").foregroundStyle(.secondary)
+                Stepper("Kota", value: $definitionStorage.quotaMB, in: 128...65_536, step: 128).labelsHidden()
+              }
                 .accessibilityIdentifier("definitionIndexQuota")
             }.id("definitionQuota")
+            settingsToggle("Kota dolunca otomatik artır", detail: "Yalnız belirlediğiniz üst sınıra kadar büyür.", value: $definitionStorage.automaticGrowth)
+            StudioFormField("Artış miktarı") {
+              HStack { SettingsIntegerInput("MB", value: $definitionStorage.incrementMB); Text("MB") }
+            }.disabled(!definitionStorage.automaticGrowth)
+            StudioFormField("Otomatik üst sınır") {
+              HStack { SettingsIntegerInput("MB", value: $definitionStorage.maximumMB); Text("MB") }
+            }.disabled(!definitionStorage.automaticGrowth)
             ProgressView(value:definitionStorage.usage?.fraction ?? 0).accessibilityLabel("Tanım indeksi doluluk oranı")
             HStack {
               Text(definitionStorage.usageText).monospacedDigit()
@@ -253,12 +264,16 @@ struct SettingsPanel: View {
             }.font(.caption)
             if let usage=definitionStorage.usage {Text("\(usage.count) nesne tanımı · Tüm bağlantıların ortak kotası").font(.caption).foregroundStyle(.secondary)}
             if !definitionStorage.error.isEmpty {Label(definitionStorage.error,systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange)}
-            settingsNote("Varsayılan 1 GB (1024 MB). Kota Uygula ile kaydedilir; küçültülürse en eski tanımlar temizlenir. Doluluk tanım verisini ölçer; SQLite dosya/WAL ve diğer katalog alanları dahil değildir. İndeksleme bağlantı ayarlarından açılır.",icon:"info.circle")
+            settingsNote("Varsayılan 1 GB (1024 MB). Kota ve otomatik artış Uygula ile kaydedilir. Üst sınır dolunca veya kota küçültülürse en eski tanımlar temizlenir. Otomatik artış fiziksel diskte boş alan oluşturmaz. Doluluk tanım verisini ölçer; SQLite dosya/WAL ve diğer katalog alanları dahil değildir. İndeksleme bağlantı ayarlarından açılır.",icon:"info.circle")
           }
           settingsCard("Geçmiş ve kurtarma", icon: "clock.arrow.circlepath") {
             settingsToggle("Sorgu geçmişini sakla", detail: "Çalıştırılan sorgular Timeline üzerinden yeniden açılabilir.", value: $history)
             StudioFormField("Saklama süresi") {
-              Stepper(value: $historyDays, in: 1...3650) { Text("\(historyDays) gün").monospacedDigit() }
+              HStack {
+                SettingsIntegerInput("Gün", value: $historyDays).accessibilityIdentifier("historyRetentionDays")
+                Text("gün").foregroundStyle(.secondary)
+                Stepper("Saklama süresi", value: $historyDays, in: 1...3650).labelsHidden()
+              }
             }.disabled(!history).id("retention")
             settingsNote("Varsayılan 30 gün. Süresi dolan kayıtlar açılışta, yeni sorguda ve Uygula ile temizlenir. Üst sınır 16 MB / 20.000 kayıttır.", icon: "calendar")
             Divider()
@@ -442,6 +457,7 @@ struct SettingsPanel: View {
   }
   private func applySettings() {
     Task {
+          guard (1...3650).contains(historyDays) else { message = "Saklama süresi 1–3650 gün arasında olmalı."; return }
           let source=updateRepository.trimmingCharacters(in:.whitespacesAndNewlines)
           if !source.isEmpty {
             do {updateRepository=try GitHubUpdateSource.repository(source)}catch {message=error.localizedDescription;return}

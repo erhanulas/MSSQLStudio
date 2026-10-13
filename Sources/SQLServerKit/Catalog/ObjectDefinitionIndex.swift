@@ -179,8 +179,26 @@ extension CatalogDiskIndex {
   public func saveDefinition(
     _ value: IndexedObjectDefinition, owner: UUID, lease: UUID, scope: String, generation: UUID
   ) throws {
+    try saveDefinitions([value], owner: owner, lease: lease, scope: scope, generation: generation)
+  }
+  /// Bounded atomic publication; one quota pass and commit for the whole page.
+  public func saveDefinitions(
+    _ values: [IndexedObjectDefinition], owner: UUID, lease: UUID, scope: String, generation: UUID
+  ) throws {
+    guard values.count <= 200 else { throw SQLFailure("Tanım yazım grubu çok büyük.") }
     try validateDefinitions(owner: owner, lease: lease, scope: scope, generation: generation)
     try registerCatalogOwner(owner, scope: scope)
+    try execute("SAVEPOINT definition_page")
+    do {
+      for value in values { try Task.checkCancellation(); try writeDefinition(value, owner: owner, scope: scope) }
+      try trimDefinitions()
+      try execute("RELEASE definition_page")
+    } catch {
+      try? execute("ROLLBACK TO definition_page"); try? execute("RELEASE definition_page")
+      cachedDefinitionQuota = nil; throw error
+    }
+  }
+  private func writeDefinition(_ value: IndexedObjectDefinition, owner: UUID, scope: String) throws {
     let payload = String(decoding: try JSONEncoder().encode(value), as: UTF8.self)
     guard payload.utf8.count <= 4_194_304 else {
       throw SQLFailure("Nesne tanımı 4 MB indeks sınırını aşıyor.")
@@ -193,7 +211,6 @@ extension CatalogDiskIndex {
         String(value.fetchedAt.timeIntervalSince1970), value.schema, value.name, value.type,
         String(value.parentID ?? 0), value.modified, value.digest,
       ])
-    try trimDefinitions()
   }
 
   public func removeDefinition(

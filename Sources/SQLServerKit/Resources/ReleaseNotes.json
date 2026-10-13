@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.111",
+    "date": "2026-10-14",
+    "title": "Hızlı nesne içeriği eşitleme ve kontrollü kota artışı",
+    "changes": [
+      "Nesne tanımları modüllerde 64’lü set sorguları, tablo ve synonym metadata’sında 8’li SQL gruplarıyla okunur. Büyük yanıtlar daha küçük gruplara bölünür; nesne başına sabit bekleme kaldırıldı. Değişmeyen tanımlar normal yenilemede yeniden indirilmez.",
+      "Tanım indeksinin disk yazımları grup başına atomik yapılır; kota kontrolü ve disk commit maliyeti azaltıldı. İptal, eski yanıt koruması, çevrimdışı salt okunur erişim ve çevrimiçi canlı okuma kuralları korunur.",
+      "Ayarlar → Çalışma Alanı içinde toplam indeks kotası ve sorgu geçmişi saklama günü klavyeden girilebilir. Geçersiz değerler Uygula sırasında reddedilir.",
+      "İsteğe bağlı otomatik kota artışı eklendi. Artış miktarı ve üst sınır MB olarak elle belirlenir; varsayılan kapalıdır. Üst sınıra ulaşılınca en eski kayıtlar temizlenir; doluluk mevcut kotayı gösterir."
+    ]
+  },
+  {
     "version": "0.2.110",
     "date": "2026-10-14",
     "title": "Veritabanı bazında nesne içeriği indeks durumu",

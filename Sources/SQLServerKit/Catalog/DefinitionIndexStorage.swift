@@ -65,13 +65,19 @@ extension CatalogDiskIndex {
     return try definitionStorageUsage()
   }
   func trimDefinitions(quota: Int? = nil) throws {
-    let quota = try quota ?? definitionQuota()
+    var limit = try quota ?? definitionQuota()
+    var checkedGrowth = false
     // O(1) byte counter and an ordered index; bodies are never summed on each save.
     while true {
       let s = try statement("SELECT total FROM source_budget WHERE id=1")
       let bytes = sqlite3_step(s) == SQLITE_ROW ? sqlite3_column_int64(s, 0) : 0
       sqlite3_finalize(s)
-      guard bytes > quota else { return }
+      guard bytes > limit else { return }
+      if quota == nil, !checkedGrowth {
+        limit = try expandedDefinitionQuota(current: limit, used: Int(bytes))
+        checkedGrowth = true
+        if bytes <= limit { return }
+      }
       try execute(
         "DELETE FROM source_definitions WHERE (scope,id)=(SELECT scope,id FROM source_definitions ORDER BY fetched LIMIT 1)"
       )
