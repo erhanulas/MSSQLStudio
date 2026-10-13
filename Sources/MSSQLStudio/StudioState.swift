@@ -44,6 +44,15 @@ import SQLServerKit
       pauseIndexing()
     }
   }
+  func recordCatalogFailure(_ error:Error,generation token:UUID) async {
+    guard generation == token else {return}
+    startupError=error.localizedDescription
+    guard let failure=error as? SQLFailure,
+      failure.diagnostics.contains(where:{$0.state.hasPrefix("08")}) else {return}
+    // Catalog work opens its own short-lived connection. Its transport failure
+    // does not prove that the persistent Explorer session has disconnected.
+    await checkExplorerHealth()
+  }
   var startupError: String?
   var schemaComparisonFixture: ((String,String) throws -> Execution)?
   var catalogFixture: ((String) -> Execution)?
@@ -139,7 +148,11 @@ import SQLServerKit
     self.diskIndex=diskIndex;self.objectIndexService=objectIndexService;self.completionIndexService=completionIndexService
   }
   func catalog(_ sql: String, database: String, limits: Limits = Limits()) async throws -> Execution {
-    if let asyncCatalogFixture {return try await asyncCatalogFixture(sql)}
+    if let asyncCatalogFixture {
+      let token=generation
+      do {return try await asyncCatalogFixture(sql)}
+      catch {await recordCatalogFailure(error,generation:token);throw error}
+    }
     if let catalogFixture { return catalogFixture(sql) }
     guard online else { throw SQLFailure("Bağlantı çevrimdışı. Bağlantı ayarlarından yeniden bağlanın.") }
     var profile = self.profile
@@ -161,7 +174,7 @@ import SQLServerKit
       return result
     } catch {
       await connection.disconnect()
-      if generation == token {recordExplorerFailure(error)}
+      await recordCatalogFailure(error,generation:token)
       throw error
     }
   }
@@ -186,6 +199,7 @@ struct ObjectEditorKey: Codable, Equatable {
   private(set) var repeating = false
   private(set) var lastExecutedSQL: String?
   private(set) var lastExecutedDatabase: String?
+  private(set) var lastExecutedReadLimit: Int?
   // In-process test injection; normal documents always use their independent ODBC session.
   var executionFixture: ((String, Limits) async throws -> Execution)?
   var sessionProbeFixture: ((String, Limits) async throws -> Execution)?
@@ -364,11 +378,13 @@ struct ObjectEditorKey: Codable, Equatable {
         ? source.substring(with: selectedRange) : sql)
     guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
     let executionServer=server,executionServerGeneration=server.generation,executionDatabase=database
+    let executionLimits=limits
     repeating = repeatRead
     resultGeneration += 1
     lastExecutionSucceeded = false
     lastExecutedSQL = estimated ? nil : query
     lastExecutedDatabase = database
+    lastExecutedReadLimit = executionLimits.rows
     state = .running
     results = []
     messages = "Çalıştırma: \(Date().formatted(date: .numeric, time: .standard)) · \(database)\n"
@@ -410,10 +426,10 @@ struct ObjectEditorKey: Codable, Equatable {
         }
         let output: Execution
         if let executionFixture {
-          output = try await executionFixture(query, limits)
+          output = try await executionFixture(query, executionLimits)
         } else {
           output = try await TSQL.run(
-            query, on: connection, limits: limits,
+            query, on: connection, limits: executionLimits,
             events: { [weak self] event in
               Task { @MainActor [weak self] in
                 guard let self, self.executionID == token,

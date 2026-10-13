@@ -3,11 +3,12 @@ import SQLServerKit
 import SwiftUI
 
 @MainActor enum GridShortcuts {
-  enum Action: String, CaseIterable { case headers, newQuery, columns, matchingPair, parameterInfo, undo, redo }
+  enum Action: String, CaseIterable { case headers, newQuery, favorites, columns, matchingPair, parameterInfo, undo, redo }
   static func title(_ action:Action)->String {
     switch action {
     case .headers: return "Grid · Başlıklarla kopyala"
     case .newQuery: return "Yeni sorgu"
+    case .favorites: return "Favori sorgu seçici"
     case .columns: return "Grid · Kolon başlığında ara"
     case .matchingPair: return "Editör · Eşleşen ayırıcıya git"
     case .parameterInfo: return "Editör · Parametre bilgisi"
@@ -31,6 +32,7 @@ import SwiftUI
     if action == .redo {return Binding(key:"y",modifiers:NSEvent.ModifierFlags.control.rawValue)}
     if action == .matchingPair {return Binding(key:"m",modifiers:NSEvent.ModifierFlags([.control,.shift]).rawValue)}
     if action == .parameterInfo {return Binding(key:"p",modifiers:NSEvent.ModifierFlags.control.rawValue)}
+    if action == .favorites {return Binding(key:"p",modifiers:NSEvent.ModifierFlags([.command,.shift]).rawValue)}
     if action == .columns { return Binding(key:"j",modifiers:NSEvent.ModifierFlags([.command,.shift]).rawValue) }
     if action == .newQuery { return Binding(key: "n", modifiers: NSEvent.ModifierFlags.command.rawValue) }
     return Binding(key: "c", modifiers: headersModifiers.rawValue)
@@ -1827,6 +1829,7 @@ private struct ColumnFilterPanel: View {
     editDataButton.isEnabled = editing ? !preparingData && !submittingData : safe && grid != nil && document.results.count == 1 && !document.partial
     columnSearchButton.isEnabled = grid != nil
     rowLimit.isEnabled = !document.busy && !submittingData
+    syncReadOptionsHelp()
     autoRefreshButton.isEnabled = !document.busy && !submittingData && !tables.values.contains {$0.editDefinition != nil}
     let pending = !(grid?.pendingEdits.isEmpty ?? true) || grid?.hasDraftChanges == true
     let canChange = !preparingData && !submittingData
@@ -2306,12 +2309,19 @@ private struct ColumnFilterPanel: View {
       item.submenu=choices;menu.addItem(item)
     }
     section("Sayfa boyutu · \(selectedPageSize == 0 ? "Tüm yüklenenler":selectedPageSize.formatted())",values:GridPaging.choices,selected:selectedPageSize,action:#selector(changeRowLimit(_:)),identifier:"gridPageChoices")
-    section("Sonuç başına okuma · \(document.limits.rows.formatted())",values:[10,100,500,1000,10_000,50_000,100_000,1_000_000,5_000_000],selected:document.limits.rows,action:#selector(changeReadLimit(_:)),identifier:"gridReadChoices")
+    section("Sonraki okuma · \(document.limits.rows.formatted()) / sonuç",values:[10,100,500,1000,10_000,50_000,100_000,1_000_000,5_000_000],selected:document.limits.rows,action:#selector(changeReadLimit(_:)),identifier:"gridReadChoices")
     menu.addItem(.separator())
     let custom=NSMenuItem(title:"Özel değerler…",action:#selector(showLoadingOptions),keyEquivalent:"");custom.target=self;custom.tag = -1;menu.addItem(custom)
     let save=NSMenuItem(title:"Varsayılan Yap",action:#selector(saveLoadingDefaults),keyEquivalent:"");save.target=self;save.tag = -2;menu.addItem(save)
     rowLimit.menu=menu;rowLimit.selectItem(at:0)
+    syncReadOptionsHelp()
+  }
+  private func syncReadOptionsHelp() {
     rowLimit.toolTip="Sayfa: \(selectedPageSize == 0 ? "Tüm yüklenenler":selectedPageSize.formatted()) · Her sonuç için okuma sınırı: \(document.limits.rows.formatted()) (sonraki çalıştırma) · Sayfa değişimi yalnız yüklenen sonuçları gösterir."
+    if let previous=document.lastExecutedReadLimit,previous != document.limits.rows,!document.results.isEmpty {
+      rowLimit.toolTip! += "\nMevcut sonuçlar \(previous.formatted()) satır sınırıyla okundu. Yeni sınırı uygulamak için Sonuçları yenile veya Çalıştır’a basın."
+    }
+    rowLimit.setAccessibilityHelp(rowLimit.toolTip)
   }
   @objc private func changeReadLimit(_ item:NSMenuItem) {
     guard !document.busy,!submittingData,(1...5_000_000).contains(item.tag) else {return}

@@ -257,6 +257,7 @@ import SwiftUI
       modifiers: [.command, .shift])
     let query = menu("Sorgu")
     command(query, "Favori Sorgular…", #selector(WorkbenchController.showFavorites))
+    command(query, "Favori Sorguları Yönet…", #selector(WorkbenchController.manageFavorites))
     command(query, "Favorilere Ekle…", #selector(WorkbenchController.addFavorite))
     query.addItem(.separator())
     command(query, "Çalıştır", #selector(WorkbenchController.execute), "\r")

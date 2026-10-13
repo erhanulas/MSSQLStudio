@@ -49,7 +49,7 @@ public actor FavoriteQueryStore {
     var values=try load()
     if let index=values.firstIndex(where:{$0.id == favorite.id}) {values[index]=favorite} else {values.append(favorite)}
     try write(values)
-    return try load()
+    return values.sorted {$0.name.localizedStandardCompare($1.name) == .orderedAscending}
   }
   public func remove(_ id: UUID) throws -> [FavoriteQuery] {
     let values=try load().filter {$0.id != id}
@@ -61,5 +61,25 @@ public actor FavoriteQueryStore {
     try FileManager.default.createDirectory(at:url.deletingLastPathComponent(),withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
     try data.write(to:url,options:.atomic)
     try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:url.path)
+  }
+}
+
+/// The quick picker is tied to one editor target; its search never broadens that scope.
+public enum FavoriteQuerySelection {
+  public static func matches(_ values:[FavoriteQuery],serverID:UUID?,database:String?,search:String="") -> [FavoriteQuery] {
+    let terms=search.split(whereSeparator:{$0.isWhitespace}).map(String.init)
+    return values.filter {value in
+      value.visible(serverID:serverID,database:database) && terms.allSatisfy {value.name.localizedStandardContains($0)}
+    }.sorted {left,right in
+      func priority(_ scope:FavoriteQuery.Scope) -> Int {scope == .database ? 0:scope == .connection ? 1:2}
+      if left.scope != right.scope {return priority(left.scope)<priority(right.scope)}
+      let order=left.name.localizedStandardCompare(right.name)
+      return order == .orderedSame ? left.id.uuidString<right.id.uuidString:order == .orderedAscending
+    }
+  }
+  public static func next(_ values:[FavoriteQuery],selected:UUID?,step:Int) -> UUID? {
+    guard !values.isEmpty else {return nil}
+    let index=values.firstIndex {$0.id == selected} ?? (step < 0 ? values.count: -1)
+    return values[min(values.count-1,max(0,index+step))].id
   }
 }

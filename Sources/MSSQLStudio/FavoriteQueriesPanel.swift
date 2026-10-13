@@ -40,6 +40,159 @@ extension StudioState {
   }
 }
 
+@MainActor final class FavoriteQueryPickerController:NSViewController,NSTableViewDataSource,NSTableViewDelegate,NSSearchFieldDelegate {
+  let model:FavoriteQueriesModel
+  let serverID:UUID?
+  let database:String
+  private let contextLabel:String
+  private let open:(FavoriteQuery)throws->Void
+  private let manage:()->Void
+  private let search=NSSearchField()
+  private let table=FavoritePickerTable()
+  private let scroll=NSScrollView()
+  private let count=NSTextField(labelWithString:"")
+  private let message=NSTextField(wrappingLabelWithString:"")
+  private let empty=NSTextField(wrappingLabelWithString:"")
+  private let titleLabel=NSTextField(labelWithString:"")
+  private let scopeLabel=NSTextField(labelWithString:"")
+  private let preview=NSHostingController(rootView:SQLReadOnlyPreview(sql:""))
+  private let openButton=StudioToolbarButton(symbol:"arrow.up.right.square",label:"Favoriyi sorguda aç",tone:.accent,title:"Sorguda Aç",width:122)
+  private(set) var visible:[FavoriteQuery]=[]
+  var selectedFavorite:FavoriteQuery? {visible.indices.contains(table.selectedRow) ? visible[table.selectedRow]:nil}
+  init(model:FavoriteQueriesModel,serverID:UUID?,database:String,contextLabel:String,open:@escaping (FavoriteQuery)throws->Void,manage:@escaping ()->Void) {
+    self.model=model;self.serverID=serverID;self.database=database;self.contextLabel=contextLabel;self.open=open;self.manage=manage
+    super.init(nibName:nil,bundle:nil)
+    NotificationCenter.default.addObserver(self,selector:#selector(reloadItems),name:FavoriteQueriesModel.changed,object:model)
+    NotificationCenter.default.addObserver(self,selector:#selector(refreshTheme),name:StudioTheme.changed,object:nil)
+  }
+  required init?(coder:NSCoder) {fatalError()}
+  override func loadView() {
+    view=NSView();view.setAccessibilityIdentifier("favoriteQueryPicker")
+    let icon=NSImageView(image:NSImage(systemSymbolName:"star.square.on.square",accessibilityDescription:nil)!)
+    icon.contentTintColor=StudioTheme.warning;icon.symbolConfiguration=NSImage.SymbolConfiguration(pointSize:24,weight:.medium)
+    let heading=NSTextField(labelWithString:"Favori Sorgular");heading.font = .systemFont(ofSize:18,weight:.semibold)
+    let context=NSTextField(labelWithString:contextLabel);context.font = .systemFont(ofSize:11);context.textColor=StudioTheme.muted
+    context.lineBreakMode = .byTruncatingMiddle;context.toolTip=contextLabel
+    let headingText=NSStackView(views:[heading,context]);headingText.orientation = .vertical;headingText.alignment = .leading;headingText.spacing=3
+    let headingRow=NSStackView(views:[icon,headingText,NSView(),count]);headingRow.spacing=12
+    count.font = .monospacedDigitSystemFont(ofSize:11,weight:.medium)
+    count.setContentCompressionResistancePriority(.required,for:.horizontal)
+    search.placeholderString="Favori sorgu adı ara";search.delegate=self;search.sendsSearchStringImmediately=true
+    search.target=self;search.action = #selector(searchChanged);search.setAccessibilityIdentifier("favoritePickerSearch");search.setAccessibilityLabel("Favori sorgu adı ara")
+    search.controlSize = .large
+    let column=NSTableColumn(identifier:.init("favorite"));column.title="Favori Sorgular";column.resizingMask = .autoresizingMask
+    table.addTableColumn(column);table.headerView=nil;table.rowHeight=48;table.intercellSpacing=NSSize(width:0,height:2)
+    table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle;table.style = .plain
+    table.dataSource=self;table.delegate=self;table.target=self;table.doubleAction = #selector(openSelected)
+    table.openSelected = {[weak self] in self?.openSelected()}
+    table.setAccessibilityIdentifier("favoritePickerList");table.setAccessibilityLabel("Bu sorguda kullanılabilen favoriler")
+    scroll.documentView=table;scroll.hasVerticalScroller=true;scroll.drawsBackground=false
+    scroll.wantsLayer=true;scroll.layer?.cornerRadius=9;scroll.layer?.borderWidth=1
+    empty.alignment = .center;empty.font = .systemFont(ofSize:12);empty.setAccessibilityIdentifier("favoritePickerEmpty")
+    let list=NSView();list.addSubview(scroll);list.addSubview(empty)
+    for child in [scroll,empty] {child.translatesAutoresizingMaskIntoConstraints=false}
+    NSLayoutConstraint.activate([scroll.leadingAnchor.constraint(equalTo:list.leadingAnchor),scroll.trailingAnchor.constraint(equalTo:list.trailingAnchor),scroll.topAnchor.constraint(equalTo:list.topAnchor),scroll.bottomAnchor.constraint(equalTo:list.bottomAnchor),empty.centerXAnchor.constraint(equalTo:list.centerXAnchor),empty.centerYAnchor.constraint(equalTo:list.centerYAnchor),empty.widthAnchor.constraint(lessThanOrEqualTo:list.widthAnchor,constant:-32)])
+    titleLabel.font = .systemFont(ofSize:13,weight:.semibold);titleLabel.lineBreakMode = .byTruncatingTail
+    scopeLabel.font = .systemFont(ofSize:11);scopeLabel.lineBreakMode = .byTruncatingMiddle
+    addChild(preview);preview.sizingOptions=[]
+    preview.view.wantsLayer=true;preview.view.layer?.cornerRadius=8;preview.view.layer?.masksToBounds=true
+    let detail=NSStackView(views:[titleLabel,scopeLabel,preview.view]);detail.orientation = .vertical;detail.alignment = .leading;detail.spacing=8
+    preview.view.setContentHuggingPriority(.init(1),for:.vertical)
+    preview.view.widthAnchor.constraint(equalTo:detail.widthAnchor).isActive=true
+    let body=NSStackView(views:[list,detail]);body.orientation = .horizontal;body.spacing=16;body.distribution = .fill
+    list.widthAnchor.constraint(equalTo:body.widthAnchor,multiplier:0.43,constant:-8).isActive=true
+    list.heightAnchor.constraint(equalTo:body.heightAnchor).isActive=true;detail.heightAnchor.constraint(equalTo:body.heightAnchor).isActive=true
+    message.font = .systemFont(ofSize:11);message.isHidden=true
+    let manageButton=StudioToolbarButton(symbol:"slider.horizontal.3",label:"Favori sorguları yönet",tone:.neutral,title:"Yönet",width:80)
+    manageButton.target=self;manageButton.action = #selector(manageFavorites)
+    openButton.target=self;openButton.action = #selector(openSelected);openButton.keyEquivalent="\r";openButton.keyEquivalentModifierMask=[]
+    openButton.setAccessibilityIdentifier("favoritePickerOpen")
+    let close=NSButton(title:"Vazgeç",target:self,action:#selector(closePicker));close.bezelStyle = .rounded;close.keyEquivalent="\u{1b}";close.keyEquivalentModifierMask=[]
+    let help=NSTextField(labelWithString:"↑ ↓ seç · ↩ aç · esc kapat");help.font = .systemFont(ofSize:10);help.textColor=StudioTheme.muted
+    let footer=NSStackView(views:[manageButton,help,NSView(),close,openButton]);footer.spacing=10
+    let stack=NSStackView(views:[headingRow,search,body,message,footer]);stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=12
+    view.addSubview(stack);stack.translatesAutoresizingMaskIntoConstraints=false
+    NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:20),stack.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-20),stack.topAnchor.constraint(equalTo:view.topAnchor,constant:16),stack.bottomAnchor.constraint(equalTo:view.bottomAnchor,constant:-16)])
+    for child in [headingRow,search,body,message,footer] {child.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true}
+    headingRow.heightAnchor.constraint(equalToConstant:48).isActive=true;search.heightAnchor.constraint(equalToConstant:30).isActive=true
+    body.setContentHuggingPriority(.init(1),for:.vertical)
+    refreshTheme();reloadItems()
+  }
+  override func viewDidAppear() {super.viewDidAppear();focusSearch()}
+  func focusSearch() {view.window?.makeFirstResponder(search)}
+  @objc func reloadItems() {
+    guard isViewLoaded else {return}
+    let previous=selectedFavorite?.id
+    visible=FavoriteQuerySelection.matches(model.items,serverID:serverID,database:database,search:search.stringValue)
+    table.reloadData()
+    if let index=visible.firstIndex(where:{$0.id == previous}) ?? (visible.isEmpty ? nil:0) {table.selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false)} else {table.deselectAll(nil)}
+    count.stringValue="\(visible.count) sorgu"
+    empty.isHidden = !visible.isEmpty
+    empty.stringValue=search.stringValue.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? "Bu bağlantı ve veritabanında kullanılabilen favori yok.\nYönet bölümünden bir sorgu ekleyin.":"Aramanıza uygun favori bulunamadı."
+    message.stringValue=model.error;message.isHidden=model.error.isEmpty
+    updatePreview()
+  }
+  func numberOfRows(in tableView:NSTableView)->Int {visible.count}
+  func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int)->NSView? {
+    let value=visible[row],cell=NSTableCellView(),name=NSTextField(labelWithString:value.name),scope=NSTextField(labelWithString:scopeText(value))
+    let image=NSImageView(image:NSImage(systemSymbolName:value.scope == .global ? "globe":value.scope == .connection ? "server.rack":"externaldrive",accessibilityDescription:nil)!)
+    image.contentTintColor=StudioTheme.warning
+    name.font = .systemFont(ofSize:12,weight:.medium);name.lineBreakMode = .byTruncatingTail
+    scope.font = .systemFont(ofSize:10);scope.textColor=StudioTheme.muted;scope.lineBreakMode = .byTruncatingMiddle
+    let text=NSStackView(views:[name,scope]);text.orientation = .vertical;text.alignment = .leading;text.spacing=3
+    let stack=NSStackView(views:[image,text]);stack.spacing=10
+    cell.addSubview(stack);stack.translatesAutoresizingMaskIntoConstraints=false
+    NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:cell.leadingAnchor,constant:10),stack.trailingAnchor.constraint(equalTo:cell.trailingAnchor,constant:-8),stack.centerYAnchor.constraint(equalTo:cell.centerYAnchor),image.widthAnchor.constraint(equalToConstant:18)])
+    cell.textField=name;cell.imageView=image;cell.toolTip=value.name+" · "+scopeText(value)
+    cell.setAccessibilityLabel(cell.toolTip);return cell
+  }
+  func tableView(_ tableView:NSTableView,rowViewForRow row:Int)->NSTableRowView? {StudioRowView()}
+  func tableViewSelectionDidChange(_ notification:Notification) {updatePreview()}
+  private func scopeText(_ value:FavoriteQuery)->String {value.scope == .global ? "Genel · Tüm bağlantılar":value.scope == .connection ? "Explorer · Bu bağlantı":"Veritabanı · "+database}
+  private func updatePreview() {
+    let value=selectedFavorite
+    titleLabel.stringValue=value?.name ?? "SQL önizlemesi";scopeLabel.stringValue=value.map(scopeText) ?? "Sorgu otomatik çalıştırılmaz."
+    let source=value?.sql ?? "",prefix=source.prefix(64_000)
+    if prefix.endIndex != source.endIndex {
+      scopeLabel.stringValue += " · Önizleme: ilk 64.000 karakter"
+      scopeLabel.toolTip="Önizleme ilk 64.000 karakteri gösterir. Sorguda Aç tam SQL metnini açar."
+    } else {scopeLabel.toolTip=scopeLabel.stringValue}
+    preview.rootView=SQLReadOnlyPreview(sql:String(prefix))
+    openButton.isEnabled=value != nil && serverID != nil
+  }
+  func select(step:Int) {
+    guard let next=FavoriteQuerySelection.next(visible,selected:selectedFavorite?.id,step:step),let index=visible.firstIndex(where:{$0.id == next}) else {return}
+    table.selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false);table.scrollRowToVisible(index)
+  }
+  @objc private func searchChanged() {reloadItems()}
+  @objc func openSelected() {
+    guard let favorite=selectedFavorite,serverID != nil else {return}
+    do {try open(favorite);view.window?.close()} catch {message.stringValue=error.localizedDescription;message.isHidden=false}
+  }
+  @objc private func manageFavorites() {manage()}
+  @objc private func closePicker() {view.window?.close()}
+  func control(_ control:NSControl,textView:NSTextView,doCommandBy command:Selector)->Bool {
+    if command == #selector(NSResponder.moveDown(_:)) {select(step:1);return true}
+    if command == #selector(NSResponder.moveUp(_:)) {select(step:-1);return true}
+    if command == #selector(NSResponder.insertNewline(_:)) {openSelected();return true}
+    if command == #selector(NSResponder.cancelOperation(_:)) {closePicker();return true}
+    return false
+  }
+  @objc private func refreshTheme() {
+    guard isViewLoaded else {return}
+    StudioTheme.surface(view,chrome:true);table.backgroundColor=StudioTheme.canvas
+    scroll.layer?.borderColor=StudioTheme.border.cgColor;scopeLabel.textColor=StudioTheme.muted;count.textColor=StudioTheme.muted
+    empty.textColor=StudioTheme.muted;message.textColor=StudioTheme.danger;openButton.refreshStyle();table.reloadData()
+  }
+}
+@MainActor private final class FavoritePickerTable:NSTableView {
+  var openSelected:(()->Void)?
+  override func keyDown(with event:NSEvent) {
+    if event.keyCode == 36 || event.keyCode == 76 {openSelected?();return}
+    super.keyDown(with:event)
+  }
+}
+
 struct FavoriteQueriesPanel:View {
   let state:StudioState
   @ObservedObject var model:FavoriteQueriesModel
@@ -123,8 +276,34 @@ struct FavoriteQueriesPanel:View {
   }
 }
 
+@MainActor final class FavoriteEditorWindowTarget {
+  weak var window:NSWindow?
+  func close() {window?.close()}
+}
+
+@MainActor final class FavoriteQuerySubmission:ObservableObject {
+  @Published private(set) var saving=false
+  @Published private(set) var error=""
+  private let persist:(FavoriteQuery)async throws->Void
+  init(persist:@escaping (FavoriteQuery)async throws->Void) {self.persist=persist}
+  func report(_ error:String) {self.error=error}
+  func save(_ value:FavoriteQuery,close:@escaping ()->Void) {
+    guard !saving else {return}
+    saving=true;error=""
+    Task {
+      do {
+        try await persist(value)
+        saving=false
+        close()
+      } catch {
+        self.error=error.localizedDescription
+        saving=false
+      }
+    }
+  }
+}
+
 struct FavoriteQueryEditor:View {
-  @ObservedObject var model:FavoriteQueriesModel
   let servers:[ConnectedServer]
   let close:()->Void
   private let id:UUID
@@ -133,10 +312,10 @@ struct FavoriteQueryEditor:View {
   @State private var scope:FavoriteQuery.Scope
   @State private var serverID:UUID?
   @State private var database:String
-  @State private var saving=false
-  @State private var error=""
+  @StateObject private var submission:FavoriteQuerySubmission
   init(model:FavoriteQueriesModel,servers:[ConnectedServer],contextServerID:UUID?,database:String,favorite:FavoriteQuery?=nil,sql:String="",name:String="",close:@escaping ()->Void) {
-    self.model=model;self.servers=servers;self.close=close;id=favorite?.id ?? UUID()
+    self.servers=servers;self.close=close;id=favorite?.id ?? UUID()
+    _submission=StateObject(wrappedValue:FavoriteQuerySubmission {try await model.save($0)})
     _name=State(initialValue:favorite?.name ?? name);_sql=State(initialValue:favorite?.sql ?? sql)
     _scope=State(initialValue:favorite?.scope ?? (contextServerID == nil ? .global:database.isEmpty ? .connection:.database))
     _serverID=State(initialValue:favorite?.serverID ?? contextServerID);_database=State(initialValue:favorite?.database ?? database)
@@ -156,17 +335,20 @@ struct FavoriteQueryEditor:View {
       if scope == .database {FavoriteDatabasePicker(servers:servers,serverID:serverID,selection:$database)}
       Text("SQL").fontWeight(.semibold)
       AgentCommandEditor(text:$sql).studioEditor().frame(minHeight:220)
-      if !error.isEmpty {Text(error).foregroundStyle(Color(nsColor:StudioTheme.danger))}
+      if !submission.error.isEmpty {Text(submission.error).foregroundStyle(Color(nsColor:StudioTheme.danger)).textSelection(.enabled).accessibilityIdentifier("favoriteSaveError")}
       HStack {
-        StudioActionButton("Vazgeç",icon:"xmark") {close()}.disabled(saving)
+        StudioActionButton("Vazgeç",icon:"xmark") {close()}.disabled(submission.saving)
         Spacer()
+        if submission.saving {
+          ProgressView().controlSize(.small)
+          Text("Favori kaydediliyor…").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("favoriteSaveProgress")
+        }
         StudioActionButton("Favoriyi Kaydet",icon:"star.fill") {
           do {
             let value=try FavoriteQuery(id:id,name:name,sql:sql,scope:scope,serverID:serverID,database:database)
-            saving=true
-            Task {do {try await model.save(value);close()} catch {self.error=error.localizedDescription};saving=false}
-          } catch {self.error=error.localizedDescription}
-        }.buttonStyle(StudioPrimaryButton()).disabled(saving).accessibilityIdentifier("favoriteSave")
+            submission.save(value,close:close)
+          } catch {submission.report(error.localizedDescription)}
+        }.buttonStyle(StudioPrimaryButton()).disabled(submission.saving).accessibilityIdentifier("favoriteSave")
       }
     }.padding(20).frame(width:720,height:660).studioPanel()
       .onChange(of:serverID) {_,id in database=servers.first {$0.id == id}?.profile.database ?? ""}

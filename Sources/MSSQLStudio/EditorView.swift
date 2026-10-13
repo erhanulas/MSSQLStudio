@@ -231,6 +231,14 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
 @MainActor enum SQLEditorPreferences {
   static let completionDelayKey = "sqlCompletionDelayMilliseconds"
   static let defaultCompletionDelay = 260
+  static let completionSchemaKey = "sqlCompletionIncludeSchema"
+  static let completionBracketsKey = "sqlCompletionQuoteIdentifiers"
+  static func includeSchema(in defaults: UserDefaults = .standard) -> Bool {
+    defaults.object(forKey:completionSchemaKey) as? Bool ?? true
+  }
+  static func quoteIdentifiers(in defaults: UserDefaults = .standard) -> Bool {
+    defaults.object(forKey:completionBracketsKey) as? Bool ?? true
+  }
   static func completionDelay(in defaults: UserDefaults = .standard) -> Int {
     guard defaults.object(forKey:completionDelayKey) != nil else {return defaultCompletionDelay}
     return max(50,min(1000,defaults.integer(forKey:completionDelayKey)))
@@ -1436,6 +1444,8 @@ private struct SQLParameterHelp:View {
     let verified = document.catalogVerified && document.catalogDatabase == document.database
     let aliases = UserDefaults.standard.object(forKey:"sqlAutomaticAliases") as? Bool ?? true
     let noLock = UserDefaults.standard.bool(forKey:"sqlAutomaticNoLock")
+    let includeSchema = SQLEditorPreferences.includeSchema()
+    let quoteIdentifiers = SQLEditorPreferences.quoteIdentifiers()
     let automatic = UserDefaults.standard.object(forKey:"sqlAutomaticCompletion") as? Bool ?? true
     let validate = UserDefaults.standard.object(forKey:"sqlValidateReferences") as? Bool ?? true
     let delay = SQLEditorPreferences.completionDelay()
@@ -1443,7 +1453,7 @@ private struct SQLParameterHelp:View {
       do {
         if !manual { try await Task.sleep(for:.milliseconds(delay)) }
         let worker = Task.detached(priority:.userInitiated) {
-          let analysis = try SQLIntelligence.analyze(source:source,caret:caret,catalog:catalog,verified:verified,automaticAliases:aliases,automaticNoLock:noLock)
+          let analysis = try SQLIntelligence.analyze(source:source,caret:caret,catalog:catalog,verified:verified,automaticAliases:aliases,automaticNoLock:noLock,includeSchema:includeSchema,quoteIdentifiers:quoteIdentifiers)
           try Task.checkCancellation()
           return (analysis,SQLFolding.regions(source))
         }

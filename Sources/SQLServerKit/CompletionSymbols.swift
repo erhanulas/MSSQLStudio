@@ -126,6 +126,10 @@ public enum SQLIntelligence {
       return values.count == 1 ? values[0] : nil
     }
     public func isAmbiguous(_ parts: [String]) -> Bool { parts.count == 1 && (names[parts[0].lowercased()]?.count ?? 0) > 1 && qualified[Self.key("dbo",parts[0])] == nil }
+    fileprivate func needsSchema(_ item: CatalogSymbol) -> Bool {
+      // A bare name cannot identify a chosen entry when more than one schema owns it.
+      (names[item.name.lowercased()]?.count ?? 0) > 1 || item.kind.contains("SCALAR_FUNCTION")
+    }
     public func matchingRoutines(_ text:String,schema:String?=nil,limit:Int=100) throws -> [CatalogSymbol] {
       let needle=text.lowercased(), schema=schema?.lowercased(), limit=max(0,min(limit,100))
       var result:[CatalogSymbol]=[]
@@ -163,9 +167,33 @@ public enum SQLIntelligence {
     let scope: NSRange
   }
   private static func raw(_ value: String) -> String {
-    if value.hasPrefix("[") { return String(value.dropFirst()).trimmingCharacters(in:CharacterSet(charactersIn:"]")).replacingOccurrences(of:"]]",with:"]") }
-    if value.hasPrefix("\"") { return value.trimmingCharacters(in:CharacterSet(charactersIn:"\"")) }
+    if value.hasPrefix("[") {
+      var inner = String(value.dropFirst())
+      if inner.hasSuffix("]") { inner.removeLast() }
+      return inner.replacingOccurrences(of:"]]",with:"]")
+    }
+    if value.hasPrefix("\"") {
+      var inner = String(value.dropFirst())
+      if inner.hasSuffix("\"") { inner.removeLast() }
+      return inner.replacingOccurrences(of:"\"\"",with:"\"")
+    }
     return value
+  }
+  // SQL Server's reserved identifier words are broader than the editor's syntax palette.
+  // Keep this check local to completion: DDL/CRUD SQL.identifier remains always delimited.
+  // https://learn.microsoft.com/sql/t-sql/language-elements/reserved-keywords-transact-sql
+  private static let reservedIdentifiers = TSQL.keywords.union(
+    "ADD EXTERNAL PUBLIC FILE FILLFACTOR READ ANY FOR READTEXT AUTHORIZATION FREETEXT FREETEXTTABLE REPLICATION BACKUP RESTORE RESTRICT BREAK GOTO REVERT BROWSE BULK CASCADE HOLDLOCK ROWCOUNT IDENTITY ROWGUIDCOL IDENTITY_INSERT RULE CHECKPOINT IDENTITYCOL SAVE CLOSE SCHEMA SECURITYAUDIT COALESCE COLLATE SEMANTICKEYPHRASETABLE COLUMN SEMANTICSIMILARITYDETAILSTABLE SEMANTICSIMILARITYTABLE COMPUTE SESSION_USER CONTAINS SETUSER CONTAINSTABLE SHUTDOWN CONTINUE KILL SOME CONVERT STATISTICS SYSTEM_USER LINENO CURRENT LOAD TABLESAMPLE CURRENT_DATE TEXTSIZE CURRENT_TIME NATIONAL NOCHECK TO CURRENT_TIMESTAMP CURRENT_USER CURSOR DATABASE DBCC NULLIF OF TRUNCATE OFF TRY_CONVERT OFFSETS TSEQUAL OPEN UNPIVOT DISK OPENDATASOURCE OPENQUERY OPENROWSET UPDATETEXT DISTRIBUTED OPENXML DOUBLE OPTION USER DUMP VARYING WAITFOR ERRLVL PERCENT ESCAPE PIVOT PLAN WHILE PRECISION WITHIN WRITETEXT EXIT PROC LABEL".split(separator:" ").map(String.init))
+  private static func completionIdentifier(_ name: String, alwaysQuote: Bool) -> String {
+    guard !alwaysQuote, let first = name.unicodeScalars.first,
+      first.value <= 0xffff, CharacterSet.letters.contains(first) || first == "_",
+      !reservedIdentifiers.contains(name.uppercased()),
+      name.unicodeScalars.allSatisfy({ scalar in
+        scalar.value <= 0xffff && (CharacterSet.letters.contains(scalar)
+          || CharacterSet.decimalDigits.contains(scalar) || "_@$#".unicodeScalars.contains(scalar))
+      })
+    else { return SQL.identifier(name) }
+    return name
   }
   public static func alias(for name: String, occupied: Set<String>) -> String {
     var initials = "", previous: Character?
@@ -181,7 +209,7 @@ public enum SQLIntelligence {
     while occupied.contains(candidate.lowercased()) { candidate = initials+String(suffix); suffix += 1 }
     return candidate.uppercased()
   }
-  public static func analyze(source: String, caret: Int, catalog: Catalog?, verified: Bool, automaticAliases: Bool = true, automaticNoLock: Bool = false) throws -> Analysis {
+  public static func analyze(source: String, caret: Int, catalog: Catalog?, verified: Bool, automaticAliases: Bool = true, automaticNoLock: Bool = false, includeSchema: Bool = true, quoteIdentifiers: Bool = true) throws -> Analysis {
     try Task.checkCancellation()
     let original = source as NSString, caret = max(0,min(caret,original.length))
     guard original.length <= 250_000 else { return Analysis(tokens:[],diagnostics:[],suggestions:[],replacement:NSRange(location:caret,length:0)) }
@@ -339,6 +367,30 @@ public enum SQLIntelligence {
     let before = tokens.filter { NSMaxRange($0.range) <= replacement.location }
     let qualifier = before.last?.text == "." && before.count >= 2 ? raw(before[before.count-2].text) : nil
     let visible = activeBindings(caret)
+    func identifier(_ name: String) -> String { completionIdentifier(name, alwaysQuote: quoteIdentifiers) }
+    let needle = prefix.lowercased()
+    func appendColumns(from bindings: [Binding], alreadyQualified: Bool) throws {
+      // Prefixes across every visible source precede interior matches. Do not let
+      // an earlier, wide relation consume all 100 slots before a closer prefix.
+      var seen = Set<String>()
+      for prefixPass in [true, false] {
+        for binding in bindings {
+          for (index, column) in (binding.columns ?? []).enumerated() {
+            if index % 256 == 0 { try Task.checkCancellation() }
+            guard suggestions.count < 100 else { return }
+            let name = column.lowercased(), isPrefix = name.hasPrefix(needle)
+            guard prefixPass ? isPrefix : !isPrefix && name.contains(needle) else { continue }
+            // Only an alias already written in this statement may qualify columns.
+            let qualifier = alreadyQualified ? "" : binding.explicitAlias ? identifier(binding.alias)+"."
+              : visible.count == 1 ? "" : binding.parts.map(identifier).joined(separator:".")+"."
+            let text = qualifier+identifier(column)
+            guard seen.insert(text).inserted else { continue }
+            let label = alreadyQualified ? binding.alias+"."+identifier(column) : text
+            suggestions.append(Suggestion(text:text,label:label,kind:.column,detail:binding.parts.joined(separator:".")))
+          }
+        }
+      }
+    }
     var context = before
     if qualifier != nil { context = Array(context.dropLast(2)) }
     let returnAssignment=context.count>=3 && context.last?.text == "=" && context[context.count-2].kind == .variable && ["EXEC","EXECUTE"].contains(context[context.count-3].text.uppercased())
@@ -353,7 +405,8 @@ public enum SQLIntelligence {
         for item in candidates {
           let isRelation = ["USER_TABLE","VIEW"].contains(item.kind)
           if !execution && !isRelation && item.kind != "SYNONYM" { continue }
-          var text = qualifier == nil ? SQL.identifier(item.schema)+"."+SQL.identifier(item.name) : SQL.identifier(item.name)
+          let schemaRequired = includeSchema || catalog?.needsSchema(item) == true
+          var text = qualifier == nil && schemaRequired ? identifier(item.schema)+"."+identifier(item.name) : identifier(item.name)
           if automaticAliases && isRelation && !alreadyAliased && ["FROM","JOIN"].contains(context.last?.text.uppercased() ?? "") { text += " AS "+alias(for:item.name,occupied:occupied)
             if automaticNoLock && nextToken?.text.uppercased() != "WITH" { text += " WITH(NOLOCK)" }
           }
@@ -362,21 +415,10 @@ public enum SQLIntelligence {
         }
       } else if let qualifier {
         if let binding = visible.first(where: { $0.alias.lowercased() == qualifier.lowercased() }) {
-          suggestions = (binding.columns ?? []).filter { $0.lowercased().hasPrefix(prefix.lowercased()) }.prefix(100).map { Suggestion(text:SQL.identifier($0),label:qualifier+"."+SQL.identifier($0),kind:.column,detail:binding.parts.joined(separator:".")) }
+          try appendColumns(from:[binding],alreadyQualified:true)
         }
       } else {
-        for binding in visible {
-          for column in binding.columns ?? [] where column.lowercased().hasPrefix(prefix.lowercased()) {
-            // Only emitted aliases already present in this statement may qualify columns.
-            // A single unaliased source needs no qualifier; multiple sources retain
-            // their actual table names to avoid ambiguous bare columns.
-            let qualifier = binding.explicitAlias ? SQL.identifier(binding.alias)+"." : visible.count == 1 ? "" : binding.parts.map(SQL.identifier).joined(separator:".")+"."
-            let text = qualifier+SQL.identifier(column)
-            suggestions.append(Suggestion(text:text,label:text,kind:.column,detail:binding.parts.joined(separator:".")))
-            if suggestions.count >= 100 { break }
-          }
-          if suggestions.count >= 100 { break }
-        }
+        try appendColumns(from:visible,alreadyQualified:false)
         if suggestions.count < 100 {
           suggestions += (Array(TSQL.keywords)+TSQL.functions).sorted().filter { $0.lowercased().hasPrefix(prefix.lowercased()) }.prefix(100-suggestions.count).map { Suggestion(text:$0,label:$0,kind:TSQL.functions.contains($0) ? .function : .keyword) }
         }

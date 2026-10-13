@@ -340,6 +340,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     NotificationCenter.default.addObserver(self, selector: #selector(catalogIndexUpdated(_:)), name: .init("sqlCatalogChanged"), object: nil)
     NotificationCenter.default.addObserver(self,selector:#selector(schemaApplied(_:)),name:.init("studioSchemaComparedApplied"),object:nil)
     NotificationCenter.default.addObserver(self,selector:#selector(favoritesChanged),name:FavoriteQueriesModel.changed,object:state.favorites)
+    NotificationCenter.default.addObserver(self,selector:#selector(favoriteWindowClosed(_:)),name:NSWindow.willCloseNotification,object:nil)
     state.changed = { [weak self] in self?.reloadWorkspace() }
   }
   deinit {agentPolling?.cancel()}
@@ -603,11 +604,21 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
           let binding = GridShortcuts.binding(.newQuery)
           item.keyEquivalent = binding.key; item.keyEquivalentModifierMask = binding.flags
         }
+        if item.action == #selector(showFavorites) {
+          let binding = GridShortcuts.binding(.favorites)
+          item.keyEquivalent = binding.key; item.keyEquivalentModifierMask = binding.flags
+        }
         if let child = item.submenu { update(child) }
       }
     }
     if let menu = NSApp.mainMenu { update(menu) }
-    if isViewLoaded { renderTabs() }
+    if isViewLoaded {
+      for item in view.window?.toolbar?.items ?? [] where item.itemIdentifier.rawValue == "favorites" {
+        item.toolTip="Favori Sorgular ("+GridShortcuts.binding(.favorites).label+")"
+        (item.view as? NSButton)?.toolTip=item.toolTip
+      }
+      renderTabs()
+    }
   }
   private func reloadWorkspace() {
     guard isViewLoaded else { return }
@@ -1724,6 +1735,17 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       else {outline.deselectAll(nil)}
     }
   }
+  @objc private func favoriteWindowClosed(_ notification:Notification) {
+    guard let window=notification.object as? NSWindow,let identity=window.identifier?.rawValue,
+      ["favorite-editor|","favorite-picker|","favorites|"].contains(where:identity.hasPrefix),
+      auxiliaryWindows.contains(where:{$0.window === window}) else {return}
+    // Release SwiftUI subscriptions and SQL text storage after AppKit finishes closing.
+    Task { @MainActor [weak self,weak window] in
+      guard let window else {return}
+      window.contentViewController=nil
+      self?.auxiliaryWindows.removeAll {$0.window === window}
+    }
+  }
   @discardableResult private func synchronizeFavorites(in root:TreeNode) -> TreeNode {
     let folder=root.children.first {if case .favorites=$0.kind {return true};return false}
       ?? TreeNode("Favori Sorgular",kind:.favorites,server:root.server,database:root.server.profile.database)
@@ -2284,22 +2306,64 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     state.newQuery(server:server,database:"master",text:Catalog.monitoring(.activity),title:"Activity Monitor · İstekler",run:true,refreshSeconds:10)
     view.window?.makeKeyAndOrderFront(nil)
   }
-  @objc func showFavorites() {presentFavorites(server:selectedServer,database:selectedDatabase)}
+  var favoriteContextDocument:QueryDocument? {
+    favoriteContextDocument(in:NSApp.keyWindow)
+  }
+  func favoriteContextDocument(in window:NSWindow?)->QueryDocument? {
+    detached.values.first {$0.window === window}?.query.document ?? state.active
+  }
+  @objc func showFavorites() {presentFavoritePicker(from:NSApp.keyWindow)}
+  func presentFavoritePicker(from window:NSWindow?) {
+    if let window,let picker=window.contentViewController as? FavoriteQueryPickerController,picker.model === state.favorites {
+      window.makeKeyAndOrderFront(nil);picker.focusSearch();return
+    }
+    let document=favoriteContextDocument(in:window)
+    let server=document?.server ?? selectedServer,database=document?.database ?? selectedDatabase
+    let identity="favorite-picker|\(server?.id.uuidString ?? "global")|\(database)"
+    if let existing=auxiliaryWindows.compactMap(\.window).first(where:{$0.identifier?.rawValue == identity && $0.isVisible}) {
+      existing.makeKeyAndOrderFront(nil);(existing.contentViewController as? FavoriteQueryPickerController)?.focusSearch();return
+    }
+    let controller=FavoriteQueryPickerController(model:state.favorites,serverID:server?.id,database:database,
+      contextLabel:(server?.profile.name ?? "Bağlantı seçilmedi")+" / "+database,
+      open:{[weak self] favorite in
+        guard let self else {return}
+        try self.state.openFavorite(favorite,contextServerID:server?.id,contextDatabase:database)
+        self.view.window?.makeKeyAndOrderFront(nil)
+      },manage:{[weak self] in self?.presentFavorites(server:server,database:database)})
+    let window=NSWindow(contentViewController:controller)
+    window.identifier = .init(identity);window.title="Favori Sorgular"
+    window.styleMask=[.titled,.closable,.resizable]
+    window.setContentSize(NSSize(width:840,height:540))
+    window.minSize=window.frameRect(forContentRect:NSRect(x:0,y:0,width:720,height:440)).size
+    window.center()
+    let owner=NSWindowController(window:window);auxiliaryWindows.append(owner);owner.showWindow(nil)
+    controller.focusSearch()
+    Task {await state.favorites.load()}
+  }
+  @objc func manageFavorites() {presentFavoritesManagement(from:NSApp.keyWindow)}
+  func presentFavoritesManagement(from window:NSWindow?) {
+    if let picker=window?.contentViewController as? FavoriteQueryPickerController,picker.model === state.favorites {
+      presentFavorites(server:state.servers.first {$0.id == picker.serverID},database:picker.database);return
+    }
+    let document=favoriteContextDocument(in:window)
+    presentFavorites(server:document?.server ?? selectedServer,database:document?.database ?? selectedDatabase)
+  }
   @objc private func showFavoritesAtNode() {if let node=contextNode {presentFavorites(server:node.server,database:Self.queryDatabase(for:node))}}
   private func presentFavorites(server:ConnectedServer?,database:String) {
     present(FavoriteQueriesPanel(state:state,model:state.favorites,contextServerID:server?.id,contextDatabase:database,didOpen:{[weak self] in self?.view.window?.makeKeyAndOrderFront(nil)}),
       title:"Favori Sorgular",width:1100,height:760,minWidth:900,minHeight:660,identity:"favorites|\(server?.id.uuidString ?? "global")|\(database)")
   }
-  @objc func addFavorite() {if let doc=state.active {presentFavoriteEditor(for:doc)}}
+  @objc func addFavorite() {if let doc=favoriteContextDocument {presentFavoriteEditor(for:doc)}}
   private func presentFavoriteEditor(for doc:QueryDocument) {
     guard !doc.sql.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else {return}
     presentFavoriteEditor(favorite:nil,serverID:doc.server.id,database:doc.database,sql:doc.sql,name:doc.title)
   }
-  private func presentFavoriteEditor(favorite:FavoriteQuery?,serverID:UUID?,database:String,sql:String="",name:String="") {
+  @discardableResult func presentFavoriteEditor(favorite:FavoriteQuery?,serverID:UUID?,database:String,sql:String="",name:String="")->FavoriteEditorWindowTarget {
     let identity="favorite-editor|\(favorite?.id ?? UUID())"
-    present(FavoriteQueryEditor(model:state.favorites,servers:state.servers,contextServerID:serverID,database:database,favorite:favorite,sql:sql,name:name,close:{[weak self] in
-      self?.auxiliaryWindows.first(where:{$0.window?.identifier?.rawValue == identity})?.close()
-    }),title:favorite == nil ? "Favorilere Ekle":"Favoriyi Düzenle",width:720,height:660,minWidth:720,minHeight:660,identity:identity)
+    let target=FavoriteEditorWindowTarget()
+    target.window=present(FavoriteQueryEditor(model:state.favorites,servers:state.servers,contextServerID:serverID,database:database,favorite:favorite,sql:sql,name:name,close:target.close),
+      title:favorite == nil ? "Favorilere Ekle":"Favoriyi Düzenle",width:720,height:660,minWidth:720,minHeight:660,identity:identity)
+    return target
   }
   @objc private func tableProperties() {
     if let item = contextNode?.item {
@@ -2386,7 +2450,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     ].contains(item.action) {
       return state.active?.state == .ready
     }
-    if item.action == #selector(addFavorite) {return state.active?.sql.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty == false}
+    if item.action == #selector(addFavorite) {return favoriteContextDocument?.sql.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty == false}
     if item.action == #selector(cancel) { return state.active?.state == .running }
     if [
       #selector(saveSQL), #selector(saveAsSQL), #selector(formatSQL), #selector(closeTab),
@@ -2427,7 +2491,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     guard let definition = definitions[id.rawValue] else { return nil }
     let item = NSToolbarItem(itemIdentifier: id)
     item.label = definition.0
-    item.toolTip = definition.0
+    item.toolTip = id.rawValue == "favorites" ? definition.0+" ("+GridShortcuts.binding(.favorites).label+")":definition.0
     item.image = NSImage(systemSymbolName: definition.1, accessibilityDescription: definition.0)
     item.target = self
     item.action = definition.2
@@ -2436,7 +2500,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       title: id.rawValue == "run" ? "Çalıştır" : "", width: id.rawValue == "run" ? 88 : 30,
       prominent: id.rawValue == "run")
     button.target = self; button.action = definition.2
-    button.toolTip = id.rawValue == "run" ? "Çalıştır (⌘↩ / F5)" : definition.0
+    button.toolTip = id.rawValue == "run" ? "Çalıştır (⌘↩ / F5)" : item.toolTip
     item.view = button
     return item
   }

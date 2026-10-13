@@ -137,6 +137,8 @@ struct SettingsPanel: View {
   @State private var theme = UserDefaults.standard.string(forKey: "ssmsTheme") ?? "light"
   @State private var completion = UserDefaults.standard.object(forKey:"sqlAutomaticCompletion") as? Bool ?? true
   @State private var completionDelay = Double(SQLEditorPreferences.completionDelay())
+  @State private var completionSchema = SQLEditorPreferences.includeSchema()
+  @State private var completionBrackets = SQLEditorPreferences.quoteIdentifiers()
   @State private var validation = UserDefaults.standard.object(forKey:"sqlValidateReferences") as? Bool ?? true
   @State private var aliases = UserDefaults.standard.object(forKey:"sqlAutomaticAliases") as? Bool ?? true
   @State private var noLock = UserDefaults.standard.bool(forKey:"sqlAutomaticNoLock")
@@ -172,11 +174,28 @@ struct SettingsPanel: View {
           settingsCard("Renk teması", icon: "circle.lefthalf.filled") {
             StudioFormField("Çalışma ortamı") {
               Picker("Renk teması", selection: $theme) {
+                Text("Sistem").tag("system")
                 Text("Studio Açık").tag("light")
                 Text("Studio Koyu").tag("dark")
               }.labelsHidden().pickerStyle(.segmented).accessibilityIdentifier("settingsTheme")
             }
-            SettingsThemePreview(dark: theme == "dark")
+            if theme == "system" {
+              HStack(spacing: 14) {
+                Image(systemName: "desktopcomputer").font(.system(size: 29, weight: .light))
+                  .foregroundStyle(Color(nsColor: StudioTheme.accent)).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 5) {
+                  Text("macOS görünümünü izle").font(.callout.weight(.medium))
+                  Text("Sistem açık veya koyu görünüme geçtiğinde arayüz ve SQL renkleri birlikte uyum sağlar.")
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "circle.lefthalf.filled").font(.system(size: 25))
+                  .foregroundStyle(Color(nsColor: StudioTheme.muted)).accessibilityHidden(true)
+              }.padding(16).frame(maxWidth: .infinity, minHeight: 110, alignment: .leading)
+                .background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: StudioTheme.border)))
+                .accessibilityElement(children: .combine).accessibilityIdentifier("settingsSystemThemePreview")
+            } else { SettingsThemePreview(dark: theme == "dark") }
             settingsNote("Tema, Uygula’ya bastığınızda tüm pencerelere uygulanır.", icon: "paintbrush.pointed")
           }
           settingsCard("Yazı ve okunabilirlik", icon: "textformat") {
@@ -189,7 +208,7 @@ struct SettingsPanel: View {
         }.tabItem { Label(SettingsSection.appearance.title, systemImage: SettingsSection.appearance.icon) }.tag(SettingsSection.appearance)
         settingsPage(.editor, subtitle: "Tamamlama, doğrulama ve yazım yardımcıları.") {
           settingsCard("Otomatik tamamlama", icon: "text.badge.plus") {
-            settingsToggle("Yazarken önerileri göster", detail: "Aktif veritabanının DDL indeksindeki nesne ve kolonları önerir.", value: $completion)
+            settingsToggle("Yazarken önerileri göster", detail: "Aktif veritabanındaki nesne ve kolonları önerir; kolon adlarının içinde de arar.", value: $completion)
               .accessibilityIdentifier("settingsCompletion")
             Divider()
             StudioFormField("Öneri gecikmesi") {
@@ -200,6 +219,12 @@ struct SettingsPanel: View {
               }
             }
             settingsNote("Kısa süre daha hızlı öneri gösterir. ⌃Space, beklemeden açar; Tab / Enter kabul eder, Escape kapatır.", icon: "keyboard")
+            Divider()
+            settingsToggle("Tamamlamada şema adını ekle", detail: "Kapalıyken SQL Server’ın varsayılan şema çözümü kullanılır. Aynı adlı nesnelerde ve gerekli fonksiyonlarda şema korunur.", value: $completionSchema)
+              .accessibilityIdentifier("settingsCompletionSchema")
+            Divider()
+            settingsToggle("Tamamlamada köşeli parantez kullan", detail: "Kapalıyken sade adlar kullanılır; boşluk, ayrılmış sözcük ve özel karakter içeren adlar SQL’in geçerli kalması için korunur.", value: $completionBrackets)
+              .accessibilityIdentifier("settingsCompletionBrackets")
           }
           settingsCard("Kod yardımcıları", icon: "checkmark.seal") {
             settingsToggle("Eksik tablo ve kolonları vurgula", detail: "Güncel, doğrulanmış veritabanı indeksiyle kırmızı işaretler.", value: $validation)
@@ -374,6 +399,8 @@ struct SettingsPanel: View {
           StudioTheme.apply(theme)
           UserDefaults.standard.set(completion,forKey:"sqlAutomaticCompletion")
           UserDefaults.standard.set(Int(completionDelay),forKey:SQLEditorPreferences.completionDelayKey)
+          UserDefaults.standard.set(completionSchema,forKey:SQLEditorPreferences.completionSchemaKey)
+          UserDefaults.standard.set(completionBrackets,forKey:SQLEditorPreferences.completionBracketsKey)
           UserDefaults.standard.set(validation,forKey:"sqlValidateReferences")
           UserDefaults.standard.set(aliases,forKey:"sqlAutomaticAliases")
           UserDefaults.standard.set(noLock,forKey:"sqlAutomaticNoLock")
@@ -1277,7 +1304,20 @@ extension View {
 
 @MainActor enum StudioTheme {
   static let changed = Notification.Name("MSSQLStudio.themeChanged")
-  static var dark: Bool { UserDefaults.standard.string(forKey: "ssmsTheme") == "dark" }
+  private static var appearanceObservation: NSKeyValueObservation?
+  private static var paintedDark: Bool?
+  static var mode: String { normalizedMode(UserDefaults.standard.string(forKey: "ssmsTheme") ?? "light") }
+  static func normalizedMode(_ value: String) -> String {
+    ["system", "light", "dark"].contains(value) ? value : "light"
+  }
+  static func usesDark(_ value: String, appearance: NSAppearance) -> Bool {
+    switch normalizedMode(value) {
+    case "dark": return true
+    case "system": return appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    default: return false
+    }
+  }
+  static var dark: Bool { usesDark(mode, appearance: NSApplication.shared.effectiveAppearance) }
   static func color(_ light: UInt32, _ darkValue: UInt32) -> NSColor {
     let hex = dark ? darkValue : light
     return NSColor(
@@ -1342,8 +1382,24 @@ extension View {
     apply(UserDefaults.standard.string(forKey: "ssmsTheme") ?? "light")
   }
   static func apply(_ value: String) {
-    UserDefaults.standard.set(value == "dark" ? "dark" : "light", forKey: "ssmsTheme")
-    NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+    let mode = normalizedMode(value)
+    UserDefaults.standard.set(mode, forKey: "ssmsTheme")
+    let application = NSApplication.shared
+    if appearanceObservation == nil {
+      appearanceObservation = application.observe(\.effectiveAppearance) { _, _ in
+        Task { @MainActor in refreshSystemAppearance() }
+      }
+    }
+    // nil inherits macOS appearance; explicit light/dark remains a user override.
+    application.appearance = mode == "system" ? nil : NSAppearance(named: mode == "dark" ? .darkAqua : .aqua)
+    repaint()
+  }
+  private static func refreshSystemAppearance() {
+    guard mode == "system", paintedDark != dark else { return }
+    repaint()
+  }
+  private static func repaint() {
+    paintedDark = dark
     for window in NSApp.windows {
       window.backgroundColor = chrome
       if let view = window.contentView { decorate(view) }

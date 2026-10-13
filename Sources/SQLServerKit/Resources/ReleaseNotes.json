@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.2.99",
+    "date": "2026-10-13",
+    "title": "Akıllı tamamlama, sistem teması ve hızlı favoriler",
+    "changes": [
+      "Kolon tamamlama adın içinde de arar; başlangıç eşleşmeleri önce gelir. SQL Editörü ayarlarından şema adını ve köşeli parantez kullanımını ayrı ayrı seçebilirsiniz.",
+      "Görünüm ayarlarına Sistem teması eklendi. macOS açık/koyu görünümü değiştiğinde arayüz ve SSMS SQL renkleri birlikte güncellenir.",
+      "Favori Sorgular artık arama, klavye seçimi ve SQL önizlemesi olan ayrı bir seçici açar. Command+Shift+P kısayolu Ayarlar’dan değiştirilebilir; genel, aktif bağlantı ve aktif veritabanına uygun favoriler birlikte listelenir.",
+      "Favori kaydında görünür ilerleme ve tek kayıt işlemi vardır; kapatılmış favori pencerelerinin editör ve abonelikleri serbest bırakılır. Kaydetme sonrası gereksiz dosya tekrar okuması kaldırıldı.",
+      "Geçici katalog bağlantısının hatası Explorer oturumunu doğrudan kopuk göstermez; gerçek kalıcı bağlantı ayrıca doğrulanır.",
+      "Okuma sınırı Çalıştır veya Yenile başlangıcında sabitlenir ve her sonuç kümesine ayrı uygulanır. Mevcut sonuç ile sonraki okumaya seçilen sınır farklıysa seçici bu ayrımı açıklar."
+    ]
+  },
+  {
     "version": "0.2.98",
     "date": "2026-10-13",
     "title": "SQL editöründe akıllı gezinme ve doğru parametre vurguları",
