@@ -1408,6 +1408,7 @@ extension View {
   }
   static func decorate(_ view: NSView) {
     if let button = view as? StudioToolbarButton { button.refreshStyle() }
+    if let button = view as? QueryTabCloseButton {button.refreshStyle()}
     if let button = view as? StudioResultTabButton { button.refreshStyle() }
     if let label = view as? NSTextField, label.identifier?.rawValue == "studio.mutedLabel" { label.textColor = muted }
     // AppKit owns private text/layout views inside controls and the shared field editor.

@@ -18,6 +18,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     case .procedure: return "Prosedür"
     case .synonym: return "Eş anlamlı"
     case .column: return "Kolon"
+    case .variable: return "Değişken"
     case .keyword: return "Anahtar sözcük"
     case .function: return "Fonksiyon"
     }
@@ -29,6 +30,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     case .procedure: return "terminal"
     case .synonym: return "link"
     case .column: return "rectangle.split.3x1"
+    case .variable: return "at"
     case .keyword: return "curlybraces"
     case .function: return "function"
     }
@@ -37,6 +39,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     switch kind {
     case .table, .view: return StudioTheme.accent
     case .column: return StudioTheme.success
+    case .variable: return StudioTheme.text
     case .procedure: return StudioTheme.syntax(.procedure)
     case .function: return StudioTheme.syntax(.function)
     case .synonym: return StudioTheme.warning
@@ -1466,7 +1469,7 @@ private struct SQLParameterHelp:View {
         highlight()
         let prefixLength = caret-analysis.replacement.location
         let dot = analysis.replacement.location > 0 && (source as NSString).substring(with:NSRange(location:analysis.replacement.location-1,length:1)) == "."
-        if !parameterPopover.isShown,(manual || automatic && allowPopup && (analysis.procedureCompletion || prefixLength >= 2 || dot)), !analysis.suggestions.isEmpty, let window = editor.window, window.firstResponder === editor {
+        if !parameterPopover.isShown,(manual || automatic && allowPopup && (analysis.procedureCompletion || analysis.variableCompletion || prefixLength >= 2 || dot)), !analysis.suggestions.isEmpty, let window = editor.window, window.firstResponder === editor {
           guard let anchor = suggestionAnchor(), let host = window.contentView else { return }
           let hostAnchor = host.convert(anchor,from:editor)
           var below=true

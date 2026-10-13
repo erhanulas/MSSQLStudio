@@ -34,6 +34,7 @@ import SQLServerKit
       recordExplorerFailure(error)
     }
   }
+  var updatingProfile=false
   var reconnecting = false
   func pauseIndexing() { indexPreparation?.cancel() }
   func recordExplorerFailure(_ error: Error) {
@@ -194,6 +195,8 @@ struct ObjectEditorKey: Codable, Equatable {
   var sql = ""
   var savedText = ""
   var pinned = false
+  private var pendingDDLChanges:[ModuleEditing.Change]=[]
+  private var pendingDDLGeneration:UUID?
   private(set) var lastExecutionSucceeded = false
   private(set) var resultGeneration = 0
   private(set) var repeating = false
@@ -296,7 +299,7 @@ struct ObjectEditorKey: Codable, Equatable {
   }
   func connect() {
     guard !busy else { return }
-    guard server.online else { state = .disconnected; changed?(); return }
+    guard server.online,!server.updatingProfile else { state = .disconnected; changed?(); return }
     state = .connecting
     changed?()
     var profile = server.profile
@@ -402,12 +405,24 @@ struct ObjectEditorKey: Codable, Equatable {
     let sessionProbeFixture = self.sessionProbeFixture
     task = Task { [weak self] in
       guard let self else { return }
+      var ddlSessionVerified = executionFixture != nil && sessionProbeFixture == nil
       defer {
         task = nil
         if state != .disconnected {state = .ready}
         if applyingModule && lastExecutionSucceeded && !partial && transactionCount == 0 { moduleApplied?() }
-        if !estimated && lastExecutionSucceeded && !partial && transactionCount == 0 && !ModuleEditing.changedObjects(query).isEmpty {
-          NotificationCenter.default.post(name: .init("studioDDLCompleted"), object: self)
+        if !estimated,server === executionServer,server.generation==executionServerGeneration {
+          if pendingDDLGeneration != executionServerGeneration {
+            pendingDDLChanges=[];pendingDDLGeneration=executionServerGeneration
+          }
+          if lastExecutionSucceeded {
+            for change in ModuleEditing.changes(query).map({$0.inDatabase(executionDatabase)}) where !pendingDDLChanges.contains(change) && pendingDDLChanges.count<128 {pendingDDLChanges.append(change)}
+          }
+          // Read live metadata after COMMIT or ROLLBACK; an open transaction must
+          // never publish uncommitted DDL through a different metadata session.
+          if ddlSessionVerified,transactionCount == 0,!pendingDDLChanges.isEmpty,state != .disconnected {
+            NotificationCenter.default.post(name:.init("studioDDLCompleted"),object:self,userInfo:["changes":pendingDDLChanges,"database":executionDatabase,"generation":executionServerGeneration])
+            pendingDDLChanges=[]
+          }
         }
         if !estimated && lastExecutionSucceeded && !partial && transactionCount == 0 {managedObjectApplied?()}
         applyingModule = false
@@ -478,6 +493,7 @@ struct ObjectEditorKey: Codable, Equatable {
             return
           }
           if let row = result.results.first?.values.first, row.count > 1 {
+            ddlSessionVerified = !result.partial && row[0].flatMap(Int.init).map {$0>=0} == true && row[1].map {!$0.isEmpty} == true
             transactionCount = row[0].flatMap(Int.init) ?? 0
             if let database = row[1] {
               // DB_NAME is the actual SQL session identity, not a case-insensitive
@@ -559,6 +575,53 @@ struct ObjectEditorKey: Codable, Equatable {
     changed?()
     return true
   }
+  var explorerOrganization:ExplorerOrganization {(try? ExplorerOrganization.load(explorerTreeDefaults.data(forKey:"explorerOrganization"))) ?? ExplorerOrganization()}
+  func changeExplorerOrganization(_ change:(inout ExplorerOrganization)throws->Void)throws {
+    var value=try ExplorerOrganization.load(explorerTreeDefaults.data(forKey:"explorerOrganization"))
+    try change(&value)
+    explorerTreeDefaults.set(try JSONEncoder().encode(value),forKey:"explorerOrganization")
+    changed?()
+  }
+  var profilePersistenceFixture:((ServerProfile,String) async throws->Void)?
+  func saveConnectionProfile(_ server:ConnectedServer,profile input:ServerProfile,password:String,remember:Bool) async throws {
+    guard servers.contains(where:{$0 === server}),input.id==server.id,!server.reconnecting,!server.updatingProfile else {throw SQLFailure("Bağlantı güncellenemiyor.")}
+    var profile=input;profile.name=profile.name.trimmingCharacters(in:.whitespacesAndNewlines)
+    guard !profile.name.isEmpty,profile.name.count<=120,!profile.name.contains("\0") else {throw SQLFailure("Bağlantı adını kontrol edin.")}
+    if let appearance=profile.appearance {profile.appearance=try appearance.validated()}
+    _ = try profile.connectionString(password:password)
+    let reset = !server.profile.hasSameConnectionSettings(as:profile) || server.password != password
+    let affected=documents.filter {$0.server === server}
+    guard !reset || affected.allSatisfy({!$0.busy && $0.transactionCount==0}) else {throw SQLFailure("Bağlantı bilgilerini değiştirmeden önce çalışan sorguları ve açık transaction’ları tamamlayın.")}
+    if reset,affected.contains(where:{$0.confirmDiscardResultEdits?() == false}) {throw CancellationError()}
+    let previous=affected.map(\.state)
+    server.updatingProfile=true
+    if reset {for doc in affected {doc.state = .connecting;doc.changed?()}}
+    defer {server.updatingProfile=false;changed?()}
+    do {
+      if remember || server.remembered {
+        if let fixture=profilePersistenceFixture {try await fixture(profile,password)}
+        else {let savedProfile=profile;try await Task.detached {try ServerVault().save(savedProfile,password:savedProfile.kerberos ? "":password)}.value}
+      }
+    } catch {
+      if reset {for (doc,state) in zip(affected,previous) {doc.state=state;doc.changed?()}}
+      throw error
+    }
+    if reset {
+      server.online=false;server.pauseIndexing();server.generation=UUID()
+      let metadata=server.metadata;server.metadata=ODBCConnection()
+      for doc in affected {await doc.connection.disconnect();doc.state = .disconnected;doc.results=[];doc.rowCount=0;doc.clearSymbols();doc.changed?()}
+      await metadata.disconnect()
+    }
+    server.profile=profile;server.password=password;server.remembered = server.remembered || remember
+    if server.remembered {rememberExplorer(server.id,selected:true)}
+    scheduleSnapshot()
+  }
+  func deleteConnectionProfile(_ server:ConnectedServer) async throws {
+    guard !server.reconnecting,!server.updatingProfile else {throw SQLFailure("Bağlantı işlemi sürüyor.")}
+    if server.remembered {let id=server.id;try await Task.detached {try ServerVault().delete(id)}.value}
+    try changeExplorerOrganization {try $0.assign(server.id,to:nil)}
+    await removeExplorer(server)
+  }
   var servers: [ConnectedServer] = []
   var documents: [QueryDocument] = []
   var active: QueryDocument?
@@ -577,6 +640,7 @@ struct ObjectEditorKey: Codable, Equatable {
     -> ConnectedServer
   {
     if let old = servers.first(where: { $0.id == profile.id }) {
+      guard !old.updatingProfile else {throw SQLFailure("Bağlantı bilgileri kaydediliyor.")}
       let previousProfile=old.profile,previousDatabases=old.databases
       let reconnect =
         !old.profile.hasSameConnectionSettings(as: profile) || old.password != password
@@ -669,7 +733,7 @@ struct ObjectEditorKey: Codable, Equatable {
   }
   // Explorer metadata is independent of each query's session and transaction.
   func disconnectExplorer(_ server: ConnectedServer) async {
-    guard !server.reconnecting else { return }
+    guard !server.reconnecting,!server.updatingProfile else { return }
     server.online = false
     server.startupError = nil
     server.pauseIndexing()
@@ -679,14 +743,14 @@ struct ObjectEditorKey: Codable, Equatable {
     await previous.disconnect()
   }
   func removeExplorer(_ server: ConnectedServer) async {
-    guard !server.reconnecting else { return }
+    guard !server.reconnecting,!server.updatingProfile else { return }
     servers.removeAll { $0 === server }
     rememberExplorer(server.id, selected:false)
     await disconnectExplorer(server)
     changed?()
   }
   func reconnectExplorer(_ server: ConnectedServer) async {
-    guard !server.reconnecting else { return }
+    guard !server.reconnecting,!server.updatingProfile else { return }
     server.reconnecting = true
     server.startupError = nil
     changed?()
@@ -702,7 +766,7 @@ struct ObjectEditorKey: Codable, Equatable {
     }
   }
   func prepareExplorerForNewQuery(_ server:ConnectedServer) async -> Bool {
-    guard !server.reconnecting else {return false}
+    guard !server.reconnecting,!server.updatingProfile else {return false}
     if !server.online {await reconnectExplorer(server)}
     return server.online
   }
@@ -871,7 +935,7 @@ struct ObjectEditorKey: Codable, Equatable {
     alert.informativeText = message
     alert.runModal()
   }
-  func close(_ doc: QueryDocument) -> Bool {
+  func close(_ doc: QueryDocument,discardChanges:Bool=false) -> Bool {
     guard !doc.busy else {
       showError("Önce çalışan sorguyu durdurun.")
       return false
@@ -880,7 +944,7 @@ struct ObjectEditorKey: Codable, Equatable {
       showError("Önce COMMIT veya ROLLBACK çalıştırın.")
       return false
     }
-    guard confirmSave(doc) else { return false }
+    guard discardChanges || confirmSave(doc) else { return false }
     doc.definitionTask?.cancel();doc.definitionTask=nil
     doc.disconnect()
     documents.removeAll { $0.id == doc.id }

@@ -161,6 +161,16 @@ public final class ODBCConnection: @unchecked Sendable {
         }
       }
     }
+    let serverLimited=try ServerReadLimit.configure(sql:text,rows:limits.rows,write:{maximum in
+      try check(SQLSetStmtAttr(handle,SQLINTEGER(SQL_ATTR_MAX_ROWS),UnsafeMutableRawPointer(bitPattern:maximum),0),kind:SQLSMALLINT(SQL_HANDLE_STMT),handle:handle)
+    },read:{
+      var actual:SQLULEN=0
+      try check(SQLGetStmtAttr(handle,SQLINTEGER(SQL_ATTR_MAX_ROWS),&actual,SQLINTEGER(MemoryLayout<SQLULEN>.size),nil),kind:SQLSMALLINT(SQL_HANDLE_STMT),handle:handle)
+      return Int(clamping:actual)
+    })
+    // The driver restores default MAX_ROWS on subsequent statement handles.
+    // Also clear this handle's attribute before it is freed, including errors/cancel.
+    defer {if serverLimited {_ = SQLSetStmtAttr(handle,SQLINTEGER(SQL_ATTR_MAX_ROWS),nil,0)}}
     try cancelledCheck()
     var utf16 = Array(text.utf16) + [0]
     let length = SQLINTEGER(utf16.count - 1)
@@ -208,7 +218,7 @@ public final class ODBCConnection: @unchecked Sendable {
           let spool = limits.diskResults ? try ResultSpool() : nil
           var pending: [[String?]] = []
           var pendingBytes = 0
-          var retainedRows = 0
+          var budget=ResultFetchBudget(rows:limits.rows)
           var lastSnapshot = Date.distantPast
           func flush(force: Bool = false) throws {
             guard !pending.isEmpty else { return }
@@ -226,21 +236,14 @@ public final class ODBCConnection: @unchecked Sendable {
             pendingBytes = 0
           }
           do {
-            while true {
+            while try budget.next(fetch:{
               try cancelledCheck()
-              let fetched = SQLFetch(handle)
-              if fetched == SQL_NO_DATA { break }
-              try check(fetched, kind: SQLSMALLINT(SQL_HANDLE_STMT), handle: handle)
+              let fetched=SQLFetch(handle)
+              if fetched == SQL_NO_DATA {return false}
+              try check(fetched,kind:SQLSMALLINT(SQL_HANDLE_STMT),handle:handle)
               messages(fetched)
-              if retainedRows >= max(1, limits.rows) {
-                rows.truncated = true
-                output.partial = true
-                output.messages.append(
-                  "Sonuç \(resultIndex + 1): \(max(1, limits.rows)) satır okuma sınırına ulaşıldı; bu sonuç kısmi. Sonraki sonuçlar okunmaya devam ediyor.")
-                // SQLMoreResults closes this cursor and discards its unread rows.
-                // Cancelling the statement here would also lose later SELECT results.
-                break
-              }
+              return true
+            }) {
               var row: [String?] = []
               for (i, field) in rows.fields.enumerated() {
                 let rawValue = try read(
@@ -259,8 +262,12 @@ public final class ODBCConnection: @unchecked Sendable {
               }
               pending.append(row)
               pendingBytes += row.reduce(0) { $0 + ($1?.utf8.count ?? 0) + 16 }
-              retainedRows += 1
               if pending.count >= 512 || pendingBytes >= 1_048_576 { try flush() }
+            }
+            if budget.reached {
+              rows.truncated=true;output.partial=true
+              let message="Sonuç \(resultIndex+1): \(budget.maximum) satır sınırına ulaşıldı; daha fazla satır olabilir. Sonraki sonuçlar ayrı okunur."
+              output.messages.append(message);events?(.message(message))
             }
           } catch {
             rows.truncated = true

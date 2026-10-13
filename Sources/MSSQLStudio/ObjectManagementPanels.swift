@@ -9,7 +9,7 @@ extension WorkbenchController {
     let folder=node.objectFolder ?? {if case .folder(let f)=node.kind {return f};return nil}()
     if let folder, [.triggers,.indexes,.keys,.constraints].contains(folder) || title.hasPrefix("Rename") {
       document.managedObjectApplied={ [weak document] in
-        guard let query=document?.lastExecutedSQL,TSQL.lex(query).contains(where:{ ![.space,.comment,.string].contains($0.kind) && ["TRIGGER","INDEX","CONSTRAINT","SP_RENAME"].contains($0.text.uppercased()) }) else {return}
+        guard let query=document?.lastExecutedSQL,ModuleEditing.changes(query).isEmpty,TSQL.lex(query).contains(where:{ ![.space,.comment,.string].contains($0.kind) && ["TRIGGER","INDEX","CONSTRAINT","SP_RENAME"].contains($0.text.uppercased()) }) else {return}
         NotificationCenter.default.post(name:.init("studioManagedObjectCompleted"),object:node)
       }
     }
@@ -136,7 +136,7 @@ extension WorkbenchController {
         default:
           if isEditor {
             let doc=openObjectEditor(server:node.server,database:node.database,objectID:item.id,sql:script,title:(mode == "MODIFY" ? "ALTER" : mode)+" · "+item.name,original:moduleSource)
-            if folder == .triggers {doc.managedObjectApplied={NotificationCenter.default.post(name:.init("studioManagedObjectCompleted"),object:node)}}
+            // Static trigger DDL uses the shared targeted metadata observer.
           } else {openManagedSQL(script,node:node,title:mode+" · "+item.name)}
         }
       } catch {state.showError(error.localizedDescription)}

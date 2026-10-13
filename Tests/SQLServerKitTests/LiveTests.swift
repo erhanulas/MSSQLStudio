@@ -5,6 +5,23 @@ import Testing
 
 @Suite(.serialized) struct LiveTests {
   @Test(.enabled(if: ProcessInfo.processInfo.environment["MSSQL_TEST_PASSWORD"] != nil))
+  func serverRowLimitDoesNotLeakIntoLaterWritesAndPreservesLaterResults() async throws {
+    let c=try await connection()
+    do {
+      _ = try await c.execute("CREATE TABLE #ReadBudget(ID int); INSERT #ReadBudget SELECT TOP(2000) ROW_NUMBER() OVER(ORDER BY (SELECT NULL)) FROM sys.all_objects a CROSS JOIN sys.all_objects b;")
+      var limits=Limits();limits.rows=1000
+      let output=try await c.execute("SELECT * FROM #ReadBudget; SELECT 42 AS Last;",limits:limits)
+      #expect(output.results.filter {!$0.fields.isEmpty}.map {$0.values.count} == [1000,1])
+      #expect(output.partial && !output.stoppedEarly && output.results.last?.values.first?[0] == "42")
+      // MAX_ROWS uses a server ROWCOUNT option. A subsequent ordinary statement
+      // must restore its default before mutating all 2000 disposable rows.
+      _ = try await c.execute("UPDATE #ReadBudget SET ID=0;")
+      let all=try await c.execute("SELECT COUNT(*) FROM #ReadBudget WHERE ID=0;")
+      #expect(all.results.first?.values.first?[0] == "2000")
+      _ = try await c.execute("DROP TABLE #ReadBudget;");await c.disconnect()
+    } catch { _ = try? await c.execute("DROP TABLE IF EXISTS #ReadBudget;");await c.disconnect();throw error }
+  }
+  @Test(.enabled(if: ProcessInfo.processInfo.environment["MSSQL_TEST_PASSWORD"] != nil))
   func connectionDiscoveryAndSelectedDatabases() async throws {
     let password = try #require(ProcessInfo.processInfo.environment["MSSQL_TEST_PASSWORD"])
     var profile = ServerProfile(trustCertificate: true, visibleDatabases: [])

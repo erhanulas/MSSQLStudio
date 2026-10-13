@@ -159,14 +159,25 @@ public actor CatalogDiskIndex {
     try write("DELETE FROM objects WHERE scope=?",[staging])
     try write("DELETE FROM builds WHERE staging=?",[staging])
   }
+  func invalidateEditingTarget(scope:String,name:String,kind:Folder)throws {
+    if kind == .tables {
+      // A preparation stores its authoritative base-table identity, never SQL.
+      // JSON validity keeps a corrupt cache entry from aborting the DDL refresh.
+      try write("DELETE FROM editing_metadata WHERE scope=? AND CASE WHEN json_valid(payload) THEN (json_extract(payload,'$.schema')||'.'||json_extract(payload,'$.name')=? OR json_extract(payload,'$.objectID') IN (SELECT CAST(id AS INTEGER) FROM objects WHERE scope=? AND kind='USER_TABLE' AND (folded_name=? OR folded_qualified=?))) ELSE 1 END",[scope,name,scope,Self.fold(name),Self.fold(name)])
+    } else if kind == .views || kind == .synonyms {
+      // View/synonym provenance can point to another base table. Without storing
+      // user SQL/dependency graphs, retain conservative preparation invalidation.
+      try write("DELETE FROM editing_metadata WHERE scope=?",[scope])
+    }
+  }
   public func replaceTarget(scope: String, name: String, kind: Folder, items: [CatalogItem], generation: UUID? = nil) throws {
     try validate(scope:scope,generation:generation)
     // Exact target replacement also removes dropped objects. Other records stay untouched.
     let kinds = Self.kinds(kind)
     try execute("BEGIN IMMEDIATE")
     do {
+      try invalidateEditingTarget(scope:scope,name:name,kind:kind)
       try write("DELETE FROM objects WHERE scope=? AND kind IN (\(kinds)) AND (folded_name=? OR folded_qualified=?)",[scope,Self.fold(name),Self.fold(name)])
-      try write("DELETE FROM editing_metadata WHERE scope=?",[scope])
       // append has its own transaction, so insert here with one prepared statement per changed object.
       for item in items {
         try write("INSERT OR REPLACE INTO objects VALUES(?,?,?,?,?,?,?)",[scope,String(item.id),item.name,item.schema,item.detail,Self.fold(item.name),Self.fold(item.schema + "." + item.name)])
@@ -297,7 +308,7 @@ public actor CatalogIndexService {
     let generation=try await index.generation(scope:scope)
     // Publish targeted DDL after an in-flight full build, avoiding lost local updates.
     if let build = builds[scope] { _ = try? await build.task.value }
-    guard try await index.status(scope: scope) != nil else { return }
+    guard try await index.status(scope: scope) != nil else {try await index.invalidateEditingTarget(scope:scope,name:name,kind:folder);return}
     try await index.replaceTarget(scope: scope,name: name,kind: folder,items: items,generation:generation)
   }
 }

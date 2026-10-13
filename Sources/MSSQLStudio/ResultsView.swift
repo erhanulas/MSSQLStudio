@@ -2252,7 +2252,7 @@ private struct ColumnFilterPanel: View {
             guard let doc else {return}
             if let result=try? await doc.server.catalog(Catalog.definition(object),database:db),!result.partial,
               let current=result.results.first?.values.first?.first,let current,doc.moduleInitialSQL == sql,doc.database == db {doc.moduleOriginal=current;doc.changed?()}
-            await doc.loadSymbols(force:true)
+            // The shared targeted DDL observer updates completion metadata.
           }
         }
         document.applyingModule=true;document.execute(override:sql)

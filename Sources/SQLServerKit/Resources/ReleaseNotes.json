@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.101",
+    "date": "2026-10-13",
+    "title": "DML tamamlama, Explorer klasörleri ve hedefli indeks yenileme",
+    "changes": [
+      "UPDATE, DELETE ve INSERT tamamlaması tablo hedefini, FROM/JOIN alias’larını ve çok satırlı şema/parantezli adları çözer. DECLARE değişkenleri ve rutin parametreleri @ yazıldığında önerilir.",
+      "Salt okunur SELECT sorgularında satır okuma sınırı ODBC sürücüsüne de uygulanır; istemci sınırdan sonra ek satır istemez. Sonraki sonuç kümeleri ve mevcut sayfalama korunur; yazma içeren sorguların etkilenen satırları kısıtlanmaz.",
+      "Explorer’da iç içe klasörler ve renkli gruplar oluşturabilirsiniz. Bağlantılar klasöre sürüklenebilir; çevrimdışıyken adlandırma, ayarları kaydetme, taşıma ve silme için bağlantı kurulması gerekmez.",
+      "CREATE, ALTER ve DROP sonrasında yalnız ilgili nesnenin Explorer, disk metadata ve kolon tamamlama bilgisi yenilenir. Açık transaction’ın bitmesi beklenir; DDL karşılaştırması da aynı hedefli güncellemeyi kullanır.",
+      "Sekme kapatma simgesi daha geniş tıklama alanı ve belirgin hover kullanır. Tümünü Kaydetmeden Kapat, normal kapatma uyarılarını değiştirmeden tüm uygun sekmeleri tek işlemde kapatır."
+    ]
+  },
+  {
     "version": "0.2.100",
     "date": "2026-10-13",
     "title": "Anlık sonuç sınırı ve güvenilir favori kaydı",

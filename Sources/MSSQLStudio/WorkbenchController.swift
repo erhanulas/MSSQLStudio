@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 @MainActor final class TreeNode: NSObject {
   enum Kind {
-    case server, group, database, favorites, favorite
+    case server, group, database, favorites, favorite, connectionGroup
     case folder(Folder)
     case object(Folder)
     case detail
@@ -16,6 +16,7 @@ import UniformTypeIdentifiers
     case catalogs(String), catalog(String, String?), group
     case relation(LinkedCatalog.Relation), columns(LinkedCatalog.Relation), detail
   }
+  var connectionGroupID:UUID?
   var linked: LinkedBranch?
   var title: String
   var favorite: FavoriteQuery?
@@ -44,17 +45,20 @@ import UniformTypeIdentifiers
   var displayTitle: String {
     if case .server = kind {
       let badge = server.profile.appearance?.badge ?? ""
-      return (badge.isEmpty ? "" : "[\(badge)] ") + server.profile.name + (server.reconnecting ? " · Bağlanıyor…" : server.online ? " · Bağlı" : " · Bağlantı kapalı")
+      return (badge.isEmpty ? "" : "[\(badge)] ") + server.profile.name + (server.updatingProfile ? " · Kaydediliyor…" : server.reconnecting ? " · Bağlanıyor…" : server.online ? " · Bağlı" : " · Bağlantı kapalı")
     }
     if case .object(.triggers)=kind { return title }
     if case .object(.jobs)=kind { return item?.name ?? title }
     return title
   }
   var persistenceKey:String {
+    if let id=connectionGroupID {return "connection-group|"+id.uuidString}
     var parts:[String]=[];var cursor:TreeNode?=self
     while let node=cursor {
+      if case .connectionGroup=node.kind {cursor=node.parent;continue}
       let kind:String
       switch node.kind {
+      case .connectionGroup:kind="connectionGroup"
       case .server:kind="server"
       case .group:kind="group"
       case .database:kind="database"
@@ -81,7 +85,7 @@ import UniformTypeIdentifiers
     if linked != nil {return true}
     if case .object(.linkedServers) = kind {return true}
     switch kind {
-    case .server, .group, .database, .favorites: return true
+    case .server, .group, .database, .favorites, .connectionGroup: return true
     case .folder(let folder):
       return [
         .databases, .tables, .views, .procedures, .functions, .synonyms, .columns, .indexes, .keys,
@@ -130,6 +134,7 @@ import UniformTypeIdentifiers
     switch kind {
     case .favorites: return favoriteScope == .global ? "globe" : favoriteScope == .database ? "cylinder.split.1x2" : "star.circle"
     case .favorite: return "star.fill"
+    case .connectionGroup:return "folder.fill"
     case .server: return "server.rack"
     case .database: return "cylinder.split.1x2"
     case .group:
@@ -164,7 +169,7 @@ import UniformTypeIdentifiers
     }
   }
 }
-@MainActor final class DocumentButton: NSButton, NSDraggingSource {
+@MainActor class DocumentButton: NSButton, NSDraggingSource {
   var document: QueryDocument?
   var showMenu: ((NSEvent) -> Void)?
   var draggable = false
@@ -174,7 +179,7 @@ import UniformTypeIdentifiers
     let origin = event.locationInWindow
     highlight(true)
     while let next = window.nextEvent(matching: [.leftMouseDragged,.leftMouseUp]) {
-      if next.type == .leftMouseUp { highlight(false); if let action { _ = sendAction(action,to: target) }; return }
+      if next.type == .leftMouseUp { highlight(false); if bounds.contains(convert(next.locationInWindow,from:nil)),let action { _ = sendAction(action,to: target) }; return }
       if hypot(next.locationInWindow.x-origin.x,next.locationInWindow.y-origin.y) > 4 {
         highlight(false)
         let item = NSPasteboardItem(); item.setString(document.id.uuidString,forType: QueryTabStrip.type)
@@ -189,6 +194,26 @@ import UniformTypeIdentifiers
     highlight(false)
   }
   func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation { .move }
+}
+@MainActor final class QueryTabCloseButton:DocumentButton {
+  private var tracking:NSTrackingArea?
+  private(set) var hovered=false
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    if let tracking {removeTrackingArea(tracking)}
+    let area=NSTrackingArea(rect:.zero,options:[.mouseEnteredAndExited,.activeAlways,.inVisibleRect],owner:self,userInfo:nil)
+    addTrackingArea(area);tracking=area
+  }
+  override func mouseEntered(with event:NSEvent) {hovered=true;refreshStyle()}
+  override func mouseExited(with event:NSEvent) {hovered=false;refreshStyle()}
+  func refreshStyle() {contentTintColor=hovered ? StudioTheme.danger:StudioTheme.muted;needsDisplay=true}
+  override func draw(_ dirtyRect:NSRect) {
+    if hovered || isHighlighted {
+      StudioTheme.danger.withAlphaComponent(isHighlighted ? 0.22:0.12).setFill()
+      NSBezierPath(roundedRect:bounds.insetBy(dx:1,dy:1),xRadius:6,yRadius:6).fill()
+    }
+    super.draw(dirtyRect)
+  }
 }
 @MainActor final class QueryTabSurface: NSStackView {
   weak var primaryButton: DocumentButton?
@@ -312,6 +337,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private let queryToolbarHost=NSView()
   private weak var hostedQuery:QueryController?
   private var roots: [TreeNode] = []
+  private var organization=ExplorerOrganization()
+  private var groupNodes:[UUID:TreeNode]=[:]
+  private var displayRoots:[TreeNode]=[]
   private var restoringTree=false
   private weak var collapsingNode:TreeNode?
   private var expansionState:[String:Bool] = [:]
@@ -578,7 +606,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   private var selected: TreeNode? { outline.item(atRow: outline.selectedRow) as? TreeNode }
   var selectedServer: ConnectedServer? {
-    selected?.server ?? state.active?.server ?? state.servers.first(where: \.online) ?? state.servers.first
+    (selected?.connectionGroupID == nil ? selected?.server:nil) ?? state.active?.server ?? state.servers.first(where: \.online) ?? state.servers.first
   }
   static func queryDatabase(for node: TreeNode) -> String {
     switch node.kind {
@@ -587,7 +615,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
   }
   var selectedDatabase: String {
-    if let node = selected { return Self.queryDatabase(for: node) }
+    if let node = selected,node.connectionGroupID == nil { return Self.queryDatabase(for: node) }
     return state.active?.database ?? selectedServer?.profile.database ?? "master"
   }
   func moveQueryTab(_ id: UUID, to insertionIndex: Int) {
@@ -650,6 +678,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     roots=state.servers.compactMap {server in roots.first {$0.server === server}}
     for root in roots {synchronizeFavorites(in:root)}
+    rebuildOrganizationRoots()
     rebuildSearchScopes()
     reloadExplorer()
     restoreExplorerExpansion()
@@ -693,13 +722,17 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       button.isBordered = false
       button.state = state.active === doc ? .on : .off
       button.font = .systemFont(ofSize: 12)
-      let close = DocumentButton(
+      let close = QueryTabCloseButton(
         image: NSImage(systemSymbolName: "xmark", accessibilityDescription: "Sekmeyi kapat")!,
         target: self, action: #selector(closeSpecificTab(_:)))
       close.document = doc
       close.bezelStyle = .inline
       close.isBordered = false
-      close.controlSize = .mini
+      close.controlSize = .small
+      close.toolTip="Sekmeyi kapat · \(doc.title)"
+      close.setAccessibilityIdentifier("closeQueryTab_"+doc.id.uuidString)
+      close.widthAnchor.constraint(equalToConstant:24).isActive=true
+      close.heightAnchor.constraint(equalToConstant:24).isActive=true
       let group = QueryTabSurface(views: [button, close])
       group.primaryButton = button
       group.identifier = NSUserInterfaceItemIdentifier("connectionAccent")
@@ -854,7 +887,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   func tabMenu(for document: QueryDocument) -> NSMenu {
     let menu = NSMenu()
-    for (index, title) in [document.pinned ? "Unpin Tab" : "Pin Tab", "Close Tab", "Close Right Tabs", "Close Left Tabs", "Close Other Tabs", "Close All Tabs"].enumerated() {
+    for (index, title) in [document.pinned ? "Unpin Tab" : "Pin Tab", "Close Tab", "Close Right Tabs", "Close Left Tabs", "Close Other Tabs", "Close All Tabs", "Tümünü Kaydetmeden Kapat"].enumerated() {
       let item = menu.addItem(withTitle: title, action: #selector(tabMenuAction(_:)), keyEquivalent: "")
       item.target = self; item.tag = index; item.representedObject = document
     }
@@ -863,6 +896,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   @objc private func tabMenuAction(_ item: NSMenuItem) {
     guard let doc = item.representedObject as? QueryDocument,
       let index = state.documents.firstIndex(where: { $0 === doc }) else { return }
+    if item.tag == 6 {closeAllWithoutSaving();return}
     if item.tag == 0 { doc.pinned.toggle(); state.scheduleSnapshot(); renderTabs(); return }
     let targets = state.documents.enumerated().filter { i, candidate in
       switch item.tag {
@@ -877,6 +911,16 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       guard state.close(target) else { break }
       controllers.removeValue(forKey: target.id)?.removeFromParent()
       if let owner = detached.removeValue(forKey: target.id) { owner.redock = nil; owner.close() }
+    }
+  }
+  @objc func closeAllWithoutSaving() {
+    guard state.documents.allSatisfy({!$0.busy && $0.transactionCount == 0}) else {
+      state.showError("Tüm sekmeleri kapatmadan önce çalışan sorguları ve açık transaction’ları tamamlayın.");return
+    }
+    for target in state.documents {
+      guard state.close(target,discardChanges:true) else {return}
+      controllers.removeValue(forKey:target.id)?.removeFromParent()
+      if let owner=detached.removeValue(forKey:target.id) {owner.redock=nil;owner.close()}
     }
   }
   @objc private func selectTab(_ sender: DocumentButton) {
@@ -916,7 +960,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     openNewQuery(server:server,database:selectedDatabase)
   }
   private func openNewQuery(server:ConnectedServer,database:String) {
-    guard !server.reconnecting else {return}
+    guard !server.reconnecting,!server.updatingProfile else {return}
     if server.online || Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" {
       state.newQuery(server:server,database:database); return
     }
@@ -1004,7 +1048,11 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
           )
         }
         reloadWorkspace()
-      }, cancel: { [weak self] in self?.finishSheet() })
+      }, saveProfile:server.map {editingServer in { [weak self] profile,password,remember in
+        guard let self else {throw SQLFailure("Çalışma alanı kapandı.")}
+        try await state.saveConnectionProfile(editingServer,profile:profile,password:password,remember:remember)
+        finishSheet();reloadWorkspace()
+      }}, cancel: { [weak self] in self?.finishSheet() })
     let controller = NSHostingController(
       rootView: form.font(.custom(StudioTheme.uiFont.fontName, size: 12)))
     let sheet = NSWindow(contentViewController: controller)
@@ -1106,6 +1154,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     let menu=NSMenu();menu.autoenablesItems=false
     let add=NSMenuItem(title:"Yeni Bağlantı…",action:#selector(showConnect),keyEquivalent:"")
     add.target=self;add.image=NSImage(systemSymbolName:"plus",accessibilityDescription:nil);menu.addItem(add)
+    let folder=NSMenuItem(title:"Yeni Klasör…",action:#selector(createExplorerGroup(_:)),keyEquivalent:"")
+    folder.target=self;folder.image=NSImage(systemSymbolName:"folder.badge.plus",accessibilityDescription:nil);menu.addItem(folder)
     if let server {
       menu.addItem(.separator())
       let action=NSMenuItem(title:server.online ? "Aktif Bağlantıyı Kapat":"Yeniden Bağlan",action:server.online ? #selector(closeExplorerConnection(_:)):#selector(reconnectExplorerConnection(_:)),keyEquivalent:"")
@@ -1167,8 +1217,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       guard generation==server.generation,server.online,server.catalogIndexRevision==revision,server.allowsCatalogIndex(database) else {return}
       guard !result.partial,!result.stoppedEarly,result.results.count==1,!result.results.contains(where:\.truncated) else {throw SQLFailure("Nesne yenilemesi kısmi geldi.")}
       let values=Array(result.results.first?.values ?? [])
-      guard values.count<=30_000,values.allSatisfy({$0.count>=6 && $0[0].flatMap(Int.init).map {$0>0}==true && $0[0]==values.first?[0] && $0[1]==key.name && $0[2]==key.schema && $0[3] != nil}) else {throw SQLFailure("Nesne yenileme yanıtı doğrulanamadı.")}
+      guard values.count<=30_000,values.allSatisfy({$0.count>=6 && $0[0].flatMap(Int.init).map {$0>0}==true && $0[0]==values.first?[0] && $0[1]==values.first?[1] && $0[2]==values.first?[2] && $0[1].map({!$0.isEmpty && $0.utf16.count<=128}) == true && $0[2].map({$0.utf16.count<=128}) == true && $0[3] != nil}) else {throw SQLFailure("Nesne yenileme yanıtı doğrulanamadı.")}
       let item=Catalog.rows(result).first
+      let key=item.map {SchemaObjectKey(schema:$0.schema,name:$0.name,databaseTrigger:key.databaseTrigger)} ?? key
       let parentID=values.first?[5].flatMap(Int.init) ?? 0
       if folder != .triggers {
         let rows=item.map {[$0]} ?? []
@@ -1186,7 +1237,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         queue.append(contentsOf:node.children)
         guard node.database==database else {continue}
         if case .folder(let category)=node.kind,category==folder,node.loaded,
-          folder != .triggers || (node.ownerObject?.item?.id ?? 0)==parentID {
+          folder != .triggers || values.isEmpty || (node.ownerObject?.item?.id ?? 0)==parentID {
           let matches:(TreeNode)->Bool={child in child.item?.name==key.name && (key.databaseTrigger || child.item?.schema==key.schema)}
           if let existing=node.children.first(where:matches),let item {existing.item=item;existing.title=folder == .triggers ? item.name:item.schema+"."+item.name}
           else if let item {node.children.append(TreeNode(folder == .triggers ? item.name:item.schema+"."+item.name,kind:.object(folder),server:server,database:database,item:item));node.children.sort {$0.title.localizedStandardCompare($1.title) == .orderedAscending}}
@@ -1203,56 +1254,42 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       if searchScope?.server === server,searchScope.map({searchDatabases($0).contains(database)})==true,!explorerSearch.stringValue.isEmpty {filterExplorer()}
     } catch {
       guard generation==server.generation,server.catalogIndexRevision==revision,server.allowsCatalogIndex(database) else {return}
-      searchStatus.stringValue="Nesne uygulandı; yerel katalog yenilenemedi."
+      searchStatus.stringValue="Nesnenin yerel kataloğu yenilenemedi."
       searchStatus.toolTip=error.localizedDescription
     }
   }
   @objc private func refreshChangedObjects(_ notification: Notification) {
-    guard let doc = notification.object as? QueryDocument else { return }
-    let targets = ModuleEditing.changedObjects(doc.lastExecutedSQL ?? "")
-    let db = doc.database, server = doc.server
-    let revision=server.catalogIndexRevision
-    Task { [weak self] in
-      guard let self else { return }
-      for target in targets {
-        guard server.catalogIndexRevision==revision,server.allowsCatalogIndex(db) else {return}
-        guard let result = try? await server.catalog(Catalog.searchObjects(target.name, operation: 1, folder: target.folder), database: db) else { continue }
-        guard server.catalogIndexRevision==revision,server.allowsCatalogIndex(db) else {return}
-        let rows = Catalog.rows(result)
+    guard let doc=notification.object as? QueryDocument else {return}
+    let changes=notification.userInfo?["changes"] as? [ModuleEditing.Change] ?? ModuleEditing.changes(doc.lastExecutedSQL ?? "")
+    let database=notification.userInfo?["database"] as? String ?? doc.database
+    let generation=notification.userInfo?["generation"] as? UUID ?? doc.server.generation
+    Task {[weak self,weak doc] in
+      guard let self,let doc,doc.server.generation==generation else {return}
+      await refreshDDLChanges(changes,server:doc.server,database:database)
+    }
+  }
+  func refreshDDLChanges(_ changes:[ModuleEditing.Change],server:ConnectedServer,database:String,indexService:CatalogIndexService = .shared,catalogService:SQLCatalogService = .shared) async {
+    let generation=server.generation,revision=server.catalogIndexRevision
+    for change in changes {
+      let db=change.database ?? database
+      guard server.generation==generation,server.catalogIndexRevision==revision,server.online else {return}
+      guard server.allowsCatalogIndex(db) else {continue}
+      var schema=change.schema,fallback:String?
+      if schema == nil {
         do {
-          try await CatalogIndexService.shared.replaceTarget(profile: server.profile, database: db, name: target.name, folder: target.folder, items: rows)
-        } catch { searchStatus.stringValue = "Disk indeksi güncellenemedi; indeksi yenileyin." }
-        guard server.catalogIndexRevision==revision,server.allowsCatalogIndex(db) else {return}
-        var queue = roots.filter { $0.server === server }, visited = 0
-        while let node = queue.popLast() {
-          visited += 1
-          if visited % 200 == 0 { await Task.yield() }
-          guard server.catalogIndexRevision==revision,server.allowsCatalogIndex(db) else {return}
-          queue.append(contentsOf: node.children)
-          guard node.database == db else { continue }
-          if case .folder(let folder) = node.kind, folder == target.folder, node.item == nil, node.loaded {
-            func matches(_ item: CatalogItem) -> Bool {
-              target.name.caseInsensitiveCompare(item.name) == .orderedSame || target.name.caseInsensitiveCompare(item.schema + "." + item.name) == .orderedSame
-            }
-            let previousCount = node.children.count
-            node.children.removeAll { child in
-              child.item.map { matches($0) && !rows.contains(where: { $0.id == child.item?.id }) } ?? false
-            }
-            for item in rows where !node.children.contains(where: { $0.item?.id == item.id }) {
-              node.children.append(TreeNode("\(item.schema).\(item.name)", kind: .object(folder), server: server, database: db, item: item))
-            }
-            if node.children.count != previousCount {
-              node.children.sort { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-              reloadExplorer(item:node,children:true)
-            }
-          }
-          if let item = node.item, case .object(let folder) = node.kind, folder == target.folder,
-            rows.contains(where: { $0.id == item.id }) {
-            node.loaded = false; node.children = []; load(node)
-          }
-        }
+          var limits=Limits();limits.rows=2;limits.timeout=10
+          let sql="-- StudioDDLDefaultSchema\nSELECT SCHEMA_NAME(),OBJECT_SCHEMA_NAME(OBJECT_ID("+SQL.literal(SQL.identifier(change.name))+"));"
+          let output=try await server.catalog(sql,database:db,limits:limits)
+          guard !output.partial,!output.stoppedEarly,output.results.count==1,let row=output.results.first?.values.first,row.count==2,let defaultSchema=row[0],!defaultSchema.isEmpty else {throw SQLFailure("Varsayılan şema doğrulanamadı.")}
+          schema=row[1] ?? defaultSchema
+          // A dropped unqualified name may have resolved through dbo rather
+          // than the login's default schema. Re-read both candidate identities.
+          if row[1]==nil,defaultSchema != "dbo" {fallback="dbo"}
+        } catch {searchStatus.stringValue="DDL tamamlandı; varsayılan şema okunamadı.";searchStatus.toolTip=error.localizedDescription;continue}
       }
-      if searchScope?.server === server && searchScope.map({ searchDatabases($0).contains(db) }) == true && !explorerSearch.stringValue.isEmpty { filterExplorer() }
+      guard server.generation==generation,server.catalogIndexRevision==revision,let schema else {return}
+      await refreshComparedObject(server:server,database:db,key:.init(schema:schema,name:change.name,databaseTrigger:change.databaseTrigger),type:change.type,indexService:indexService,catalogService:catalogService)
+      if let fallback,server.generation==generation,server.catalogIndexRevision==revision {await refreshComparedObject(server:server,database:db,key:.init(schema:fallback,name:change.name,databaseTrigger:change.databaseTrigger),type:change.type,indexService:indexService,catalogService:catalogService)}
     }
   }
   @objc private func explorerConnectionChanged(_ notification:Notification) {
@@ -1569,21 +1606,27 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   func outlineView(_ outlineView:NSOutlineView,validateDrop info:any NSDraggingInfo,proposedItem item:Any?,proposedChildIndex childIndex:Int) -> NSDragOperation {
     guard info.draggingSource as? NSOutlineView === outlineView,info.draggingPasteboard.pasteboardItems?.count == 1,
       let raw=info.draggingPasteboard.string(forType:Self.explorerDragType),let id=UUID(uuidString:raw),
-      let index=explorerDropIndex(sourceID:id,item:item,childIndex:childIndex) else {return []}
+      !organization.groups.isEmpty || explorerDropIndex(sourceID:id,item:item,childIndex:childIndex) != nil else {return []}
+    if !organization.groups.isEmpty {
+      guard explorerGroupDrop(sourceID:id,item:item,childIndex:childIndex,apply:false) else {return []}
+      return .move
+    }
+    let index=explorerDropIndex(sourceID:id,item:item,childIndex:childIndex)!
     outlineView.setDropItem(nil,dropChildIndex:index)
     return .move
   }
   func outlineView(_ outlineView:NSOutlineView,acceptDrop info:any NSDraggingInfo,item:Any?,childIndex:Int) -> Bool {
     guard info.draggingSource as? NSOutlineView === outlineView,info.draggingPasteboard.pasteboardItems?.count == 1,
       let raw=info.draggingPasteboard.string(forType:Self.explorerDragType),let id=UUID(uuidString:raw),
-      let index=explorerDropIndex(sourceID:id,item:item,childIndex:childIndex) else {return false}
-    return state.moveExplorer(id,to:index)
+      !organization.groups.isEmpty || explorerDropIndex(sourceID:id,item:item,childIndex:childIndex) != nil else {return false}
+    if !organization.groups.isEmpty {return explorerGroupDrop(sourceID:id,item:item,childIndex:childIndex,apply:true)}
+    return state.moveExplorer(id,to:explorerDropIndex(sourceID:id,item:item,childIndex:childIndex)!)
   }
   func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
-    visible((item as? TreeNode)?.children ?? (showingSearch ? searchResults ?? [] : roots)).count
+    visible((item as? TreeNode)?.children ?? (showingSearch ? searchResults ?? [] : displayRoots)).count
   }
   func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
-    visible((item as? TreeNode)?.children ?? (showingSearch ? searchResults ?? [] : roots))[index]
+    visible((item as? TreeNode)?.children ?? (showingSearch ? searchResults ?? [] : displayRoots))[index]
   }
   func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
     (item as? TreeNode)?.expandable ?? false
@@ -1599,13 +1642,13 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     restoringTree=true;defer {restoringTree=false}
     func restore(_ node:TreeNode,isRoot:Bool=false) {
       guard node.expandable,outline.row(forItem:node)>=0 else {return}
-      let expanded=expansionState[node.persistenceKey] ?? isRoot
+      let expanded=expansionState[node.persistenceKey] ?? (isRoot || roots.contains(where:{$0 === node}) || node.connectionGroupID != nil)
       if expanded {
         outline.expandItem(node)
         for child in node.children {restore(child)}
       } else {outline.collapseItem(node)}
     }
-    for root in roots {restore(root,isRoot:true)}
+    for root in displayRoots {restore(root,isRoot:true)}
   }
   private func recordExpansion(_ notification:Notification,expanded:Bool) {
     guard !restoringTree,!showingSearch,let node=notification.userInfo?["NSObject"] as? TreeNode else {return}
@@ -1648,7 +1691,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     auxiliaryWindows.append(owner);owner.showWindow(nil)
   }
   func outlineViewSelectionDidChange(_ notification: Notification) {
-    if !showingSearch, let node=selected, node.server !== searchScope?.server {
+    if !showingSearch, let node=selected,node.connectionGroupID == nil, node.server !== searchScope?.server {
       rebuildSearchScopes()
       filterExplorer()
     }
@@ -1677,6 +1720,11 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     label.textColor = node.error == nil ? .labelColor : .systemOrange
     if case .server = node.kind { label.font = .systemFont(ofSize: 12, weight: .semibold) }
+    if case .database=node.kind {label.font = .systemFont(ofSize:12,weight:.medium)}
+    if let id=node.connectionGroupID {
+      label.font = .systemFont(ofSize:12,weight:.semibold)
+      image.contentTintColor=groupColor(id) ?? StudioTheme.accent
+    }
     cell.addSubview(label)
     cell.addSubview(image)
     label.translatesAutoresizingMaskIntoConstraints = false
@@ -1716,13 +1764,19 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       label.setAccessibilityLabel(cell.toolTip)
     }
     if case .favorites = node.kind {cell.toolTip="Yerel favori sorgular · Bağlantı kapalıyken de açılabilir"}
+    if let id=node.connectionGroupID {cell.toolTip=organization.path(id)+" · Yerel bağlantı klasörü · Bağlantıları buraya sürükleyebilirsiniz";label.setAccessibilityLabel(node.title)}
     return cell
   }
   func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
     guard let node = item as? TreeNode else { return StudioRowView() }
-    guard let appearance = node.server.profile.appearance, appearance.isMarked else { return StudioRowView() }
+    let color:NSColor?
+    if let id=node.connectionGroupID {color=groupColor(id) ?? StudioTheme.accent}
+    else if let appearance=node.server.profile.appearance,appearance.isMarked {color=appearance.color}
+    else {color=organization.color(for:node.server.id).map {ServerAppearance(colorHex:$0).color}}
+    guard let color else {return StudioRowView()}
     let row = ConnectionTreeRow()
-    row.color = appearance.color
+    row.color = color
+    if node.connectionGroupID != nil {row.isServer=true}
     if case .server = node.kind { row.isServer = true }
     return row
   }
@@ -1982,7 +2036,23 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       }
       let item=NSMenuItem(title:title,action:nil,keyEquivalent:"");item.submenu=scripts;menu.addItem(item)
     }
-    guard let node = contextNode else { return }
+    guard let node = contextNode else {
+      command("Yeni Klasör…",#selector(createExplorerGroup(_:)))
+      command("Yeni Bağlantı…",#selector(showConnect));return
+    }
+    if let id=node.connectionGroupID {
+      command("Alt Klasör…",#selector(createExplorerGroup(_:)));menu.items.last?.representedObject=id.uuidString
+      command("Klasörü Yeniden Adlandır…",#selector(renameExplorerGroup))
+      addMoveMenu(to:menu,group:id,server:nil)
+      addGroupColorMenu(to:menu,id:id)
+      command("Klasörü Kaldır…",#selector(removeExplorerGroup));return
+    }
+    if case .server=node.kind {
+      command("Bağlantıyı Yeniden Adlandır…",#selector(renameExplorerConnection))
+      addMoveMenu(to:menu,group:nil,server:node.server.id)
+      command("Bağlantıyı Sil…",#selector(deleteExplorerConnection))
+      menu.addItem(.separator())
+    }
     if case .favorite = node.kind {
       let favorites=favoriteMenu(for:node)
       for item in favorites.items {favorites.removeItem(item);menu.addItem(item)}
@@ -2655,6 +2725,7 @@ private struct DatabaseChoices: View {
 
 private struct ConnectionForm: View {
   var connect: (ServerProfile, String, Bool) async throws -> Void
+  var saveProfile:((ServerProfile,String,Bool) async throws->Void)?
   var cancel: () -> Void
   @State private var profile = ServerProfile(visibleDatabases: [])
   @State private var password = ""
@@ -2672,19 +2743,24 @@ private struct ConnectionForm: View {
   init(
     initial: ConnectedServer? = nil,
     connect: @escaping (ServerProfile, String, Bool) async throws -> Void,
+    saveProfile:((ServerProfile,String,Bool) async throws->Void)?=nil,
     cancel: @escaping () -> Void
   ) {
     self.connect = connect
+    self.saveProfile=saveProfile
     self.cancel = cancel
     editing = initial != nil
     _profile = State(initialValue: initial?.profile ?? ServerProfile(visibleDatabases: []))
     _password = State(initialValue: initial?.password ?? "")
     _remember = State(initialValue: initial?.remembered ?? true)
+    _items=State(initialValue:initial?.databases ?? [])
+    _chosen=State(initialValue:Set(initial?.profile.visibleDatabases ?? initial?.databases.map(\.name) ?? []))
+    _defaultDatabase=State(initialValue:initial?.profile.database ?? "")
+    _listed=State(initialValue:initial?.databases.isEmpty == false)
   }
   private var appearance: Binding<ServerAppearance> {
     Binding(get: { profile.appearance ?? ServerAppearance() }, set: { profile.appearance = $0 })
   }
-  @State private var didAutoTest = false
   @State private var connectionPage = "Genel"
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -2794,7 +2870,10 @@ private struct ConnectionForm: View {
         }
         Spacer()
         StudioActionButton("Vazgeç",icon:"xmark",action:cancel).disabled(loading)
-        if tested && listed {
+        if editing,saveProfile != nil {
+          StudioActionButton("Veritabanlarını Yükle",icon:"arrow.clockwise",action:test).disabled(loading)
+          StudioActionButton("Kaydet",icon:"checkmark",action:saveLocal).buttonStyle(StudioPrimaryButton()).disabled(loading).accessibilityIdentifier("saveConnectionProfile")
+        } else if tested && listed {
           StudioActionButton(editing ? "Uygula" : "Bağlan",icon:editing ? "checkmark":"bolt.horizontal",action:submit)
             .buttonStyle(StudioPrimaryButton()).disabled(loading || chosen.isEmpty)
         } else {
@@ -2803,12 +2882,6 @@ private struct ConnectionForm: View {
         }
       }
     }.padding(22).studioPanel().frame(width: 980, height: 700)
-      .task {
-        if editing && !didAutoTest {
-          didAutoTest = true
-          test()
-        }
-      }
       .onChange(of: profile) { old, new in
         var previous = old
         previous.name = new.name
@@ -2816,6 +2889,21 @@ private struct ConnectionForm: View {
         if previous != new { invalidate() }
       }
       .onChange(of: password) { _, _ in invalidate() }
+  }
+  private func saveLocal() {
+    guard let saveProfile,!loading else {return}
+    loading=true;phase="Kaydediliyor…";error=""
+    var value=profile
+    do {
+      if listed,(chosen != Set(profile.visibleDatabases ?? items.map(\.name)) || defaultDatabase != profile.database) {
+        try value.selectDatabases(chosen,available:items);value.database=defaultDatabase
+      }
+    } catch {self.error=error.localizedDescription;loading=false;return}
+    let input=value,secret=password,remember=remember
+    Task {@MainActor in
+      defer {loading=false}
+      do {try await saveProfile(input,secret,remember)} catch {self.error=error.localizedDescription}
+    }
   }
   private func invalidate() {
     tested = false
@@ -3160,5 +3248,161 @@ private extension View {
   func explorerInfoCard() -> some View {
     background(Color(nsColor:StudioTheme.canvas),in:RoundedRectangle(cornerRadius:8))
       .overlay(RoundedRectangle(cornerRadius:8).stroke(Color(nsColor:StudioTheme.border),lineWidth:1))
+  }
+}
+
+extension WorkbenchController {
+  private func rebuildOrganizationRoots() {
+    organization=state.explorerOrganization
+    let ids=Set(organization.groups.map(\.id))
+    groupNodes=groupNodes.filter {ids.contains($0.key)}
+    for root in roots {root.parent=nil}
+    for group in organization.groups {
+      let node:TreeNode
+      if let existing=groupNodes[group.id] {node=existing}
+      else {
+        let server=ConnectedServer(profile:ServerProfile(id:group.id,name:group.name),password:"");server.online=false
+        node=TreeNode(group.name,kind:.connectionGroup,server:server);node.connectionGroupID=group.id;node.loaded=true
+        groupNodes[group.id]=node
+      }
+      node.title=group.name;node.children=[]
+    }
+    func children(_ parent:UUID?)->[TreeNode] {
+      organization.groups.filter {$0.parent==parent}.compactMap {groupNodes[$0.id]} + roots.filter {organization.assignments[$0.server.id]==parent}
+    }
+    for group in organization.groups {groupNodes[group.id]?.children=children(group.id)}
+    displayRoots=children(nil)
+  }
+  private func groupColor(_ id:UUID)->NSColor? {
+    (try? organization.ancestors(id).compactMap(\.colorHex).first).map {ServerAppearance(colorHex:$0).color}
+  }
+  private func inputName(title:String,value:String)->String? {
+    let alert=NSAlert();alert.messageText=title
+    let field=ExplorerNameField(string:value);field.frame=NSRect(x:0,y:0,width:320,height:26)
+    alert.accessoryView=field;alert.addButton(withTitle:"Kaydet");alert.addButton(withTitle:"Vazgeç")
+    alert.window.initialFirstResponder=field
+    guard alert.runModal() == .alertFirstButtonReturn else {return nil}
+    // AX/default-button activation can end the modal before field editing commits.
+    let submitted=field.submittedText
+    field.validateEditing()
+    return submitted
+  }
+  @objc private func createExplorerGroup(_ sender:NSMenuItem) {
+    let parent=(sender.representedObject as? String).flatMap(UUID.init(uuidString:))
+    // Finish the NSMenu tracking loop before opening a modal input window.
+    Task {[weak self] in
+      guard let self,let name=inputName(title:parent == nil ? "Yeni bağlantı klasörü":"Yeni alt klasör",value:"") else {return}
+      do {try state.changeExplorerOrganization {try $0.create(name,parent:parent)}} catch {state.showError(error.localizedDescription)}
+    }
+  }
+  @objc private func renameExplorerGroup() {
+    guard let node=contextNode,let id=node.connectionGroupID else {return}
+    Task {[weak self] in
+      guard let self,let name=inputName(title:"Klasörü yeniden adlandır",value:node.title) else {return}
+      do {try state.changeExplorerOrganization {try $0.rename(id,name:name)}} catch {state.showError(error.localizedDescription)}
+    }
+  }
+  @objc private func removeExplorerGroup() {
+    guard let node=contextNode,let id=node.connectionGroupID else {return}
+    Task {[weak self] in
+      guard let self else {return}
+      let alert=NSAlert();alert.messageText="\(node.title) klasörü kaldırılsın mı?"
+      alert.informativeText="Bağlantılar ve alt klasörler bir üst konuma taşınır. Kayıtlı bağlantılar silinmez."
+      alert.addButton(withTitle:"Klasörü Kaldır");alert.addButton(withTitle:"Vazgeç")
+      guard alert.runModal() == .alertFirstButtonReturn else {return}
+      do {try state.changeExplorerOrganization {try $0.remove(id)}} catch {state.showError(error.localizedDescription)}
+    }
+  }
+  private func addMoveMenu(to menu:NSMenu,group:UUID?,server:UUID?) {
+    let child=NSMenu();child.autoenablesItems=false
+    func option(_ title:String,_ destination:UUID?) {
+      let item=NSMenuItem(title:title,action:#selector(moveOrganizationItem(_:)),keyEquivalent:"")
+      item.target=self;item.representedObject=[group == nil ? "server":"group",(group ?? server)!.uuidString,destination?.uuidString ?? ""]
+      item.state=(group.flatMap {id in organization.groups.first {$0.id==id}?.parent} ?? server.flatMap {organization.assignments[$0]}) == destination ? .on:.off
+      item.image=NSImage(systemSymbolName:destination == nil ? "tray":"folder",accessibilityDescription:nil)
+      child.addItem(item)
+    }
+    option("Üst Düzey",nil)
+    for value in organization.groups where value.id != group && (group == nil || (try? organization.ancestors(value.id).contains {$0.id==group}) == false) {option(organization.path(value.id),value.id)}
+    let item=NSMenuItem(title:"Klasöre Taşı",action:nil,keyEquivalent:"");item.submenu=child;item.image=NSImage(systemSymbolName:"folder",accessibilityDescription:nil);menu.addItem(item)
+  }
+  @objc private func moveOrganizationItem(_ sender:NSMenuItem) {
+    guard let parts=sender.representedObject as? [String],parts.count==3,let id=UUID(uuidString:parts[1]) else {return}
+    let destination=UUID(uuidString:parts[2])
+    do {try state.changeExplorerOrganization {if parts[0]=="group" {try $0.move(id,to:destination)} else {try $0.assign(id,to:destination)}}} catch {state.showError(error.localizedDescription)}
+  }
+  private func addGroupColorMenu(to menu:NSMenu,id:UUID) {
+    let child=NSMenu()
+    for (name,hex) in [("Varsayılan",""),("Mavi","3B82F6"),("Yeşil","238B65"),("Turuncu","C47C25"),("Mor","8B5CF6"),("Kırmızı","C74242")] {
+      let item=NSMenuItem(title:name,action:#selector(changeExplorerGroupColor(_:)),keyEquivalent:"");item.target=self;item.representedObject=[id.uuidString,hex]
+      item.state=organization.groups.first {$0.id==id}?.colorHex == (hex.isEmpty ? nil:hex) ? .on:.off
+      item.image=NSImage(systemSymbolName:"circle.fill",accessibilityDescription:nil)?.withSymbolConfiguration(.init(paletteColors:[hex.isEmpty ? StudioTheme.accent:ServerAppearance(colorHex:hex).color]));child.addItem(item)
+    }
+    let item=NSMenuItem(title:"Klasör Rengi",action:nil,keyEquivalent:"");item.submenu=child;menu.addItem(item)
+  }
+  @objc private func changeExplorerGroupColor(_ sender:NSMenuItem) {
+    guard let parts=sender.representedObject as? [String],parts.count==2,let id=UUID(uuidString:parts[0]) else {return}
+    do {try state.changeExplorerOrganization {try $0.setColor(id,hex:parts[1].isEmpty ? nil:parts[1])}} catch {state.showError(error.localizedDescription)}
+  }
+  @objc private func renameExplorerConnection() {
+    guard let server=contextNode?.server,!server.updatingProfile,!server.reconnecting else {return}
+    Task {[weak self] in
+      guard let self,let name=inputName(title:"Bağlantıyı yeniden adlandır",value:server.profile.name) else {return}
+      var profile=server.profile;profile.name=name
+      do {try await state.saveConnectionProfile(server,profile:profile,password:server.password,remember:server.remembered)} catch {state.showError(error.localizedDescription)}
+    }
+  }
+  @objc private func deleteExplorerConnection() {
+    guard let server=contextNode?.server,!server.updatingProfile,!server.reconnecting else {return}
+    Task {[weak self] in
+      guard let self else {return}
+      let alert=NSAlert();alert.messageText="\(server.profile.name) bağlantısı silinsin mi?"
+      alert.informativeText="Kayıtlı profil ve bu profile ait parola silinir. Açık sorgu sekmeleri korunur."
+      alert.addButton(withTitle:"Bağlantıyı Sil");alert.addButton(withTitle:"Vazgeç")
+      guard alert.runModal() == .alertFirstButtonReturn else {return}
+      do {try await state.deleteConnectionProfile(server)} catch {state.showError(error.localizedDescription)}
+    }
+  }
+  @discardableResult func explorerGroupDrop(sourceID:UUID,item:Any?,childIndex:Int,apply:Bool)->Bool {
+    guard !showingSearch,state.servers.contains(where:{$0.id==sourceID}) else {return false}
+    let destination:UUID?,before:UUID?
+    if let node=item as? TreeNode {
+      if let id=node.connectionGroupID {
+        guard childIndex == NSOutlineViewDropOnItemIndex || (0...node.children.count).contains(childIndex) else {return false}
+        if childIndex>=0,childIndex<node.children.count,node.children[childIndex].connectionGroupID != nil {return false}
+        destination=id
+        before=childIndex>=0 && childIndex<node.children.count && node.children[childIndex].connectionGroupID == nil ? node.children[childIndex].server.id:nil
+      } else if case .server=node.kind {
+        destination=organization.assignments[node.server.id];before=node.server.id
+      } else {return false}
+    } else {
+      guard (0...displayRoots.count).contains(childIndex) else {return false}
+      if childIndex<displayRoots.count,displayRoots[childIndex].connectionGroupID != nil {return false}
+      destination=nil;before=childIndex<displayRoots.count ? displayRoots[childIndex].server.id:nil
+    }
+    let insertion=before.flatMap {id in state.servers.firstIndex {$0.id==id}} ?? state.servers.count
+    let movedGroup=organization.assignments[sourceID] != destination
+    let old=state.servers.firstIndex {$0.id==sourceID}!
+    guard movedGroup || insertion != old && insertion != old+1 else {return false}
+    guard apply else {return true}
+    do {
+      if movedGroup {try state.changeExplorerOrganization {try $0.assign(sourceID,to:destination)}}
+      _ = state.moveExplorer(sourceID,to:insertion)
+      return true
+    } catch {state.showError(error.localizedDescription);return false}
+  }
+}
+
+/// Keep an in-progress field-editor value when NSAlert ends without resigning it.
+final class ExplorerNameField:NSTextField {
+  private var draft:String?
+  var submittedText:String {draft ?? currentEditor()?.string ?? stringValue}
+  override func textDidChange(_ notification:Notification) {
+    draft=currentEditor()?.string ?? stringValue
+    super.textDidChange(notification)
+  }
+  override func textDidEndEditing(_ notification:Notification) {
+    draft=currentEditor()?.string ?? draft ?? stringValue
+    super.textDidEndEditing(notification)
   }
 }

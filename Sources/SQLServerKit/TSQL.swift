@@ -280,36 +280,7 @@ public enum TSQL {
       for token in batch where token.kind == .variable {
         counts[token.text.lowercased(),default:0] += 1
       }
-      let formalLocations=Set(SQLRoutineDefinition.headers(in:batch,source:sql)
-        .filter(\.hasSQLBody).flatMap(\.parameters).map(\.location))
-      declarations=batch.filter {formalLocations.contains($0.range.location)}
-      var i = 0
-      while i < batch.count {
-        guard batch[i].text.uppercased() == "DECLARE", i+2 < batch.count,
-          batch[i+1].kind == .variable else { i += 1; continue }
-        var j = i+1, depth = 0, caseDepth = 0
-        var expectsName = true
-        while j < batch.count {
-          let token = batch[j], upper = token.text.uppercased()
-          if depth == 0 && caseDepth == 0 && (token.text == ";" ||
-            ["SELECT","SET","DECLARE","BEGIN","END","IF","WHILE","RETURN","PRINT","EXEC","EXECUTE","INSERT","UPDATE","DELETE","MERGE","CREATE","ALTER","DROP","FETCH","OPEN","CLOSE"].contains(upper)) { break }
-          if expectsName {
-            guard token.kind == .variable, !token.text.hasPrefix("@@"),
-              j+1 < batch.count else { break }
-            let typeIndex = batch[j+1].text.uppercased() == "AS" ? j+2 : j+1
-            guard typeIndex < batch.count,
-              batch[typeIndex].kind == .word || batch[typeIndex].text.uppercased() == "TABLE" else { break }
-            declarations.append(token); expectsName = false
-          }
-          if token.text == "(" { depth += 1 }
-          if token.text == ")" { depth = max(0,depth-1) }
-          if token.kind == .keyword && upper == "CASE" { caseDepth += 1 }
-          if token.kind == .keyword && upper == "END" { caseDepth = max(0,caseDepth-1) }
-          if token.text == "," && depth == 0 && caseDepth == 0 { expectsName = true }
-          j += 1
-        }
-        i = max(i+1,j)
-      }
+      declarations=declaredVariables(in:batch,source:sql)
       for declaration in declarations where counts[declaration.text.lowercased()] == 1 {
         result.append(declaration.range)
       }
@@ -323,6 +294,39 @@ public enum TSQL {
     }
     inspect()
     return result.sorted {$0.location < $1.location}
+  }
+  static func declaredVariables(in tokens:[Lexeme],source:String)->[Lexeme] {
+      let formalLocations=Set(SQLRoutineDefinition.headers(in:tokens,source:source)
+        .filter(\.hasSQLBody).flatMap(\.parameters).map(\.location))
+      var declarations=tokens.filter {formalLocations.contains($0.range.location)}
+      var i = 0
+      while i < tokens.count {
+        guard tokens[i].text.uppercased() == "DECLARE", i+2 < tokens.count,
+          tokens[i+1].kind == .variable else { i += 1; continue }
+        var j = i+1, depth = 0, caseDepth = 0
+        var expectsName = true
+        while j < tokens.count {
+          let token = tokens[j], upper = token.text.uppercased()
+          if depth == 0 && caseDepth == 0 && (token.text == ";" ||
+            ["SELECT","SET","DECLARE","BEGIN","END","IF","WHILE","RETURN","PRINT","EXEC","EXECUTE","INSERT","UPDATE","DELETE","MERGE","CREATE","ALTER","DROP","FETCH","OPEN","CLOSE"].contains(upper)) { break }
+          if expectsName {
+            guard token.kind == .variable, !token.text.hasPrefix("@@"),
+              j+1 < tokens.count else { break }
+            let typeIndex = tokens[j+1].text.uppercased() == "AS" ? j+2 : j+1
+            guard typeIndex < tokens.count,
+              tokens[typeIndex].kind == .word || tokens[typeIndex].text.uppercased() == "TABLE" else { break }
+            declarations.append(token); expectsName = false
+          }
+          if token.text == "(" { depth += 1 }
+          if token.text == ")" { depth = max(0,depth-1) }
+          if token.kind == .keyword && upper == "CASE" { caseDepth += 1 }
+          if token.kind == .keyword && upper == "END" { caseDepth = max(0,caseDepth-1) }
+          if token.text == "," && depth == 0 && caseDepth == 0 { expectsName = true }
+          j += 1
+        }
+        i = max(i+1,j)
+      }
+      return declarations
   }
   public static func batches(_ sql: String) throws -> [ScriptBatch] {
     let ns = sql as NSString
@@ -586,35 +590,7 @@ extension TSQL {
 
 public enum ModuleEditing {
   public static func changedObjects(_ sql: String) -> [(name: String, folder: Folder)] {
-    let t = TSQL.lex(sql).filter { $0.kind != .space && $0.kind != .comment && $0.kind != .string }
-    var result: [(String, Folder)] = []
-    for i in t.indices where ["CREATE", "ALTER", "DROP"].contains(t[i].text.uppercased()) {
-      var j = i + 1
-      if j + 1 < t.count && t[j].text.uppercased() == "OR" && t[j+1].text.uppercased() == "ALTER" { j += 2 }
-      guard j + 1 < t.count else { continue }
-      let folder: Folder
-      switch t[j].text.uppercased() {
-      case "TABLE": folder = .tables
-      case "VIEW": folder = .views
-      case "PROC", "PROCEDURE": folder = .procedures
-      case "FUNCTION": folder = .functions
-      case "SYNONYM": folder = .synonyms
-      case "TRIGGER": folder = .triggers
-      default: continue
-      }
-      j += 1
-      if t[j].text.uppercased() == "IF", j + 2 < t.count { j += 2 }
-      guard t[j].kind == .word || t[j].kind == .keyword else { continue }
-      func unquote(_ value: String) -> String {
-        if value.hasPrefix("[") && value.hasSuffix("]") { return String(value.dropFirst().dropLast()).replacingOccurrences(of: "]]", with: "]") }
-        if value.hasPrefix("\"") && value.hasSuffix("\"") { return String(value.dropFirst().dropLast()).replacingOccurrences(of: "\"\"", with: "\"") }
-        return value
-      }
-      var name = unquote(t[j].text)
-      if j + 2 < t.count && t[j+1].text == "." { name += "." + unquote(t[j+2].text) }
-      result.append((name,folder))
-    }
-    return result
+    changes(sql).map {(($0.schema.map {$0+"."} ?? "")+$0.name,$0.folder)}
   }
   public static func alter(_ source: String) -> String {
     let tokens = TSQL.lex(source).filter { $0.kind != .space && $0.kind != .comment }

@@ -86,7 +86,7 @@ enum CompletionSymbols {
 public enum SQLIntelligence {
   public struct Diagnostic: Equatable, Sendable { public let range: NSRange; public let message: String }
   public struct Suggestion: Equatable, Sendable {
-    public enum Kind: Sendable { case table, view, procedure, synonym, column, keyword, function }
+    public enum Kind: Sendable { case table, view, procedure, synonym, column, keyword, function, variable }
     public let text: String
     public let label: String
     public let kind: Kind
@@ -101,6 +101,7 @@ public enum SQLIntelligence {
     public let suggestions: [Suggestion]
     public let replacement: NSRange
     public var procedureCompletion = false
+    public var variableCompletion = false
   }
   public final class Catalog: Sendable {
     public let snapshot: SQLCatalogSnapshot
@@ -229,7 +230,7 @@ public enum SQLIntelligence {
     }
     // SQL Server also permits consecutive SELECT statements without semicolons.
     // Each SELECT arm owns its FROM bindings, including UNION and nested queries.
-    let selects=tokens.indices.filter {tokens[$0].text.uppercased() == "SELECT"}
+    let selects=tokens.indices.filter {tokens[$0].kind == .keyword && ["SELECT","UPDATE","DELETE","INSERT","MERGE"].contains(tokens[$0].text.uppercased())}
     var starts = [Int](repeating:0,count:tokens.count), ends = [Int](repeating:original.length,count:tokens.count), start = 0
     for i in tokens.indices {
       starts[i] = start
@@ -274,9 +275,18 @@ public enum SQLIntelligence {
     local = local.mapValues { $0.map(raw) }
     var bindings: [Binding] = [], ignored = Set<Int>(), diagnostics: [Diagnostic] = []
     var references: [(Int,[String],NSRange)] = []
-    for i in tokens.indices where ["FROM","JOIN","UPDATE","INTO","APPLY","EXEC","EXECUTE"].contains(tokens[i].text.uppercased()) {
+    var targets:[(index:Int,verb:String)]=[]
+    for i in tokens.indices where ["FROM","JOIN","UPDATE","DELETE","INSERT","INTO","APPLY","EXEC","EXECUTE"].contains(tokens[i].text.uppercased()) {
       try Task.checkCancellation()
       var j = i+1, parts: [String] = [], indices: [Int] = []
+      let verb=tokens[i].text.uppercased()
+      if j < tokens.count,tokens[j].text.uppercased() == "TOP" {
+        j+=1
+        if j < tokens.count,tokens[j].text == "(",let close=closes[j] {j=close+1}
+        else if j < tokens.count,tokens[j].kind == .number {j+=1}
+        if j < tokens.count,tokens[j].text.uppercased() == "PERCENT" {j+=1}
+      }
+      if ["DELETE","INSERT"].contains(verb),j < tokens.count,["FROM","INTO"].contains(tokens[j].text.uppercased()) {continue}
       if j < tokens.count, tokens[j].text == "(", let close = closes[j] {
         j = close+1; if j < tokens.count && tokens[j].text.uppercased() == "AS" { j += 1 }
         if j < tokens.count, tokens[j].kind == .word {
@@ -298,7 +308,27 @@ public enum SQLIntelligence {
       if j < tokens.count && tokens[j].kind == .word { alias = raw(tokens[j].text); explicitAlias = true; ignored.insert(j) }
       let columns = local[name] ?? (resolved?.kind == "SYNONYM" ? nil : resolved?.columns)
       bindings.append(Binding(alias:alias,explicitAlias:explicitAlias,parts:parts,columns:columns,scope:scope(i)))
+      if ["UPDATE","DELETE","INSERT","INTO"].contains(verb) {targets.append((bindings.count-1,verb))}
+      if verb == "FROM",let head=tokens.indices.last(where:{$0<i && parents[$0]==parents[i] && tokens[$0].range.location>=starts[i] && ["SELECT","UPDATE","DELETE","INSERT"].contains(tokens[$0].text.uppercased())}),tokens[head].text.uppercased() == "DELETE",!targets.contains(where:{$0.verb == "DELETE" && bindings[$0.index].scope == scope(i)}) {targets.append((bindings.count-1,"DELETE"))}
       references.append((i,parts,NSRange(location:tokens[indices[0]].range.location,length:NSMaxRange(tokens[indices.last!].range)-tokens[indices[0]].range.location)))
+    }
+    // An UPDATE/DELETE target may name a FROM alias. Resolve that target from
+    // the same statement before de-duplicating; an unresolved target must not
+    // shadow the later concrete relation (UPDATE NWS ... FROM dbo.News NWS).
+    for target in targets {
+      let binding=bindings[target.index]
+      if binding.columns == nil,binding.parts.count == 1,
+        let concrete=bindings.first(where:{$0.scope == binding.scope && $0.alias.lowercased() == binding.alias.lowercased() && $0.columns != nil}) {
+        bindings[target.index]=Binding(alias:binding.alias,explicitAlias:true,parts:concrete.parts,columns:concrete.columns,scope:binding.scope)
+      }
+    }
+    let targetBindings=targets.map {($0.verb,bindings[$0.index])}
+    for (verb,binding) in targetBindings {
+      let names=verb == "UPDATE" ? ["inserted","deleted"] : verb == "DELETE" ? ["deleted"] : ["inserted"]
+      // OUTPUT pseudo-tables are offered only after an OUTPUT in this scope.
+      if tokens.contains(where:{$0.text.uppercased() == "OUTPUT" && contains(binding.scope,$0.range.location) && $0.range.location < caret}) {
+        for name in names {bindings.append(Binding(alias:name,explicitAlias:true,parts:binding.parts,columns:binding.columns,scope:binding.scope))}
+      }
     }
     guard bindings.count <= 128 else { return Analysis(tokens:all,diagnostics:[],suggestions:[],replacement:replacement) }
     func activeBindings(_ location: Int) -> [Binding] {
@@ -315,7 +345,7 @@ public enum SQLIntelligence {
       for (i,parts,range) in references {
         let key = parts.joined(separator:".").lowercased()
         let special = parts.count > 2 || parts.first?.lowercased() == "sys" || parts.first?.lowercased() == "information_schema" || parts.last?.hasPrefix("#") == true || parts.last?.hasPrefix("@") == true
-        let updateAlias = tokens[i].text.uppercased() == "UPDATE" && activeBindings(range.location).contains { $0.alias.lowercased() == key && $0.parts.map { $0.lowercased() }.joined(separator:".") != key }
+        let updateAlias = ["UPDATE","FROM","DELETE"].contains(tokens[i].text.uppercased()) && activeBindings(range.location).contains { $0.alias.lowercased() == key && $0.parts.map { $0.lowercased() }.joined(separator:".") != key }
         if !special && local[key] == nil && catalog?.resolve(parts) == nil && catalog?.isAmbiguous(parts) != true && !updateAlias && !isEditing(range) {
           diagnostics.append(Diagnostic(range:range,message:"Nesne güncel DDL indeksinde bulunamadı: \(parts.joined(separator:"."))"))
         }
@@ -395,9 +425,16 @@ public enum SQLIntelligence {
     if qualifier != nil { context = Array(context.dropLast(2)) }
     let returnAssignment=context.count>=3 && context.last?.text == "=" && context[context.count-2].kind == .variable && ["EXEC","EXECUTE"].contains(context[context.count-3].text.uppercased())
     let execution = (["EXEC","EXECUTE"].contains(context.last?.text.uppercased() ?? "") || returnAssignment) && !prefix.hasPrefix("@")
-    let objectPosition = execution || ["FROM","JOIN","UPDATE","INTO","APPLY"].contains(context.last?.text.uppercased() ?? "")
+    let objectPosition = execution || ["FROM","JOIN","UPDATE","DELETE","INSERT","INTO","APPLY"].contains(context.last?.text.uppercased() ?? "")
     if !inLiteral {
-      if objectPosition {
+      if prefix.hasPrefix("@"),!prefix.hasPrefix("@@") {
+        let separators=tokens.filter {SQLRoutineDefinition.isBatchSeparator($0,source:original)}
+        let start=separators.last(where:{$0.range.location < caret}).map {NSMaxRange($0.range)} ?? 0
+        let end=separators.first(where:{$0.range.location >= caret})?.range.location ?? original.length
+        let batch=tokens.filter {$0.range.location>=start && $0.range.location<end}
+        let declarations=TSQL.declaredVariables(in:batch,source:source).filter {NSMaxRange($0.range)<caret}
+        suggestions=declarations.filter {$0.text.lowercased().hasPrefix(needle)}.map {Suggestion(text:$0.text,label:$0.text,kind:.variable,detail:"Bu SQL grubunda tanımlı değişken")}
+      } else if objectPosition {
         let nextToken = tokens.first { $0.range.location >= NSMaxRange(replacement) && $0.range.location > replacement.location }
         let alreadyAliased = nextToken?.text.uppercased() == "AS" || nextToken?.kind == .word
         let occupied = Set(visible.map { $0.alias.lowercased() })
@@ -427,6 +464,6 @@ public enum SQLIntelligence {
     try Task.checkCancellation()
     var seen = Set<String>()
     suggestions = suggestions.filter { seen.insert($0.text).inserted }.prefix(100).map { $0 }
-    return Analysis(tokens:all,diagnostics:Array(diagnostics.prefix(200)),suggestions:suggestions,replacement:replacement,procedureCompletion:execution && !inLiteral)
+    return Analysis(tokens:all,diagnostics:Array(diagnostics.prefix(200)),suggestions:suggestions,replacement:replacement,procedureCompletion:execution && !inLiteral,variableCompletion:prefix.hasPrefix("@") && !inLiteral)
   }
 }
