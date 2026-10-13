@@ -581,7 +581,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
   @objc private func toggleCodeOutline(_ sender: Any?) { toggleOutline?() }
   @objc private func expandCodeOutline(_ sender: Any?) { expandOutline?() }
   override func menu(for event: NSEvent) -> NSMenu? {
-    let menu = super.menu(for:event) ?? NSMenu()
+    let menu = super.menu(for:event) ?? StudioMenu()
     menu.addItem(.separator())
     for (title,action) in [("Geri Al ("+GridShortcuts.binding(.undo).label+")",#selector(undoSQL(_:))),("İleri Al ("+GridShortcuts.binding(.redo).label+")",#selector(redoSQL(_:)))] {
       let item=NSMenuItem(title:title,action:action,keyEquivalent:"");item.target=self;menu.addItem(item)

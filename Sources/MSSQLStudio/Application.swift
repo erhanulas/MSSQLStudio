@@ -4,6 +4,7 @@ import SwiftUI
 
 @main @MainActor final class Application: NSObject, NSApplicationDelegate {
   static var updateTerminationApproved = false
+  private var terminationPrompt:StudioCloseWindowController?
   private var window: NSWindow!
   private let studio = StudioState()
   private var workbench: WorkbenchController!
@@ -47,7 +48,7 @@ import SwiftUI
        !ApplicationUpdate.consumeCompletedInstallation(in: .standard,
          runningVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0",
          bundleURL: Bundle.main.bundleURL) {
-      let alert=NSAlert()
+      let alert=StudioAlert()
       alert.messageText="Güncelleme henüz tamamlanmadı"
       alert.informativeText="macOS Kurulum penceresinde kurulumu tamamlayıp Uygulamalar’daki MSSQL Studio’yu açın. Beklenen sürüm: \(expected)."
       alert.runModal()
@@ -199,7 +200,19 @@ import SwiftUI
   }
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     guard SchemaComparisonModel.activeApplications==0 else {NSSound.beep();return .terminateCancel}
-    return Self.updateTerminationApproved || studio.canQuit() ? .terminateNow : .terminateCancel
+    if Self.updateTerminationApproved {return .terminateNow}
+    if let terminationPrompt {terminationPrompt.window?.makeKeyAndOrderFront(nil);return .terminateLater}
+    guard studio.canBeginBulkClose() else {return .terminateCancel}
+    guard studio.needsBulkCloseConfirmation else {return studio.canQuit() ? .terminateNow:.terminateCancel}
+    let prompt=StudioCloseWindowController(title:"MSSQL Studio’yu kapat",count:studio.documents.count) {[weak self] choice in
+      guard let self else {return true}
+      if choice == .cancel {terminationPrompt=nil;sender.reply(toApplicationShouldTerminate:false);return true}
+      guard studio.canQuit(choice:choice) else {return false}
+      terminationPrompt=nil;sender.reply(toApplicationShouldTerminate:true);return true
+    }
+    terminationPrompt=prompt
+    Task { @MainActor in prompt.showWindow(nil);prompt.window?.makeKeyAndOrderFront(nil) }
+    return .terminateLater
   }
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
   private func createMenu() {

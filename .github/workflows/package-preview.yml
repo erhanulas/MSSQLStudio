@@ -1,0 +1,63 @@
+name: Build signed local preview (no release)
+on:
+  push:
+    branches: ['codex/local-package-*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: local-package-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: xcode-27
+    timeout-minutes: 45
+    env:
+      GH_REPO: ${{ github.repository }}
+      PACKAGE_DIR: /tmp/MSSQLStudio-local-package
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        run: brew install unixodbc openssl@3
+      - name: Select preview version
+        run: |
+          version="$(python3 -c 'import json; print(json.load(open("Sources/SQLServerKit/Resources/ReleaseNotes.json"))[0]["version"])')"
+          echo "RELEASE_TAG=v$version" >> "$GITHUB_ENV"
+      - name: Import existing persistent signing identity
+        env:
+          MSSQL_SIGNING_P12: ${{ secrets.MSSQL_SIGNING_P12 }}
+          MSSQL_SIGNING_PASSWORD: ${{ secrets.MSSQL_SIGNING_PASSWORD }}
+        run: python3 scripts/ci-signing.py import
+      - name: Verify isolated signing and Keychain fixture
+        run: python3 scripts/test-signing.py
+      - name: Build signed ZIP and installer without publishing
+        run: ./scripts/build-app.sh "$PACKAGE_DIR"
+      - name: Verify signed packages and frozen helper
+        run: python3 scripts/prepare-release.py --repository "$GH_REPO" --tag "$RELEASE_TAG" --output "$PACKAGE_DIR"
+      - name: Run tests with the signed preview package
+        run: |
+          version="${RELEASE_TAG#v}"
+          export MSSQL_UPDATE_ZIP="$PACKAGE_DIR/MSSQLStudio-$version.zip"
+          export MSSQL_UPDATE_PKG="$PACKAGE_DIR/MSSQLStudio-$version.pkg"
+          ./scripts/test.sh 2>&1 | tee /tmp/MSSQLStudio-local-package-tests.log
+          python3 - <<'PYCODE'
+          import pathlib,re
+          log=pathlib.Path('/tmp/MSSQLStudio-local-package-tests.log').read_text()
+          summaries=re.findall(r'Test run with (\d+) tests.*passed',log)
+          assert len(summaries)==2 and all(int(x)>0 for x in summaries), 'Both app and core must finish'
+          assert 'recorded an issue' not in log, 'Test issues block the package'
+          PYCODE
+      - name: Store preview files only
+        uses: actions/upload-artifact@v4
+        with:
+          name: MSSQLStudio-local-preview
+          path: |
+            /tmp/MSSQLStudio-local-package/MSSQLStudio-0.*.zip
+            /tmp/MSSQLStudio-local-package/MSSQLStudio-0.*.pkg
+          if-no-files-found: error
+          retention-days: 3
+      - name: Remove temporary signing identity
+        if: always()
+        run: python3 scripts/ci-signing.py cleanup

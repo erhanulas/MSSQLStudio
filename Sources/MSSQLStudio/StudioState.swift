@@ -273,6 +273,8 @@ struct ObjectEditorKey: Codable, Equatable {
   var task: Task<Void, Never>?
   var changed: (() -> Void)?
   var completed: ((String, Execution?, String?) -> Void)?
+  var closeOperationBlocked:(()->Bool)?
+  var hasResultEdits: (() -> Bool)?
   var confirmDiscardResultEdits: (() -> Bool)?
   private var acceptingEvents = false
   private var executionID = UUID()
@@ -591,7 +593,7 @@ struct ObjectEditorKey: Codable, Equatable {
     _ = try profile.connectionString(password:password)
     let reset = !server.profile.hasSameConnectionSettings(as:profile) || server.password != password
     let affected=documents.filter {$0.server === server}
-    guard !reset || affected.allSatisfy({!$0.busy && $0.transactionCount==0}) else {throw SQLFailure("Bağlantı bilgilerini değiştirmeden önce çalışan sorguları ve açık transaction’ları tamamlayın.")}
+    guard !reset || affected.allSatisfy({!$0.busy && $0.transactionCount==0 && $0.closeOperationBlocked?() != true}) else {throw SQLFailure("Bağlantı bilgilerini değiştirmeden önce çalışan sorguları ve açık transaction’ları tamamlayın.")}
     if reset,affected.contains(where:{$0.confirmDiscardResultEdits?() == false}) {throw CancellationError()}
     let previous=affected.map(\.state)
     server.updatingProfile=true
@@ -661,8 +663,8 @@ struct ObjectEditorKey: Codable, Equatable {
         try await candidate.connect(profile, password: password)
         let items = Catalog.rows(try await candidate.execute(Catalog.databases))
         if reconnect { try checkSessions() }
-        if save || old.remembered {
-          try ServerVault().save(profile, password: profile.kerberos ? "" : password)
+        if save || (old.remembered && (old.profile != profile || old.password != password)) {
+          try await Task.detached {try ServerVault().save(profile,password:profile.kerberos ? "":password)}.value
           UserDefaults.standard.set(profile.id.uuidString, forKey: "lastSavedServer")
         }
         if reconnect {
@@ -717,7 +719,7 @@ struct ObjectEditorKey: Codable, Equatable {
       let available=Catalog.rows(try await server.metadata.execute(Catalog.databases))
       server.databases = profile.visibleItems(from:available)
       await server.synchronizeCatalogVisibility(available:available)
-      if save { try ServerVault().save(profile, password: profile.kerberos ? "" : password) }
+      if save {try await Task.detached {try ServerVault().save(profile,password:profile.kerberos ? "":password)}.value}
       server.remembered = save
       if save { UserDefaults.standard.set(profile.id.uuidString, forKey: "lastSavedServer") }
     } catch {
@@ -929,14 +931,15 @@ struct ObjectEditorKey: Codable, Equatable {
     try data.write(to: url, options: .atomic)
     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
   }
-  func showError(_ message: String) {
-    let alert = NSAlert()
-    alert.messageText = "MSSQL Studio"
-    alert.informativeText = message
-    alert.runModal()
+  private var noticeWindows:[NSWindowController]=[]
+  func showError(_ message:String) {
+    let owner=StudioNoticeWindowController(message:message)
+    noticeWindows.append(owner)
+    owner.closed={ [weak self,weak owner] in Task { @MainActor [weak self,weak owner] in self?.noticeWindows.removeAll {$0 === owner} } }
+    owner.showWindow(nil);owner.window?.makeKeyAndOrderFront(nil)
   }
   func close(_ doc: QueryDocument,discardChanges:Bool=false) -> Bool {
-    guard !doc.busy else {
+    guard !doc.busy,doc.closeOperationBlocked?() != true else {
       showError("Önce çalışan sorguyu durdurun.")
       return false
     }
@@ -956,7 +959,7 @@ struct ObjectEditorKey: Codable, Equatable {
   func confirmSave(_ doc: QueryDocument) -> Bool {
     guard doc.confirmDiscardResultEdits?() != false else { return false }
     guard doc.needsCloseConfirmation else { return true }
-    let alert = NSAlert()
+    let alert = StudioAlert()
     alert.messageText = "\(doc.title) kaydedilsin mi?"
     if doc.hasPendingDatabaseChanges {alert.informativeText="Bu nesnede veritabanına uygulanmamış düzenlemeler var. Dosyaya kaydetmek veritabanına uygulamaz."}
     alert.addButton(withTitle: "Kaydet")
@@ -981,7 +984,7 @@ struct ObjectEditorKey: Codable, Equatable {
       if target == doc.file, let disk = try? String(contentsOf: target, encoding: .utf8),
         disk != doc.savedText
       {
-        let alert = NSAlert()
+        let alert = StudioAlert()
         alert.messageText = "Dosya diskte değişmiş"
         alert.informativeText = "Diskteki değişikliklerin üzerine yazılsın mı?"
         alert.addButton(withTitle: "Vazgeç")
@@ -1000,12 +1003,57 @@ struct ObjectEditorKey: Codable, Equatable {
       return false
     }
   }
-  func canQuit() -> Bool {
-    guard documents.allSatisfy({ !$0.busy && $0.transactionCount == 0 }) else {
-      showError("Çalışan sorguları ve açık transaction'ları tamamlayın.")
+  enum BulkCloseChoice {case save,discard,cancel}
+  var bulkCloseChoiceFixture:(()->BulkCloseChoice)?
+  var closeErrorFixture:((String)->Void)?
+  /// nil cancels, true authorizes a single discard pass (no per-tab dialogs).
+  func confirmBulkClose()->Bool? {
+    guard documents.allSatisfy({!$0.busy && $0.transactionCount==0 && $0.closeOperationBlocked?() != true}) else {
+      if let fixture=closeErrorFixture {fixture("Çalışan sorguları ve açık transaction’ları tamamlayın.")}
+      else {showError("Çalışan sorguları ve açık transaction’ları tamamlayın.")}
+      return nil
+    }
+    guard documents.contains(where:{$0.needsCloseConfirmation || $0.hasResultEdits?() == true}) else {return true}
+    let choice:BulkCloseChoice
+    if let fixture=bulkCloseChoiceFixture {choice=fixture()}
+    else {
+      let alert=StudioAlert();alert.messageText="Açık sorgulardaki değişiklikler kaydedilsin mi?"
+      alert.informativeText="SQL dosyaları kaydedilebilir. Sonuç düzenlemeleri ve uygulanmamış DDL, dosya kaydıyla veritabanına gönderilmez."
+      alert.addButton(withTitle:"Tümünü Kaydet");alert.addButton(withTitle:"Tümünü Kaydetmeden Kapat");alert.addButton(withTitle:"Vazgeç")
+      alert.buttons[2].keyEquivalent="\u{1b}"
+      switch alert.runModal() {case .alertFirstButtonReturn:choice = .save;case .alertSecondButtonReturn:choice = .discard;default:choice = .cancel}
+    }
+    return approveBulkClose(choice) ? true:nil
+  }
+  var needsBulkCloseConfirmation:Bool {documents.contains {$0.needsCloseConfirmation || $0.hasResultEdits?() == true}}
+  func canBeginBulkClose()->Bool {
+    guard documents.allSatisfy({!$0.busy && $0.transactionCount==0 && $0.closeOperationBlocked?() != true}) else {
+      if let fixture=closeErrorFixture {fixture("Çalışan sorguları ve açık transaction’ları tamamlayın.")}
+      else {showError("Çalışan sorguları ve açık transaction’ları tamamlayın.")}
       return false
     }
-    if recoveryEnabled { return saveSnapshot() }
-    return documents.allSatisfy(confirmSave)
+    return true
+  }
+  func approveBulkClose(_ choice:BulkCloseChoice)->Bool {
+    guard canBeginBulkClose() else {return false}
+    switch choice {
+    case .cancel:return false
+    case .discard:return true
+    case .save:
+      for doc in documents {
+        guard doc.confirmDiscardResultEdits?() != false else {return false}
+        if doc.needsCloseConfirmation,!save(doc) {return false}
+      }
+      return true
+    }
+  }
+  func canQuit(choice:BulkCloseChoice?=nil) -> Bool {
+    guard choice.map({approveBulkClose($0)}) ?? (confirmBulkClose() != nil) else {return false}
+    // A discard decision must not resurrect earlier recovery drafts next launch.
+    if documents.contains(where:{$0.needsCloseConfirmation || $0.hasResultEdits?() == true}) {
+      for doc in documents {doc.disconnect()}
+      documents=[];active=nil;changed?()
+    }
+    return !recoveryEnabled || saveSnapshot()
   }
 }

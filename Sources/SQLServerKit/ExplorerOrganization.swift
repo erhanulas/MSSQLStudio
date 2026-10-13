@@ -34,7 +34,10 @@ public struct ExplorerOrganization:Codable,Equatable,Sendable {
   }
   private func validName(_ name:String,parent:UUID?,excluding:UUID?=nil)throws->String {
     let name=name.trimmingCharacters(in:.whitespacesAndNewlines)
-    guard !name.isEmpty,name.count<=80,!name.unicodeScalars.contains(where:CharacterSet.controlCharacters.contains),!groups.contains(where:{$0.id != excluding && $0.parent==parent && $0.name.caseInsensitiveCompare(name) == .orderedSame}) else {throw SQLFailure("Klasör adı 1–80 karakter olmalı ve aynı konumda benzersiz olmalı.")}
+    guard !name.isEmpty else {throw SQLFailure("Klasör adını girin.")}
+    guard name.count<=80 else {throw SQLFailure("Klasör adı en fazla 80 karakter olabilir.")}
+    guard !name.unicodeScalars.contains(where:{CharacterSet.controlCharacters.contains($0)}) else {throw SQLFailure("Klasör adı görünmeyen bir kontrol karakteri içeriyor.")}
+    guard !groups.contains(where:{$0.id != excluding && $0.parent==parent && $0.name.caseInsensitiveCompare(name) == .orderedSame}) else {throw SQLFailure("Bu konumda aynı adlı bir klasör zaten var.")}
     return name
   }
   @discardableResult public mutating func create(_ name:String,parent:UUID?=nil)throws->UUID {

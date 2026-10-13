@@ -28,6 +28,7 @@ import UniformTypeIdentifiers
   var item: CatalogItem?
   weak var parent: TreeNode?
   var children: [TreeNode] = [] { didSet { for child in children { child.parent=self } } }
+  var databaseIdentity:[String]?
   var loaded = false
   var loading = false
   var error: String?
@@ -44,8 +45,7 @@ import UniformTypeIdentifiers
   }
   var displayTitle: String {
     if case .server = kind {
-      let badge = server.profile.appearance?.badge ?? ""
-      return (badge.isEmpty ? "" : "[\(badge)] ") + server.profile.name + (server.updatingProfile ? " · Kaydediliyor…" : server.reconnecting ? " · Bağlanıyor…" : server.online ? " · Bağlı" : " · Bağlantı kapalı")
+      return server.profile.name + (server.updatingProfile ? " · Kaydediliyor…" : server.reconnecting ? " · Bağlanıyor…" : server.online ? " · Bağlı" : " · Bağlantı kapalı")
     }
     if case .object(.triggers)=kind { return title }
     if case .object(.jobs)=kind { return item?.name ?? title }
@@ -218,6 +218,7 @@ import UniformTypeIdentifiers
 @MainActor final class QueryTabSurface: NSStackView {
   weak var primaryButton: DocumentButton?
   private let activeIndicator = CALayer()
+  var sourceColor:NSColor?
   private var hoverArea: NSTrackingArea?
   private var hovered = false
   private(set) var isActiveTab = false
@@ -228,7 +229,7 @@ import UniformTypeIdentifiers
     layer?.masksToBounds = true
     layer?.borderWidth = 0
     if activeIndicator.superlayer == nil { layer?.addSublayer(activeIndicator) }
-    activeIndicator.backgroundColor = StudioTheme.accent.withAlphaComponent(0.85).cgColor
+    activeIndicator.backgroundColor = (sourceColor ?? StudioTheme.accent).withAlphaComponent(0.9).cgColor
     activeIndicator.cornerRadius = 1
     activeIndicator.isHidden = !active
     setAccessibilitySelected(active)
@@ -237,7 +238,7 @@ import UniformTypeIdentifiers
   }
   private func refreshSurface() {
     CATransaction.begin(); CATransaction.setDisableActions(true)
-    let selected = StudioTheme.selection.blended(withFraction: 0.55, of: StudioTheme.canvas) ?? StudioTheme.selection
+    let selected = sourceColor.map {StudioTheme.canvas.blended(withFraction:StudioTheme.dark ? 0.18:0.08,of:$0) ?? StudioTheme.selection} ?? (StudioTheme.selection.blended(withFraction:0.55,of:StudioTheme.canvas) ?? StudioTheme.selection)
     layer?.backgroundColor = (isActiveTab ? selected : hovered ? StudioTheme.panel : .clear).cgColor
     CATransaction.commit()
   }
@@ -350,6 +351,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private var auxiliaryWindows: [NSWindowController] = []
   private var contextNode: TreeNode?
   private var sheet: NSWindow?
+  private var connectionSheetBusy=false
   private var detached: [UUID: DetachedQueryWindow] = [:]
   private var sidebar: NSSplitViewItem!
   init(state: StudioState) {
@@ -458,7 +460,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     outline.setDraggingSourceOperationMask(.move,forLocal:true)
     outline.setDraggingSourceOperationMask([],forLocal:false)
     outline.setAccessibilityHelp("Bağlantı başlıklarını sürükleyerek sıralayın. Command-tıklama ile iki veritabanı seçip sağ tıktan DDL Karşılaştır’ı açın.")
-    let menu = NSMenu()
+    let menu = StudioMenu()
     menu.delegate = self
     outline.menu = menu
     let scroll = NSScrollView()
@@ -662,13 +664,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     for server in state.servers {
       if let index = roots.firstIndex(where: { $0.server === server }) {
         roots[index].error = server.startupError
-        let existing =
-          roots[index].children.first?.children.flatMap { node -> [String] in
-            if case .database = node.kind { return [node.database] }
-            return node.children.map(\.database)
-          } ?? []
         if roots[index].generation != server.generation
-          || Set(existing) != Set(server.databases.map(\.name))
+          || roots[index].databaseIdentity != server.databases.map({"\($0.id)|\($0.name)"})
         {
           roots[index] = serverTree(server)
         }
@@ -700,7 +697,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       }
     }
     let signature=state.documents.map {doc in
-      "\(doc.id)|\(doc.title)|\(doc.needsCloseConfirmation)|\(doc.pinned)|\(doc.busy)|\(state.active === doc)|\(doc.server.profile)"
+      "\(doc.id)|\(doc.title)|\(doc.needsCloseConfirmation)|\(doc.pinned)|\(doc.busy)|\(state.active === doc)|\(doc.server.profile)|\(organization.color(for:doc.server.id) ?? "")"
     }
     guard signature != tabSignature else {return}
     tabSignature=signature
@@ -736,6 +733,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       let group = QueryTabSurface(views: [button, close])
       group.primaryButton = button
       group.identifier = NSUserInterfaceItemIdentifier("connectionAccent")
+      group.sourceColor=sourceColor(for:doc.server)
       group.configure(active: state.active === doc)
       button.contentTintColor = state.active === doc ? StudioTheme.accent : StudioTheme.muted
       button.font = .systemFont(ofSize: 12, weight: state.active === doc ? .medium : .regular)
@@ -747,8 +745,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         ])
       close.contentTintColor = StudioTheme.muted
       let icon = NSImageView(image: NSImage(systemSymbolName: doc.pinned ? "pin.fill" : "doc.text", accessibilityDescription: doc.pinned ? "Sabitlenmiş sekme" : nil)!)
-      icon.contentTintColor = doc.server.profile.appearance?.isMarked == true
-        ? doc.server.profile.appearance!.color : StudioTheme.accent
+      icon.contentTintColor = sourceColor(for:doc.server) ?? StudioTheme.accent
       icon.widthAnchor.constraint(equalToConstant: 14).isActive = true
       icon.heightAnchor.constraint(equalToConstant: 14).isActive = true
       if doc.busy {
@@ -827,11 +824,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       database.addItems(withTitles: names.contains(doc.database) ? names : [doc.database] + names)
       database.selectItem(withTitle: doc.database)
       database.isEnabled = doc.state == .ready
-      let badge = doc.server.profile.appearance?.badge ?? ""
-      context.stringValue =
-        (badge.isEmpty ? "" : "[\(badge)] ")
-        + "\(doc.server.profile.name) · \(doc.server.profile.host),\(doc.server.profile.port)  •  \(doc.server.profile.login)"
-      context.toolTip=context.stringValue
+      context.stringValue = "\(doc.server.profile.name) · \(doc.server.profile.host),\(doc.server.profile.port)  •  \(doc.server.profile.login)"
+      context.toolTip=context.stringValue+" · "+(doc.server.profile.appearance?.badge ?? "")
       context.textColor = .secondaryLabelColor
       let phase: String
       switch doc.state {
@@ -886,8 +880,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     NSMenu.popUpContextMenu(tabMenu(for: document), with: event, for: view)
   }
   func tabMenu(for document: QueryDocument) -> NSMenu {
-    let menu = NSMenu()
-    for (index, title) in [document.pinned ? "Unpin Tab" : "Pin Tab", "Close Tab", "Close Right Tabs", "Close Left Tabs", "Close Other Tabs", "Close All Tabs", "Tümünü Kaydetmeden Kapat"].enumerated() {
+    let menu = StudioMenu()
+    for (index, title) in [document.pinned ? "Unpin Tab" : "Pin Tab", "Close Tab", "Close Right Tabs", "Close Left Tabs", "Close Other Tabs", "Close All Tabs"].enumerated() {
+      if index==1 || index==5 {menu.addItem(.separator())}
       let item = menu.addItem(withTitle: title, action: #selector(tabMenuAction(_:)), keyEquivalent: "")
       item.target = self; item.tag = index; item.representedObject = document
     }
@@ -896,7 +891,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   @objc private func tabMenuAction(_ item: NSMenuItem) {
     guard let doc = item.representedObject as? QueryDocument,
       let index = state.documents.firstIndex(where: { $0 === doc }) else { return }
-    if item.tag == 6 {closeAllWithoutSaving();return}
+    if item.tag == 5 {Task { @MainActor [weak self] in self?.requestCloseAllTabs() };return}
     if item.tag == 0 { doc.pinned.toggle(); state.scheduleSnapshot(); renderTabs(); return }
     let targets = state.documents.enumerated().filter { i, candidate in
       switch item.tag {
@@ -913,8 +908,22 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       if let owner = detached.removeValue(forKey: target.id) { owner.redock = nil; owner.close() }
     }
   }
+  func requestCloseAllTabs() {
+    guard state.canBeginBulkClose() else {return}
+    guard state.needsBulkCloseConfirmation else {closeAllWithoutSaving();return}
+    if let existing=auxiliaryWindows.compactMap(\.window).first(where:{$0.identifier?.rawValue=="studio.bulkClose" && $0.isVisible}) {existing.makeKeyAndOrderFront(nil);return}
+    let owner=StudioCloseWindowController(title:"Tüm sorgu sekmelerini kapat",count:state.documents.count) {[weak self] choice in
+      guard let self else {return true}
+      if choice == .cancel {return true}
+      guard state.approveBulkClose(choice) else {return false}
+      closeAllWithoutSaving();return true
+    }
+    auxiliaryWindows.append(owner)
+    owner.closed={ [weak self,weak owner] in Task { @MainActor [weak self,weak owner] in self?.auxiliaryWindows.removeAll {$0 === owner} } }
+    owner.showWindow(nil);owner.window?.makeKeyAndOrderFront(nil)
+  }
   @objc func closeAllWithoutSaving() {
-    guard state.documents.allSatisfy({!$0.busy && $0.transactionCount == 0}) else {
+    guard state.documents.allSatisfy({!$0.busy && $0.transactionCount == 0 && $0.closeOperationBlocked?() != true}) else {
       state.showError("Tüm sekmeleri kapatmadan önce çalışan sorguları ve açık transaction’ları tamamlayın.");return
     }
     for target in state.documents {
@@ -1033,6 +1042,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   private func presentConnection(editing server: ConnectedServer? = nil) {
     guard sheet == nil, let window = view.window else { return }
+    connectionSheetBusy=false
     let form = ConnectionForm(
       initial: server,
       connect: { [weak self] profile, password, save in
@@ -1052,10 +1062,12 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         guard let self else {throw SQLFailure("Çalışma alanı kapandı.")}
         try await state.saveConnectionProfile(editingServer,profile:profile,password:password,remember:remember)
         finishSheet();reloadWorkspace()
-      }}, cancel: { [weak self] in self?.finishSheet() })
+      }}, loadingChanged:{[weak self] busy in self?.connectionSheetBusy=busy}, cancel: { [weak self] in self?.finishSheet() })
     let controller = NSHostingController(
       rootView: form.font(.custom(StudioTheme.uiFont.fontName, size: 12)))
-    let sheet = NSWindow(contentViewController: controller)
+    let sheet = StudioPanelWindow(contentViewController: controller)
+    sheet.animationBehavior = .none
+    sheet.cancelAction={ [weak self] in guard let self,!connectionSheetBusy else {return};finishSheet() }
     sheet.title = server == nil ? "Yeni bağlantı" : "Bağlantı ayarları"
     sheet.styleMask = [.titled]
     self.sheet = sheet
@@ -1066,7 +1078,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       view.window?.endSheet(sheet)
       sheet.orderOut(nil)
     }
-    sheet = nil
+    sheet = nil;connectionSheetBusy=false
   }
   @objc private func refreshManagedObject(_ notification:Notification) {
     guard let node=notification.object as? TreeNode else {return}
@@ -1151,7 +1163,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     Task { await state.reconnectExplorer(server) }
   }
   func explorerConnectionMenu(server:ConnectedServer?) -> NSMenu {
-    let menu=NSMenu();menu.autoenablesItems=false
+    let menu=StudioMenu();menu.autoenablesItems=false
     let add=NSMenuItem(title:"Yeni Bağlantı…",action:#selector(showConnect),keyEquivalent:"")
     add.target=self;add.image=NSImage(systemSymbolName:"plus",accessibilityDescription:nil);menu.addItem(add)
     let folder=NSMenuItem(title:"Yeni Klasör…",action:#selector(createExplorerGroup(_:)),keyEquivalent:"")
@@ -1180,7 +1192,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   @objc private func disconnectServer() {
     guard let server = contextNode?.server else { return }
     guard !server.reconnecting, let window = view.window else { return }
-    let alert = NSAlert()
+    let alert = StudioAlert()
     alert.messageText = "Bağlantı Explorer’dan kaldırılsın mı?"
     alert.informativeText = "\(server.profile.name) bağlantısı Explorer’dan kaldırılacak. Kayıtlı bağlantı bilgileri ve açık sorgu sekmeleri korunur."
     alert.addButton(withTitle:"Kaldır"); alert.addButton(withTitle:"Vazgeç")
@@ -1753,7 +1765,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     cell.imageView = image
     cell.toolTip = node.error ?? (!node.server.online ? "Explorer bağlantısı kapalı. Son yüklenen nesneler gösteriliyor. Bağlantı işlemleri menüsünden yeniden bağlanabilirsiniz; açık sorgu oturumları korunur." : nil) ?? node.item?.detail ?? "\(node.server.profile.name) · \(node.server.profile.host),\(node.server.profile.port) · \(node.database)"
     if case .server = node.kind {
-      cell.toolTip=(cell.toolTip ?? "")+"\nSürükleyerek Explorer bağlantılarının sırasını değiştirin."
+      cell.toolTip=(cell.toolTip ?? "")+" · "+(node.server.profile.appearance?.badge ?? "")+"\nSürükleyerek Explorer bağlantılarının sırasını değiştirin."
       label.setAccessibilityHelp(cell.toolTip)
     }
     if case .relation(let relation)=node.linked {
@@ -1835,7 +1847,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   @objc private func openFavoriteAtNode() {if let node=contextNode {openExplorerFavorite(node)}}
   func favoriteMenu(for node:TreeNode) -> NSMenu {
-    let menu=NSMenu()
+    let menu=StudioMenu()
     guard let favorite=node.favorite else {return menu}
     for (title,symbol,selector) in [("Sorguda Aç","arrow.up.right.square",#selector(openFavoriteMenu(_:))),("Düzenle…","pencil",#selector(editFavoriteMenu(_:))),("Sil…","trash",#selector(deleteFavoriteMenu(_:)))] {
       let item=NSMenuItem(title:title,action:selector,keyEquivalent:"")
@@ -1851,7 +1863,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   @objc private func deleteFavoriteMenu(_ item:NSMenuItem) {
     guard let node=item.representedObject as? TreeNode,let favorite=state.favorites.items.first(where:{$0.id == node.favorite?.id}),let window=view.window else {return}
-    let alert=NSAlert();alert.messageText="Favori sorgu silinsin mi?";alert.informativeText=favorite.name
+    let alert=StudioAlert();alert.messageText="Favori sorgu silinsin mi?";alert.informativeText=favorite.name
     alert.addButton(withTitle:"Favoriyi Sil");alert.addButton(withTitle:"Vazgeç")
     alert.beginSheetModal(for:window) { [weak self] response in
       guard response == .alertFirstButtonReturn else {return}
@@ -1866,6 +1878,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     let root = TreeNode(
       server.profile.name + " (" + server.profile.host + ")", kind: .server, server: server)
     root.loaded = true
+    root.databaseIdentity=server.databases.map {"\($0.id)|\($0.name)"}
     root.error = server.startupError
     let databases = folder(.databases)
     databases.loaded = true
@@ -2026,9 +2039,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       menu.addItem(item)
     }
     func scriptMenu(_ title:String,modes:[String]) {
-      let scripts=NSMenu(title:title)
+      let scripts=StudioMenu(title:title)
       for mode in modes {
-        let destinations=NSMenu(title:mode+" To")
+        let destinations=StudioMenu(title:mode+" To")
         for destination in ["New Query Editor Window","Clipboard","File…"] {
           let item=NSMenuItem(title:destination,action:#selector(scriptManagedMenu(_:)),keyEquivalent:"");item.target=self;item.representedObject=[mode,destination];destinations.addItem(item)
         }
@@ -2145,7 +2158,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       if folder == .jobs { command("New SQL Agent Job…", #selector(jobDesigner)) }
     }
     if case .database = node.kind {
-      let create=NSMenu(title:"Yeni Nesne")
+      let create=StudioMenu(title:"Yeni Nesne")
       for (title,selector,icon) in [("Tablo…",#selector(newManagedTable),"tablecells"),("View…",#selector(newManagedView),"eye"),("Stored Procedure…",#selector(newManagedProcedure),"function"),("Scalar Function…",#selector(newManagedScalarFunction),"function")] {
         let item=NSMenuItem(title:title,action:selector,keyEquivalent:"");item.target=self;item.image=NSImage(systemSymbolName:icon,accessibilityDescription:nil);create.addItem(item)
       }
@@ -2161,7 +2174,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     command("Adı Kopyala", #selector(copyNodeName))
   }
   func agentMenu(for node:TreeNode) -> NSMenu {
-    let menu=NSMenu()
+    let menu=StudioMenu()
     if node.title == "SQL Server Agent" || {if case .folder(.jobs)=node.kind {return true};return false}() {
       let item=NSMenuItem(title:"Otomatik Yenile · 15 sn",action:#selector(toggleAgentAutoRefresh),keyEquivalent:"")
       item.target=self;item.state=agentAutoRefresh ? .on:.off;menu.addItem(item)
@@ -2404,7 +2417,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         try self.state.openFavorite(favorite,contextServerID:server?.id,contextDatabase:database)
         self.view.window?.makeKeyAndOrderFront(nil)
       },manage:{[weak self] in self?.presentFavorites(server:server,database:database)})
-    let window=NSWindow(contentViewController:controller)
+    let window=StudioPanelWindow(contentViewController:controller)
+    window.animationBehavior = .none
     window.identifier = .init(identity);window.title="Favori Sorgular"
     window.styleMask=[.titled,.closable,.resizable]
     window.setContentSize(NSSize(width:840,height:540))
@@ -2496,7 +2510,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     let controller = NSHostingController(
       rootView: root.font(.custom(StudioTheme.uiFont.fontName, size: 12)))
     controller.sizingOptions = []
-    let window = NSWindow(contentViewController: controller)
+    let window = StudioPanelWindow(contentViewController: controller)
+    window.animationBehavior = .none
     if let identity {window.identifier = .init(identity)}
     window.title = title
     window.styleMask = [.titled, .closable, .resizable]
@@ -2726,6 +2741,7 @@ private struct DatabaseChoices: View {
 private struct ConnectionForm: View {
   var connect: (ServerProfile, String, Bool) async throws -> Void
   var saveProfile:((ServerProfile,String,Bool) async throws->Void)?
+  var loadingChanged:(Bool)->Void
   var cancel: () -> Void
   @State private var profile = ServerProfile(visibleDatabases: [])
   @State private var password = ""
@@ -2744,10 +2760,12 @@ private struct ConnectionForm: View {
     initial: ConnectedServer? = nil,
     connect: @escaping (ServerProfile, String, Bool) async throws -> Void,
     saveProfile:((ServerProfile,String,Bool) async throws->Void)?=nil,
+    loadingChanged:@escaping (Bool)->Void={_ in},
     cancel: @escaping () -> Void
   ) {
     self.connect = connect
     self.saveProfile=saveProfile
+    self.loadingChanged=loadingChanged
     self.cancel = cancel
     editing = initial != nil
     _profile = State(initialValue: initial?.profile ?? ServerProfile(visibleDatabases: []))
@@ -2889,6 +2907,7 @@ private struct ConnectionForm: View {
         if previous != new { invalidate() }
       }
       .onChange(of: password) { _, _ in invalidate() }
+      .onChange(of: loading) {_,value in loadingChanged(value)}
   }
   private func saveLocal() {
     guard let saveProfile,!loading else {return}
@@ -3046,7 +3065,7 @@ extension WorkbenchController {
     }
   }
   func linkedMenu(for node: TreeNode) -> NSMenu {
-    let menu=NSMenu()
+    let menu=StudioMenu()
     func add(_ title:String,_ action:Selector) {
       let item=NSMenuItem(title:title,action:action,keyEquivalent:"");item.target=self;item.representedObject=node;menu.addItem(item)
     }
@@ -3276,37 +3295,43 @@ extension WorkbenchController {
   private func groupColor(_ id:UUID)->NSColor? {
     (try? organization.ancestors(id).compactMap(\.colorHex).first).map {ServerAppearance(colorHex:$0).color}
   }
-  private func inputName(title:String,value:String)->String? {
-    let alert=NSAlert();alert.messageText=title
-    let field=ExplorerNameField(string:value);field.frame=NSRect(x:0,y:0,width:320,height:26)
-    alert.accessoryView=field;alert.addButton(withTitle:"Kaydet");alert.addButton(withTitle:"Vazgeç")
-    alert.window.initialFirstResponder=field
-    guard alert.runModal() == .alertFirstButtonReturn else {return nil}
-    // AX/default-button activation can end the modal before field editing commits.
-    let submitted=field.submittedText
-    field.validateEditing()
-    return submitted
+  func sourceColor(for server:ConnectedServer)->NSColor? {
+    if let appearance=server.profile.appearance,appearance.isMarked {return appearance.color}
+    return organization.color(for:server.id).map {ServerAppearance(colorHex:$0).color}
+  }
+  @discardableResult func presentExplorerName(title:String,value:String="",save:@escaping (String) async throws->Void)->StudioNameWindowController {
+    let owner=StudioNameWindowController(title:title,value:value,save:save)
+    auxiliaryWindows.append(owner)
+    owner.closed={ [weak self,weak owner] in
+      Task { @MainActor [weak self,weak owner] in self?.auxiliaryWindows.removeAll {$0 === owner} }
+    }
+    if ProcessInfo.processInfo.arguments.contains(where:{$0.contains(".xctest")}) {owner.window?.setFrameOrigin(NSPoint(x:-20_000,y:-20_000))}
+    owner.showWindow(nil);owner.window?.makeKeyAndOrderFront(nil)
+    return owner
   }
   @objc private func createExplorerGroup(_ sender:NSMenuItem) {
     let parent=(sender.representedObject as? String).flatMap(UUID.init(uuidString:))
-    // Finish the NSMenu tracking loop before opening a modal input window.
-    Task {[weak self] in
-      guard let self,let name=inputName(title:parent == nil ? "Yeni bağlantı klasörü":"Yeni alt klasör",value:"") else {return}
-      do {try state.changeExplorerOrganization {try $0.create(name,parent:parent)}} catch {state.showError(error.localizedDescription)}
+    Task { @MainActor [weak self] in
+      self?.presentExplorerName(title:parent == nil ? "Yeni bağlantı klasörü":"Yeni alt klasör") {[weak self] name in
+        guard let self else {throw CancellationError()}
+        try state.changeExplorerOrganization {try $0.create(name,parent:parent)}
+      }
     }
   }
   @objc private func renameExplorerGroup() {
     guard let node=contextNode,let id=node.connectionGroupID else {return}
-    Task {[weak self] in
-      guard let self,let name=inputName(title:"Klasörü yeniden adlandır",value:node.title) else {return}
-      do {try state.changeExplorerOrganization {try $0.rename(id,name:name)}} catch {state.showError(error.localizedDescription)}
+    Task { @MainActor [weak self] in
+      self?.presentExplorerName(title:"Klasörü yeniden adlandır",value:node.title) {[weak self] name in
+        guard let self else {throw CancellationError()}
+        try state.changeExplorerOrganization {try $0.rename(id,name:name)}
+      }
     }
   }
   @objc private func removeExplorerGroup() {
     guard let node=contextNode,let id=node.connectionGroupID else {return}
     Task {[weak self] in
       guard let self else {return}
-      let alert=NSAlert();alert.messageText="\(node.title) klasörü kaldırılsın mı?"
+      let alert=StudioAlert();alert.messageText="\(node.title) klasörü kaldırılsın mı?"
       alert.informativeText="Bağlantılar ve alt klasörler bir üst konuma taşınır. Kayıtlı bağlantılar silinmez."
       alert.addButton(withTitle:"Klasörü Kaldır");alert.addButton(withTitle:"Vazgeç")
       guard alert.runModal() == .alertFirstButtonReturn else {return}
@@ -3314,7 +3339,7 @@ extension WorkbenchController {
     }
   }
   private func addMoveMenu(to menu:NSMenu,group:UUID?,server:UUID?) {
-    let child=NSMenu();child.autoenablesItems=false
+    let child=StudioMenu();child.autoenablesItems=false
     func option(_ title:String,_ destination:UUID?) {
       let item=NSMenuItem(title:title,action:#selector(moveOrganizationItem(_:)),keyEquivalent:"")
       item.target=self;item.representedObject=[group == nil ? "server":"group",(group ?? server)!.uuidString,destination?.uuidString ?? ""]
@@ -3332,7 +3357,7 @@ extension WorkbenchController {
     do {try state.changeExplorerOrganization {if parts[0]=="group" {try $0.move(id,to:destination)} else {try $0.assign(id,to:destination)}}} catch {state.showError(error.localizedDescription)}
   }
   private func addGroupColorMenu(to menu:NSMenu,id:UUID) {
-    let child=NSMenu()
+    let child=StudioMenu()
     for (name,hex) in [("Varsayılan",""),("Mavi","3B82F6"),("Yeşil","238B65"),("Turuncu","C47C25"),("Mor","8B5CF6"),("Kırmızı","C74242")] {
       let item=NSMenuItem(title:name,action:#selector(changeExplorerGroupColor(_:)),keyEquivalent:"");item.target=self;item.representedObject=[id.uuidString,hex]
       item.state=organization.groups.first {$0.id==id}?.colorHex == (hex.isEmpty ? nil:hex) ? .on:.off
@@ -3346,17 +3371,19 @@ extension WorkbenchController {
   }
   @objc private func renameExplorerConnection() {
     guard let server=contextNode?.server,!server.updatingProfile,!server.reconnecting else {return}
-    Task {[weak self] in
-      guard let self,let name=inputName(title:"Bağlantıyı yeniden adlandır",value:server.profile.name) else {return}
-      var profile=server.profile;profile.name=name
-      do {try await state.saveConnectionProfile(server,profile:profile,password:server.password,remember:server.remembered)} catch {state.showError(error.localizedDescription)}
+    Task { @MainActor [weak self] in
+      self?.presentExplorerName(title:"Bağlantıyı yeniden adlandır",value:server.profile.name) {[weak self] name in
+        guard let self else {throw CancellationError()}
+        var profile=server.profile;profile.name=name
+        try await state.saveConnectionProfile(server,profile:profile,password:server.password,remember:server.remembered)
+      }
     }
   }
   @objc private func deleteExplorerConnection() {
     guard let server=contextNode?.server,!server.updatingProfile,!server.reconnecting else {return}
     Task {[weak self] in
       guard let self else {return}
-      let alert=NSAlert();alert.messageText="\(server.profile.name) bağlantısı silinsin mi?"
+      let alert=StudioAlert();alert.messageText="\(server.profile.name) bağlantısı silinsin mi?"
       alert.informativeText="Kayıtlı profil ve bu profile ait parola silinir. Açık sorgu sekmeleri korunur."
       alert.addButton(withTitle:"Bağlantıyı Sil");alert.addButton(withTitle:"Vazgeç")
       guard alert.runModal() == .alertFirstButtonReturn else {return}
@@ -3390,19 +3417,5 @@ extension WorkbenchController {
       _ = state.moveExplorer(sourceID,to:insertion)
       return true
     } catch {state.showError(error.localizedDescription);return false}
-  }
-}
-
-/// Keep an in-progress field-editor value when NSAlert ends without resigning it.
-final class ExplorerNameField:NSTextField {
-  private var draft:String?
-  var submittedText:String {draft ?? currentEditor()?.string ?? stringValue}
-  override func textDidChange(_ notification:Notification) {
-    draft=currentEditor()?.string ?? stringValue
-    super.textDidChange(notification)
-  }
-  override func textDidEndEditing(_ notification:Notification) {
-    draft=currentEditor()?.string ?? draft ?? stringValue
-    super.textDidEndEditing(notification)
   }
 }

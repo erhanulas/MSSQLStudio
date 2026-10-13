@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.102",
+    "date": "2026-10-13",
+    "title": "Yerel önizleme: Explorer ve pencere deneyimi",
+    "changes": [
+      "Klasör ekleme ve yeniden adlandırma, hatayı form içinde gösteren bağımsız bir pencere kullanır. Enter, Tab, Shift+Tab ve Escape ile yönetilebilir; başka Explorer işlemlerini kilitlemez.",
+      "Tümünü Kaydetmeden Kapat ayrı bir menü öğesi değildir. Close All Tabs veya uygulamadan çıkış sırasında kaydetme, toplu kaydetmeden kapatma ve vazgeçme seçenekleri birlikte sunulur.",
+      "Başarısız yeniden bağlantıda Explorer kökleri, seçim ve açık dallar korunur. Değişmemiş kayıtlı profil yeniden bağlanırken Keychain’e tekrar yazılmaz.",
+      "Explorer açık temada beyaz, koyu temada nötr bir yüzey kullanır. Klasör rengi bağlantı ve sorgu sekmesine miras kalır; etiket ve renk adları satır metni yerine ipucunda gösterilir.",
+      "Sağ tık menüleri ortak yazı boyutu ve işlev ikonlarıyla yenilendi. Yardımcı pencereler ortak Tab/Shift+Tab/Escape davranışını kullanır; SQL editöründeki Tab işlevi korunur."
+    ]
+  },
+  {
     "version": "0.2.101",
     "date": "2026-10-13",
     "title": "DML tamamlama, Explorer klasörleri ve hedefli indeks yenileme",

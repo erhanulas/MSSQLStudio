@@ -241,7 +241,7 @@ public struct ServerAppearance: Codable, Equatable, Sendable {
   }
   public var isMarked: Bool { environment != .unspecified || Self.normalizedHex(colorHex) != nil }
   public var badge: String {
-    if environment == .custom {
+    if environment == .custom || !customLabel.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
       let label = customLabel.components(separatedBy: .newlines).joined(separator: " ")
         .trimmingCharacters(in: .whitespacesAndNewlines)
       return label.isEmpty ? "Özel" : String(label.prefix(40))

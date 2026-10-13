@@ -614,7 +614,7 @@ struct SchemaComparisonPanel: View {
   private var review: ModuleReviewController?
   init(model:SchemaComparisonModel,openSQL:@escaping (SchemaEndpoint,String)->Void) {
     self.model=model
-    let window=NSWindow(contentRect:NSRect(x:0,y:0,width:1280,height:850),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
+    let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:1280,height:850),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
     super.init(window:window)
     model.cancelOperation={[weak self] in self?.operation?.cancel()}
     window.title="DDL Karşılaştırma";window.minSize=NSSize(width:1000,height:680);window.delegate=self

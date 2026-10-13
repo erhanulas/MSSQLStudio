@@ -114,12 +114,13 @@ import SwiftUI
     try await Task.sleep(for:.milliseconds(30))
     #expect(state.documents.count == 1 && state.active === doc && doc.sql.hasSuffix("-- keep"))
   }
-  @Test func closeAllIncludesPinnedTabsWithoutWarningForGeneratedSQL() throws {
+  @Test func closeAllIncludesPinnedTabsWithoutWarningForGeneratedSQL() async throws {
     let state=StudioState(),server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false
     let host=WorkbenchController(state:state);_=host.view
     let a=state.newQuery(server:server,text:"SELECT 1"),b=state.newQuery(server:server,text:"SELECT 2");a.pinned=true
     let item=try #require(host.tabMenu(for:b).items.first {$0.title == "Close All Tabs"})
     #expect(NSApp.sendAction(try #require(item.action),to:item.target,from:item))
+    for _ in 0..<100 where !state.documents.isEmpty {await Task.yield()}
     #expect(state.documents.isEmpty)
   }
   @Test func agentPanelsOnlyReadOnOpenAndHistoryUsesNativeExpandableRows() async throws {

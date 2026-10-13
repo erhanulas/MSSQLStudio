@@ -53,7 +53,7 @@ import Testing
     _ = controller.view
     func invoke(_ index: Int, on doc: QueryDocument) throws {
       let menu = controller.tabMenu(for: doc)
-      let item = try #require(menu.item(at: index))
+      let item = try #require(menu.items.first(where: {!$0.isSeparatorItem && $0.tag == index}))
       #expect(NSApp.sendAction(try #require(item.action), to: item.target, from: item))
     }
     try invoke(0, on: documents[4])

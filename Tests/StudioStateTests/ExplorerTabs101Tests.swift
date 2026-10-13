@@ -5,18 +5,6 @@ import Testing
 
 @MainActor @Suite(.serialized) struct ExplorerTabs101Tests {
   private func views(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(views)}
-  @Test func folderNameKeepsTheLiveFieldEditorTextAtModalCompletion() throws {
-    _=NSApplication.shared
-    let field=ExplorerNameField(string:"");field.frame=NSRect(x:10,y:10,width:320,height:26)
-    let window=NSWindow(contentRect:NSRect(x:0,y:0,width:360,height:100),styleMask:[.titled],backing:.buffered,defer:false);window.isReleasedWhenClosed=false
-    window.contentView?.addSubview(field);defer {window.close()}
-    #expect(window.makeFirstResponder(field))
-    let editor=try #require(field.currentEditor() as? NSTextView)
-    editor.insertText("Geliştirme",replacementRange:NSRange(location:0,length:0))
-    #expect(field.submittedText=="Geliştirme")
-    window.endEditing(for:field)
-    #expect(field.submittedText=="Geliştirme")
-  }
   @Test func foldersRestoreOfflineAndDragMovesConnectionsWithoutLosingExpansionIdentity() throws {
     _=NSApplication.shared
     let suite="StudioFolders-\(UUID())",defaults=try #require(UserDefaults(suiteName:suite));defer {defaults.removePersistentDomain(forName:suite)}
@@ -60,7 +48,7 @@ import Testing
     do {try await state.saveConnectionProfile(server,profile:changed,password:"",remember:false);Issue.record("Persistence must fail")} catch {}
     #expect(server.profile.name=="Original" && server.profile.host=="localhost" && !server.updatingProfile && doc.state == .ready)
   }
-  @Test func explicitDiscardAllClosesDirtyPinnedAndDetachedTabsWithoutPerDocumentPrompts() throws {
+  @Test func explicitDiscardAllClosesDirtyPinnedAndDetachedTabsWithoutPerDocumentPrompts() async throws {
     _=NSApplication.shared
     let state=StudioState(),server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false;state.servers=[server];state.recoveryEnabled=false
     let host=WorkbenchController(state:state);_=host.view
@@ -69,8 +57,12 @@ import Testing
     for doc in docs {doc.sql+="; -- unsaved";doc.confirmDiscardResultEdits={prompts+=1;return false}}
     docs[1].pinned=true;state.active=docs[1];host.detachQuery()
     let detached=NSApp.windows.first {$0.title==docs[1].title && $0.isVisible}
-    let item=try #require(host.tabMenu(for:docs[0]).items.first {$0.title=="Tümünü Kaydetmeden Kapat"})
+    let menu=host.tabMenu(for:docs[0]);#expect(!menu.items.contains {$0.title=="Tümünü Kaydetmeden Kapat"})
+    let item=try #require(menu.items.first {$0.title=="Close All Tabs"})
     #expect(NSApp.sendAction(try #require(item.action),to:item.target,from:item))
+    for _ in 0..<100 where !NSApp.windows.contains(where:{$0.identifier?.rawValue=="studio.bulkClose" && $0.isVisible}) {await Task.yield()}
+    let prompt=try #require(NSApp.windows.first {$0.identifier?.rawValue=="studio.bulkClose" && $0.isVisible}?.windowController as? StudioCloseWindowController)
+    prompt.discardAll()
     #expect(prompts==0 && state.documents.isEmpty && state.active==nil && detached?.isVisible != true)
   }
   @Test func closeIconHasAHitAreaHoverFeedbackAndNormalCloseStillChecksDrafts() throws {

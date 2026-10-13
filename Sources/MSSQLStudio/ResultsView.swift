@@ -260,7 +260,7 @@ import SwiftUI
     showSelectionMenu(with:event)
   }
   private func showSelectionMenu(with event:NSEvent) {
-    let menu = NSMenu(); menu.autoenablesItems = false
+    let menu = StudioMenu(); menu.autoenablesItems = false
     let item = menu.addItem(withTitle: "Kopyala", action: #selector(copySelection), keyEquivalent: "c")
     item.target = self
     let headers = menu.addItem(withTitle: "Başlıklarla Kopyala", action: #selector(copyWithHeaders), keyEquivalent: GridShortcuts.binding(.headers).key)
@@ -1131,7 +1131,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     table.headerView?.setAccessibilityHelp(help); frozenTable.headerView?.setAccessibilityHelp(help)
   }
   func columnMenu(ordinal:Int?) -> NSMenu {
-    let menu=NSMenu()
+    let menu=StudioMenu()
     func add(_ title:String,_ action:Selector,_ index:Int,_ symbol:String,to parent:NSMenu) -> NSMenuItem {
       let item=NSMenuItem(title:title,action:action,keyEquivalent:"")
       item.target=self; item.tag=index; item.image=NSImage(systemSymbolName:symbol,accessibilityDescription:title)
@@ -1150,7 +1150,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       menu.addItem(.separator())
     }
     let parent=NSMenuItem(title:"Kolonları Göster / Gizle",action:nil,keyEquivalent:"")
-    let list=NSMenu(); parent.submenu=list
+    let list=StudioMenu(); parent.submenu=list
     parent.image=NSImage(systemSymbolName:"tablecells",accessibilityDescription:parent.title); menu.addItem(parent)
     for (index,field) in result.fields.enumerated() {
       let item=add("\(index+1). \(field.name)",#selector(toggleColumn(_:)),index,"eye",to:list)
@@ -1278,7 +1278,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       table.cellColumns.isEmpty || table.tableColumns.firstIndex(where:{$0.identifier.rawValue == String(ordinal)}).map {table.cellColumns.contains($0)} == true
     }
     guard chosen.count <= 10_000 else {
-      let a = NSAlert()
+      let a = StudioAlert()
       a.messageText = "Kopyalama sınırı: 10.000 satır"
       a.informativeText = "Daha büyük sonuçlar için Dışa Aktar kullanın veya daha az satır seçin."
       a.runModal()
@@ -1289,7 +1289,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       let values = values(at: sourceIndex(row))
       bytes += ordinals.reduce(0) { $0 + (values[$1]?.utf8.count ?? 4) * 2 + 4 }
       if bytes > 16_777_216 {
-        let alert = NSAlert()
+        let alert = StudioAlert()
         alert.messageText = "Kopyalama boyutu 16 MB sınırını aşıyor."
         alert.informativeText = "Dışa Aktar kullanın veya daha az satır seçin."
         alert.runModal()
@@ -1324,7 +1324,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     if canEdit(row:r,column:i), let (target,position)=presentationColumn(i) {target.editColumn(position,row:r,with:nil,select:true);return}
     let values = values(at: sourceIndex(r))
     guard values.indices.contains(i) else { return }
-    let alert = NSAlert()
+    let alert = StudioAlert()
     alert.messageText = result.fields[i].name
     alert.informativeText = readOnlyReason(column: i) ?? "Bu hücre salt okunur."
     let text = NSTextView()
@@ -1516,12 +1516,14 @@ private struct ColumnFilterPanel: View {
     self.document = document
     editor = EditorController(document: document)
     super.init(nibName: nil, bundle: nil)
+    document.closeOperationBlocked = { [weak self] in self?.submittingData == true }
+    document.hasResultEdits = { [weak self] in self?.hasDataEdits == true }
     document.confirmDiscardResultEdits = { [weak self] in
       guard let self else { return true }
       view.window?.makeFirstResponder(nil)
       guard !submittingData else { return false }
       guard hasDataEdits else { return true }
-      let alert = NSAlert(); alert.messageText = "Gönderilmemiş sonuç düzenlemeleri var"
+      let alert = StudioAlert(); alert.messageText = "Gönderilmemiş sonuç düzenlemeleri var"
       alert.informativeText = "Devam ederseniz bu yerel değişiklikler silinir. Veritabanına göndermek için Önizle'yi kullanın."
       alert.addButton(withTitle: "Düzenlemeleri Sil ve Devam Et"); alert.addButton(withTitle: "Geri Dön")
       guard alert.runModal() == .alertFirstButtonReturn else { return false }
@@ -1876,7 +1878,7 @@ private struct ColumnFilterPanel: View {
     deleteRowButton.toolTip = restoring ? "Seçili satırların silme işaretini kaldır" : "Seçili satırları silinmek üzere işaretle · SQL önizlemesinden onayla uygulanır"
   }
   private func dataError(_ error: Error) {
-    let alert = NSAlert(); alert.messageText = "Veri düzenleme"; alert.informativeText = error.localizedDescription
+    let alert = StudioAlert(); alert.messageText = "Veri düzenleme"; alert.informativeText = error.localizedDescription
     if let window = view.window { alert.beginSheetModal(for: window) } else { alert.runModal() }
   }
   @objc private func beginDataEditing() {
@@ -1924,7 +1926,7 @@ private struct ColumnFilterPanel: View {
     guard let grid = selectedGrid, !submittingData else { return }
     view.window?.makeFirstResponder(nil)
     if grid.pendingEdits.isEmpty { grid.discardEdits(); return }
-    let alert = NSAlert(); alert.messageText = "Bekleyen düzenlemelerden vazgeçilsin mi?"; alert.addButton(withTitle: "Vazgeç"); alert.addButton(withTitle: "Düzenlemeye Devam Et")
+    let alert = StudioAlert(); alert.messageText = "Bekleyen düzenlemelerden vazgeçilsin mi?"; alert.addButton(withTitle: "Vazgeç"); alert.addButton(withTitle: "Düzenlemeye Devam Et")
     if let window = view.window { alert.beginSheetModal(for: window) { response in if response == .alertFirstButtonReturn { grid.discardEdits() } } }
   }
   @objc private func previewDataEditing() {
@@ -1962,7 +1964,7 @@ private struct ColumnFilterPanel: View {
           if document.resultGeneration == generation && document.database == db && document.canRefresh { refreshResults() }
         } catch { await connection.disconnect(); throw error }
       })
-      let window = NSWindow(contentViewController: NSHostingController(rootView: panel)); window.title = "Veri Değişiklikleri — SQL Önizlemesi"; window.setContentSize(NSSize(width: 1000, height: 720)); window.styleMask = [.titled, .closable, .resizable]; window.minSize = NSSize(width: 760, height: 520)
+      let window = StudioPanelWindow(contentViewController: NSHostingController(rootView: panel)); window.title = "Veri Değişiklikleri — SQL Önizlemesi"; window.setContentSize(NSSize(width: 1000, height: 720)); window.styleMask = [.titled, .closable, .resizable]; window.minSize = NSSize(width: 760, height: 520)
       let controller = DataReviewWindowController(window: window); controller.canClose = { [weak self] in self?.submittingData != true }; window.delegate = controller; dataReview = controller; controller.showWindow(nil)
     } catch { dataError(error) }
   }
@@ -2225,7 +2227,7 @@ private struct ColumnFilterPanel: View {
   @objc private func compareModule() {modulePreview()}
   @objc private func applyModule() {
     guard document.transactionCount == 0 else {
-      let alert=NSAlert();alert.messageText="Önce COMMIT veya ROLLBACK çalıştırın.";alert.runModal();return
+      let alert=StudioAlert();alert.messageText="Önce COMMIT veya ROLLBACK çalıştırın.";alert.runModal();return
     }
     guard document.canSubmitModule else {return}
     modulePreview()
@@ -2257,7 +2259,7 @@ private struct ColumnFilterPanel: View {
         }
         document.applyingModule=true;document.execute(override:sql)
       } catch {
-        let alert=NSAlert();alert.messageText="Değişiklik uygulanamadı";alert.informativeText=error.localizedDescription;alert.runModal()
+        let alert=StudioAlert();alert.messageText="Değişiklik uygulanamadı";alert.informativeText=error.localizedDescription;alert.runModal()
       }
     }
   }
@@ -2307,7 +2309,7 @@ private struct ColumnFilterPanel: View {
     autoRefreshButton.image=NSImage(systemSymbolName:seconds>0 ? "clock.badge.checkmark":"clock.arrow.circlepath",accessibilityDescription:"Otomatik yenileme")
     autoRefreshButton.toolTip="Otomatik yenileme · \(seconds == 0 ? "Kapalı":"\(seconds) sn")\(seconds>0 && !document.canRefresh ? " · Başarılı SELECT sonrası başlar":"")"
     autoRefreshButton.setAccessibilityValue(seconds == 0 ? "Kapalı":"\(seconds) sn")
-    let menu=NSMenu()
+    let menu=StudioMenu()
     for value in [0,5,10,30,60,300] {
       let item=NSMenuItem(title:value == 0 ? "Kapalı":"Her \(value) saniyede",action:#selector(changeAutoRefresh(_:)),keyEquivalent:"")
       item.target=self;item.tag=value;item.state=value == seconds ? .on:.off
@@ -2323,14 +2325,14 @@ private struct ColumnFilterPanel: View {
   }
   private func syncPageMenu() {
     syncReadOptions()
-    let menu=NSMenu();menu.autoenablesItems=false
+    let menu=StudioMenu();menu.autoenablesItems=false
     func compact(_ value:Int) -> String {value>=1000 && value%1000 == 0 ? "\(value/1000)k":value.formatted()}
     let pageTitle=selectedPageSize == 0 ? "Tümü":compact(selectedPageSize)
     let title=NSMenuItem(title:"\(pageTitle) · \(compact(document.limits.rows))",action:nil,keyEquivalent:"")
     title.image=NSImage(systemSymbolName:"tablecells",accessibilityDescription:nil);menu.addItem(title)
     func section(_ label:String,values:[Int],selected:Int,action:Selector,identifier:String) {
       let item=NSMenuItem(title:label,action:nil,keyEquivalent:"");item.identifier = .init(identifier)
-      let choices=NSMenu();choices.autoenablesItems=false
+      let choices=StudioMenu();choices.autoenablesItems=false
       for value in values + (values.contains(selected) ? []:[selected]) {
         let option=NSMenuItem(title:value == 0 ? "Sınır içindeki tüm satırlar":value.formatted(),action:action,keyEquivalent:"")
         option.target=self;option.tag=value;option.state=value == selected ? .on:.off;choices.addItem(option)
@@ -2402,7 +2404,7 @@ private struct ColumnFilterPanel: View {
         try await favorites.delete(favorite.id)
         if self?.document.favoriteID == favorite.id {self?.document.favoriteID=nil}
       } catch {
-        if let window=self?.view.window {let alert=NSAlert();alert.messageText="Favori kaldırılamadı";alert.informativeText=error.localizedDescription;_ = await alert.beginSheetModal(for:window)}
+        if let window=self?.view.window {let alert=StudioAlert();alert.messageText="Favori kaldırılamadı";alert.informativeText=error.localizedDescription;_ = await alert.beginSheetModal(for:window)}
       }
       self?.removingFavorite=false;self?.syncFavoriteButton()
     }
@@ -2424,7 +2426,7 @@ private struct ColumnFilterPanel: View {
       document.results.indices.contains(index), let controller = tables[index]
     else { return }
     guard !controller.isProcessing else {
-      let a = NSAlert()
+      let a = StudioAlert()
       a.messageText = "Önce filtreleme veya sıralamanın tamamlanmasını bekleyin."
       a.runModal()
       return
