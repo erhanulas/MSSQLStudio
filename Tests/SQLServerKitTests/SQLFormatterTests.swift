@@ -28,6 +28,18 @@ struct SQLFormatterTests {
       }
     }
   }
+  @Test func contextualKeywordIdentifiersKeepTheirOriginalCase() {
+    for options in [SQLFormattingOptions(), .init(keywordCase:.lower)] {
+      let source="select 1 as Go, 2 as Try from dbo.Go as Catch"
+      let formatted=TSQL.format(source,options:options)
+      for name in ["Go","Try","Catch"] { #expect(formatted.contains(name),"\(formatted)") }
+      #expect(!SQLFormatter.preservesSQLTokens("SELECT 1 AS Go",formatted:"SELECT 1 AS GO"))
+      for name in ["Try","Catch","Go","Apply","Offset","Rows","Only","Output","Partition","Include","Next"] {
+        let sql="select "+name+" from dbo.t"
+        #expect(TSQL.format(sql,options:options).contains(name))
+      }
+    }
+  }
   @Test func preferencesAffectListsCaseAndIndentWithoutChangingAliases() {
     let source="select a,b from dbo.t AS Alias where a=1 and b=2"
     let upper=TSQL.format(source)

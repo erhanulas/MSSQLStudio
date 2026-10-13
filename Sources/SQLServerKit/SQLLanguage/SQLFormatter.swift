@@ -18,6 +18,7 @@ public struct SQLFormattingOptions: Codable, Equatable, Sendable {
 /// Whitespace/case-only T-SQL formatting. No alias, comma, comment or statement
 /// token is inserted/removed. A lexical equivalence check rejects unsafe output.
 public enum SQLFormatter {
+  private static let clauseWords = Set("FROM WHERE JOIN LEFT RIGHT INNER FULL OUTER CROSS ON AS AND OR IS IN BETWEEN LIKE GROUP BY HAVING ORDER ASC DESC OFFSET FETCH UNION ALL EXCEPT INTERSECT WHEN THEN ELSE END OVER PARTITION WITH SET VALUES OUTPUT INTO BEGIN SELECT".split(separator:" ").map(String.init))
   private struct Frame {
     var clause = ""
     var query = false
@@ -56,7 +57,7 @@ public enum SQLFormatter {
       let previous = i > 0 ? tokens[i-1].text.uppercased() : ""
       let next = i+1 < tokens.count ? tokens[i+1].text.uppercased() : ""
       let qualified = previous == "." || next == "."
-      let keyword = token.kind == .keyword && !qualified
+      let keyword = token.kind == .keyword && !qualified && !isIdentifier(tokens,index:i,source:ns)
       let batch = SQLRoutineDefinition.isBatchSeparator(token, source: ns)
       if batch { blockIndent = 0; caseIndent = 0; caseBases = []; frames = [Frame(query: true)]; newline(0) }
       // GO count and its optional comment stay on the original separator line.
@@ -152,10 +153,42 @@ public enum SQLFormatter {
     guard source.utf16.count <= 250_000, result.utf16.count <= 500_000 else { return false }
     let tokens = TSQL.lex(source).filter { $0.kind != .space }
     let formatted = TSQL.lex(result).filter { $0.kind != .space }
-    return tokens.count == formatted.count && zip(tokens,formatted).allSatisfy { original, changed in
-      if original.kind == .keyword { return original.text.caseInsensitiveCompare(changed.text) == .orderedSame }
+    let ns = source as NSString
+    return tokens.count == formatted.count && tokens.indices.allSatisfy { index in
+      let original=tokens[index], changed=formatted[index]
+      if original.kind == .keyword && !isIdentifier(tokens,index:index,source:ns) {
+        return original.text.caseInsensitiveCompare(changed.text) == .orderedSame
+      }
       return original.text == changed.text
     } && batchLines(source) == batchLines(result)
+  }
+  private static func isIdentifier(_ tokens: [Lexeme], index: Int, source: NSString) -> Bool {
+    let token=tokens[index], word=token.text.uppercased()
+    let previous=index > 0 ? tokens[index-1].text.uppercased():""
+    let next=index+1 < tokens.count ? tokens[index+1].text.uppercased():""
+    if previous == "." || next == "." { return true }
+    // These palette words are not SQL Server reserved identifiers. Without a
+    // full parser, preserve ambiguous names rather than change their meaning.
+    // https://learn.microsoft.com/sql/t-sql/language-elements/reserved-keywords-transact-sql
+    switch word {
+    case "TRY", "CATCH": return !["BEGIN","END"].contains(previous)
+    case "APPLY": return !["CROSS","OUTER"].contains(previous)
+    case "PARTITION": return next != "BY"
+    case "NEXT": return previous != "FETCH"
+    case "OFFSET", "ROWS", "ONLY", "OUTPUT", "INCLUDE": return true
+    default: break
+    }
+    // GO is a client separator only on its own physical line. In SQL it may be
+    // a case-sensitive identifier, including AS Go / dbo.Go / SELECT 1 Go.
+    if word == "GO" { return !SQLRoutineDefinition.isBatchSeparator(token,source:source) }
+    if previous == "AS" { return !["BEGIN","SELECT","WITH","RETURN","EXTERNAL"].contains(word) }
+    if ["FROM","JOIN","INTO","UPDATE","TABLE","VIEW","PROCEDURE","FUNCTION","EXEC","EXECUTE"].contains(previous),
+       !["TOP","SELECT","WITH"].contains(word) { return true }
+    if index > 0, !clauseWords.contains(word), [",","FROM","WHERE","GROUP","ORDER",";", ""].contains(next) {
+      let prior=tokens[index-1]
+      return [.word,.number,.string,.variable].contains(prior.kind) || previous == ")"
+    }
+    return false
   }
   private static func batchLines(_ source: String) -> [String] {
     let ns = source as NSString

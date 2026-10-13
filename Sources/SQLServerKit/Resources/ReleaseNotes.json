@@ -1,6 +1,6 @@
 [
   {
-    "version": "0.2.106",
+    "version": "0.2.107",
     "date": "2026-10-13",
     "title": "Bağlama duyarlı öneriler, bağlantılar ve SQL biçimlendirme",
     "changes": [
@@ -8,7 +8,7 @@
       "Yorum yardım düğmesi küçük bir simgeye dönüştürüldü. Yalnız tam satır veya çok satırlı seçimde görünür; kelime seçimi ve yazım sırasında açılmaz. Mevcut yorum kısayolları ve tek adımlı geri alma korunur.",
       "Yeni ve mevcut Explorer bağlantıları aynı Bağlantılar ekranından yönetilir. Test ve veritabanı yükleme birleştirildi, mükerrer ve etkisiz yenileme işlemleri kaldırıldı. Çevrimdışı kaydetme ve bağlantı taslakları korunur.",
       "Bağlantı ekranı ODBC Driver 18 kaydını, yüklenebilirliğini ve sürümünü kontrol eder. Eksik sürücü, lisans ve kaynak onayından sonra resmî Microsoft Homebrew yöntemiyle kurulabilir; ilerleme ve hatalar gösterilir, ardından sürücü yeniden algılanır. Yönetici yetkisi veya Homebrew kurulumu otomatik başlatılmaz.",
-      "SQL formatter CTE, JOIN, CASE, alt sorgu ve DML yerleşimleriyle yenilendi. Anahtar kelime harfleri, girinti, virgül yerleşimi ve satır kırma Ayarlar’dan özelleştirilebilir. Seçili SQL veya tüm editör tek adımda biçimlendirilir; token, yorum, literal ve GO sınırlarını değiştirecek çıktı uygulanmaz.",
+      "SQL formatter CTE, JOIN, CASE, alt sorgu ve DML yerleşimleriyle yenilendi. Anahtar kelime harfleri, girinti, virgül yerleşimi ve satır kırma Ayarlar’dan özelleştirilebilir. Seçili SQL veya tüm editör tek adımda biçimlendirilir; token, yorum, literal ve GO sınırlarını değiştirecek çıktı uygulanmaz. SQL keyword’leriyle aynı yazılan alias ve nesne adlarının özgün harf biçimi de korunur.",
       "Açık bağlantı formunda tema değişirken kart ve düğme renklerinin eski temada kalması düzeltildi."
     ]
   },
