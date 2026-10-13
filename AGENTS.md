@@ -274,6 +274,8 @@ Noktalı virgülsüz ardışık SELECT ifadeleri ve UNION kolları tamamlama bin
 
 ## Yayımlanmayan yerel önizleme ve popup davranışı
 
+0.2.102/build 103 yalnız yerel dosya olarak hazırlandı; kaynak `081e6fe4e8afd95efe5edae22bbeb48ba3f5588b`, önizleme Actions `38405770591` başarılı, 579 test (552 geçti / 27 dış koşullu atlandı). Public latest v0.2.101, v0.2.102 tag/Release yok. İndirilen signed ZIP/PKG ve frozen helper doğrulandı; ayrıntılı hash ve CUA sınırları TEST-REPORT.md içindedir.
+
 - Kullanıcı yalnız dosya istediğinde release tag’i veya GitHub Release oluşturmayın. `package-preview.yml` yalnız `codex/local-package-*` dalında imzalı ZIP/PKG, frozen helper ve paket testlerini üretir; contents:read izni ve üç günlük Actions artifact’i vardır, publish komutu yoktur. Kaynağı önizleme dalında tutun; public latest güncelleme kanalı değişmez. Dosyaları indirip strict imza/hash/helper eşitliğini doğrulayın ve yerel bağlantıları verin. Yayın anahtarını dışarı çıkarmayın veya ad-hoc uygulamayı normal kullanıcı paketi gibi vermeyin.
 - Tümünü Kaydetmeden Kapat ayrı menü/toolbar maddesi değildir: Close All Tabs ve ⌘Q sırasında ortak karar penceresindeki seçenektir. Kaydet/Toplu At/Vazgeç tek kararda uygulanır; normal tek sekme onayı korunur. Açık transaction, SQL çalışması veya devam eden grid yazması toplu kapatmayı engeller. Açık taslakları atarak çıkış recovery snapshot’ına eski taslakları bırakmaz.
 - Explorer adlandırmaları bağımsız StudioNameWindowController kullanır; NSAlert.runModal + accessory field ile isim toplamayın. Gerçek field-editor metni Save eyleminde alınır; duplicate/validation formda kalır, aynı pencerede tekrar denenir, boş isim kabul edilmez. Saving sırasında Esc/X kapatamaz. Genel hata bildirimi bloklamayan ayrı native karttır.

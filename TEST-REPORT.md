@@ -6,7 +6,10 @@
 - Son CUA turunda yeni form açıldı; yapıştırma/Tab/Return sonrasında araç AX/screenshot zaman aşımı verdi. İzole süreç örneğinde ana thread AppKit event loop bekliyordu; bu son tur başarı sayılmadı. Menü ikonlarının son ekleme-dekorasyon yolu native testte doğrulanır; son gerçek ekran görüntüsü doğrulaması tamamlanmadı.
 - AppKit rounded-button performClick animasyonunun Swift test yardımcısını tamamlanmış native özet olmadan sonlandırdığı LLDB ile görüldü; ortak dialog butonu eylemi doğrudan iletir. Yalnız exit 0 başarı sayılmaz; hem app hem core özetleri zorunludur. Menü ayırıcıları sonrası indeks kullanan eski testler gerçek action tag’iyle düzeltilmiştir.
 - Son yerel `/tmp/mssql-102-tests-final.log`: 296 app + 283 core = **579 test; 552 geçti / 27 dış koşullu atlandı, 0 issue**. Her iki tamamlanmış test özeti doğrulandı (50.692 / 4.295 sn).
-- Canlı SQL Server, gerçek bağlantı kopması ve Installer kurulumu denenmedi. Paket/CI doğrulama kanıtları aşağıya eklenecektir; public güncelleme kanalı v0.2.101 olarak kalır.
+- İmzalı önizleme Actions **38405770591** başarılı; kaynak **081e6fe4e8afd95efe5edae22bbeb48ba3f5588b**. CI: 296 app + 283 core = 579 test (552 geçti / 27 atlandı), iki tamamlanmış başarılı özet (76.756 / 6.445 sn). Artifact **11817259469**, dış arşiv digest `9389fa9e49ad55a239f16ea8169099e55d50bd46893a9d5f28cbc4d672344380` doğrulandı.
+- İndirilen ZIP SHA-256 `f5b7f08c893289a9e31a2fdcfddef95e258a72e22a9b0de090e1e9fab0be0626`; PKG `112a8b86fa43fdcae9f0d8b84a8ee4b888ec5bbd196d3647f22d3810ffe6d8f0`. prepare-release.py strict app/helper imzaları, frozen helper byte/hash eşitliği, ZIP/PKG binary/metadata/not eşitliğini doğruladı. Signed uygulamanın Foundation feed kontrolü exact **0.2.101** geçti. Remote v0.2.102 etiketi yok; public latest v0.2.101 kaldı, Release oluşturulmadı. Üretilen yerel update.json yayımlanmadı.
+- Kullanıcı dosyaları `/Users/erhanulas/Downloads/MSSQLStudio-0.2.102-Onizleme.pkg` ve `.zip`; kopya hash’leri doğrulandı. Kurulum/gerçek uygulama restart yapılmadı. Kaynak yalnız `codex/local-package-0.2.102` dalına gönderildi.
+- Canlı SQL Server, gerçek bağlantı kopması ve Installer kurulumu denenmedi. Public güncelleme kanalı v0.2.101 olarak kalır.
 
 ## 13 Ekim 2026 — v0.2.101 / build 102: DML IntelliSense, gerçek okuma bütçesi, Explorer klasörleri ve hedefli DDL
 
