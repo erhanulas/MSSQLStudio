@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.110 / build 111 public yayın doğrulandı
+
+- [Public/latest v0.2.110](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.110), kaynak `fbc6bbbd82a18948062b86e75fa64bf911c075b7`; [Actions 38484335483](https://github.com/erhanulas/MSSQLStudio/actions/runs/38484335483) bütün adımlarıyla başarılı. DB bazında nesne içeriği indeks sayısı/tarih/ilerleme/bağımsız hata/kısmi durum ve kalıcı başarılı tur metadata'sı yayımlandı.
+- CI gerçek yayın paketleriyle **334 app +317 core +8 text =659 test; 632 geçti /27 dış koşullu atlandı, 0 issue**; tamamlanmış özetler 83.710 /8.480 /0.003 sn. Sabit kimlik/izole Keychain fixture ve geçici imza kimliği temizliği geçti. Loglar `/tmp/MSSQLStudio-110-ci-tests.log`, `110-ci-feed.log`, `110-ci-logs.zip`.
+- GitHub'dan indirilen dört public asset SHA-256 değerleri GitHub digest'leriyle aynı; ZIP/PKG URL/hash eşliği manifest ile doğrulandı. Exact 0.2.110/build 111, ZIP/PKG metadata/binary/notlar eşliği, kaynak ReleaseNotes byte eşliği ve yayın metni geçti. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği doğrulandı; helper v1 yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed app kendi Foundation/URLSession updater yoluyla `Foundation updater feed verified: 0.2.110` verdi. Kanıt `/tmp/MSSQLStudio-110-public-verification/verification.json` altında.
+- Yerel native/geometry ve scoped status kanıtları aşağıdadır. Bu görevde gerçek uygulama/SQL/Keychain/geçmiş ve `.vscode/` değiştirilmedi; kurulum yapılmadı. Canlı SQL Server, gerçek CUA popup fare akışı ve Installer denenmedi. Önceki smoke geçmiş olayı ve kurtarma belirsizliği tarihsel kayıtta korunur; yeni yayın bunu çözülmüş saymaz.
+
+Public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.110.pkg`: `7f80d32cf553a9d737185ee3ccf8588ba98759c4be135efd83c764fba0cf1f69`.
+- `MSSQLStudio-0.2.110.zip`: `13a7b015fcc2bb75bb34f3350132ab759d1e65e895d1bf9ea1a41dd376a9ce81`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `4a1f5d3b97ae730b86879f84c446fa49949cd7f6ada7e01aa07ed6d6eaaa4fbf`.
+
 ## 14 Ekim 2026 — v0.2.110 / build 111 yayın hazırlığı
 
 - DB indeks düğmesi/tooltip ve ortak yerel indeks penceresinde Nesne içerikleri bölümü eklendi: kayıtlı tanım sayısı, son başarılı tur/son içerik okuma, bağımsız sırada/ilerleme/duraklama/hata ve okunamayan nesneler. Kısmi/izin/kota eksikliği uyarıdır; başka DB başarısı hatayı gizlemez. Kart başlığı da içerik hatası/kısmi durumunu yansıtır. Boş başarılı tur Hazır'dır; eski v0.2.109 kayıtları ilk doğrulanmış tur öncesi kısmi olarak gösterilebilir.
