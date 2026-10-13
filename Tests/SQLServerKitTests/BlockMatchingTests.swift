@@ -3,6 +3,20 @@ import Testing
 @testable import SQLServerKit
 
 struct BlockMatchingTests {
+  @Test func sharedStructureSeparatesBlocksCaseAndParenthesesAcrossBatches() {
+    let sql = "-- 😀 BEGIN END\r\nBEGIN TRAN; IF 1=1\r\nBEGIN\r\n SELECT CASE WHEN (1)=1 THEN 'END' END;\r\n END CONVERSATION @h;\r\nEND\r\nGO\r\nBEGIN\r\nGO\r\nEND"
+    let structure = SQLBlockStructure(sql)
+    #expect(structure.pairs.count == 3)
+    #expect(structure.pairs.filter { $0.kind == .block }.count == 1)
+    #expect(structure.pairs.filter { $0.kind == .caseExpression }.count == 1)
+    #expect(structure.pairs.filter { $0.kind == .parenthesis }.count == 1)
+    let block = structure.pairs.first { $0.kind == .block }!
+    #expect(structure.matchingPair(at: block.opening.location + 2) == [block.opening, block.closing])
+    #expect(structure.matchingPair(at: block.closing.location + 3) == [block.opening, block.closing])
+    #expect(SQLBlockStructure(String(repeating: " ", count: 250_001) + "BEGIN END").pairs.isEmpty)
+    let adjacent = SQLBlockStructure("(())")
+    #expect(adjacent.matchingPair(at: 2) == [NSRange(location: 1, length: 1), NSRange(location: 2, length: 1)])
+  }
   @Test func nestedBlocksCaseTransactionsAndLexicalExclusions() {
     let sql="-- BEGIN END\nSELECT N'😀 BEGIN END', [BEGIN]; BEGIN TRANSACTION; BEGIN /* BEGIN */ SELECT CASE WHEN 1=1 THEN CASE WHEN 2=2 THEN 3 END END; BEGIN TRY SELECT 1; END TRY BEGIN CATCH SELECT 2; END CATCH END; END CONVERSATION @h;"
     let tokens=TSQL.lex(sql).filter {$0.kind == .keyword}

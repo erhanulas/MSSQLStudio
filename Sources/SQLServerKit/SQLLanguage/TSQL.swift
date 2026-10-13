@@ -28,34 +28,9 @@ public enum TSQL {
   /// Lexical block pairing: CASE consumes its own END; transaction BEGIN is not a block.
   /// Work is bounded on the native selection path and ranges remain UTF-16.
   public static func matchingBlock(in source:String,at caret:Int) -> [NSRange] {
-    guard source.utf16.count <= 250_000,caret >= 0,caret <= source.utf16.count else {return []}
-    let tokens=lex(source).filter {$0.kind != .space && $0.kind != .comment}
-    var stack:[Int]=[],parentheses:[Int]=[],pairs:[Int:Int]=[:]
-    for (i,token) in tokens.enumerated() {
-      if token.kind == .symbol {
-        if token.text == "(" {parentheses.append(i)}
-        if token.text == ")",let start=parentheses.popLast() {pairs[start]=i;pairs[i]=start}
-      }
-      guard token.kind == .keyword else {continue}
-      switch token.text.uppercased() {
-      case "GO": stack.removeAll();parentheses.removeAll()
-      case "CASE": stack.append(i)
-      case "BEGIN":
-        let next=i+1 < tokens.count ? tokens[i+1].text.uppercased():""
-        if !["TRAN","TRANSACTION","DISTRIBUTED","DIALOG","CONVERSATION"].contains(next) {stack.append(i)}
-      case "END":
-        // END CONVERSATION is an independent statement, never a block closer.
-        if i+1 < tokens.count,tokens[i+1].text.uppercased() == "CONVERSATION" {continue}
-        if let start=stack.popLast() {pairs[start]=i;pairs[i]=start}
-      default: break
-      }
-    }
-    // At adjacent parentheses prefer the delimiter immediately after the caret.
-    let selected=tokens.indices.first {pairs[$0] != nil && tokens[$0].range.location <= caret && caret < NSMaxRange(tokens[$0].range)} ?? tokens.indices.last {pairs[$0] != nil && NSMaxRange(tokens[$0].range) == caret}
-    guard let i=selected,
-      let other=pairs[i] else {return []}
-    return [tokens[min(i,other)].range,tokens[max(i,other)].range]
+    SQLBlockStructure(source).matchingPair(at:caret)
   }
+
   /// Quote pairing belongs to typed code, never to comments or existing literals.
   /// Bound synchronous work on the editor's input path.
   public static func allowsQuotePair(in source:String,at caret:Int) -> Bool {

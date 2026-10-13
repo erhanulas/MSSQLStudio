@@ -35,6 +35,8 @@ import SwiftUI
   private let previewDataButton = StudioToolbarButton(symbol: "doc.text.magnifyingglass", label: "SQL önizle ve gönder", title: "SQL", width: 56, prominent: true)
   private let nullDataButton = StudioToolbarButton(symbol: "nosign", label: "Seçili hücreyi NULL yap", tone: .warning)
   private var preparingData = false
+  private let editPreparation = ResultEditingCoordinator()
+  private let editingIndex: CatalogDiskIndex
   private var submittingData = false
   private var dataReview: NSWindowController?
   private var refreshTask: Task<Void, Never>?
@@ -68,8 +70,9 @@ import SwiftUI
   private var pendingResultUpdate:Task<Void,Never>?
   private var moduleReview: ModuleReviewController?
   private var refreshSelection: Any?
-  init(document: QueryDocument) {
+  init(document: QueryDocument, editingIndex: CatalogDiskIndex = .shared) {
     self.document = document
+    self.editingIndex = editingIndex
     editor = EditorController(document: document)
     super.init(nibName: nil, bundle: nil)
     document.closeOperationBlocked = { [weak self] in self?.submittingData == true }
@@ -270,7 +273,7 @@ import SwiftUI
     updateShortcutHints()
     NotificationCenter.default.addObserver(self, selector: #selector(updateShortcutHints), name: GridShortcuts.changed, object: nil)
     filter.toolTip = "Yalnızca yüklenen sonuçlarda ara; sunucuya sorgu göndermez"
-    StudioTheme.surface(resultHeader)
+    StudioTheme.resultSurface(resultHeader)
     resultHeader.edgeInsets = NSEdgeInsets(top: 1, left: 6, bottom: 1, right: 6)
     resultHeader.spacing = 3
     filter.controlSize = .small
@@ -286,9 +289,9 @@ import SwiftUI
     export.setAccessibilityLabel("Sonuçları dışa aktar")
     resultStrip.spacing = 2
     resultStrip.edgeInsets = NSEdgeInsets(top: 3,left: 6,bottom: 3,right: 6)
-    StudioTheme.surface(resultStrip)
+    StudioTheme.resultSurface(resultStrip)
     resultStrip.setAccessibilityIdentifier("resultTabStrip")
-    StudioTheme.surface(stripScroll)
+    StudioTheme.resultSurface(stripScroll)
     stripScroll.documentView = resultStrip
     stripScroll.hasHorizontalScroller = true; stripScroll.autohidesScrollers = true
     resultStrip.translatesAutoresizingMaskIntoConstraints = false
@@ -399,9 +402,10 @@ import SwiftUI
     guard let index = (resultTabs.selectedTabViewItem?.identifier as? NSNumber)?.intValue else { return nil }
     return tables[index]
   }
-  private var hasDataEdits: Bool { tables.values.contains { !$0.pendingEdits.isEmpty } }
+  private var hasDataEdits: Bool { tables.values.contains { !$0.pendingEdits.isEmpty || $0.hasDraftChanges } }
   private var canChangeReadLimit:Bool {!tables.values.contains {$0.editDefinition != nil} && exportJob == nil}
   private func syncDataActions() {
+    warmDataEditing()
     let grid = selectedGrid
     let editing = grid?.editDefinition != nil
     let safe = document.canRefresh && !preparingData && !submittingData
@@ -419,7 +423,7 @@ import SwiftUI
     autoRefreshButton.isEnabled = !document.busy && !submittingData && !tables.values.contains {$0.editDefinition != nil}
     let pending = !(grid?.pendingEdits.isEmpty ?? true) || grid?.hasDraftChanges == true
     let canChange = !preparingData && !submittingData
-    previewDataButton.isEnabled = canChange && grid?.editingAllowed?() == true && pending
+    previewDataButton.isEnabled = canChange && grid?.editingAllowed?() == true && pending && grid?.editValidationMessage == nil
     previewDataButton.toolTip = pending ? "SQL önizle ve gönder · Değişiklikler yalnız önizlemedeki onayınızla veritabanına gönderilir" : "SQL önizle ve gönder · Bir hücreyi değiştirdiğinizde etkinleşir"
     previewDataButton.setAccessibilityLabel("Bekleyen değişikliklerin SQL önizlemesi")
     addRowButton.isEnabled = canChange && grid?.canAppendRow == true
@@ -441,11 +445,28 @@ import SwiftUI
     if selectedGrid?.editDefinition != nil { revertDataEditing() }
     else { prepareDataEditing() }
   }
+  private func editingContext(_ grid: ResultController) -> ResultEditingCoordinator.Context? {
+    guard document.canRefresh, !document.partial, document.results.count == 1, let sql = document.lastExecutedSQL else { return nil }
+    return .init(serverID: document.server.id, serverGeneration: document.server.generation, resultGeneration: document.resultGeneration, database: document.database, sql: sql, fields: grid.result.fields, profileScope: CatalogDiskIndex.scope(profile: document.server.profile, database: document.database))
+  }
+  private func warmDataEditing() {
+    guard let grid = selectedGrid, let context = editingContext(grid) else { editPreparation.invalidate(); return }
+    guard !preparingData, !submittingData, grid.editDefinition == nil, document.server.online else { return }
+    // Synthetic query fixtures must never start an actual metadata connection.
+    guard document.executionFixture == nil || document.server.catalogFixture != nil || document.server.asyncCatalogFixture != nil else { return }
+    let server = document.server, profile = server.profile, index = editingIndex
+    editPreparation.warm(context) {
+      try await ResultEditingPreparation.load(sql: context.sql, fields: context.fields, profile: profile, database: context.database, index: index) { query in
+        try await server.catalog(query, database: context.database)
+      }
+    }
+  }
   private func prepareDataEditing(cell: (Int, Int)? = nil) {
     guard !preparingData, !submittingData else { return }
-    guard let grid = selectedGrid, document.canRefresh, !document.partial, document.results.count == 1, let sql = document.lastExecutedSQL else { return }
+    guard let grid = selectedGrid, document.canRefresh, !document.partial, document.results.count == 1, let sql = document.lastExecutedSQL, let context = editingContext(grid) else { return }
     let generation = document.resultGeneration, db = document.database, server = document.server
     let serverGeneration = server.generation
+    let index = editingIndex
     let cellIdentity = cell.flatMap { grid.cellIdentity(row: $0.0, position: $0.1) }
     preparingData = true; syncDataActions()
     // Unattended refresh would discard the staged copy.
@@ -454,8 +475,11 @@ import SwiftUI
       guard let self, let grid else { return }
       defer { preparingData = false; syncDataActions() }
       do {
-        let prepared = try await ResultEditingPreparation.load(sql:sql,fields:grid.result.fields,profile:server.profile,database:db) { query in
-          try await server.catalog(query,database:db)
+        let profile = server.profile
+        let prepared = try await editPreparation.prepared(context) {
+          try await ResultEditingPreparation.load(sql:sql,fields:context.fields,profile:profile,database:db,index:index) { query in
+            try await server.catalog(query,database:db)
+          }
         }
         let table = prepared.snapshot.table, id = prepared.snapshot.objectID
         guard document.server === server, server.generation == serverGeneration, document.resultGeneration == generation, document.database == db, document.canRefresh else { throw SQLFailure("Sonuç değişti; güncel sonuçta yeniden deneyin.") }
@@ -469,15 +493,15 @@ import SwiftUI
         if let cell, cellIdentity != nil, grid.cellIdentity(row: cell.0, position: cell.1) == cellIdentity, selectedGrid === grid {
           grid.table.editCell?(cell.0, cell.1)
         }
-      } catch { dataError(error) }
+      } catch is CancellationError {} catch { dataError(error) }
     }
   }
-  @objc private func addDataRow() { commitDataCell(); selectedGrid?.appendRow() }
-  @objc private func cloneDataRow() { commitDataCell(); selectedGrid?.appendRow(cloning: true) }
-  @objc private func deleteDataRows() { commitDataCell(); selectedGrid?.toggleSelectedDeletion() }
-  @objc private func undoDataRows() { commitDataCell(); selectedGrid?.revertSelectedRows() }
-  private func commitDataCell() { view.window?.makeFirstResponder(nil) }
-  @objc private func nullDataEditing() { commitDataCell(); selectedGrid?.setSelectedNull() }
+  @objc private func addDataRow() { guard commitDataCell() else { return }; selectedGrid?.appendRow() }
+  @objc private func cloneDataRow() { guard commitDataCell() else { return }; selectedGrid?.appendRow(cloning: true) }
+  @objc private func deleteDataRows() { guard commitDataCell() else { return }; selectedGrid?.toggleSelectedDeletion() }
+  @objc private func undoDataRows() { guard commitDataCell() else { return }; selectedGrid?.revertSelectedRows() }
+  private func commitDataCell() -> Bool { view.window?.makeFirstResponder(nil) ?? true }
+  @objc private func nullDataEditing() { guard commitDataCell() else { return }; selectedGrid?.setSelectedNull() }
   @objc private func revertDataEditing() {
     guard let grid = selectedGrid, !submittingData else { return }
     view.window?.makeFirstResponder(nil)
@@ -486,7 +510,7 @@ import SwiftUI
     if let window = view.window { alert.beginSheetModal(for: window) { response in if response == .alertFirstButtonReturn { grid.discardEdits() } } }
   }
   @objc private func previewDataEditing() {
-    view.window?.makeFirstResponder(nil)
+    guard commitDataCell() else { return }
     guard let grid = selectedGrid, document.canRefresh, !submittingData, let sourceSQL=document.lastExecutedSQL else { return }
     do {
       let sql = try grid.pendingSQL(), generation = document.resultGeneration, db = document.database
@@ -504,7 +528,7 @@ import SwiftUI
           guard ResultEditingSnapshot.signature(table:current) == grid.editMetadataSignature else { throw SQLFailure("Tablo yapısı değişmiş; güncel sonucu yeniden yükleyin.") }
         } catch {
           // Reloading after a schema/source mismatch must not reuse the same stale entry.
-          try? await CatalogDiskIndex.shared.invalidateEditingMetadata(scope:CatalogDiskIndex.scope(profile:server.profile,database:db))
+          try? await editingIndex.invalidateEditingMetadata(scope:CatalogDiskIndex.scope(profile:server.profile,database:db))
           throw error
         }
         guard document.server === server, server.generation == serverGeneration, server.online, document.canRefresh, document.database == db, document.resultGeneration == generation, try grid.pendingSQL() == sql else { throw SQLFailure("Önizleme artık güncel değil.") }

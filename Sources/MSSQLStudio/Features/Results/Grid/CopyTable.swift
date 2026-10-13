@@ -61,6 +61,27 @@ import SwiftUI
   }
   var editCell: ((Int, Int) -> Void)?
   var draftChanged: (() -> Void)?
+  var validateDraft: ((Int, Int, String) -> Bool)?
+  private var resultFieldEditor: ResultFieldEditor?
+  func editingFieldEditor(formatter: ResultCellFormatter?) -> NSTextView {
+    if resultFieldEditor == nil {
+      let editor = ResultFieldEditor(usingTextLayoutManager: true)
+      editor.isFieldEditor = true; editor.isRichText = false; editor.allowsUndo = true
+      editor.table = self
+      resultFieldEditor = editor
+    }
+    resultFieldEditor!.valueFormatter = formatter
+    return resultFieldEditor!
+  }
+  override func abortEditing() -> Bool {
+    resultFieldEditor?.allowsInvalidExit = true
+    defer { resultFieldEditor?.allowsInvalidExit = false }
+    return super.abortEditing()
+  }
+  override func textShouldEndEditing(_ textObject: NSText) -> Bool {
+    guard validateDraft?(editedRow, editedColumn, textObject.string) != false else { return false }
+    return super.textShouldEndEditing(textObject)
+  }
   override func textDidChange(_ notification: Notification) {
     super.textDidChange(notification)
     draftChanged?()
@@ -87,10 +108,10 @@ import SwiftUI
     didSet { if cellColumns != oldValue { needsDisplay = true; cellSelectionChanged?() } }
   }
   override func drawBackground(inClipRect clip: NSRect) {
-    StudioTheme.canvas.setFill(); clip.fill()
+    StudioTheme.resultCanvas.setFill(); clip.fill()
     let visible = rows(in: clip)
     guard visible.location != NSNotFound, visible.length > 0 else { return }
-    StudioTheme.stripe.setFill()
+    StudioTheme.resultStripe.setFill()
     for row in visible.location..<NSMaxRange(visible) where !row.isMultiple(of: 2) {
       NSIntersectionRect(rect(ofRow: row), clip).fill()
     }

@@ -3,7 +3,7 @@ import SQLServerKit
 import SwiftUI
 
 @MainActor
-final class ResultController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
+final class ResultController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSControlTextEditingDelegate {
   let table = CopyTable()
   let rowGutter = ResultRowGutter()
   // Both native tables read the same result/projection/staged edits; only presentation differs.
@@ -53,7 +53,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     for ordinal in pinnedColumns {
       guard let source=table.tableColumns.first(where:{$0.identifier.rawValue == String(ordinal)}) else {continue}
       let column=NSTableColumn(identifier:source.identifier)
-      column.title=source.title; column.minWidth=max(96,source.minWidth); column.maxWidth=source.maxWidth; column.width=max(column.minWidth,source.width,GridColumnSizing.headerWidth(source.title)+16)
+      column.title=source.title; column.minWidth=max(96,source.minWidth); column.maxWidth=source.maxWidth; column.width=max(column.minWidth,source.width,GridColumnSizing.headerWidth(source.title, detail: (source.headerCell as? FilterHeaderCell)?.typeDetail ?? "")+16)
       column.isEditable=source.isEditable; column.sortDescriptorPrototype=source.sortDescriptorPrototype
       if let cell=source.dataCell as? NSCell {column.dataCell=cell.copy()}
       column.headerCell=FilterHeaderCell(textCell:source.title)
@@ -73,10 +73,11 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       let field=result.fields[ordinal], reason=readOnlyReason(column:ordinal)
       header.typeSymbol=reason != nil ? "lock.fill":field.type == -7 ? "checkmark.square":field.numeric ? "number":([91,92,93,-9_101,-9_102].contains(Int(field.type)) ? "calendar":"textformat")
       header.typeDetail=field.dataType; header.pinned=pinnedColumns.contains(ordinal)
+      header.primaryKey = editDefinition.map { definition in definition.columns.indices.contains(ordinal) && definition.primaryKey.contains(definition.columns[ordinal].name) } ?? false
       header.active=rules[ordinal] != nil
       header.navigationTarget=highlightedColumnOrdinal == ordinal
       header.ascending=table.sortDescriptors.first?.key == String(ordinal) ? table.sortDescriptors.first?.ascending:nil
-      column.headerToolTip="\(field.name) · \(field.dataType)"+(header.pinned ? " · Sabitlenmiş kolon":"")+(reason.map {" · "+$0} ?? "")
+      column.headerToolTip="\(field.name) · \(field.dataType)"+(header.primaryKey ? " · Primary key":"")+(header.pinned ? " · Sabitlenmiş kolon":"")+(rules[ordinal].map {" · Yerel filtre: "+$0.summary} ?? "")+(reason.map {" · "+$0} ?? "")
     }
     table.headerView?.needsDisplay=true; frozenTable.headerView?.needsDisplay=true
   }
@@ -148,8 +149,12 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   private var generation = -1
   var requestEditing: ((Int, Int) -> Bool)?
   var editDefinition: TableDefinition? {
-    didSet {if isViewLoaded {refreshColumnHeaders();updateRange()}}
+    didSet {
+      editFormatters = Dictionary(uniqueKeysWithValues: (editDefinition?.columns.enumerated().map { ($0.offset, ResultCellFormatter(column: $0.element)) } ?? []))
+      if isViewLoaded {refreshColumnHeaders();updateRange()}
+    }
   }
+  private var editFormatters: [Int: ResultCellFormatter] = [:]
   var hasDraftChanges: Bool {
     for target in [table,frozenTable] {
       let row=target.editedRow, position=target.editedColumn
@@ -173,6 +178,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   var editMetadataCached = false
   var editObjectID: Int?
   private(set) var pendingEdits: [Int: DataEditRow] = [:]
+  private(set) var editValidationMessage: String?
   private var newRowOrder: [Int] = []
   private var nextNewRow = -1
   private func values(at index: Int) -> [String?] { pendingEdits[index]?.values ?? (index >= 0 ? Array(result.values[index]) : []) }
@@ -244,13 +250,27 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   @objc private func revertResultRows() { table.window?.makeFirstResponder(nil); revertSelectedRows() }
   var editsChanged: (() -> Void)?
   var editingAllowed: (() -> Bool)?
-  func discardEdits() { pendingEdits = [:]; newRowOrder = []; nextNewRow = -1; editDefinition = nil; editObjectID = nil; editMetadataSignature = nil; editMetadataCached = false; table.reloadData(); editsChanged?() }
+  func discardEdits() { _ = table.abortEditing(); _ = frozenTable.abortEditing(); pendingEdits = [:]; newRowOrder = []; nextNewRow = -1; editValidationMessage = nil; editDefinition = nil; editObjectID = nil; editMetadataSignature = nil; editMetadataCached = false; table.reloadData(); updateInfo(); editsChanged?() }
   func pendingSQL() throws -> String {
     guard let editDefinition else { throw SQLFailure("Önce düzenlemeyi açın.") }
-    return try DataEditScripts.changes(table: editDefinition, rows: (pendingEdits.keys.filter { $0 >= 0 }.sorted() + newRowOrder).compactMap { pendingEdits[$0] }, expectedObjectID: editObjectID)
+    return try DataEditScripts.changes(table: editDefinition, rows: (pendingEdits.keys.filter { $0 >= 0 }.sorted() + newRowOrder).compactMap { pendingEdits[$0] }, expectedObjectID: editObjectID, rowMatching: .primaryKeyOrOriginalValues)
+  }
+  private func validateEditValue(_ value: String?, column: Int) -> Bool {
+    guard let definition = editDefinition, definition.columns.indices.contains(column) else { return false }
+    do {
+      try ResultValueValidation.validate(value, column: definition.columns[column])
+      editValidationMessage = nil; info.textColor = StudioTheme.muted; updateRange()
+      updateInfo()
+      return true
+    } catch {
+      editValidationMessage = error.localizedDescription
+      info.stringValue = error.localizedDescription; info.textColor = StudioTheme.danger; info.toolTip = error.localizedDescription
+      info.isHidden = false
+      return false
+    }
   }
   func setEditValue(_ value: String?, row: Int, column: Int) {
-    guard canEdit(row: row, column: column) else { return }
+    guard canEdit(row: row, column: column), validateEditValue(value, column: column) else { return }
     let index = sourceIndex(row)
     if pendingEdits[index] == nil {
       guard pendingEdits.count < 400 else { NSSound.beep(); return }
@@ -300,22 +320,37 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   private func configureGrid(_ target:CopyTable,scroll:NSScrollView,identifier:String) {
     target.dataSource=self; target.delegate=self; target.style = .plain
     target.usesAlternatingRowBackgroundColors=true
-    target.backgroundColor=StudioTheme.canvas; target.gridColor=StudioTheme.border
+    target.backgroundColor=StudioTheme.resultCanvas
     target.rowHeight=24; target.usesAutomaticRowHeights=false
     target.intercellSpacing=NSSize(width:1,height:1)
     target.gridStyleMask=[.solidVerticalGridLineMask,.solidHorizontalGridLineMask]
+    target.gridColor=StudioTheme.resultBorder
     target.columnAutoresizingStyle = .noColumnAutoresizing
     target.allowsMultipleSelection=true; target.allowsColumnReordering=true
     target.setAccessibilityIdentifier(identifier)
     target.toolTip="Düzenlemek için çift tıklayın veya Enter’a basın. Değişiklikler yalnız SQL önizlemesinden onayla gönderilir."
     target.focusRingType = .none; scroll.focusRingType = .none
+    scroll.backgroundColor = StudioTheme.resultCanvas
     scroll.horizontalScrollElasticity = .none; scroll.verticalScrollElasticity = .none
     target.rowActions = { [weak self] in self?.editingMenu() ?? [] }
     target.editCell = { [weak self, weak target] row,position in
       guard let self, let canonical=target?.canonicalPosition(position) else {return}
       inspectCell(row:row,position:canonical)
     }
-    target.draftChanged = { [weak self] in self?.editsChanged?() }
+    target.draftChanged = { [weak self, weak target] in
+      if let self, let target, let editor = target.currentEditor() as? NSTextView {
+        _ = target.validateDraft?(target.editedRow, target.editedColumn, editor.string)
+      } else if let self {
+        editValidationMessage = nil; updateInfo()
+      }
+      self?.editsChanged?()
+    }
+    target.validateDraft = { [weak self, weak target] row, position, value in
+      guard let self, let target, row >= 0, row < pageCount, target.tableColumns.indices.contains(position),
+        let ordinal = Int(target.tableColumns[position].identifier.rawValue) else { return true }
+      if value == self.tableView(target, objectValueFor: target.tableColumns[position], row: row) as? String { return true }
+      return validateEditValue(value, column: ordinal)
+    }
     target.copyRows = { [weak self] in self?.copySelectionData() }
     target.copyHeaders = { [weak self] in self?.copySelectionData(includeHeaders:true) }
     target.navigateCell = { [weak self] in self?.moveSelectedCell($0) }
@@ -338,20 +373,21 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     view = NSView()
     let scroll = NSScrollView()
     scroll.automaticallyAdjustsContentInsets=false; scroll.contentInsets = NSEdgeInsets(top:0,left:0,bottom:0,right:0)
-    scroll.documentView = table
     scroll.hasVerticalScroller = true
     scroll.hasHorizontalScroller = true
     scroll.autohidesScrollers = false
     scroll.scrollerStyle = .legacy
     scroll.usesPredominantAxisScrolling = true
-    rowGutter.connect(table)
     rowGutter.label = { [weak self] row in
       guard let self, row >= 0, row < pageCount else { return ("",StudioTheme.muted) }
       let index=sourceIndex(row)
       return (rowNumber(row),pendingEdits[index]?.deleted == true ? StudioTheme.danger:index < 0 ? StudioTheme.success:pendingEdits[index] != nil ? StudioTheme.warning:StudioTheme.muted)
     }
     configureGrid(table,scroll:scroll,identifier:"resultsGrid")
-    frozenScroll.documentView=frozenTable
+    // Install the final 40 pt header before AppKit computes its initial clip origin.
+    // Otherwise the default 28 pt offset leaves the first row under the taller header.
+    scroll.documentView = table
+    rowGutter.connect(table)
     frozenScroll.hasHorizontalScroller=true; frozenScroll.hasVerticalScroller=false
     frozenScroll.autohidesScrollers=false; frozenScroll.scrollerStyle = .legacy
     frozenScroll.automaticallyAdjustsContentInsets=false
@@ -360,6 +396,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     frozenScroll.setAccessibilityLabel("Sabitlenmiş sonuç kolonları")
     frozenTable.selectionOwner=table
     configureGrid(frozenTable,scroll:frozenScroll,identifier:"resultsFrozenGrid")
+    frozenScroll.documentView=frozenTable
     frozenTable.searchColumns = { [weak self] in self?.table.searchColumns?() }
     table.cellSelectionChanged = { [weak self] in
       self?.frozenTable.needsDisplay=true; self?.editsChanged?()
@@ -400,7 +437,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     clear.image = NSImage(systemSymbolName: "line.3.horizontal.decrease.circle", accessibilityDescription: "Filtreleri temizle")
     clear.toolTip = "Tüm kolon filtrelerini ve sonuç aramasını temizle"
     bar.setAccessibilityIdentifier("gridNavigation")
-    StudioTheme.surface(bar)
+    StudioTheme.resultSurface(bar)
     bar.spacing = 3
     bar.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
     let chipScroll = NSScrollView()
@@ -530,8 +567,8 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
         c.isEditable = true
         c.title = f.name
         c.headerToolTip = "\(f.name) · \(f.dataType)"
-        c.maxWidth = max(10_000, GridColumnSizing.headerWidth(f.name))
-        c.width = max(150, GridColumnSizing.headerWidth(f.name))
+        c.maxWidth = max(10_000, GridColumnSizing.headerWidth(f.name, detail: f.dataType))
+        c.width = max(150, GridColumnSizing.headerWidth(f.name, detail: f.dataType))
         c.minWidth = 70
         c.sortDescriptorPrototype = NSSortDescriptor(key: String(i), ascending: true)
         table.addTableColumn(c)
@@ -594,6 +631,12 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
 
   private func updateInfo() {
     guard isViewLoaded else { return }
+    if let editValidationMessage {
+      info.stringValue = editValidationMessage; info.toolTip = editValidationMessage
+      info.textColor = StudioTheme.danger; info.isHidden = false
+      return
+    }
+    info.textColor = StudioTheme.muted
     info.stringValue = busy ? "İşleniyor…" : (partial ? "Kısmi sonuç" : isReadLimited ? "Sınırlandı" : "")
     info.isHidden = info.stringValue.isEmpty
     info.toolTip = "\(loadedRowCount.formatted()) önbellekte · ilk \(result.values.count.formatted()) satır sınırında \(visibleCount.formatted()) eşleşme · Filtre/sıralama yalnızca sınır içindeki satırlara uygulanır."
@@ -682,7 +725,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     guard count > 0 else { return }
     let sampleCount = min(32, result.values.count, max(1,4096 / count))
     let attributes: [NSAttributedString.Key:Any] = [.font: StudioTheme.uiFont]
-    var widths = result.fields.map { max(80,GridColumnSizing.headerWidth($0.name)) }
+    var widths = result.fields.map { max(80,GridColumnSizing.headerWidth($0.name, detail: $0.dataType)) }
     for row in 0..<sampleCount {
       let values = result.values[row]
       for c in result.fields.indices where values.indices.contains(c) {
@@ -699,7 +742,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       let column = table.tableColumns.first(where: { $0.identifier.rawValue == String(sender.tag) })
     else { return }
     let attributes: [NSAttributedString.Key: Any] = [.font: StudioTheme.uiFont]
-    let headerWidth = GridColumnSizing.headerWidth(column.title)+(pinnedColumns.contains(sender.tag) ? 16:0)
+    let headerWidth = GridColumnSizing.headerWidth(column.title, detail: result.fields[sender.tag].dataType)+(pinnedColumns.contains(sender.tag) ? 16:0)
     var width = headerWidth
     for i in 0..<min(200, pageCount) {
       let row = values(at: sourceIndex(i))
@@ -744,6 +787,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     guard let ordinal = column.flatMap({ Int($0.identifier.rawValue) }) else { return false }
     return canEdit(row: row, column: ordinal)
   }
+  func control(_ control: NSControl, didFailToFormatString string: String, errorDescription error: String?) -> Bool { false }
   func tableView(_ tableView: NSTableView, setObjectValue value: Any?, for column: NSTableColumn?, row: Int) {
     guard let ordinal = column.flatMap({ Int($0.identifier.rawValue) }) else { return }
     // Merely entering/leaving NULL or DEFAULT must not turn its display text into data.
@@ -775,6 +819,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     cell.placeholderString = index < 0 && ordinal.map({ pendingEdits[index]?.touched.contains($0) != true }) == true ? "DEFAULT" : nil
     cell.isEditable = ordinal.map { canEdit(row: row, column: $0) } ?? false
     cell.isSelectable = cell.isEditable
+    cell.formatter = ordinal.flatMap { editFormatters[$0] }
     cell.textColor = pendingEdits[index]?.deleted == true ? .systemRed : index < 0 ? .systemGreen : changed ? .systemOrange : missing ? .secondaryLabelColor : StudioTheme.text
     cell.font = missing ? nullFont : StudioTheme.uiFont
   }

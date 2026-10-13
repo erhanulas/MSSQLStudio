@@ -12,7 +12,7 @@ struct DataChangesPreview: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       StudioPanelHeading(title: "Değişiklikleri İncele", icon: "doc.text.magnifyingglass", subtitle: target)
-      Text("Aşağıdaki SQL onayınızla tek transaction içinde gönderilir. Anahtar ve karşılaştırılabilen özgün değerler denetlenir; çakışmada tüm işlem geri alınır.").foregroundStyle(.secondary)
+      Text("SQL onayınızla tek transaction içinde gönderilir. Primary key varsa satır yalnız özgün anahtarıyla bulunur; diğer kolonların eşzamanlı değişimleri denetlenmez. Primary key yoksa özgün değerlerle tek bir satır eşleşmesi gerekir; bulunamazsa veya birden fazla satır eşleşirse işlem geri alınır.").foregroundStyle(.secondary)
       HStack(spacing:16) {
         Label("SQL önizlemesi",systemImage:"chevron.left.forwardslash.chevron.right").font(.callout.weight(.semibold))
         Spacer()

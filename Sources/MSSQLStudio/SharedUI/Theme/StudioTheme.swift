@@ -39,6 +39,8 @@ import SwiftUI
   static var selection: NSColor { color(0xE8EFFF, 0x2C4062) }
   static var lineNumber: NSColor { color(0x008080, 0x4EC9B0) }
   static var editorCanvas: NSColor { color(0xFFFFFF,0x1E1E1E) }
+  static var blockGuide: NSColor { color(0xD8DEE8, 0x414750) }
+  static var activeBlockGuide: NSColor { accent.withAlphaComponent(0.75) }
   static var unusedVariable: NSColor { color(0x929292,0x808080) }
   static var undeclaredVariable:NSColor {color(0xFF0000,0xFF8080)}
   static var editorText: NSColor { color(0x000000,0xD4D4D4) }
@@ -49,13 +51,24 @@ import SwiftUI
   static var accent: NSColor { color(0x3869D6, 0x8EAEFF) }
   static var muted: NSColor { color(0x5E6D82, 0x9DAAC0) }
   static var stripe: NSColor { color(0xFAFBFD, 0x1C212B) }
+  static var resultCanvas: NSColor { color(0xFFFFFF, 0x1E1F22) }
+  static var resultHeader: NSColor { color(0xFFFFFF, 0x252830) }
+  static var resultStripe: NSColor { color(0xFBFCFE, 0x22252B) }
+  static var resultGutter: NSColor { color(0xFAFBFD, 0x22252B) }
+  static var resultBorder: NSColor { color(0xE9EDF3, 0x343942) }
+  static var resultFilteredHeader: NSColor { color(0xF0F6FF, 0x283952) }
   static func surface(_ view: NSView, card: Bool = false, chrome: Bool = false, sidebar: Bool = false) {
     view.identifier = .init(sidebar ? "studio.sidebar" : card ? "studio.card" : chrome ? "studio.frame" : "studio.chrome")
     view.wantsLayer = true
     paintSurface(view)
   }
+  static func resultSurface(_ view: NSView) {
+    view.identifier = .init("studio.results")
+    view.wantsLayer = true
+    paintSurface(view)
+  }
   private static func paintSurface(_ view: NSView) {
-    view.layer?.backgroundColor = (view.identifier?.rawValue == "studio.sidebar" ? explorerCanvas : view.identifier?.rawValue == "studio.card" ? canvas : view.identifier?.rawValue == "studio.frame" ? chrome : panel).cgColor
+    view.layer?.backgroundColor = (view.identifier?.rawValue == "studio.results" ? resultCanvas : view.identifier?.rawValue == "studio.sidebar" ? explorerCanvas : view.identifier?.rawValue == "studio.card" ? canvas : view.identifier?.rawValue == "studio.frame" ? chrome : panel).cgColor
     if ["studio.card", "studio.sidebar"].contains(view.identifier?.rawValue ?? "") {
       view.layer?.cornerRadius = 10
       view.layer?.borderWidth = 1
@@ -118,13 +131,13 @@ import SwiftUI
     // Preserve their native typography and appearance when updating the SQL workspace.
     if view is NSTextField || view is NSPopUpButton || view is NSSegmentedControl { return }
     if let table = view as? NSTableView {
-      table.backgroundColor = table is NSOutlineView ? explorerCanvas : canvas
+      table.backgroundColor = table is NSOutlineView ? explorerCanvas : table is CopyTable ? resultCanvas : canvas
       // Gridless SwiftUI lists own their separators; setting gridColor can inspect unbuilt cells.
-      if !table.gridStyleMask.isEmpty {table.gridColor = border}
+      if !table.gridStyleMask.isEmpty {table.gridColor = table is CopyTable ? resultBorder : border}
       table.headerView?.needsDisplay = true
       table.enumerateAvailableRowViews { row, _ in row.needsDisplay = true }
     } else if let scroll = view as? NSScrollView {
-      scroll.backgroundColor = scroll.documentView is NSOutlineView ? explorerCanvas : scroll.identifier?.rawValue == "studio.chrome" ? panel : canvas
+      scroll.backgroundColor = scroll.documentView is NSOutlineView ? explorerCanvas : scroll.documentView is CopyTable || scroll.identifier?.rawValue == "studio.results" ? resultCanvas : scroll.identifier?.rawValue == "studio.chrome" ? panel : canvas
     } else if let textView = view as? NSTextView, !textView.isFieldEditor, !(textView is SQLTextView), !["sqlSourcePreview","agentCommandEditor"].contains(textView.identifier?.rawValue ?? "") {
       textView.backgroundColor = canvas
       textView.textColor = text

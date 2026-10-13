@@ -26,6 +26,7 @@ import SQLServerKit
 /// must not edit text attributes or invalidate TextKit's cached paragraph fragments.
 @MainActor final class OccurrenceHighlights: NSView {
   weak var editor: NSTextView?
+  let blockGuides = EditorBlockGuides()
   var findRanges:[NSRange]=[] {didSet {if oldValue != findRanges {needsDisplay=true}}}
   var blockRanges:[NSRange]=[] {didSet {if oldValue != blockRanges {needsDisplay=true}}}
   var ranges:[NSRange]=[] {didSet {if oldValue != ranges {needsDisplay=true}}}
@@ -50,6 +51,12 @@ import SQLServerKit
     return rects
   }
   override func draw(_ dirtyRect:NSRect) {
+    if let editor {
+      for segment in blockGuides.segments(in: self, editor: editor, dirtyRect: dirtyRect) {
+        (segment.active ? StudioTheme.activeBlockGuide : StudioTheme.blockGuide).setFill()
+        segment.rect.fill()
+      }
+    }
     NSColor.systemYellow.withAlphaComponent(0.25).setFill()
     for rect in highlightRects(in:dirtyRect) {NSBezierPath(roundedRect:rect,xRadius:2,yRadius:2).fill()}
   }

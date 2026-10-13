@@ -332,6 +332,7 @@ import SQLServerKit
     highlight()
     resizeToViewport()
     ruler.needsDisplay = true
+    updateOccurrences()
     scheduleIntelligence()
   }
   func textDidChange(_ notification: Notification) {
@@ -349,18 +350,22 @@ import SQLServerKit
     scheduleParameters()
     scheduleIntelligence(allowPopup:!suppressNextPopup)
     suppressNextPopup = false
+    scheduleOccurrences()
+  }
+  private func scheduleOccurrences() {
+    occurrenceTask?.cancel()
+    let range = editor.selectedRange(), selectedSource = editor.string
+    occurrenceTask = Task { [weak self] in
+      do { try await Task.sleep(for: .milliseconds(90)) } catch { return }
+      guard let self, !changingPresentation, editor.string == selectedSource, editor.selectedRange() == range else { return }
+      updateOccurrences()
+    }
   }
   func textViewDidChangeSelection(_ notification: Notification) {
     guard !paintingOccurrences, !changingPresentation else {return}
     let range = editor.selectedRange()
     updateCommentHint()
-    occurrenceTask?.cancel()
-    let selectedSource=editor.string
-    occurrenceTask=Task { [weak self] in
-      do {try await Task.sleep(for:.milliseconds(90))} catch {return}
-      guard let self,!changingPresentation,editor.string == selectedSource,editor.selectedRange() == range else {return}
-      updateOccurrences()
-    }
+    scheduleOccurrences()
     scheduleParameters()
     document.selectedRange = projection?.sourceRange(range) ?? range
     let prefix = (document.sql as NSString).substring(
@@ -383,6 +388,7 @@ import SQLServerKit
     occurrenceRanges=[]
     occurrenceHighlights.ranges=[]
     occurrenceHighlights.blockRanges=[]
+    occurrenceHighlights.blockGuides.clear()
   }
   func updateOccurrences() {
     guard !paintingOccurrences,!editor.trackingMouseSelection else {return}
@@ -401,12 +407,7 @@ import SQLServerKit
       }
     }
     let sourceRange=projection?.sourceRange(range) ?? range
-    let blocks=range.length == 0 ? TSQL.matchingBlock(in:document.sql,at:sourceRange.location):[]
-    occurrenceHighlights.blockRanges=blocks.compactMap { block in
-      guard let projection else {return block}
-      guard !projection.regions.contains(where: {NSIntersectionRange($0.hidden,block).length > 0}) else {return nil}
-      return NSRange(location:projection.displayOffset(block.location),length:block.length)
-    }
+    occurrenceHighlights.blockRanges = occurrenceHighlights.blockGuides.update(source: document.sql, selection: sourceRange, projection: projection)
     occurrenceRanges=updatedRanges
     occurrenceHighlights.ranges=updatedRanges
     // Also repaint when the selected occurrence changes within the same match set.

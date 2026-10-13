@@ -10,6 +10,9 @@ import SwiftUI
     isEditable = false; isSelectable = false; isBordered = false; focusRingType = .none
   }
   required init(coder: NSCoder) { fatalError() }
+  override func fieldEditor(for controlView: NSView) -> NSTextView? {
+    (controlView as? CopyTable)?.editingFieldEditor(formatter: formatter as? ResultCellFormatter)
+  }
   // Field editing copies the cell; preserve its bit presentation and read-only state.
   override func copy(with zone: NSZone? = nil) -> Any {
     let cell = GridDataCell(textCell: stringValue)
@@ -17,6 +20,7 @@ import SwiftUI
     cell.textColor = textColor; cell.lineBreakMode = lineBreakMode
     cell.isEditable = isEditable; cell.isSelectable = isSelectable
     cell.isBordered = isBordered; cell.isEnabled = isEnabled; cell.placeholderString = placeholderString
+    cell.formatter = formatter
     return cell
   }
   override func draw(withFrame frame: NSRect, in view: NSView) {

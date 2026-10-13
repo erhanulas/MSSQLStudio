@@ -57,7 +57,7 @@ import SwiftUI
     }
   }
   override func draw(_ dirtyRect:NSRect) {
-    StudioTheme.panel.setFill(); bounds.fill()
+    StudioTheme.resultGutter.setFill(); bounds.fill()
     guard let table else { return }
     NSGraphicsContext.saveGraphicsState()
     NSBezierPath(rect:viewport).addClip()
@@ -65,19 +65,19 @@ import SwiftUI
     for row in visibleRows {
       let rect=rowRect(row)
       guard rect.intersects(dirtyRect) else { continue }
-      (table.selectedRowIndexes.contains(row) ? StudioTheme.selection:row.isMultiple(of:2) ? StudioTheme.panel:StudioTheme.stripe).setFill()
+      (table.selectedRowIndexes.contains(row) ? StudioTheme.selection:StudioTheme.resultGutter).setFill()
       rect.fill()
       let (text,color)=label?(row) ?? (String(row+1),StudioTheme.muted)
       text.draw(in:NSRect(x:3,y:rect.midY-7,width:bounds.width-12,height:16),withAttributes:[.font:NSFont.monospacedDigitSystemFont(ofSize:11,weight:table.selectedRowIndexes.contains(row) ? .semibold:.regular),.foregroundColor:color,.paragraphStyle:paragraph])
-      StudioTheme.border.setFill(); NSRect(x:0,y:rect.maxY,width:bounds.width,height:1).fill()
+      StudioTheme.resultBorder.setFill(); NSRect(x:0,y:rect.maxY,width:bounds.width,height:1).fill()
     }
     NSGraphicsContext.restoreGraphicsState()
     if let header=table.headerView {
       let rect=convert(header.bounds,from:header)
-      StudioTheme.panel.setFill()
+      StudioTheme.resultHeader.setFill()
       NSRect(x:0,y:rect.minY,width:bounds.width,height:rect.height).fill()
       "#".draw(in:NSRect(x:8,y:rect.midY-7,width:bounds.width-18,height:16),withAttributes:[.font:NSFont.monospacedSystemFont(ofSize:11,weight:.semibold),.foregroundColor:StudioTheme.muted,.paragraphStyle:paragraph])
-      StudioTheme.border.setFill(); NSRect(x:0,y:rect.maxY-1,width:bounds.width,height:1).fill()
+      StudioTheme.resultBorder.setFill(); NSRect(x:0,y:rect.maxY-1,width:bounds.width,height:1).fill()
     }
     StudioTheme.border.setFill(); NSRect(x:bounds.width-1,y:0,width:1,height:bounds.height).fill()
     setAccessibilityChildren(rowAccessibility())

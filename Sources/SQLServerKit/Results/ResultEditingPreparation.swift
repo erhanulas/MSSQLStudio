@@ -41,14 +41,19 @@ public enum ResultEditingPreparation {
     let generation=profile.visibleDatabases?.contains(database) != false ? try? await index.generation(scope:scope):nil
     let fingerprint = CatalogDiskIndex.editingFingerprint(sql:sql,fields:fields)
     if generation != nil,let cached = try? await index.editingMetadata(scope:scope,fingerprint:fingerprint),
-       cached.columns.count == fields.count, !cached.primaryKey.isEmpty {
+       cached.columns.count == fields.count, cached.objectID > 0, !cached.schema.isEmpty, !cached.name.isEmpty,
+       Set(cached.columns.map(\.name)).count == cached.columns.count,
+       cached.primaryKey.allSatisfy({ key in cached.columns.contains { $0.name == key } }),
+       cached.metadataSignature.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression) != nil {
       return (cached,true)
     }
     let source = try ResultEditSource.decode(await fetch(provenanceSQL),fields:fields,database:database)
-    let identity = try await fetch("SELECT object_id FROM sys.tables WHERE schema_id=SCHEMA_ID(\(SQL.literal(source.schema))) AND name=\(SQL.literal(source.table));")
-    guard !identity.partial, let id = identity.results.first?.values.first?.first.flatMap({ $0 }).flatMap(Int.init) else { throw SQLFailure("Kaynak bir yerel kullanıcı tablosu değil.") }
-    let table = try source.projected(ObjectMetadata.decode(await fetch(ObjectMetadata.table(id)),schema:source.schema,name:source.table))
+    try Task.checkCancellation()
+    let metadata = try ObjectMetadata.decodeEditing(await fetch(ObjectMetadata.editingTable(schema: source.schema, name: source.table)), schema: source.schema, name: source.table)
+    let id = metadata.objectID
+    let table = try source.projected(metadata.table)
     let snapshot = ResultEditingSnapshot(objectID:id,table:table)
+    try Task.checkCancellation()
     if let generation {try? await index.saveEditingMetadata(snapshot,scope:scope,fingerprint:fingerprint,generation:generation)}
     return (snapshot,false)
   }

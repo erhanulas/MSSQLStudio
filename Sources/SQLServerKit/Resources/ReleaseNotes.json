@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.2.105",
+    "date": "2026-10-13",
+    "title": "Yenilenen sonuç grid’i ve SQL blok kılavuzları",
+    "changes": [
+      "SQL editöründe çok satırlı BEGIN/END bloklarına girinti kılavuzları eklendi. İmlecin bulunduğu iç blok vurgulanır; katlama, kaydırma ve mevcut eşleştirme davranışı korunur.",
+      "Sonuç alanı açık temada beyaz yüzeyler, hafif çizgiler ve ad/tür bilgili kolon başlıklarıyla yenilendi; koyu tema uygulama görünümünü izler. Aktif filtre, sıralama ve primary key işaretleri belirginleştirildi.",
+      "Kolon filtreleri doğrudan değer seçimi, arama, toplu seçim ve açılabilir koşul alanı sunar. Filtreler yalnız yüklenmiş sonuçlara uygulanır; ilk satırın başlık altında kırpılması düzeltildi.",
+      "Düzenleme hazırlığında gereksiz katalog ve DDL okumaları kaldırıldı. Güvenli sonuçlar için arka planda hazırlanan metadata, aynı işlem ve önbellek üzerinden tekrar kullanılır.",
+      "Hücre düzenlemede kolon türü, sayı aralığı, precision/scale ve uzunluk doğrulanır. Integer alanına metin yazılması engellenir; geçersiz değer odak değişimi veya SQL önizlemesiyle gönderilemez.",
+      "Sonuç grid’inden UPDATE/DELETE işlemlerinde primary key varsa WHERE yalnız özgün anahtar kolonlarını kullanır; diğer kolonların eşzamanlı değişimleri bu modda denetlenmez. Primary key yoksa özgün satır değerleriyle aynı transaction içinde tek satır eşleşmesi doğrulanır; belirsiz eşleşme geri alınır. Ayrı nesne veri editörünün mevcut optimistic kontrolü korunur."
+    ]
+  },
+  {
     "version": "0.2.104",
     "date": "2026-10-13",
     "title": "Akıllı SQL editörü ve modüler mimari",

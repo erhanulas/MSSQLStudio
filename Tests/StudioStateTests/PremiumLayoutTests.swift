@@ -58,7 +58,7 @@ import Testing
     #expect(grid.selectedRow == 1)
     #expect(doc.sql == "SELECT 1;")
     #expect(grid.numberOfRows == 2)
-    #expect(grid.backgroundColor == StudioTheme.canvas)
+    #expect(grid.backgroundColor == StudioTheme.resultCanvas)
     #expect(try #require(views.compactMap { $0 as? SQLTextView }.first).textLayoutManager != nil)
   }
   @Test func primaryControlsFitMinimumAndWideWorkspace() throws {

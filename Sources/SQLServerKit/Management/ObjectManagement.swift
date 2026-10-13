@@ -131,8 +131,20 @@ public enum ObjectScripts {
 }
 
 public enum ObjectMetadata {
-  public static func table(_ id:Int) -> String {
-    """
+  public static func table(_ id:Int) -> String { tableSQL(String(id), includeDefinitions: true) }
+  public static func editingTable(schema: String, name: String) -> String {
+    let objectID = "OBJECT_ID(\(SQL.literal(SQL.identifier(schema)+"."+SQL.identifier(name))), N'U')"
+    return "SELECT object_id FROM sys.tables WHERE object_id=\(objectID);\n" + tableSQL(objectID, includeDefinitions: false)
+  }
+  public static func decodeEditing(_ result: Execution, schema: String, name: String) throws -> (objectID: Int, table: TableDefinition) {
+    guard !result.partial, result.results.count == 4, result.results[0].values.count == 1,
+      let objectID = result.results[0].values.first?.first.flatMap({ $0 }).flatMap(Int.init), objectID > 0 else { throw SQLFailure("Kaynak bir yerel kullanıcı tablosu değil veya metadata eksik.") }
+    var compatible = Execution()
+    compatible.results = [result.results[1], result.results[2], Rows(), Rows(), Rows(), Rows(), result.results[3]]
+    return (objectID, try decode(compatible, schema: schema, name: name))
+  }
+  private static func tableSQL(_ id:String, includeDefinitions: Bool) -> String {
+    let columns = """
     SELECT c.column_id,c.name,
       CASE WHEN t.is_user_defined=1 THEN (QUOTENAME(SCHEMA_NAME(t.schema_id)) COLLATE DATABASE_DEFAULT)+'.'+(QUOTENAME(t.name) COLLATE DATABASE_DEFAULT) ELSE t.name END+
       CASE WHEN t.is_user_defined=1 THEN '' WHEN t.name IN ('varchar','char','binary','varbinary') THEN '('+CASE WHEN c.max_length=-1 THEN 'max' ELSE CONVERT(varchar(10),c.max_length) END+')'
@@ -152,6 +164,8 @@ public enum ObjectMetadata {
     LEFT JOIN sys.computed_columns cc ON cc.object_id=c.object_id AND cc.column_id=c.column_id
     LEFT JOIN sys.default_constraints dc ON dc.object_id=c.default_object_id WHERE c.object_id=\(id) ORDER BY c.column_id;
     SELECT c.name,k.name FROM sys.key_constraints k JOIN sys.index_columns ic ON ic.object_id=k.parent_object_id AND ic.index_id=k.unique_index_id JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE k.parent_object_id=\(id) AND k.type='PK' ORDER BY ic.key_ordinal;
+    """
+    let definitions = """
     SELECT i.name,CASE WHEN i.is_primary_key=1 THEN 'PK' WHEN i.is_unique_constraint=1 THEN 'UQ' ELSE 'INDEX' END,
       CASE WHEN i.is_primary_key=1 OR i.is_unique_constraint=1 THEN N'ALTER TABLE '+(QUOTENAME(OBJECT_SCHEMA_NAME(i.object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(i.object_id)) COLLATE DATABASE_DEFAULT)+N' ADD CONSTRAINT '+(QUOTENAME(i.name) COLLATE DATABASE_DEFAULT)+CASE WHEN i.is_primary_key=1 THEN N' PRIMARY KEY ' ELSE N' UNIQUE ' END
       ELSE N'CREATE '+CASE WHEN i.is_unique=1 THEN N'UNIQUE ' ELSE N'' END END+
@@ -170,11 +184,14 @@ public enum ObjectMetadata {
     CROSS APPLY (SELECT STRING_AGG(CONVERT(nvarchar(max),(QUOTENAME(rc.name) COLLATE DATABASE_DEFAULT)),N', ') WITHIN GROUP (ORDER BY c.constraint_column_id) AS cols FROM sys.foreign_key_columns c JOIN sys.columns rc ON rc.object_id=c.referenced_object_id AND rc.column_id=c.referenced_column_id WHERE c.constraint_object_id=fk.object_id) b WHERE fk.parent_object_id=\(id);
     SELECT c.name,'CHECK',N'ALTER TABLE '+(QUOTENAME(OBJECT_SCHEMA_NAME(c.parent_object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(c.parent_object_id)) COLLATE DATABASE_DEFAULT)+CASE WHEN c.is_not_trusted=1 THEN N' WITH NOCHECK' ELSE N' WITH CHECK' END+N' ADD CONSTRAINT '+(QUOTENAME(c.name) COLLATE DATABASE_DEFAULT)+N' CHECK '+CASE WHEN c.is_not_for_replication=1 THEN N'NOT FOR REPLICATION ' ELSE N'' END+(c.definition COLLATE DATABASE_DEFAULT)+N';'+CASE WHEN c.is_disabled=1 THEN N' ALTER TABLE '+(QUOTENAME(OBJECT_SCHEMA_NAME(c.parent_object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(c.parent_object_id)) COLLATE DATABASE_DEFAULT)+N' NOCHECK CONSTRAINT '+(QUOTENAME(c.name) COLLATE DATABASE_DEFAULT)+N';' ELSE N'' END FROM sys.check_constraints c WHERE c.parent_object_id=\(id);
     SELECT t.name,'TRIGGER',(OBJECT_DEFINITION(t.object_id) COLLATE DATABASE_DEFAULT)+CASE WHEN t.is_disabled=1 THEN CHAR(10)+N'GO'+CHAR(10)+N'DISABLE TRIGGER '+(QUOTENAME(OBJECT_SCHEMA_NAME(t.object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(t.name) COLLATE DATABASE_DEFAULT)+N' ON '+(QUOTENAME(OBJECT_SCHEMA_NAME(t.parent_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(t.parent_id)) COLLATE DATABASE_DEFAULT)+N';' ELSE N'' END FROM sys.triggers t WHERE t.parent_id=\(id);
+    """
+    let flags = """
     SELECT CASE WHEN t.temporal_type<>0 OR t.is_memory_optimized=1 OR t.is_filetable=1 OR t.is_node=1 OR t.is_edge=1
       OR EXISTS(SELECT 1 FROM sys.indexes i LEFT JOIN sys.data_spaces d ON d.data_space_id=i.data_space_id WHERE i.object_id=t.object_id AND (i.type>2 OR d.type='PS'))
       OR EXISTS(SELECT 1 FROM sys.partitions p WHERE p.object_id=t.object_id AND p.data_compression<>0)
       THEN 1 ELSE 0 END,ds.name FROM sys.tables t LEFT JOIN sys.indexes i ON i.object_id=t.object_id AND i.index_id=0 LEFT JOIN sys.data_spaces ds ON ds.data_space_id=i.data_space_id WHERE t.object_id=\(id);
     """
+    return columns + "\n" + (includeDefinitions ? definitions + "\n" : "") + flags
   }
   public static func decode(_ result:Execution,schema:String,name:String) throws -> TableDefinition {
     guard !result.partial, result.results.count == 7 else { throw SQLFailure("Tablo metadata eksik/kısmi; script oluşturulmadı.") }
@@ -207,7 +224,9 @@ public struct DataEditRow: Identifiable, Sendable {
   public init(original:[String?]?,values:[String?],touched:Set<Int>=[],deleted:Bool=false) { id=UUID(); self.original=original; self.values=values; self.touched=touched; self.deleted=deleted }
 }
 public enum DataEditScripts {
+  public enum RowMatching { case optimistic, primaryKeyOrOriginalValues }
   public static func value(_ value:String?,column:TableColumn) throws -> String {
+    try ResultValueValidation.validate(value, column: column)
     guard let value else { return "NULL" }
     var column = column
     column.type = column.valueType
@@ -220,8 +239,8 @@ public enum DataEditScripts {
     _ = try ObjectScripts.validatedType(column.type)
     return "CONVERT(\(column.type), \(SQL.literal(value))\(column.collation.isEmpty ? "" : " COLLATE "+(try ObjectScripts.collation(column.collation))))"
   }
-  public static func changes(table:TableDefinition,rows:[DataEditRow],expectedObjectID:Int? = nil) throws -> String {
-    guard !table.primaryKey.isEmpty else { throw SQLFailure("Veri düzenlemesi için primary key gerekli; anahtarsız satırlar yazılmaz.") }
+  public static func changes(table:TableDefinition,rows:[DataEditRow],expectedObjectID:Int? = nil,rowMatching:RowMatching = .optimistic) throws -> String {
+    guard !table.primaryKey.isEmpty || rowMatching == .primaryKeyOrOriginalValues else { throw SQLFailure("Veri düzenlemesi için primary key gerekli; anahtarsız satırlar yazılmaz.") }
     guard rows.count <= 400 else { throw SQLFailure("En fazla 200 mevcut + 200 yeni satır düzenlenebilir.") }
     let keyIndices=table.primaryKey.compactMap { key in table.columns.firstIndex { $0.name == key } }
     guard keyIndices.count == table.primaryKey.count else { throw SQLFailure("Primary key metadata eksik.") }
@@ -243,10 +262,13 @@ public enum DataEditScripts {
       if changed.isEmpty && !row.deleted { continue }
       guard changed.allSatisfy({ !table.columns[$0].generated && table.columns[$0].editableValue }) else { throw SQLFailure("Üretilen veya desteklenmeyen türdeki kolon değiştirilemez.") }
       let compared:[Int]
-      if let version { compared=Array(Set(keyIndices+[version])).sorted() }
+      if rowMatching == .primaryKeyOrOriginalValues {
+        compared = keyIndices.isEmpty ? table.columns.indices.filter { table.columns[$0].editableValue || ["rowversion", "timestamp"].contains(table.columns[$0].valueType.lowercased()) } : keyIndices
+      } else if let version { compared=Array(Set(keyIndices+[version])).sorted() }
       else {
         compared=table.columns.indices.filter { keyIndices.contains($0) || table.columns[$0].editableValue }
       }
+      guard !compared.isEmpty else { throw SQLFailure("Satırı güvenle tanımlayacak karşılaştırılabilir kolon yok.") }
       let predicate=try compared.map { i -> String in
         let c=table.columns[i], name=SQL.identifier(c.name)
         guard original[i] != nil else { return name+" IS NULL" }
@@ -256,12 +278,15 @@ public enum DataEditScripts {
           return "CONVERT(varbinary(max),CONVERT(\(cast),\(name))) = CONVERT(varbinary(max),CONVERT(\(cast),\(literal)))"
         }
         if c.valueType.lowercased() == "image" { return "CONVERT(varbinary(max),\(name)) = \(literal)" }
-        if ["varchar","nvarchar","char","nchar"].contains(where:{ c.valueType.lowercased().hasPrefix($0+"(") }) {
+        if (rowMatching == .optimistic || keyIndices.isEmpty), ["varchar","nvarchar","char","nchar"].contains(where:{ c.valueType.lowercased().hasPrefix($0+"(") }) {
           return "CONVERT(varbinary(max),\(name)) = CONVERT(varbinary(max),\(literal))"
         }
         return name+" = "+literal
       }.joined(separator:" AND ")
       let action = row.deleted ? "DELETE FROM \(table.qualified)" : "UPDATE \(table.qualified) SET \(try changed.map { SQL.identifier(table.columns[$0].name)+" = "+(try value(row.values[$0],column:table.columns[$0])) }.joined(separator:", "))"
+      if keyIndices.isEmpty {
+        statements.append("IF (SELECT COUNT_BIG(*) FROM \(table.qualified) WITH (UPDLOCK, HOLDLOCK) WHERE \(predicate)) <> 1 THROW 51003, N'Anahtarsız satır tekil olarak bulunamadı; değişiklik gönderilmedi.', 1;")
+      }
       statements.append(action+" WHERE "+predicate+";\nIF @@ROWCOUNT <> 1 THROW 51001, N'Satır değişmiş veya bulunamadı; tüm düzenleme geri alındı. Yenileyip tekrar deneyin.', 1;")
     }
     guard !statements.isEmpty else { throw SQLFailure("Değişiklik yok.") }
@@ -415,9 +440,9 @@ public struct ResultEditSource: Sendable {
     return .init(database: database, schema: schema, table: table, columns: columns)
   }
   public func projected(_ definition: TableDefinition) throws -> TableDefinition {
-    guard definition.schema == schema, definition.name == table, !definition.primaryKey.isEmpty,
+    guard definition.schema == schema, definition.name == table,
       Set(columns) == Set(definition.columns.map(\.name)), columns.count == definition.columns.count else {
-      throw SQLFailure("Güvenli düzenleme için tablonun tüm kolonları ve primary key sonuçta bulunmalı. SELECT * ile tekrar deneyin.")
+      throw SQLFailure("Güvenli düzenleme için tablonun tüm kolonları sonuçta bulunmalı. SELECT * ile tekrar deneyin.")
     }
     var result = definition
     result.columns = try columns.map { name in

@@ -11,73 +11,81 @@ struct ColumnFilterPanel: View {
   @State private var values: [CellChoice] = []
   @State private var truncated = false
   @State private var loading = false
+  @State private var conditionExpanded: Bool
   @State private var error = ""
   init(rows: Rows, column: Int, initial: ColumnRule, apply: @escaping (ColumnRule) throws -> Void) {
     self.rows = rows
     self.column = column
     self.apply = apply
     _rule = State(initialValue: initial)
+    _conditionExpanded = State(initialValue: initial.operation != .any)
   }
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      Text(rows.fields[column].name).font(.headline).lineLimit(2)
-      Picker("Koşul", selection: $rule.operation) {
-        ForEach(ColumnOperation.allCases, id: \.self) { op in
-          if !rows.fields[column].numeric && !ResultFiltering.isDate(rows.fields[column])
-            || ![.contains, .starts, .empty, .notEmpty].contains(op)
-          {
-            Text(op.rawValue).tag(op)
-          }
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(alignment: .top, spacing: 10) {
+        Image(systemName: "line.3.horizontal.decrease.circle").font(.system(size: 22)).foregroundStyle(Color(nsColor: StudioTheme.accent))
+        VStack(alignment: .leading, spacing: 3) {
+          Text(rows.fields[column].name).font(.system(size: 13, weight: .semibold)).lineLimit(2)
+          Text(rows.fields[column].dataType + " · Yerel filtre").font(.caption).foregroundStyle(.secondary)
         }
+        Spacer(minLength: 0)
       }
-      if rule.operation.needsValue {
-        TextField(
-          ResultFiltering.isDate(rows.fields[column]) ? "YYYY-MM-DD veya ISO 8601" : "Değer",
-          text: $rule.first)
-      }
-      if rule.operation == .between { TextField("Bitiş (dahil)", text: $rule.second) }
-      Divider()
-      Toggle(
-        "Değer seçimini kullan",
-        isOn: Binding(get: { rule.choices != nil }, set: { rule.choices = $0 ? [] : nil }))
-      TextField("Kolon değerlerinde ara", text: $search).textFieldStyle(.roundedBorder)
-      HStack {
+      TextField("Değerlerde ara", text: $search).textFieldStyle(.roundedBorder)
+      HStack(spacing: 10) {
+        Button("Tümü") { rule.choices = nil }
         Button("Görünenleri seç") { rule.choices = (rule.choices ?? []).union(values) }
-        Button("Kaldır") { if rule.choices != nil { rule.choices?.subtract(values) } }
-        Spacer()
+        Button("Seçimi kaldır") { rule.choices = [] }
+        Spacer(minLength: 0)
         if loading { ProgressView().controlSize(.small) }
       }.controlSize(.small)
       ScrollView {
-        LazyVStack(alignment: .leading, spacing: 5) {
+        LazyVStack(alignment: .leading, spacing: 0) {
           ForEach(values, id: \.self) { value in
-            Toggle(
-              String(value.title.prefix(256)),
-              isOn: Binding(
-                get: { rule.choices?.contains(value) ?? false },
-                set: { on in
-                  if on { rule.choices?.insert(value) } else { rule.choices?.remove(value) }
-                })
-            )
-            .toggleStyle(.checkbox).disabled(rule.choices == nil).lineLimit(1).help(
-              String(value.title.prefix(4000)))
+            Toggle(String(value.title.prefix(256)), isOn: Binding(
+              get: { rule.choices?.contains(value) ?? false },
+              set: { selected in
+                if selected { rule.choices = (rule.choices ?? []).union([value]) }
+                else { rule.choices?.remove(value) }
+              }))
+              .toggleStyle(.checkbox).font(.system(size: 12)).lineLimit(1)
+              .padding(.horizontal, 10).padding(.vertical, 6)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .help(String(value.title.prefix(4000)))
           }
+          if values.isEmpty && !loading { Text("Eşleşen değer yok").foregroundStyle(.secondary).padding(12) }
         }.frame(maxWidth: .infinity, alignment: .leading)
-      }.frame(maxHeight: .infinity)
-      Text(
-        truncated
-          ? "En fazla 500 farklı değer gösterilir; diğerlerini arayın. Seçimler korunur."
-          : "\(values.count) farklı değer · NULL ve boş metin ayrıdır."
-      ).font(.caption).foregroundStyle(.secondary)
-      if let choices = rule.choices {
-        Text("\(choices.count) değer seçili; koşulla birlikte uygulanır.").font(.caption)
       }
+      .frame(minHeight: 110, maxHeight: .infinity)
+      .background(Color(nsColor: StudioTheme.resultCanvas))
+      .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color(nsColor: StudioTheme.resultBorder), lineWidth: 1))
+      Text(rule.choices.map { "\($0.count) değer seçili" } ?? "Tüm değerler · Henüz değer seçimi yok")
+        .font(.caption).foregroundStyle(.secondary)
+      if truncated { Text("İlk 500 farklı değer gösteriliyor; diğerlerini arayabilirsiniz. Seçimler korunur.").font(.caption).foregroundStyle(.secondary) }
+      DisclosureGroup("Koşul", isExpanded: $conditionExpanded) {
+        VStack(alignment: .leading, spacing: 8) {
+          Picker("Karşılaştırma", selection: $rule.operation) {
+            ForEach(ColumnOperation.allCases, id: \.self) { operation in
+              if !rows.fields[column].numeric && !ResultFiltering.isDate(rows.fields[column]) || ![.contains, .starts, .empty, .notEmpty].contains(operation) {
+                Text(operation.rawValue).tag(operation)
+              }
+            }
+          }
+          if rule.operation.needsValue {
+            TextField(ResultFiltering.isDate(rows.fields[column]) ? "YYYY-MM-DD veya ISO 8601" : "Değer", text: $rule.first).textFieldStyle(.roundedBorder)
+          }
+          if rule.operation == .between { TextField("Bitiş (dahil)", text: $rule.second).textFieldStyle(.roundedBorder) }
+        }.padding(.top, 6)
+      }.font(.system(size: 12))
       if !error.isEmpty { Text(error).font(.caption).foregroundStyle(.red).lineLimit(3) }
+      Divider()
       HStack {
-        Button("Filtreyi Kaldır") { commit(ColumnRule()) }
+        Button("Temizle") { commit(ColumnRule()) }
         Spacer()
-        Button("Uygula") { commit(rule) }.buttonStyle(.borderedProminent)
+        Button("Uygula") { commit(rule) }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
       }
-    }.padding(16).frame(maxWidth:.infinity,maxHeight:.infinity)
+      Text("Yalnız yüklenen sonuçları filtreler.").font(.caption2).foregroundStyle(.secondary)
+    }.padding(16).frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(Color(nsColor: StudioTheme.resultCanvas))
       .task(id: search) {
         loading = true
         error = ""

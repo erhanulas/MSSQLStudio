@@ -2,8 +2,24 @@
 
 Bu dosya projenin mimari, kod yapısı, görünüm, veri bütünlüğü, test ve yayın kurallarının tek ana kaynağıdır. Değişiklik yapmadan önce ilgili bölümü okuyun; davranış veya mimari değiştiğinde aynı bölümü güncelleyin. Kuralları yeni mimari/tasarım belgelerine dağıtmayın.
 
+## Agent çalışma protokolü — önce okuyun
+
+Bu bölüm çalışma yönteminin öncelikli özetidir; aşağıdaki teknik, güvenlik, UI, test ve yayın sözleşmelerini kaldırmaz veya gevşetmez. Hız hedefi zorunlu kontrolü atlama gerekçesi değildir.
+
+1. **Bağımsız ilerleyin.** Kullanıcı istenen davranışı tarif eder; ilgili kodu ve testleri inceleyerek mevcut mimariye uygun en küçük, güvenli çözümü seçin, uygulayın ve doğrulayın. Rutin teknik tercihleri kullanıcıya seçtirmeyin; yalnız plan sunup bırakmayın.
+2. **Soruları sınırlayın.** Önce bu dosyada, kaynakta ve testlerde araştırın. Ancak ürün davranışını belirleyen belirsizlik, erişilemeyen zorunlu bilgi veya mevcut yetkiyi aşan geri dönüşü zor işlem varsa sorun. Soruyu somut seçenek ve öneriyle birleştirin; yanıt beklerken bağımsız işleri tamamlayın. Daha önce verilmiş ve aynı kapsamda geçerli onayı tekrar istemeyin.
+3. **Görev kadar okuyun.** İçindekiler ve kaynak haritasından ilgili bölümleri seçin; aynı oturumda değişmemiş içeriği tekrar tekrar okumayın. Otomatik yüklenen metnin tam olduğunu varsaymayın: ilgili bölüm eksik/kesilmişse depodaki bu AGENTS.md'den doğrudan okuyun. Ortak güvenlik kuralları her görevde geçerlidir; ayrıntılı okuma kapsamı aşağıdadır.
+4. **Kök nedeni bulun.** Belirtiyi ilgili veri/olay akışı, durum sahibi ve test kanıtıyla ilişkilendirin; varsayımı gerçek gibi sunmayın. Aynı nedeni paylaşabilecek yakın çağrı noktalarını kontrol edin. Hata gizleme, kontrol kaldırma veya kanıtsız tekrar deneme ile başarı üretmeyin.
+5. **Küçük, hedefli değiştirin.** İlgili özellik sahibinde çalışın; ilgisiz refactor, biçimlendirme, bağımlılık veya mimari katman eklemeyin. Kullanıcının değişikliklerini, çalışan özellikleri, veri biçimlerini ve performans bütçelerini koruyun. Gerekli ortak düzeltmeyi etkilenen yolların regresyonuyla doğrulayın.
+6. **Aşamalı doğrulayın.** Önce ilgili test, ardından etkilenen ortak yollar, gerekli derleme/native kontrol ve görev gerektiriyorsa tam suite/paket doğrulaması. Ayrıntılar “Geliştirme, doğrulama ve yayın akışı”ndadır. Geçmiş başarılı sonucu ancak ilgili kaynak, bağımlılık ve koşullar değişmediyse yeniden kullanın; yeni hata/değişiklik/koşul yoksa aynı kontrolü tekrarlamayın.
+7. **Güvenlik sınırını koruyun.** Geliştirme isteği gerçek kullanıcı DB'sine yazma, kullanıcı verisini silme, kurulu uygulamayı değiştirme veya test için yeniden başlatma yetkisi değildir. Üründeki SQL/DDL gönderim ve işlem onaylarını atlamayın. Secret, Keychain, dondurulmuş helper ve imza kuralları aynen geçerlidir; güvenlik bypass'ı çözüm değildir.
+8. **Geliştirme, paket ve yayını ayırın.** Hata/özellik isteğinde geliştirme akışını tamamlayın; dosya/önizleme isteğinde yalnız yerel paket akışını, açık public yayın isteğinde yayın akışını uygulayın. Paket isteği release/tag/latest yetkisi değildir. Yayın isteği varsa aynı kapsam için tekrar onay aramayın; zorunlu doğrulamaları tamamlayın. Helper/kimlik değişimi ayrı açık migration kapsamı gerektirir.
+9. **Çelişkiyi sessizce çözmeyin.** Kaynak, test, bu sözleşme ve son kullanıcı isteğini birlikte değerlendirin. Genel özerklik kuralıyla özel güvenlik/bütçe/onay sınırını aşmayın. Ürün kararını gerektiren çözülemeyen çelişkide yalnız etkilenen adımı durdurun; gerekçeyi ve gereken kararı bildirin. Doğrulanan değişikliği mevcut bölümde güncelleyin; yeni sözleşme belgesi açmayın.
+10. **Kısa ve kanıtlı raporlayın.** Türkçe iletişim kurun. Anlamlı ilerleme veya engeli kısa bildirin; rutin adımları tek tek anlatmayın. Sonuçta ne değiştiğini, gerçekten çalıştırılan doğrulamayı ve varsa doğrulanmayan koşulu/kalan riski yazın. Atlanan test, sıfır test, araç hatası veya yalnız CI başarısını canlı SQL/native UI/Installer doğrulaması diye sunmayın.
+
 ## İçindekiler
 
+- [Agent çalışma protokolü — önce okuyun](#agent-çalışma-protokolü--önce-okuyun)
 - [Çalışma ilkeleri ve kapsam](#çalışma-ilkeleri-ve-kapsam)
 - [Belgelerin sorumluluğu](#belgelerin-sorumluluğu)
 - [Platform ve kaynak haritası](#platform-ve-kaynak-haritası)
@@ -20,13 +36,27 @@ Bu dosya projenin mimari, kod yapısı, görünüm, veri bütünlüğü, test ve
 
 ## Çalışma ilkeleri ve kapsam
 
-- Kullanıcıyla Türkçe iletişim kurun. Kullanıcı istediği davranışı tarif eder; mevcut kodu inceleyip uygun uygulamayı geliştirici belirler. Teknik sonuçları, doğrulamayı ve açık kalan noktaları açıkça bildirin.
 - Proje deposu: https://github.com/erhanulas/MSSQLStudio. Bu proje NativeSQL'den bağımsızdır; eski projeyi değiştirmeyin veya kodunu kopyalamayın. Üst proje aynasının `sources/` dosyaları salt okunur referanstır.
 - Kullanıcının mevcut yerel değişikliklerini koruyun. İlgisiz dosyaları, tercihleri, SQL belgelerini, verileri veya geliştirme ortamını sıfırlamayın. Refactor sırasında önceki özellikleri ve kalıcı veri biçimlerini koruyun.
 - İstenen davranışı mevcut özellik sahibinde geliştirin. Yeni teknoloji, paket, genel servis katmanı veya büyük yeniden yazım ancak somut ihtiyacı varsa eklenir. Mevcut AppKit/SwiftUI/TextKit 2 yaklaşımını koruyun.
 - Eksik yeteneği çalışan düğme, başarı mesajı veya tamamlanmış özellik gibi göstermeyin. Kısmi veri, okunamayan metadata, çevrimdışı bağlantı ve belirsiz işlem sonucu görünür olmalıdır.
 - Tasarım, şablon, AI ve favori SQL'i açmak otomatik yürütme değildir. Yazma, sorgu çalıştırma ve yeniden bağlantı yollarının kullanıcıya görünen anlamını koruyun.
 - Kurulu `/Applications/MSSQLStudio.app` uygulamasını test derlemesiyle değiştirmeyin; gerçek kullanıcı uygulamasını veya açık SQL oturumlarını test için yeniden başlatmayın. Test/build/QA çıktıları `/tmp` altında tutulur.
+
+### Göreve göre okuma
+
+Her görevde üst protokolü, çalışma ilkelerini ve belgelerin sorumluluğunu esas alın. Kod değişiminde kaynak haritası, sahiplik/concurrency kuralları ve doğrulama akışı ortak temeldir. Aynı oturumda okunmuş ve değişmemiş bölümleri yeniden yüklemek gerekmez. Aşağıdaki tablo başlangıç kapsamıdır; değişiklik başka bir sınırı etkiliyorsa o bölümü de okuyun. Görev dışı ayrıntıyı okumamak o sözleşmeyi değiştirme yetkisi vermez.
+
+| Görev | Bu dosyada ayrıca okunacak bölüm |
+|---|---|
+| SQL editörü, tamamlama, undo, folding | SQL editörü sözleşmesi; katalog/metadata etkileniyorsa SQL oturumları, yürütme ve katalog güvenliği |
+| Bağlantı, Explorer, yürütme, katalog | SQL oturumları, yürütme ve katalog güvenliği; credential etkileniyorsa Keychain, kalıcı imza ve güncelleme |
+| Grid, filtre, export, yenileme, veri editi | Sonuçlar, veri düzenleme ve performans; SQL oturumları, yürütme ve katalog güvenliği |
+| Nesne tasarımı veya DDL karşılaştırma | Nesne yönetimi ve DDL karşılaştırma; SQL oturumları, yürütme ve katalog güvenliği |
+| İzleme, favori/geçmiş, Agent, Linked Server, AI | Yardımcı özellik sözleşmeleri içindeki ilgili alt bölüm; etkilenen oturum/kalıcılık sınırları |
+| Görsel veya etkileşim değişikliği | Görünüm standardı; ilgili özelliğin sözleşmesi; Test kanıtı ve UI izolasyonu |
+| Credential, imza, updater, paket veya yayın | Keychain, kalıcı imza ve güncelleme; Geliştirme, doğrulama ve yayın akışı |
+| Belge düzenleme | Belgelerin sorumluluğu; değiştirilen sözleşmenin tamamı; Rehberi güncel tutma |
 
 ### Ürün sınırı
 
@@ -124,6 +154,7 @@ Aşağıdaki yollar `Sources/SQLServerKit/` altındadır.
 | `EditorCompletionController` | Analiz task/generation, öneri popup'ı ve key monitor yaşam döngüsü |
 | `ResultController` | loadedResult/prefix, kolon/selection/sayfa/pin ve staged edit durumu |
 | `ResultProjectionController` | Değişmez Rows/rule/sort snapshot'ında arka plan filtre/sıralama işi |
+| `ResultEditingCoordinator` | Sonuç/bağlantı/SQL/field bağlamında metadata hazırlığı, tek uçuş, bellekten reuse ve iptal |
 
 ### Dosya ve API düzeni
 
@@ -157,6 +188,9 @@ Renk/font kaynağı `SharedUI/Theme/StudioTheme.swift`; kontrol/kart ölçüleri
 |---|---|---|
 | Canvas | `FFFFFF` | `191D25` |
 | SQL editörü | `FFFFFF` | `1E1E1E` |
+| Blok kılavuzu / aktif blok | `D8DEE8` / accent %75 | `414750` / accent %75 |
+| Sonuç zemin / başlık / satır | `FFFFFF / FFFFFF / FBFCFE` | `1E1F22 / 252830 / 22252B` |
+| Sonuç kenarlık / aktif filtre | `E9EDF3 / F0F6FF` | `343942 / 283952` |
 | Panel | `F4F6FA` | `222833` |
 | Explorer | `FFFFFF` | `1E1F22` |
 | Pencere çerçevesi | `EBEFF5` | `141820` |
@@ -279,6 +313,7 @@ Numara alanı genişliği kaynak/snapshot değişince hesaplanır; scroll çizim
 - Folding özgün SQL'i koruyan source projection'dır. Başlık/caret/viewport anchor korunur; +/− gösterimi gerçek durumu izler. Gereksiz tam metin sıfırlama/animasyon/scroll yoktur; gizli hedefe gezinme projection'ı açar.
 - Çift tık kelime seçimi/eşleşme vurgusudur; dirty/undo veya SQL değiştirmez. Boyama native mouse tracking sonrasına kalır; @/@@/# ve composed Unicode korunur. Tanıma geçiş command-click/⌘B ile ayrıdır.
 - BEGIN/END, CASE/END ve parantez eşleri 250.000 UTF-16 lexer bütçesinde bulunur; CASE ve parantez ayrı stack kullanır, GO sınırdır. Transaction/dialog BEGIN ve END CONVERSATION blok sayılmaz; yorum/literal/quoted identifier dışlanır. Eşler viewport dekorasyonudur; gizli eş çizilmez. Ayarlanabilir Ctrl+Shift+M iki yönde gider.
+- Çok satırlı BEGIN/END blokları soluk dikey kılavuzla gösterilir; tek caret'in içindeki en dar blok accent ile belirginleşir. SQLBlockStructure eşleştirme/gezinme ve kılavuzlar için ortak lexical snapshot'tır; EditorBlockGuides SQL değişene kadar bunu önbellekte tutar. Çizgi açılış satırının girintisine hizalanır, tab/space native dört boşluk aralığını izler; iki uç ekran dışındayken görünür alanda devam eder. Gizli uçlu/tek satırlı/eşleşmemiş bloklar çizilmez; görünür üst blok folded projection'a uyar. Çizim yalnız TextKit 2 viewport overlay'indedir; metin/foreground/undo/odak değişmez. CASE/parantez sözcük vurgusu ve eşe gitme korunur; bunlar BEGIN/END kılavuzu üretmez.
 - ⌥←/→ SQLCaretNavigation değişken/temp/Unicode kelime/sayıları bütün, operatör/noktalama ayrı durak sayar. Quoted/yorum içinde kelime hareketi kalır. ⌘←/→ önce kod sınırına, sonra fiziksel satıra gider; CRLF bölünmez. Shift seçim yönü selectionAffinity ile korunur; sıradan/dikey oklar, IME/çoklu seçim native kalır. Hareket yalnız caret başını kaydırır ve yazım grubunu ayırır; kaynak/renk/undo üretmez. Çevre bütçesi yaklaşık 8.200 UTF-16; 4.096'yı aşan tek token ara durak alabilir.
 - Tırnak eşleme yalnız fiziksel keyDown, editable/tek seçim/IME dışı girdide çalışır. 250k lexical bağlam yorum/string/bracket/quoted identifier'ı korur; metin ortasında gereksiz kapanış üretmez. Marker'lar affected-range ile kayar; aynı kapanışı skip, boş çifti Backspace ile silme ve kod seçimini sarma desteklenir. Paste/insertText eşlemez; tam SQL değişimi marker'ları geçersizleştirir.
 - Formatla kaynak değişmiyorsa native metni yeniden atamaz; gerçek değişim/undo/redo renk cache'ini geçersizleştirir. Literal, source projection, undo ve SSMS renkleri korunur.
@@ -355,7 +390,8 @@ Koyu palet uygulama uyarlamasıdır; Microsoft'un birebir koyu paleti diye sunul
 
 ### Native grid ve kolon davranışı
 
-- Başlık ad/tip için iki satır, genişlik native 11 pt medium ölçümü + ikon/kenar payıdır; veri örneklemesi başlığı daraltmaz. Filtre hit alanı 12 pt dış resize kenarından ayrıdır; sürüklemede açılmaz.
+- Sonuç açık temada beyaz zemin/başlık/araç alanı, çok hafif satır zemini ve sakin ayırıcılar kullanır; uygulama koyu temasına uyar. Başlık ad/tip için iki satır, genişlik native 11 pt semibold ad ve 9 pt tür ölçümünün büyüğü + ikon/kenar payıdır; auto-fit veya pin başlığı/türü daraltmaz. Filtre hit alanı 12 pt dış resize kenarından ayrıdır; sürüklemede açılmaz. Aktif filtre hafif zemin/alt accent ve ikonla, PK doğrulanmış edit metadata'sı sonrası anahtar ikonu ile gösterilir. SF Symbols tema/rol bazında sınırlı cache'tedir; hücre başına view/layout kurulmaz.
+- Kolon filtresi doğrudan değer seçimi, arama, Tümü/Görünenleri seç/Seçimi kaldır, açılabilir Koşul ve Temizle/Uygula sunar. Filtre yalnız yüklenmiş capped snapshot'tadır; SQL çalıştırmaz. NULL/boş metin, nil (sınırsız) / boş seçim (hiçbiri), arama dışında kalan seçimler ve en fazla 500 değer bütçesi korunur.
 - Bit false boş kontur, true StudioTheme.success dolgulu işarettir; NULL metindir. Ham 1/0/NULL ve clipboard/edit değeri değişmez. GridDataCell.copy(with:) bağımsız native hücre üretir; inherited ObjC shallow copy Swift-owned alanları paylaşmaz. Table/scroll/cell focus ring none, native seçim/klavye korunur.
 - ResultRowGutter yatay clip dışında tek sabit yüzeydir; görünür satırları çizer. Sentetik row kolonu gizlidir; ordinal/pozisyon korunur. Numara kaynak satır indeksidir; filter/sort/page/edit işaretleri ve tık/Shift/sürükle/sağ tık korunur. Clipboard/export/SQL'e girmez; görünür numaralar AX çocuklarıdır.
 - Kolon arama varsayılan ⌘⇧J'dir; yazım, ↑↓, Enter/Escape ve sayaç desteklenir. Gizli/taşınmış kolon ordinal ile bulunur; başlık vurgusu yeni generation'da temizlenir, hücre değer/seçimi değişmez.
@@ -365,14 +401,15 @@ Koyu palet uygulama uyarlamasıdır; Microsoft'un birebir koyu paleti diye sunul
 
 ### Veri yazma güvenliği
 
-- Sonuç edit eligibility SQL metninden tablo tahminiyle kurulmaz. Canlı sys.dm_exec_describe_first_result_set(...,1) ordinal kaynağı doğrular: tek yerel kullanıcı tablosu, tam kolonlar/PK zorunludur. Alias/sıra desteklenir; JOIN/toplama/çoklu sonuç/temp/remote/eksik projection/PK/kısmi sonuç salt okunurdur.
-- Edit hazırlığı cache'i endpoint/login/server UUID/DB + tam sorgu/ordinal field signature SHA-256 anahtarlıdır. İlk/eksik/bozuk/eski kayıtta canlı DMF/objectID/table metadata okunur; cache hit de eligibility'yi korur. SQL, sonuç değerleri, default/computed SQL diske yazılmaz; kolon nitelikleri ve canonical hash saklanır.
+- Sonuç edit eligibility SQL metninden tablo tahminiyle kurulmaz. Canlı sys.dm_exec_describe_first_result_set(...,1) ordinal kaynağı doğrular: tek yerel kullanıcı tablosu ve tüm kolonlar zorunludur; varsa PK sonuçta bulunur. Alias/sıra ve anahtarsız tam satır desteklenir; JOIN/toplama/çoklu sonuç/temp/remote/eksik projection/kısmi sonuç salt okunurdur.
+- Edit hazırlığı cache'i endpoint/login/server UUID/DB + tam sorgu ve ordinal field name/type/size/scale/declaredType SHA-256 anahtarlıdır. İlk/eksik/bozuk/eski kayıtta DMF ve yalnız objectID/kolon/PK/özel tablo flag metadata'sı iki okuma isteğiyle alınır; indeks/trigger DDL üretimi yapılmaz. Cache hit de eligibility'yi korur; anahtarsız snapshot tekrar kullanılabilir. SQL, sonuç değerleri, default/computed SQL diske yazılmaz; kolon nitelikleri ve canonical hash saklanır.
+- ResultEditingCoordinator yalnız tamamlanmış güvenli sonucun metadata'sını önceden hazırlar; edit modu açılmaz/SQL yazılmaz. Düzenleme isteği aynı uçuşu veya hazır bellek sonucunu kullanır; context server/profil scope/generation, result generation, DB, yürütülen SQL ve fields'tır. Eski iş fiziksel olarak bitmeden yeni okuma başlamaz; iptali dikkate almayan eski yanıt yeni bağlama yayınlanmaz. Hazırlık hatası kendiliğinden döngüde tekrarlanmaz; açık düzenleme isteği tekrar deneyebilir. Kapanış/değişen bağlam işi iptal eder; UI bloke edilmez.
 - Gönderimde cache'e güvenilmez: canlı DMF ordinal kaynak, objectID ve canonical metadata hash; PK/type/baseType/nullability/generated/default/computed yeniden doğrulanır. Çözümleme veya metadata değişmişse reddedilir. İlgili katalog değişimi/başarısız canlı doğrulama edit cache'ini geçersizleştirir.
 - Staged edit kaynak satır indeksine bağlı ayrı sözlüktür; spool değişmez. Normal PK düzenlenebilir, UPDATE özgün anahtarla bulur. IDENTITY/computed/rowversion/desteklenmeyen tür kilit ve açıklamayla korunur. NULL ayrı açık eylemdir; orijinale dönüş değişikliği kaldırır.
 - Yeni/çoğaltılan satır negatif yerel kimlikle sayfa sonunda görünür; filter/sort gizlemez, spool/export'a girmez. Dokunulmayan alan DEFAULT, açık NULL touched'dır. Çoğaltma PK/generated/özel tür taşımaz; nonidentity anahtar tekrar girilir. Mevcut silme staged, yeni satır silme yereldir. Kopyalama staged değeri, filter/sort/export yürütülmüş snapshot'ı kullanır.
-- Field editor taslağı hücreden çıkmadan önizlemeyi etkinleştirir; commit öncesi sözlük/spool değişmez, Escape iptal eder. Önizleme native editor'ı commit eder, salt okunur SQL ve hedef sunucu/DB gösterir. Düğme sabit yerleşimli ve değişiklik yoksa pasiftir.
-- Yalnız Onayla ve Veritabanına Gönder yazar. SQL/sonuç generation/DB/server generation ve metadata yeniden denetlenir. Ayrı ODBC oturumunda OBJECT_ID + özgün PK/değer + varsa rowversion + @@ROWCOUNT=1 transaction koruması vardır; query transaction etkilenmez.
-- Rowversion yoksa karşılaştırılabilen değerler ve XML/text/ntext/image açık dönüşümleri kullanılır. SQL alias type özgün DDL adı ile baseType/length/precision/scale olarak ayrılır; CONVERT temel tiptedir, string binary conflict korunur. CLR/table/çözülemeyen alias/spatial/sql_variant salt okunur ve conflict dışında olabilir; bunlarda tam eşzamanlılık güvencesi iddia edilmez.
+- Field editor taslağı commit öncesinde sözlük/spool'u değiştirmez; Escape iptal eder ve pending draft kapanış denetimine dahildir. ResultCellFormatter kolon başına, ResultFieldEditor tablo başına yalnız edit sırasında oluşturulur. Sayısal metin yazım sırasında, tür/aralık/precision/scale/NULL/uzunluk/binary/UUID/ISO tarih commit ve SQL üretiminde doğrulanır; alias baseType kullanılır, integer/decimal metni Double'a çevrilmez. Geçersiz taslak native odak değişiminde hücrede kalır; görünür hata ve pasif SQL önizlemesi vardır. Önizleme native editor'ı commit eder, salt okunur SQL ve hedef sunucu/DB gösterir. Düğme sabit yerleşimlidir.
+- Yalnız Onayla ve Veritabanına Gönder yazar. SQL/sonuç generation/DB/server generation ve metadata yeniden denetlenir. Sonuç grid'inin DataEditScripts.primaryKeyOrOriginalValues politikası kullanıcının isteğiyle PK varsa WHERE'de yalnız özgün anahtar(lar)ı kullanır; PK değişimi SET'te yeni, WHERE'de eski değerdir. Diğer kolon/rowversion eşzamanlı değişimi bu modda denetlenmez; önizleme bunu açıklar. OBJECT_ID ve @@ROWCOUNT=1 transaction koruması kalır, query transaction etkilenmez.
+- PK yoksa karşılaştırılabilir özgün kolonlar (varsa rowversion) ve XML/text/ntext/image açık dönüşümleri kullanılır. Aynı transaction'da UPDLOCK/HOLDLOCK + COUNT_BIG=1 ön denetimi ve DML sonrası @@ROWCOUNT=1 zorunludur; sıfır/çoklu eşleşme rollback verir, keyfi TOP 1 kullanılmaz. SQL alias type özgün DDL adı ile baseType/length/precision/scale olarak ayrılır; CONVERT temel tiptedir, anahtarsız string karşılaştırması byte eşliğini korur. CLR/table/çözülemeyen alias/spatial/sql_variant salt okunur ve eşleştirme dışında olabilir; tam eşzamanlılık güvencesi iddia edilmez. Ayrı nesne veri editörü DataEditScripts'in varsayılan optimistic PK/original/rowversion politikasını korur.
 - Edit mode'da auto-refresh yoktur. Pending taslağı silecek execution/refresh/close uyarır; gönderimde execution/close engellenir. Başarı değişiklikleri temizleyip son SELECT'i yeniler; ağ hatasında commit belirsiz olabilir, otomatik yazma tekrarı yoktur. Önizleme değişince eski onay geçersizdir.
 
 ## Nesne yönetimi ve DDL karşılaştırma
@@ -473,11 +510,27 @@ Koyu palet uygulama uyarlamasıdır; Microsoft'un birebir koyu paleti diye sunul
 
 ### Her değişiklikte
 
-1. Git durumunu ve ilgili feature/core/test kaynaklarını okuyun. Mevcut değişiklikleri ayırın; ilgisiz revert, temizlik veya format yapmayın.
-2. Davranışın sahibini ve etkilenen sınırları belirleyin. Refactor'da veri/oturum/undo/kalıcılık sahipliğini değiştirmeden küçük doğrulanabilir adımlarla ilerleyin.
+1. Üst protokol ve görev bazlı okuma kapsamıyla başlayın; Git durumunu ve ilgili feature/core/test kaynaklarını okuyun. Mevcut değişiklikleri ayırın; ilgisiz revert, temizlik veya format yapmayın.
+2. Beklenen davranışı, kök neden kanıtını, davranışın sahibini ve etkilenen sınırları belirleyin. Refactor'da veri/oturum/undo/kalıcılık sahipliğini değiştirmeden küçük doğrulanabilir adımlarla ilerleyin.
 3. İlgili sorunu gerçekten sınayan testleri ve gerekli native kontrolü çalıştırın. Düşük etkili belge/biçim değişiminde gereksiz ürün testi eklemeyin. Hata/davranış değişiminde geç yanıt/iptal/sahiplik veya veri bütünlüğü regresyonunu sınayın; yalnız uygulamayı taklit eden test yazmayın.
 4. Kaynak ekleme/taşımada Xcode senkronizasyonu, mimari denetimi ve gerekli Release derlemesini yapın. Kontroller geçince yeni hata/değişiklik yoksa sebepsiz tekrar etmeyin.
-5. İlgili kuralları burada, kullanıcı başlangıcını README'de, tarihli kanıt/açık sınırı TEST-REPORT'ta güncelleyin. Sonuçta ne değiştiğini, nasıl doğrulandığını ve doğrulanmayan koşulu bildirin.
+5. İlgili kuralları burada, kullanıcı başlangıcını README'de, tarihli kanıt/açık sınırı TEST-REPORT'ta güncelleyin. Kısa sonuç raporunda üst protokoldeki kanıt ayrımını kullanın.
+
+### Aşamalı doğrulama ve tekrar sınırı
+
+Bu sıra mevcut test/derleme/yayın şartlarını değiştirmez; kontrollerin ne zaman genişletileceğini belirler. Aşağıdaki komut listesi her görevde körlemesine çalıştırılacak bir liste değildir.
+
+| Aşama | Ne zaman ve ne doğrulanır? |
+|---|---|
+| Belge/biçim | İçerik, bağlantı, sözleşme ve diff tutarlılığını kontrol edin; düşük etkili değişiklik için gereksiz ürün testi eklemeyin. |
+| Hedefli regresyon | Hata/davranış değişiminde ilgili suite/test ile başlayın; gerçek hatayı ve etkilenen iptal/geç yanıt/sahiplik/veri bütünlüğü sınırını sınayın. |
+| Etki alanını genişletme | Ortak model/servis, oturum, kalıcılık, SQL çözümleme veya UI bileşeni değiştiğinde onu kullanan etkilenen yolları doğrulayın. Etki sınırı güvenle daraltılamıyorsa tam suite çalıştırın. |
+| Derleme ve native kontrol | Kaynak ekleme/taşımada Xcode senkronizasyonunu, mimari denetimini ve gerekli Release derlemesini tamamlayın; UI davranışında ilgili izole native/smoke kontrolünü uygulayın. |
+| Paket ve public yayın | İstenen paket/yayın yolunun tüm zorunlu test, imza, hash, helper ve manifest/feed kontrollerini tamamlayın. Hedefli test public yayın öncesi tam suite ve paket doğrulamasının yerine geçmez. |
+
+- Bir kontrol başarısızsa önce ürün regresyonu, ortam/araç koşulu ve mevcut başarısızlık ayrımını kanıtla yapın. Kaynak veya koşul değişmeden aynı komutu döngüde çalıştırmayın; belirsiz yazmayı otomatik tekrarlamayın.
+- Aynı kaynak ve koşullarda tamamlanmış mimari denetimini test/build betiği zaten çalıştırdıysa sırf ayrı komut olarak listelendiği için tekrarlamayın. Betiğin gerçekten hangi denetimi tamamladığını doğrulayın; zorunlu veya başarısız kontrolü atlamayın.
+- Testi geçirtmek için assertion, güvenlik denetimi veya ürün sınırını kaldırmayın. Ortam eksikse yapılabilen doğrulamayı tamamlayın; eksik kontrolü ve gerçek engeli raporlayın.
 
 ### Komutlar
 
@@ -504,7 +557,7 @@ scripts/test.sh ve scripts/build-app.sh mimari kontrolünü çalıştırır. Fil
 ### Test kanıtı ve UI izolasyonu
 
 - Native suite'ler `--no-parallel` çalışır; build paralel olabilir. Aynı masaüstünde iki native test süreci çalıştırmayın; AppKit tema/odak/hover/field editor paylaşılır.
-- Çıkış kodu tek başına başarı değildir. StudioStateTests, SQLServerKitTests ve SQLTextCoreTests'in tamamlanmış `Test run with` özetlerini ayrı doğrulayın. Geçen/atlanan/başarısız sayısı ve koşul ayrıdır; dış ortam nedeniyle skip, doğrulanmış davranış değildir. İlgili hedefte test bulunmayan filtre için sıfır testi başarı kanıtı gibi sunmayın.
+- Çıkış kodu tek başına başarı değildir. Tam suite çalışmasında StudioStateTests, SQLServerKitTests ve SQLTextCoreTests'in tamamlanmış `Test run with` özetlerini ayrı doğrulayın. Filtreli çalışmada seçilen hedefte beklenen testin gerçekten çalıştığını ve tamamlanmış özetini doğrulayın; bunu tam suite sonucu diye bildirmeyin. Geçen/atlanan/başarısız sayısı ve koşul ayrıdır; dış ortam nedeniyle skip, doğrulanmış davranış değildir. İlgili hedefte test bulunmayan filtre için sıfır testi başarı kanıtı gibi sunmayın.
 - Gerçek SQL Server testi yalnız adı belirtilmiş test/localhost ortamında benzersiz nesne/#temp, rollback/cleanup ile yapılır; mevcut kullanıcı DB'sine yazılmaz. Gerçek credential, API anahtarı ve kullanıcı sonucu source/fixture/log/sohbete konmaz.
 - UI smoke ayrı `/tmp` uygulaması ve `local.mssqlstudio.uitest` veya `--ui-smoke` kullanır; gerçek Keychain/history/favori/restore/network okunmaz. scripts/prepare-ui-test.sh imzalı ZIP'ten ayrı fixture hazırlar. Test tercihi/deposu kullanıcı tercihini değiştirmez.
 - Fixture bayrakları yalnız izole başlangıçta etkindir: StudioObjectSmoke, StudioSchemaComparisonSmoke, StudioExplorerOrderSmoke, StudioGridSmoke/Compact, StudioMultiResultSmoke, StudioAgentSmoke, StudioActivitySmoke, StudioDatabaseFilesSmoke, StudioSettingsSmoke ve StudioRefreshSmokeSQL.
@@ -515,6 +568,8 @@ scripts/test.sh ve scripts/build-app.sh mimari kontrolünü çalıştırır. Fil
 - Başka suite'in field editor odağını çalmayın; edit/iptal arasına yapay async bekleme koymayın. Gerçek asenkron işte bounded koşul bekleyin. Araç timeout/odak/screenshot sorunu ürün başarısı veya kesin ürün hatası diye sunulmaz; somut örnek/log ve sınır rapora yazılır.
 
 ### Yerel dosya ve public yayın ayrımı
+
+Aşağıdaki main/tag/publish adımları yalnız public yayın isteğine aittir; geliştirme veya yerel dosya isteğinin kendiliğinden devamı değildir. Kullanıcının açık yayın isteği aynı kapsam için yeterlidir; kapsam değişmedikçe ikinci onay istemeyin.
 
 - Yalnız dosya/önizleme istendiğinde public release/tag oluşturmayın. package-preview.yml `codex/local-package-*` dalında contents:read ve 3 günlük artifact ile signed ZIP/PKG, frozen helper ve paket testlerini üretir; latest'i değiştirmez. Dosyaları indirip hash/strict imza/helper eşliğini doğrulayın, yerel bağlantıları verin. Ad-hoc test uygulamasını kullanıcı yayın paketi diye vermeyin.
 - Public yayın yalnız kullanıcı isteğiyle yapılır. Debug/Release MARKETING_VERSION/CURRENT_PROJECT_VERSION, bundle ve ReleaseNotes.json version/date/title/changes aynı olmalıdır. Sürüm notunun tek kaynağını koruyun; kullanılmamış tag seçin, eski tag/asset force değiştirmeyin.

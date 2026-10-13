@@ -152,7 +152,7 @@ struct CatalogExclusionTests {
         _=await gate.waitFirst()
         output.results=[Rows(values:[["Id",nil,"D","dbo","T","Id",nil,nil,"1"]])]
       } else if query.hasPrefix("SELECT object_id") {
-        output.results=[Rows(values:[["42"]])]
+        output.results=[Rows(values:[["42"]]),Rows(values:[["1","Id","int","0","0",nil,nil,nil,"0",nil,nil,nil,"0","0","0","int"]]),Rows(values:[["Id","PK_T"]]),Rows(values:[["0",nil]])]
       } else {
         output.results=[Rows(values:[["1","Id","int","0","0",nil,nil,nil,"0",nil,nil,nil,"0","0","0","int"]]),Rows(values:[["Id","PK_T"]]),Rows(),Rows(),Rows(),Rows(),Rows(values:[["0",nil]])]
       }

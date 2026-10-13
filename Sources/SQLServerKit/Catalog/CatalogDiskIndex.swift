@@ -94,7 +94,7 @@ public actor CatalogDiskIndex {
     guard sqlite3_step(s) == SQLITE_DONE else { throw SQLFailure("Yerel katalog güncellenemedi.") }
   }
   public nonisolated static func editingFingerprint(sql: String, fields: [Field]) -> String {
-    let signature = [sql] + fields.flatMap { [$0.name, String($0.type)] }
+    let signature = [sql] + fields.flatMap { [$0.name, String($0.type), String($0.size), String($0.scale), $0.declaredType ?? ""] }
     return SHA256.hash(data:(try? JSONEncoder().encode(signature)) ?? Data()).map { String(format:"%02x",$0) }.joined()
   }
   public func invalidateEditingMetadata(scope: String) throws {

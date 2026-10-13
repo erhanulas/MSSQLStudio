@@ -219,7 +219,7 @@ private actor EditingMetadataFixture {
     if sql.contains("dm_exec_describe_first_result_set") {
       result.results=[Rows(values:[["Id",nil,"D","dbo","T","Id",nil,nil,"1"],["Code",nil,"D","dbo","T","Code",nil,nil,"2"]])]
     } else if sql.hasPrefix("SELECT object_id") {
-      result.results=[Rows(values:[["42"]])]
+      result.results=[Rows(values:[["42"]]), Rows(values:[["1","Id","int","0","0",nil,nil,nil,"0",nil,nil,nil,"0","0","0","int"],["2","Code","[dbo].[CodeType]","1","0",nil,nil,nil,"0",nil,"'PRIVATE_DEFAULT'",nil,"0","0","0","varchar(12)"]]),Rows(values:[["Id","PK_T"]]),Rows(values:[["0",nil]])]
     } else {
       result.results=[Rows(values:[["1","Id","int","0","0",nil,nil,nil,"0",nil,nil,nil,"0","0","0","int"],["2","Code","[dbo].[CodeType]","1","0",nil,nil,nil,"0",nil,"'PRIVATE_DEFAULT'",nil,"0","0","0","varchar(12)"]]),Rows(values:[["Id","PK_T"]]),Rows(),Rows(),Rows(),Rows(),Rows(values:[["0",nil]])]
     }
@@ -234,10 +234,10 @@ struct ResultEditingPreparationTests {
     let sql="SELECT Id, Code FROM dbo.T;", fields=[Field("Id",type:4),Field("Code")]
     let first=try await ResultEditingPreparation.load(sql:sql,fields:fields,profile:profile,database:"D",index:index) { await fixture.fetch($0) }
     #expect(!first.cached && first.snapshot.objectID == 42)
-    #expect(await fixture.calls == 3)
+    #expect(await fixture.calls == 2)
     let second=try await ResultEditingPreparation.load(sql:sql,fields:fields,profile:profile,database:"D",index:index) { await fixture.fetch($0) }
     #expect(second.cached && second.snapshot.metadataSignature == first.snapshot.metadataSignature)
-    #expect(await fixture.calls == 3)
+    #expect(await fixture.calls == 2)
     let fresh=try ResultEditSource.decode(await fixture.fetch("dm_exec_describe_first_result_set"),fields:fields,database:"D")
     #expect(second.snapshot.matchesSource(fresh))
     var other=await fixture.fetch("dm_exec_describe_first_result_set")
@@ -247,6 +247,6 @@ struct ResultEditingPreparationTests {
     try await index.invalidateEditingMetadata(scope:CatalogDiskIndex.scope(profile:profile,database:"D"))
     let refreshed=try await ResultEditingPreparation.load(sql:sql,fields:fields,profile:profile,database:"D",index:index) { await fixture.fetch($0) }
     #expect(!refreshed.cached)
-    #expect(await fixture.calls == 8)
+    #expect(await fixture.calls == 6)
   }
 }
