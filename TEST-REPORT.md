@@ -1,3 +1,18 @@
+## 13 Ekim 2026 — v0.2.105 / build 106 public yayın doğrulandı
+
+- [Public/latest v0.2.105](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.105), kaynak `e17bc516f531ca9692451030c545bdc6841e3ec8`; [Actions 38438166330](https://github.com/erhanulas/MSSQLStudio/actions/runs/38438166330) bütün adımlarıyla başarılı. BEGIN/END kılavuzları, Results görünüm/filtre ve düzenleme doğrulamaları bu yayındadır; kullanıcı AGENTS.md protokol ekleri korunur.
+- Gerçek imzalı ZIP/PKG ile CI **320 app + 298 core + 8 text = 626 test; 599 geçti / 27 dış koşullu atlandı, 0 issue**. Üç tamamlanmış özet 105.795 / 9.118 / 0.009 sn. Sabit kimlik ve izole Keychain fixture'ı, paket kontrolleri ve geçici CI kimliğinin temizliği geçti. Loglar `/tmp/MSSQLStudio-105-ci-tests.log`, `105-ci-feed.log`, `105-ci-logs.zip`.
+- GitHub'dan indirilen dört asset'in SHA-256 değerleri GitHub digest'leriyle eşleşti; ZIP/PKG hash ve URL'leri public manifest ile aynı. ZIP/PKG metadata/binary/sürüm notu eşliği, exact 0.2.105/build 106, kaynak ReleaseNotes byte eşliği ve GitHub yayın metni doğrulandı. App/helper strict/deep sabit sertifika/DR doğrulamaları ve frozen helper byte eşliği geçti. Helper v1 yeniden derlenmedi/imzalanmadı; v0.2.69 pinleri korunur.
+- CI signed app ve bağımsız indirilen signed app, kendi Foundation/URLSession updater yoluyla `Foundation updater feed verified: 0.2.105` verdi. Public/latest, asset bütünlüğü ve exact feed kanıtı `/tmp/MSSQLStudio-105-public-verification/verification.json` altındadır.
+- Yerel native/SQL grammar/performance kanıtları aşağıdadır. Canlı SQL Server DML/duplicate/concurrency, CUA fare akışı ve gerçek Installer/yeniden açma denenmedi. PK-only Results modunda diğer kolon/rowversion eşzamanlı değişimleri denetlenmez; ayrı nesne veri editörü optimistic kontrolünü korur. Yerel ilk probe'ların shared türetilmiş metadata cache sınırı aşağıdaki kayıtla aynen geçerlidir. Yayın sırasında kurulu kullanıcı uygulaması, gerçek SQL oturumları/verileri, kullanıcı Keychain'i ve `.vscode/` değiştirilmedi.
+
+İndirilen public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.105.pkg`: `965bd076f6d543305f3bf4b07caaefb71c4d6fac8b2902dc17d7aa5378ce9fb1`.
+- `MSSQLStudio-0.2.105.zip`: `df188f931ae097d03ca38c3c3703569c96e5388597e023d365d8180f78a25768`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `236bd65e694c30f43ce309054411a0727dfba8ef5131cc7a160c938df9cfe6b5`.
+
 ## 13 Ekim 2026 — v0.2.105 / build 106 yayın hazırlığı
 
 - Kullanıcının açık yayın isteğiyle BEGIN/END blok kılavuzları, Results görünüm/filtre yenilemesi, hızlı düzenleme hazırlığı, hücre tür doğrulaması ve PK-only/keyless satır politikası birlikte yayıma hazırlanır. Kullanıcının AGENTS.md protokol ekleri korunur. Debug/Release 0.2.105/build 106 ve ReleaseNotes.json eşleştirildi; önceki tag/asset ve frozen helper/kimlik değişmez.
