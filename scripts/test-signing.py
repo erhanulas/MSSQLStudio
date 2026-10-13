@@ -17,7 +17,7 @@ agent, agent_archive = _agent.prepare(Path(os.environ['RUNNER_TEMP'])/('MSSQLStu
 unauthorized = subprocess.run([str(agent)],input=b'{}',capture_output=True,timeout=20)
 assert unauthorized.returncode == 77 and not unauthorized.stdout, 'Helper accepted an unauthorized launcher'
 
-VAULT_SOURCE = (Path(__file__).resolve().parent.parent / 'Sources/SQLServerKit/Persistence.swift').read_text().split('public struct QueryRecord:')[0]
+VAULT_SOURCE = (Path(__file__).resolve().parent.parent / 'Sources/SQLServerKit/Persistence/Persistence.swift').read_text().split('public struct QueryRecord:')[0]
 SOURCE = r'''
 import Foundation
 import Security
@@ -58,7 +58,7 @@ do {
   }
   print(0)
 } catch { if let error=error as? SQLFailure {FileHandle.standardError.write(Data(error.message.utf8))}; print(-1)}
-'''.replace('AGENT_SOURCE',(Path(__file__).resolve().parent.parent/'Sources/SQLServerKit/CredentialAgent.swift').read_text()).replace('VAULT_SOURCE',VAULT_SOURCE).replace('PINNED_REQUIREMENT',requirement())
+'''.replace('AGENT_SOURCE',(Path(__file__).resolve().parent.parent/'Sources/SQLServerKit/Persistence/CredentialAgent.swift').read_text()).replace('VAULT_SOURCE',VAULT_SOURCE).replace('PINNED_REQUIREMENT',requirement())
 
 
 

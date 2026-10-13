@@ -21,6 +21,14 @@ for module in ("MSSQLStudio", "SQLServerKit", "SQLTextCore"):
         for path in (root / "Sources" / module).glob("*.swift"):
             errors.append(f"{path.relative_to(root)}: place source in its feature/domain directory")
 
+# Source moves must also update build, signing and release harness references.
+for folder in (root / "scripts", root / ".github/workflows"):
+    for path in folder.rglob("*"):
+        if path.is_file() and path.suffix in {".py", ".sh", ".yml", ".yaml"}:
+            for reference in re.findall(r"Sources/[A-Za-z0-9_./-]+\.swift", path.read_text()):
+                if not (root / reference).is_file():
+                    errors.append(f"{path.relative_to(root)}: missing source reference {reference}")
+
 if errors:
     sys.exit("\n".join(errors))
 subprocess.run([sys.executable, str(root / "scripts/sync-xcode-sources.py"), "--check"], check=True)

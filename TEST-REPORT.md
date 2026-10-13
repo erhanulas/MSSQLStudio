@@ -1,3 +1,10 @@
+## 13 Ekim 2026 — v0.2.104 / build 105 yayın hazırlığı
+
+- v0.2.103 etiketindeki Actions [38428786223](https://github.com/erhanulas/MSSQLStudio/actions/runs/38428786223), imzalama fixture'ının eski `Persistence.swift` kaynak yolunda FileNotFoundError ile paket üretmeden durdu. Public release oluşturulmadı; v0.2.103 etiketi korunur.
+- İmzalama fixture'ının Persistence/CredentialAgent yolları yeni klasörlere uyarlandı. Mimari denetimi scripts/workflow içindeki sabit Swift kaynak yollarının varlığını da kontrol eder. Frozen helper, pinleri ve imza kimliği değişmedi.
+- Yayın kapsamı önceki hazırlıkla aynıdır; Debug/Release 0.2.104/build 105 ve ilk sürüm notu 0.2.104 olarak güncellendi. Yayımlanmayan 0.2.103 uygulama sürüm geçmişine eklenmedi. Son ürün suite'i 610 test (583 geçti / 27 dış koşullu atlandı); yeni sürümün yerel/CI/paket doğrulaması ayrıca kaydedilecektir.
+- 104 sürüm/resource sonrası 23 ilgili test geçti (19 app + 4 core, 0 skip/issue), Release başarılı (`/tmp/MSSQLStudio-104-release-tests.log`, `104-release-build.log`). İmzalama audit Swift fixture'ı Keychain'e dokunmadan typecheck edildi; mimari denetiminin hatalı kaynak yolunu reddettiği izole negatif fixture ile doğrulandı. Mimari/kaynak eşliği ve whitespace kontrolleri geçti.
+
 ## 13 Ekim 2026 — v0.2.103 / build 104 yayın hazırlığı
 
 - Kullanıcı public yayın istedi. Explorer menü düzeltmeleri, tanımsız değişken rengi, Ayarlar araması, SQL yorum işlemleri, bağlama duyarlı DDL tamamlama, modüler kaynak yapısı ve yenilenen AGENTS.md bu yayının kapsamıdır. Debug/Release ve ReleaseNotes.json 0.2.103/build 104 için güncellendi; daha önceki 0.2.102 tag/asset'leri korunur. README'deki eskimiş sabit sürüm bilgisi güncel yayın/Hakkında kaynağına yönlendirildi.
