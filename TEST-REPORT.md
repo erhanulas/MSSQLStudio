@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.122 / build 123 public yayın doğrulandı
+
+- [Public/latest v0.2.122](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.122), kaynak `250b38c91beeb28658dadcd6216b1332c19b65ef`; [Actions 38571585741](https://github.com/erhanulas/MSSQLStudio/actions/runs/38571585741) bütün adımlarıyla başarılı. Explorer indeks görünürlüğü/sadeleştirme, ilişkili pencere ve öndeki pencereye komut yönlendirmesi, kompakt Ayarlar ve parametrik kapatma uyarısı, profil aktarımı, tip hover ve bağlantı yönetimi yayımlandı.
+- CI gerçek yayın paketleriyle **391 app +341 core +8 text =740 test; 713 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 97.028 /10.875 /0.004 sn (`/tmp/MSSQLStudio-122-ci-tests.log`). Sabit imza kimliği/izole Keychain denetimi ve geçici kimlik temizliği başarılı.
+- Dört public asset indirildi: GitHub digest/SHA-256, ZIP/PKG URL/hash manifest eşliği, exact 0.2.122/build123 metadata/binary/notlar ve kaynak ReleaseNotes byte eşliği doğrulandı. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği geçti; helper yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu `Foundation updater feed verified: 0.2.122` verdi. Kanıt `/tmp/MSSQLStudio-122-public-verification/verification.json` içindedir.
+- CUA native pipe hatası nedeniyle fiziksel fare/⌘W turu yapılamadı. Native komut testindeki OS odak sağlayıcısı enjeksiyonu ve geometry/bitmap başarıları fiziksel klavye kontrolünün yerine sayılmaz. Canlı SQL Server, gerçek kullanıcı import/export Keychain akışı ve Installer denenmedi. Kullanıcı uygulaması/SQL/Keychain/history/favoriler ve `.vscode/` korunur; kurulum veya yeniden başlatma yapılmadı.
+
+Public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.122.pkg`: `889e4d0cc02808b3f5cdd43493dc069b552363d660377a801e0d303ea38c6b7c`.
+- `MSSQLStudio-0.2.122.zip`: `9f356d03ed738e111aa3c635bd039d2d19563e2e6d4bb87e9c380a197c0abd68`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `5e65993f1f2ceb182abaf4502a5fe42b658c40f162ff1fe1f90ea8ea892fe559`.
+
 ## 14 Ekim 2026 — v0.2.122 / build 123 yayın hazırlığı
 
 - Okunamayan tanım sayısı UI’dan kaldırıldı; completeness yalnız expected-unavailable okunabilir kapsamına göre hesaplanır. Bu sebeple tek başına uyarı yoktur; gerçek runtime hatası/kota kaynaklı eksik okunabilir kayıt uyarısı korunur. Kalıcı unavailable sayacı/şifreli içerik temizliği değişmedi. Eksik okunabilir kayıt ve okunamayan-only ayrımı core/native testinde geçti.
