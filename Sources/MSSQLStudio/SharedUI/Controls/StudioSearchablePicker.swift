@@ -4,8 +4,33 @@ import SwiftUI
 /// Retains NSPopUpButton selection/target-action API; searching never changes selection.
 @MainActor final class StudioSearchablePopUpButton:NSPopUpButton {
   private let popup=NSPopover()
+  var leadingSymbol:String? {didSet {needsDisplay=true}}
+  override init(frame:NSRect = .zero,pullsDown:Bool = false) {super.init(frame:frame,pullsDown:pullsDown);font = .systemFont(ofSize:13);isBordered=false}
+  required init?(coder:NSCoder) {super.init(coder:coder)}
+  override func draw(_ dirtyRect:NSRect) {
+    let color=isEnabled ? StudioTheme.text:StudioTheme.muted.withAlphaComponent(0.5)
+    let paragraph=NSMutableParagraphStyle();paragraph.lineBreakMode = .byTruncatingMiddle
+    let left:CGFloat=leadingSymbol == nil ? 8:28
+    if let leadingSymbol,let image=NSImage(systemSymbolName:leadingSymbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(paletteColors:[StudioTheme.accent])) {
+      image.draw(in:NSRect(x:7,y:(bounds.height-16)/2,width:16,height:16))
+    }
+    NSAttributedString(string:titleOfSelectedItem ?? "",attributes:[.font:NSFont.systemFont(ofSize:13),.foregroundColor:color,.paragraphStyle:paragraph])
+      .draw(in:NSRect(x:left,y:(bounds.height-17)/2,width:max(0,bounds.width-left-24),height:17))
+    NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:9,weight:.medium))?
+      .withSymbolConfiguration(.init(paletteColors:[StudioTheme.muted]))?.draw(in:NSRect(x:bounds.width-18,y:(bounds.height-10)/2,width:10,height:10))
+    if window?.firstResponder === self {StudioTheme.accent.withAlphaComponent(0.6).setStroke();let path=NSBezierPath(roundedRect:bounds.insetBy(dx:1,dy:1),xRadius:5,yRadius:5);path.stroke()}
+  }
+
   private var choicesRevision=UUID()
   var contextID:UUID? {didSet {if contextID != oldValue {invalidateChoices()}}}
+  /// Refresh metadata without discarding an in-progress search in the same scope.
+  func updateChoices(_ titles:[String],selected:String?,contextID:UUID?,enabled:Bool) {
+    self.contextID=contextID
+    if itemTitles != titles {invalidateChoices();removeAllItems();addItems(withTitles:titles)}
+    if titleOfSelectedItem != selected {invalidateChoices();selectItem(withTitle:selected ?? "")}
+    if isEnabled && !enabled {invalidateChoices()}
+    isEnabled=enabled;needsDisplay=true
+  }
   func invalidateChoices() {choicesRevision=UUID();popup.close()}
   private(set) var choices:StudioSearchableChoices?
   override func mouseDown(with event:NSEvent) {showChoices()}
@@ -25,19 +50,36 @@ import SwiftUI
       if let action {_ = sendAction(action,to:target)}
     }
     controller.dismiss={ [weak self] in self?.popup.close() }
+    controller.searchActivated={ [weak self] in guard let self,popup.isShown else {return};popup.contentSize.height=min(420,popup.contentSize.height+30) }
     choices=controller;popup.behavior = .transient;popup.animates=false
-    popup.contentViewController=controller;popup.contentSize=NSSize(width:max(260,min(420,bounds.width)),height:300)
+    popup.contentViewController=controller;popup.contentSize=NSSize(width:max(260,min(420,bounds.width)),height:min(420,max(80,CGFloat(values.count)*32+16)))
     popup.show(relativeTo:bounds,of:self,preferredEdge:.maxY)
-    popup.contentViewController?.view.window?.makeFirstResponder(controller.search)
+    popup.contentViewController?.view.window?.makeKey()
+    popup.contentViewController?.view.window?.makeFirstResponder(controller.table)
   }
   override func viewWillMove(toWindow newWindow:NSWindow?) {popup.close();super.viewWillMove(toWindow:newWindow)}
 }
 
+@MainActor private final class StudioChoiceRow:NSTableRowView {
+  override func drawSelection(in dirtyRect:NSRect) {
+    guard isSelected else {return}
+    StudioTheme.selection.setFill()
+    NSBezierPath(roundedRect:bounds.insetBy(dx:4,dy:1),xRadius:6,yRadius:6).fill()
+  }
+  override var isEmphasized:Bool {get {false} set {}}
+}
+@MainActor final class StudioChoiceTable:NSTableView {
+  var handleKey:((NSEvent)->Bool)?
+  override func keyDown(with event:NSEvent) {if handleKey?(event) != true {super.keyDown(with:event)}}
+}
 @MainActor final class StudioSearchableChoices:NSViewController,NSTableViewDataSource,NSTableViewDelegate,NSSearchFieldDelegate {
   let search=NSSearchField()
-  let table=NSTableView()
+  let table=StudioChoiceTable()
   let values:[String]
   private(set) var filtered:[String]
+  private var searchHeight:NSLayoutConstraint?
+  private let emptyLabel=NSTextField(labelWithString:"Eşleşen seçenek yok")
+  var searchActivated:(()->Void)?
   let accept:(String)->Void
   var dismiss:(()->Void)?
   init(values:[String],selected:String?,accept:@escaping (String)->Void) {
@@ -50,36 +92,71 @@ import SwiftUI
   required init?(coder:NSCoder) {fatalError()}
   override func loadView() {
     view=NSView(frame:NSRect(x:0,y:0,width:280,height:300));StudioTheme.surface(view,card:true)
+    view.layer?.backgroundColor=StudioTheme.canvas.cgColor
     search.placeholderString="Ara…";search.delegate=self;search.setAccessibilityLabel("Seçeneklerde ara")
-    search.translatesAutoresizingMaskIntoConstraints=false
-    table.addTableColumn(NSTableColumn(identifier:.init("choice")));table.headerView=nil;table.rowHeight=28
+    search.translatesAutoresizingMaskIntoConstraints=false;search.isHidden=true
+    table.addTableColumn(NSTableColumn(identifier:.init("choice")));table.headerView=nil;table.rowHeight=30
+    table.intercellSpacing=NSSize(width:0,height:2);table.selectionHighlightStyle = .regular
     table.frame=NSRect(x:0,y:0,width:280,height:0);table.autoresizingMask=[.width];table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
     table.dataSource=self;table.delegate=self;table.target=self;table.action=#selector(commit)
-    table.backgroundColor=StudioTheme.panel;table.setAccessibilityLabel("Arama sonuçları")
-    let scroll=NSScrollView();scroll.documentView=table;scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true;scroll.borderType = .noBorder;scroll.translatesAutoresizingMaskIntoConstraints=false
+    table.backgroundColor=StudioTheme.canvas;table.setAccessibilityLabel("Seçenekler")
+    table.handleKey={ [weak self] event in self?.handle(event) ?? false }
+    let scroll=NSScrollView();scroll.documentView=table;scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true;scroll.scrollerStyle = .overlay;scroll.borderType = .noBorder;scroll.translatesAutoresizingMaskIntoConstraints=false
+    scroll.drawsBackground=false
     view.addSubview(search);view.addSubview(scroll)
-    NSLayoutConstraint.activate([search.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:10),search.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-10),search.topAnchor.constraint(equalTo:view.topAnchor,constant:10),scroll.topAnchor.constraint(equalTo:search.bottomAnchor,constant:8),scroll.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:6),scroll.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-6),scroll.bottomAnchor.constraint(equalTo:view.bottomAnchor,constant:-6)])
+    emptyLabel.textColor=StudioTheme.muted;emptyLabel.font = .systemFont(ofSize:12);emptyLabel.isHidden = !values.isEmpty
+    emptyLabel.translatesAutoresizingMaskIntoConstraints=false;view.addSubview(emptyLabel)
+    NSLayoutConstraint.activate([emptyLabel.centerXAnchor.constraint(equalTo:scroll.centerXAnchor),emptyLabel.centerYAnchor.constraint(equalTo:scroll.centerYAnchor)])
+    searchHeight=search.heightAnchor.constraint(equalToConstant:0)
+    NSLayoutConstraint.activate([search.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:10),search.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-10),search.topAnchor.constraint(equalTo:view.topAnchor,constant:6),searchHeight!,scroll.topAnchor.constraint(equalTo:search.bottomAnchor,constant:2),scroll.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:5),scroll.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-5),scroll.bottomAnchor.constraint(equalTo:view.bottomAnchor,constant:-6)])
+  }
+  func beginSearch(_ seed:String) {
+    let first=search.isHidden
+    search.isHidden=false;searchHeight?.constant=26
+    if first {searchActivated?()}
+    view.layoutSubtreeIfNeeded();search.stringValue=seed;filter(seed)
+    view.window?.makeFirstResponder(search)
+    search.currentEditor()?.selectedRange=NSRange(location:(seed as NSString).length,length:0)
+  }
+  func handle(_ event:NSEvent)->Bool {
+    guard event.modifierFlags.intersection([.command,.control,.option]).isEmpty else {return false}
+    switch event.keyCode {
+    case 53:dismiss?();return true
+    case 36,76:commit();return true
+    case 125:move(1);return true
+    case 126:move(-1);return true
+    default:
+      guard let text=event.characters,!text.isEmpty,text.unicodeScalars.allSatisfy({!CharacterSet.controlCharacters.contains($0)}) else {return false}
+      beginSearch(text);return true
+    }
   }
   func filter(_ query:String) {
     filtered=values.filter {query.isEmpty || $0.localizedStandardContains(query)}
+    emptyLabel.isHidden = !filtered.isEmpty
     table.reloadData();table.deselectAll(nil)
     if !filtered.isEmpty {table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)}
   }
   func controlTextDidChange(_ obj:Notification) {filter(search.stringValue)}
+  func move(_ delta:Int) {
+    guard !filtered.isEmpty else {return}
+    let row=max(0,min(filtered.count-1,table.selectedRow+delta))
+    table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false);table.scrollRowToVisible(row)
+  }
   func control(_ control:NSControl,textView:NSTextView,doCommandBy selector:Selector)->Bool {
     if selector == #selector(NSResponder.cancelOperation(_:)) {dismiss?();return true}
     if selector == #selector(NSResponder.insertNewline(_:)) {commit();return true}
-    if selector == #selector(NSResponder.moveDown(_:)) || selector == #selector(NSResponder.moveUp(_:)) {
-      guard !filtered.isEmpty else {return true}
-      let row=max(0,min(filtered.count-1,table.selectedRow+(selector == #selector(NSResponder.moveDown(_:)) ? 1:-1)))
-      table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false);table.scrollRowToVisible(row);return true
-    }
+    if selector == #selector(NSResponder.moveDown(_:)) {move(1);return true}
+    if selector == #selector(NSResponder.moveUp(_:)) {move(-1);return true}
     return false
   }
   @objc func commit() {guard filtered.indices.contains(table.selectedRow) else {return};let value=filtered[table.selectedRow];dismiss?();accept(value)}
   func numberOfRows(in tableView:NSTableView)->Int {filtered.count}
+  func tableView(_ tableView:NSTableView,rowViewForRow row:Int)->NSTableRowView? {StudioChoiceRow()}
   func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int)->NSView? {
-    let cell=NSTextField(labelWithString:filtered[row]);cell.font = .systemFont(ofSize:12);cell.lineBreakMode = .byTruncatingMiddle;return cell
+    let cell=NSTextField(labelWithString:filtered[row]);cell.font = .systemFont(ofSize:14);cell.textColor=StudioTheme.text;cell.lineBreakMode = .byTruncatingMiddle
+    let host=NSView();host.addSubview(cell);cell.translatesAutoresizingMaskIntoConstraints=false
+    NSLayoutConstraint.activate([cell.leadingAnchor.constraint(equalTo:host.leadingAnchor,constant:12),cell.trailingAnchor.constraint(equalTo:host.trailingAnchor,constant:-12),cell.centerYAnchor.constraint(equalTo:host.centerYAnchor)])
+    return host
   }
 }
 
@@ -102,10 +179,8 @@ struct StudioSearchablePicker:NSViewRepresentable {
     context.coordinator.parent=self
     let items=values.contains(selection) ? values:[selection]+values
     let labels=items.map {$0.isEmpty ? emptyTitle:$0}
-    if button.itemTitles != labels {button.invalidateChoices();button.removeAllItems();button.addItems(withTitles:labels)}
-    if let index=items.firstIndex(of:selection),button.indexOfSelectedItem != index {button.invalidateChoices()}
+    button.updateChoices(labels,selected:selection.isEmpty ? emptyTitle:selection,contextID:nil,enabled:enabled)
     for (index,value) in items.enumerated() {button.item(at:index)?.representedObject=value}
-    if let index=items.firstIndex(of:selection) {button.selectItem(at:index)}
-    button.isEnabled=enabled;button.setAccessibilityLabel(title)
+    button.setAccessibilityLabel(title)
   }
 }

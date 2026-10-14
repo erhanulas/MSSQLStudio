@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.129",
+    "date": "2026-10-14",
+    "title": "Kompakt editör araçları ve yazınca aranan seçiciler",
+    "changes": [
+      "Sorgu sekmeleri daha ince şerit, hafif aktif zemin ve sakin kenarlıkla yenilendi. Veritabanı seçimi editör satırının soluna, Çalıştır/İptal/Plan/Formatla ise hemen yanına kompakt ikonlar olarak taşındı.",
+      "Ana ve ayrılmış sorgu pencereleri aynı belgeye ait araç satırını kullanır. Ayrılmış pencerede veritabanı seçimi de bulunur; sorgu oturumu ve metin ayırma/geri yerleştirme sırasında korunur.",
+      "Ortak aranabilir seçiciler önce sade liste olarak açılır; yazmaya başlayınca arama alanı belirir ve ilk karakter kayıpsız aktarılır. Yuvarlatılmış hafif seçim, daha okunur liste metni ve sade seçici görünümü uygulama genelinde kullanılır.",
+      "Aynı kapsam ve seçeneklerle gelen durum yenilemeleri açık aramayı kapatmaz. Kapsam veya seçenek değiştiğinde eski seçim geçersiz kılınır; aramak veritabanını değiştirmez, Escape veya boş sonuç seçim uygulamaz."
+    ]
+  },
+  {
     "version": "0.2.128",
     "date": "2026-10-14",
     "title": "Sade menüler ve kategorili kısayollar",

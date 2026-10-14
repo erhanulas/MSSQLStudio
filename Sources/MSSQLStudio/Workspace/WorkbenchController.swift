@@ -131,8 +131,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     tabs.reorder = { [weak self] id,index in self?.moveQueryTab(id,to: index) }
     tabs.orientation = .horizontal
     tabs.alignment = .centerY
-    tabs.spacing = 4
-    tabs.edgeInsets = NSEdgeInsets(top: 4, left: 6, bottom: 4, right: 6)
+    tabs.spacing = 3
+    tabs.edgeInsets = NSEdgeInsets(top: 3, left: 6, bottom: 3, right: 6)
     let tabScroll = NSScrollView()
     tabScroll.documentView = tabs
     tabScroll.hasHorizontalScroller = true
@@ -142,7 +142,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     NSLayoutConstraint.activate([
       tabs.leadingAnchor.constraint(equalTo: tabScroll.contentView.leadingAnchor),
       tabs.topAnchor.constraint(equalTo: tabScroll.contentView.topAnchor),
-      tabs.heightAnchor.constraint(equalToConstant: 36),
+      tabs.heightAnchor.constraint(equalToConstant: 34),
     ])
     database.target = self
     database.action = #selector(changeDatabase)
@@ -151,20 +151,19 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     context.textColor = .secondaryLabelColor
     context.lineBreakMode = .byTruncatingMiddle
     context.setContentCompressionResistancePriority(.init(200),for:.horizontal)
-    let databaseLabel = NSTextField(labelWithString: "Veritabanı:")
-    databaseLabel.font = .systemFont(ofSize: 11)
     explorerToggle.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: "Object Explorer’ı Göster / Gizle")
     explorerToggle.target = self; explorerToggle.action = #selector(toggleExplorer)
     explorerToggle.bezelStyle = .inline; explorerToggle.isBordered = false
     explorerToggle.toolTip = "Object Explorer’ı Göster / Gizle"
     queryToolbarHost.setAccessibilityIdentifier("queryToolbarHost")
     queryToolbarHost.isHidden=true
-    let row = NSStackView(views: [explorerToggle, databaseLabel, database, context, queryToolbarHost])
+    let row = NSStackView(views: [database, queryToolbarHost, context, explorerToggle])
     row.setAccessibilityIdentifier("queryContextToolbar")
     StudioTheme.surface(row)
     row.orientation = .horizontal
     row.spacing = 8
     row.edgeInsets = NSEdgeInsets(top: 1, left: 8, bottom: 1, right: 8)
+    database.leadingSymbol="square.on.square"
     database.controlSize = .small
     database.widthAnchor.constraint(equalToConstant: 170).isActive = true
     status.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
@@ -200,12 +199,12 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       stack.trailingAnchor.constraint(equalTo: center.view.trailingAnchor),
       stack.topAnchor.constraint(equalTo: center.view.topAnchor),
       stack.bottomAnchor.constraint(equalTo: center.view.bottomAnchor),
-      tabScroll.heightAnchor.constraint(equalToConstant: 40),
+      tabScroll.heightAnchor.constraint(equalToConstant: 36),
       tabScroll.widthAnchor.constraint(equalTo: stack.widthAnchor),
       row.widthAnchor.constraint(equalTo: stack.widthAnchor),
       content.widthAnchor.constraint(equalTo: stack.widthAnchor),
       statusRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
-      row.heightAnchor.constraint(equalToConstant: 30),
+      row.heightAnchor.constraint(equalToConstant: 34),
       queryToolbarHost.heightAnchor.constraint(equalToConstant:28),
       statusRow.heightAnchor.constraint(equalToConstant: 26),
     ])
@@ -368,7 +367,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
           .foregroundColor: state.active === doc ? StudioTheme.text : StudioTheme.muted,
         ])
       close.contentTintColor = StudioTheme.muted
-      let icon = NSImageView(image: NSImage(systemSymbolName: doc.pinned ? "pin.fill" : "doc.text", accessibilityDescription: doc.pinned ? "Sabitlenmiş sekme" : nil)!)
+      let icon = NSImageView(image: NSImage(systemSymbolName: doc.pinned ? "pin.fill" : "externaldrive", accessibilityDescription: doc.pinned ? "Sabitlenmiş sekme" : nil)!)
       icon.contentTintColor = sourceColor(for:doc.server) ?? StudioTheme.accent
       icon.widthAnchor.constraint(equalToConstant: 14).isActive = true
       icon.heightAnchor.constraint(equalToConstant: 14).isActive = true
@@ -382,7 +381,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       button.toolTip =
         "\(doc.server.profile.appearance?.badge ?? "") · \(doc.server.profile.name) · \(doc.database)"
       group.spacing = 6
-      group.edgeInsets = NSEdgeInsets(top: 4, left: 10, bottom: 4, right: 8)
+      group.edgeInsets = NSEdgeInsets(top: 2, left: 8, bottom: 2, right: 4)
       tabs.addArrangedSubview(group)
     }
     let plus = symbolButton("plus", tip: "Yeni Sorgu (\(GridShortcuts.binding(.newQuery).label))", action: #selector(newQuery))
@@ -467,13 +466,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     executionDate.stringValue="Son çalıştırma: " + (doc?.lastExecutionDate?.formatted(date:.numeric,time:.standard) ?? "—")
     for controller in controllers.values { controller.updateConnectionAppearance() }
     for owner in detached.values { owner.updateConnectionAppearance() }
-    database.contextID=state.active?.id
-    database.invalidateChoices();database.removeAllItems()
     if let doc {
       let names = doc.server.databases.map(\.name)
-      database.addItems(withTitles: names.contains(doc.database) ? names : [doc.database] + names)
-      database.selectItem(withTitle: doc.database)
-      database.isEnabled = !doc.busy && doc.offlinePreview == nil
+      database.updateChoices(names.contains(doc.database) ? names:[doc.database]+names,selected:doc.database,contextID:doc.id,enabled:!doc.busy && doc.offlinePreview == nil)
       context.stringValue = "\(doc.server.profile.name) · \(doc.server.profile.host),\(doc.server.profile.port)  •  \(doc.server.profile.login)"
       context.toolTip=context.stringValue+" · "+(doc.server.profile.appearance?.badge ?? "")
       context.textColor = .secondaryLabelColor
@@ -495,7 +490,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       status.stringValue =
         "\(displayPhase)   |   \(doc.database)   |   \(rows)   |   \(String(format:"%.3f",doc.elapsed)) s\(doc.partial ? "   |   PARTIAL" : "")\(doc.transactionCount > 0 ? "   |   TRAN: \(doc.transactionCount)" : "")"
     } else {
-      database.isEnabled = false
+      database.updateChoices([],selected:nil,contextID:nil,enabled:false)
       context.stringValue = ""
       status.stringValue = (connectionSheetBusy ? "Bağlantı yönetimi işlemi sürüyor…" : nil) ?? state.connectionActivities.values.sorted().first ?? state.connectionErrors.values.sorted().first ?? selectedServer?.startupError ?? (
         state.servers.isEmpty ? "Connect to SQL Server" : "Yeni bir sorgu açın veya nesne seçin")
@@ -859,8 +854,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
     [
-      .init("query"), .init("save"), .init("explorerBoundary"), .init("run"), .init("cancel"),
-      .init("plan"), .space, .init("format"), .flexibleSpace, .init("activity"), .init("favorites"), .init("history"),
+      .init("query"), .init("save"), .init("explorerBoundary"), .flexibleSpace, .init("activity"), .init("favorites"), .init("history"),
       .init("ai"),
     ]
   }

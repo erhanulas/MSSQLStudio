@@ -52,6 +52,7 @@ import SwiftUI
   private var savedEditorFraction: CGFloat = 0.60
   private let messages = StudioTextView()
   private let connectionBadge = NSTextField(labelWithString: "")
+  private lazy var queryActions=QueryEditorActions(document:document,focus:{[weak self] in self?.focusEditor()},format:{[weak self] in self?.format()})
   private var editorHeader: NSStackView?
   private let editorHeaderSlot=NSView()
   private var editorHeaderHeight:NSLayoutConstraint?
@@ -160,8 +161,8 @@ import SwiftUI
     favoriteButton.tracksActiveState=true;editDataButton.tracksActiveState=true;autoRefreshButton.tracksActiveState=true
     favoriteButton.target=self;favoriteButton.action=#selector(addQueryFavorite)
     favoriteButton.setAccessibilityIdentifier("queryFavorite")
-    let header = NSStackView(views: [connectionBadge, NSView(), favoriteButton, compareModuleButton, submitModuleButton, actual, position, toggle])
-    header.spacing = 10
+    let header = NSStackView(views: [queryActions, favoriteButton, compareModuleButton, submitModuleButton, actual, NSView(), connectionBadge, position, toggle])
+    header.spacing = 6
     header.wantsLayer = true
     editorHeader = header
     header.edgeInsets = NSEdgeInsets(top: 1, left: 8, bottom: 1, right: 8)
@@ -744,6 +745,7 @@ import SwiftUI
     }
     updateConnectionAppearance()
     syncDataActions()
+    queryActions.refresh()
     actual.state = document.actualPlan ? .on : .off
     actual.isEnabled = !document.busy
     syncFavoriteButton()

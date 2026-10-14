@@ -82,6 +82,7 @@ import SwiftUI
   enum Tone { case neutral, accent, success, warning, danger }
   var tone: Tone { didSet { refreshStyle() } }
   var prominent: Bool { didSet { refreshStyle() } }
+  var flat=false {didSet {refreshStyle()}}
   var tracksActiveState = false
   private var hovered = false
   private var pressed = false
@@ -121,7 +122,7 @@ import SwiftUI
     let active = prominent || tracksActiveState && state == .on
     contentTintColor = isEnabled ? prominent ? (StudioTheme.dark ? StudioTheme.canvas : .white) : color : StudioTheme.muted.withAlphaComponent(0.4)
     layer?.backgroundColor = (isEnabled
-      ? color.withAlphaComponent(prominent ? pressed ? 0.80 : hovered ? 0.92 : 1 : pressed ? 0.20 : hovered ? 0.12 : active ? 0.12 : 0.035)
+      ? color.withAlphaComponent(prominent ? pressed ? 0.80 : hovered ? 0.92 : 1 : pressed ? 0.20 : hovered ? 0.12 : active ? 0.12 : flat ? 0 : 0.035)
       : StudioTheme.muted.withAlphaComponent(0.015)).cgColor
     layer?.borderColor = (isEnabled ? color.withAlphaComponent(active || hovered ? 0.28 : 0) : NSColor.clear).cgColor
   }

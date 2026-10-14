@@ -122,7 +122,7 @@ import Testing
     state.changed?();#expect(window.firstResponder === responder)
     host.detachQuery()
     #expect(query.view.window !== window)
-    #expect(descendants(query.view).contains {$0.accessibilityIdentifier() == "queryFavorite"})
+    #expect(descendants(try #require(query.view.window?.contentView)).contains {$0.accessibilityIdentifier() == "queryFavorite"})
     host.redockQueries();host.view.layoutSubtreeIfNeeded()
     #expect(query.view.window === window)
     let toolbar=try #require(descendants(host.view).first {$0.accessibilityIdentifier() == "queryToolbarHost"})

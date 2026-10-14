@@ -61,7 +61,6 @@ import UniformTypeIdentifiers
 }
 @MainActor final class QueryTabSurface: NSStackView {
   weak var primaryButton: DocumentButton?
-  private let activeIndicator = CALayer()
   var sourceColor:NSColor?
   private var hoverArea: NSTrackingArea?
   private var hovered = false
@@ -69,13 +68,10 @@ import UniformTypeIdentifiers
   func configure(active: Bool) {
     isActiveTab = active
     wantsLayer = true
-    layer?.cornerRadius = 8
+    layer?.cornerRadius = 6
     layer?.masksToBounds = true
-    layer?.borderWidth = 0
-    if activeIndicator.superlayer == nil { layer?.addSublayer(activeIndicator) }
-    activeIndicator.backgroundColor = (sourceColor ?? StudioTheme.accent).withAlphaComponent(0.9).cgColor
-    activeIndicator.cornerRadius = 1
-    activeIndicator.isHidden = !active
+    layer?.borderWidth = active ? 1:0
+    layer?.borderColor = StudioTheme.accent.withAlphaComponent(0.42).cgColor
     setAccessibilitySelected(active)
     refreshSurface()
     needsLayout = true
@@ -94,12 +90,6 @@ import UniformTypeIdentifiers
   }
   override func mouseEntered(with event: NSEvent) { hovered = true; refreshSurface() }
   override func mouseExited(with event: NSEvent) { hovered = false; refreshSurface() }
-  override func layout() {
-    super.layout()
-    CATransaction.begin(); CATransaction.setDisableActions(true)
-    activeIndicator.frame = NSRect(x: 10, y: isFlipped ? max(0, bounds.height-2) : 0, width: max(0, bounds.width-20), height: 2)
-    CATransaction.commit()
-  }
   override func hitTest(_ point: NSPoint) -> NSView? {
     guard let hit = super.hitTest(point) else { return nil }
     if hit is QueryTabCloseButton { return hit }

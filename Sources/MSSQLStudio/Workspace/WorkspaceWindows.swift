@@ -3,6 +3,8 @@ import AppKit
 @MainActor final class DetachedQueryWindow: NSWindowController, NSWindowDelegate {
   var redock: (() -> Void)?
   let query: QueryController
+  private let database=StudioSearchablePopUpButton()
+  private let queryToolbarHost=NSView()
   private let label = NSTextField(labelWithString: "")
   private let status=NSTextField(labelWithString:"")
   private let selection=NSTextField(labelWithString:"")
@@ -22,16 +24,19 @@ import AppKit
     host.view = NSView()
     host.addChild(query)
     StudioTheme.surface(host.view, chrome: true)
-    let run = StudioToolbarButton(symbol: "play.fill", label: "Çalıştır", tone: .success, title: "Çalıştır", width: 88, prominent: true)
-    let cancel = StudioToolbarButton(symbol: "stop.fill", label: "İptal", tone: .warning, title: "İptal", width: 66)
-    let dock = StudioToolbarButton(symbol: "arrow.uturn.backward", label: "Çalışma Alanına Dön", tone: .neutral, title: "Çalışma Alanına Dön", width: 170)
-    run.target = self; run.action = #selector(execute)
-    cancel.target = self; cancel.action = #selector(stop)
+    let dock = StudioToolbarButton(symbol: "arrow.uturn.backward", label: "Çalışma Alanına Dön", tone: .neutral, width: 28)
     dock.target = self; dock.action = #selector(DetachedQueryWindow.dock)
     label.font = .systemFont(ofSize: 11, weight: .medium)
     label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     updateConnectionAppearance()
-    let header = NSStackView(views: [label, NSView(), run, cancel, dock])
+    database.leadingSymbol="square.on.square"
+    database.target=self;database.action=#selector(changeDatabase)
+    database.setAccessibilityIdentifier("databaseSelector")
+    database.widthAnchor.constraint(equalToConstant:170).isActive=true
+    queryToolbarHost.widthAnchor.constraint(greaterThanOrEqualToConstant:400).isActive=true
+    let header = NSStackView(views: [database, queryToolbarHost, dock])
+    header.spacing=6
+    query.hostEditorToolbar(in:queryToolbarHost)
     StudioTheme.surface(header)
     header.edgeInsets = NSEdgeInsets(top: 1, left: 8, bottom: 1, right: 8)
     let footer=NSStackView(views:[status,NSView(),selection])
@@ -77,6 +82,9 @@ import AppKit
   }
   func updateStatus() {
     let doc=query.document
+    let names=doc.server.databases.map(\.name)
+    let values=names.contains(doc.database) ? names:[doc.database]+names
+    database.updateChoices(values,selected:doc.database,contextID:doc.id,enabled:!doc.busy && doc.offlinePreview == nil)
     let phase:String
     switch doc.state {
     case .ready:phase=doc.offlinePreview != nil ? "Çevrimdışı tanım · Salt okunur":"Ready"
@@ -90,8 +98,7 @@ import AppKit
     selection.toolTip=query.selectionStatus?.help
     selection.isHidden=query.selectionStatus==nil
   }
-  @objc private func execute() {guard query.document.canExecute else {return};query.focusEditor();query.document.execute()}
-  @objc private func stop() { query.document.cancel() }
+  @objc private func changeDatabase() {if let value=database.titleOfSelectedItem {query.document.useDatabase(value)}}
   @objc private func dock() { close() }
   func windowWillClose(_ notification: Notification) {
     redock?()

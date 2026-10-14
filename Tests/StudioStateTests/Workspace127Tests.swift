@@ -114,7 +114,7 @@ import Testing
     let ids=host.toolbarDefaultItemIdentifiers(toolbar).map(\.rawValue)
     #expect(!ids.contains("connect"))
     let boundary=try #require(ids.firstIndex(of:"explorerBoundary"))
-    #expect(ids[boundary+1]=="run" && ids[boundary+2]=="cancel")
+    #expect(boundary>=0 && !ids.contains("run") && !ids.contains("cancel") && !ids.contains("plan") && !ids.contains("format"))
     #expect(host.toolbar(toolbar,itemForItemIdentifier:.init("explorerBoundary"),willBeInsertedIntoToolbar:true) is NSTrackingSeparatorToolbarItem)
     host.showConnect()
     let panel=try #require(host.sheet),root=try #require(panel.contentView)
