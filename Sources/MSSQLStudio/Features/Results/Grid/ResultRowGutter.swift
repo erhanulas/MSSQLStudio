@@ -11,22 +11,38 @@ import SwiftUI
     return max(36,ceil(max(textWidth,newWidth))+12)
   }
   weak var table: CopyTable?
+  let selectAllButton=StudioFullAreaButton(title:"",target:nil,action:nil)
   var label: ((Int) -> (String, NSColor))?
   override var isFlipped: Bool { true }
   override func acceptsFirstMouse(for event:NSEvent?) -> Bool { true }
   func connect(_ table:CopyTable) {
     self.table=table; table.rowGutter=self
+    selectAllButton.target=table;selectAllButton.action=#selector(CopyTable.selectAllCells(_:))
+    selectAllButton.isBordered=false;selectAllButton.bezelStyle = .inline
+    selectAllButton.focusRingType = .none
+    selectAllButton.setAccessibilityLabel("Tüm tabloyu seç")
+    selectAllButton.setAccessibilityIdentifier("resultsSelectAll")
+    selectAllButton.toolTip="Geçerli tablonun/sayfanın tüm görünür hücrelerini seç"
+    addSubview(selectAllButton)
     clipsToBounds=true
     setAccessibilityIdentifier("resultsRowNumbers")
     setAccessibilityElement(true); setAccessibilityRole(.group)
     setAccessibilityLabel("Sabit satır numaraları")
-    toolTip="Satır numarası · Tıklayarak satırı, Shift ile aralığı seçin."
+    toolTip="# tüm tabloyu seçer · Satır numarası satırı, Shift aralığı seçer."
     for (name,object) in [(NSView.boundsDidChangeNotification,table.enclosingScrollView?.contentView as Any?), (NSTableView.selectionDidChangeNotification,table), (StudioTheme.changed,nil)] {
       NotificationCenter.default.addObserver(self,selector:#selector(redraw),name:name,object:object)
     }
     table.enclosingScrollView?.contentView.postsBoundsChangedNotifications=true
   }
-  @objc private func redraw() { needsDisplay=true }
+  @objc private func redraw() { needsDisplay=true;needsLayout=true }
+  override func layout() {
+    super.layout()
+    if let header=table?.headerView {
+      let rect=convert(header.bounds,from:header)
+      selectAllButton.frame=NSRect(x:0,y:rect.minY,width:bounds.width,height:rect.height)
+      selectAllButton.isHidden=false
+    } else {selectAllButton.isHidden=true}
+  }
   var viewport:NSRect {
     guard let clip=table?.enclosingScrollView?.contentView else { return .zero }
     let rect=convert(clip.bounds,from:clip)
@@ -46,7 +62,8 @@ import SwiftUI
     return range.location..<min(table.numberOfRows,NSMaxRange(range))
   }
   private func rowAccessibility() -> [Any] {
-    visibleRows.compactMap { row -> NSAccessibilityElement? in
+    let elements:[Any]=selectAllButton.isHidden ? []:[selectAllButton]
+    return elements + visibleRows.compactMap { row -> NSAccessibilityElement? in
       let rect=NSIntersectionRect(rowRect(row),viewport)
       guard !rect.isEmpty else { return nil }
       let screen=window?.convertToScreen(convert(rect,to:nil)) ?? .zero
@@ -89,6 +106,10 @@ import SwiftUI
     return table.row(at:NSPoint(x:table.enclosingScrollView?.documentVisibleRect.midX ?? 1,y:table.convert(event.locationInWindow,from:nil).y))
   }
   override func mouseDown(with event:NSEvent) {
+    if let table,let header=table.headerView {
+      let rect=convert(header.bounds,from:header),point=convert(event.locationInWindow,from:nil)
+      if NSRect(x:0,y:rect.minY,width:bounds.width,height:rect.height).contains(point) {table.selectAllCells(nil);return}
+    }
     table?.selectGutterRow(row(at:event),extending:event.modifierFlags.contains(.shift))
   }
   override func mouseDragged(with event:NSEvent) {

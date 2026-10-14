@@ -45,6 +45,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   let database = NSPopUpButton()
   let executionDate = NSTextField(labelWithString:"Son çalıştırma: —")
   let statusStrip = NSStackView()
+  let resultSelectionStatus=NSTextField(labelWithString:"")
   let status = NSTextField(labelWithString: "Bağlantı bekleniyor")
   let context = NSTextField(labelWithString: "")
   private let queryToolbarHost=NSView()
@@ -173,9 +174,16 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     let statusRow = statusStrip
     executionDate.font = .monospacedSystemFont(ofSize:10,weight:.regular)
     executionDate.textColor=StudioTheme.muted
+    executionDate.lineBreakMode = .byTruncatingTail
     executionDate.setAccessibilityIdentifier("queryLastExecutionDate")
     let divider=NSBox();divider.boxType = .separator
-    statusRow.setViews([status,NSView(),divider,executionDate],in:.center)
+    resultSelectionStatus.font = .monospacedDigitSystemFont(ofSize:10,weight:.medium)
+    resultSelectionStatus.isSelectable=true;resultSelectionStatus.lineBreakMode = .byTruncatingMiddle
+    resultSelectionStatus.setAccessibilityIdentifier("resultSelectionSummaryValues")
+    resultSelectionStatus.setContentCompressionResistancePriority(.init(751),for:.horizontal)
+    resultSelectionStatus.widthAnchor.constraint(lessThanOrEqualToConstant:340).isActive=true
+    executionDate.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+    statusRow.setViews([status,NSView(),resultSelectionStatus,divider,executionDate],in:.center)
     divider.widthAnchor.constraint(equalToConstant:1).isActive=true
     divider.heightAnchor.constraint(equalToConstant:14).isActive=true
     statusRow.spacing=10
@@ -409,6 +417,12 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
           self?.renderTabs()
           self?.state.scheduleSnapshot()
         }
+        controller.selectionStatusChanged = { [weak self,weak controller] in
+          guard let self,let controller else {return}
+          let id=controller.document.id
+          if let owner=detached[id] {owner.updateStatus()}
+          else if state.active?.id==id {updateSelectionStatus()}
+        }
         controllers[doc.id] = controller
         addChild(controller)
       }
@@ -439,9 +453,16 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       }
     }
   }
+  private func updateSelectionStatus() {
+    let value=state.active.flatMap {detached[$0.id]==nil ? controllers[$0.id]?.selectionStatus:nil}
+    resultSelectionStatus.stringValue=value?.text ?? ""
+    resultSelectionStatus.toolTip=value?.help
+    resultSelectionStatus.isHidden=value==nil
+  }
   func updateControls() {
     guard isViewLoaded else { return }
     updateIndexStatus()
+    updateSelectionStatus()
     let doc = state.active
     executionDate.stringValue="Son çalıştırma: " + (doc?.lastExecutionDate?.formatted(date:.numeric,time:.standard) ?? "—")
     for controller in controllers.values { controller.updateConnectionAppearance() }
@@ -754,6 +775,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     state.active = state.documents.first { $0 !== doc && detached[$0.id] == nil }
     renderTabs()
     renderActive()
+    updateControls()
     owner.showWindow(nil)
   }
   @objc func redockQueries() { for owner in Array(detached.values) { owner.close() } }
@@ -786,7 +808,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       }
     }
     window.associate(with:view.window)
+    window.contentView?.layoutSubtreeIfNeeded()
     owner.showWindow(nil);window.makeKeyAndOrderFront(nil)
+    window.contentView?.layoutSubtreeIfNeeded()
     return window
   }
   func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {

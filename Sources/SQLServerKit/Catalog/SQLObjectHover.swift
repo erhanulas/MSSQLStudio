@@ -6,20 +6,26 @@ public enum SQLObjectHover {
     public let title:String
     public let detail:String
   }
-  static func typeExpression(_ value:String,_ type:String)->String {
-    "\(type).name + CASE WHEN \(type).name IN ('nvarchar','nchar') THEN '('+CASE WHEN \(value).max_length=-1 THEN 'max' ELSE CONVERT(varchar(10),\(value).max_length/2) END+')' WHEN \(type).name IN ('varchar','char','varbinary','binary') THEN '('+CASE WHEN \(value).max_length=-1 THEN 'max' ELSE CONVERT(varchar(10),\(value).max_length) END+')' WHEN \(type).name IN ('decimal','numeric') THEN '('+CONVERT(varchar(10),\(value).precision)+','+CONVERT(varchar(10),\(value).scale)+')' WHEN \(type).name IN ('time','datetime2','datetimeoffset') THEN '('+CONVERT(varchar(10),\(value).scale)+')' ELSE '' END"
+  static func typeExpression(_ value:String,_ type:String,baseType:String?=nil)->String {
+    let name=baseType.map {"COALESCE(\($0).name,\(type).name)"} ?? "\(type).name"
+    let formatted="\(name) + CASE WHEN \(name) IN ('nvarchar','nchar') THEN '('+CASE WHEN \(value).max_length=-1 THEN 'max' ELSE CONVERT(varchar(10),\(value).max_length/2) END+')' WHEN \(name) IN ('varchar','char','varbinary','binary') THEN '('+CASE WHEN \(value).max_length=-1 THEN 'max' ELSE CONVERT(varchar(10),\(value).max_length) END+')' WHEN \(name) IN ('decimal','numeric') THEN '('+CONVERT(varchar(10),\(value).precision)+','+CONVERT(varchar(10),\(value).scale)+')' WHEN \(name) IN ('time','datetime2','datetimeoffset') THEN '('+CONVERT(varchar(10),\(value).scale)+')' ELSE '' END"
+    guard let baseType else {return formatted}
+    return "CASE WHEN \(type).user_type_id<>\(type).system_type_id AND \(baseType).name IS NOT NULL AND \(type).name<>\(baseType).name THEN \(type).name+' ('+(\(formatted))+')' ELSE \(formatted) END"
+  }
+  static func baseTypeJoin(_ value:String,_ base:String)->String {
+    "LEFT JOIN sys.types \(base) ON \(base).user_type_id=\(value).system_type_id AND \(base).user_type_id=\(base).system_type_id"
   }
   public static func query(targets:[[String]],column:String?=nil)throws->String {
     guard !targets.isEmpty,targets.count<=8,targets.allSatisfy({(1...2).contains($0.count) && $0.allSatisfy {!$0.isEmpty && $0.count<=128}}),column.map({!$0.isEmpty && $0.count<=128}) ?? true else {throw SQLFailure("Nesne hover kapsamı geçersiz.")}
     let ids=targets.map {"OBJECT_ID("+SQL.literal($0.map(SQL.identifier).joined(separator:"."))+")"}.joined(separator:",")
     let filter=column.map {" AND c.name="+SQL.literal($0)} ?? ""
     return """
-    SELECT TOP(17) o.object_id,SCHEMA_NAME(o.schema_id),o.name,o.type_desc,c.name,\(typeExpression("c","t"))+CASE WHEN c.is_nullable=1 THEN ' NULL' ELSE ' NOT NULL' END
-    FROM sys.objects o JOIN sys.columns c ON c.object_id=o.object_id JOIN sys.types t ON t.user_type_id=c.user_type_id
-    WHERE o.object_id IN (\(ids)) AND o.type IN ('U','V','IF','TF','FT')\(filter)
+    SELECT TOP(17) o.object_id,SCHEMA_NAME(o.schema_id),o.name,o.type_desc,c.name,\(typeExpression("c","t",baseType:"b"))+CASE WHEN c.is_nullable=1 THEN ' NULL' ELSE ' NOT NULL' END
+    FROM sys.objects o JOIN sys.columns c ON c.object_id=o.object_id JOIN sys.types t ON t.user_type_id=c.user_type_id \(baseTypeJoin("c","b"))
+    WHERE o.object_id IN (\(ids)) AND o.type IN (\(column == nil ? "'IF','TF','FT'":"'U','V','IF','TF','FT'"))\(filter)
     UNION ALL
-    SELECT o.object_id,SCHEMA_NAME(o.schema_id),o.name,o.type_desc,N'Return Value',\(typeExpression("p","t"))
-    FROM sys.objects o JOIN sys.parameters p ON p.object_id=o.object_id AND p.parameter_id=0 JOIN sys.types t ON t.user_type_id=p.user_type_id
+    SELECT o.object_id,SCHEMA_NAME(o.schema_id),o.name,o.type_desc,N'Return Value',\(typeExpression("p","t",baseType:"b"))
+    FROM sys.objects o JOIN sys.parameters p ON p.object_id=o.object_id AND p.parameter_id=0 JOIN sys.types t ON t.user_type_id=p.user_type_id \(baseTypeJoin("p","b"))
     WHERE o.object_id IN (\(ids)) AND o.type IN ('FN','FS')\(column == nil ? "":" AND 1=0")
     ORDER BY 1,5;
     """
@@ -36,7 +42,8 @@ public enum SQLObjectHover {
     if let column,let row=rows.first(where:{$0[4]?.caseInsensitiveCompare(column) == .orderedSame}),let type=row[5] {
       return Info(title:qualified+"."+(row[4] ?? column),detail:type)
     }
-    let header=kind.contains("TABLE_VALUED_FUNCTION") ? "Table Function → TABLE":kind=="VIEW" ? "View":"Tablo"
+    guard kind.contains("TABLE_VALUED_FUNCTION") else {return nil}
+    let header="Table Function → TABLE"
     let lines=rows.prefix(8).map {($0[4] ?? "")+" · "+($0[5] ?? "")}
     return Info(title:qualified,detail:([header]+lines+(rows.count>8 ? ["…"]:[])).joined(separator:"\n"))
   }

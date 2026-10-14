@@ -4,6 +4,8 @@ import AppKit
   var redock: (() -> Void)?
   let query: QueryController
   private let label = NSTextField(labelWithString: "")
+  private let status=NSTextField(labelWithString:"")
+  private let selection=NSTextField(labelWithString:"")
   init(query: QueryController) {
     self.query = query
     let window = StudioAssociatedWindow(
@@ -32,7 +34,17 @@ import AppKit
     let header = NSStackView(views: [label, NSView(), run, cancel, dock])
     StudioTheme.surface(header)
     header.edgeInsets = NSEdgeInsets(top: 1, left: 8, bottom: 1, right: 8)
-    let stack = NSStackView(views: [header, query.view])
+    let footer=NSStackView(views:[status,NSView(),selection])
+    StudioTheme.statusSurface(footer);footer.spacing=10
+    footer.edgeInsets=NSEdgeInsets(top:1,left:8,bottom:1,right:8)
+    for field in [status,selection] {
+      field.font = .monospacedDigitSystemFont(ofSize:10,weight:.regular)
+      field.lineBreakMode = .byTruncatingMiddle
+      field.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+    }
+    selection.isSelectable=true;selection.setAccessibilityIdentifier("resultSelectionSummaryValues")
+    selection.widthAnchor.constraint(lessThanOrEqualToConstant:340).isActive=true
+    let stack = NSStackView(views: [header, query.view,footer])
     stack.orientation = .vertical
     stack.spacing = 0
     host.view.addSubview(stack)
@@ -44,6 +56,8 @@ import AppKit
       stack.topAnchor.constraint(equalTo: host.view.topAnchor),
       stack.bottomAnchor.constraint(equalTo: host.view.bottomAnchor),
       header.heightAnchor.constraint(equalToConstant: 36),
+      footer.heightAnchor.constraint(equalToConstant:26),
+      footer.widthAnchor.constraint(equalTo:stack.widthAnchor),
       header.widthAnchor.constraint(equalTo: stack.widthAnchor),
       query.view.widthAnchor.constraint(equalTo: stack.widthAnchor),
     ])
@@ -59,6 +73,22 @@ import AppKit
     label.lineBreakMode = .byTruncatingMiddle
     window?.subtitle = label.stringValue
     query.updateConnectionAppearance()
+    updateStatus()
+  }
+  func updateStatus() {
+    let doc=query.document
+    let phase:String
+    switch doc.state {
+    case .ready:phase=doc.offlinePreview != nil ? "Çevrimdışı tanım · Salt okunur":"Ready"
+    case .running:phase="Executing…"
+    case .connecting:phase="Connecting…"
+    case .cancelling:phase="Cancelling…"
+    case .disconnected:phase="Çalıştırıldığında bağlanacak"
+    }
+    status.stringValue="\(phase) · \(doc.database) · Son çalıştırma: \(doc.lastExecutionDate?.formatted(date:.numeric,time:.standard) ?? "—")"
+    selection.stringValue=query.selectionStatus?.text ?? ""
+    selection.toolTip=query.selectionStatus?.help
+    selection.isHidden=query.selectionStatus==nil
   }
   @objc private func execute() {guard query.document.canExecute else {return};query.focusEditor();query.document.execute()}
   @objc private func stop() { query.document.cancel() }

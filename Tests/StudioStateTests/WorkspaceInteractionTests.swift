@@ -212,7 +212,7 @@ import Testing
     #expect(grid.table.tableColumns[2].width > grid.table.tableColumns[1].width)
     #expect(grid.table.tableColumns[2].width <= 420)
     let scroll = try #require(grid.table.enclosingScrollView)
-    #expect(scroll.hasHorizontalScroller && !scroll.autohidesScrollers)
+    #expect(scroll.hasHorizontalScroller && scroll.autohidesScrollers && scroll.scrollerStyle == .overlay && scroll.borderType == .noBorder)
     grid.table.scrollColumnToVisible(24)
     query.view.layoutSubtreeIfNeeded()
     #expect(scroll.contentView.bounds.minX > 0)

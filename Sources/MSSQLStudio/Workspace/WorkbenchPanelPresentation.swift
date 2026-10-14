@@ -4,12 +4,12 @@ import SQLServerKit
 import SwiftUI
 
 extension WorkbenchController {
-  func showSettingsWindow() {
+  func showSettingsWindow(definitionStorage:DefinitionIndexStorageModel=DefinitionIndexStorageModel()) {
     if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "studio.settings" && $0.isVisible }) {
       window.makeKeyAndOrderFront(nil); return
     }
-    let window = present(SettingsPanel(state: state), title: "MSSQL Studio Ayarları", width: 920, height: 700, minWidth: 780, minHeight: 600, identity: "studio.settings")
-    window.minSize = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: 780, height: 600)).size
+    let window = present(SettingsPanel(state: state,definitionStorage:definitionStorage), title: "MSSQL Studio Ayarları", width: 960, height: 720, minWidth: 820, minHeight: 620, identity: "studio.settings")
+    window.minSize = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: 820, height: 620)).size
   }
   func showHistoryWindow() {
     let document=favoriteContextDocument

@@ -104,10 +104,10 @@ public enum Catalog {
     switch folder {
     case .parameters:
       return
-        "SELECT p.parameter_id,COALESCE(NULLIF(p.name,N''),N'Return Value'),N'',\(SQLObjectHover.typeExpression("p","t")) + CASE WHEN p.is_output=1 THEN ', output' ELSE '' END FROM sys.parameters p JOIN sys.types t ON t.user_type_id=p.user_type_id WHERE p.object_id=\(object) ORDER BY p.parameter_id;"
+        "SELECT p.parameter_id,COALESCE(NULLIF(p.name,N''),N'Return Value'),N'',\(SQLObjectHover.typeExpression("p","t",baseType:"bt")) + CASE WHEN p.is_output=1 THEN ', output' ELSE '' END FROM sys.parameters p JOIN sys.types t ON t.user_type_id=p.user_type_id \(SQLObjectHover.baseTypeJoin("p","bt")) WHERE p.object_id=\(object) ORDER BY p.parameter_id;"
     case .columns:
       return
-        "SELECT c.column_id,c.name,N'',"+SQLObjectHover.typeExpression("c","ty")+" + CASE WHEN c.is_nullable=1 THEN ', null' ELSE ', not null' END + CASE WHEN c.is_identity=1 THEN ', identity' ELSE '' END + CASE WHEN c.is_computed=1 THEN ', computed' ELSE '' END FROM sys.columns c JOIN sys.types ty ON ty.user_type_id=c.user_type_id WHERE c.object_id=\(object) ORDER BY c.column_id;"
+        "SELECT c.column_id,c.name,N'',"+SQLObjectHover.typeExpression("c","ty",baseType:"bt")+" + CASE WHEN c.is_nullable=1 THEN ', null' ELSE ', not null' END + CASE WHEN c.is_identity=1 THEN ', identity' ELSE '' END + CASE WHEN c.is_computed=1 THEN ', computed' ELSE '' END FROM sys.columns c JOIN sys.types ty ON ty.user_type_id=c.user_type_id \(SQLObjectHover.baseTypeJoin("c","bt")) WHERE c.object_id=\(object) ORDER BY c.column_id;"
     case .indexes:
       return
         "SELECT index_id,name,N'',type_desc+CASE WHEN is_unique=1 THEN ', unique' ELSE '' END FROM sys.indexes WHERE object_id=\(object) AND index_id>0 ORDER BY name;"

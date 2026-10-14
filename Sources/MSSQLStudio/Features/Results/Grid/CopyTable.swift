@@ -44,6 +44,12 @@ import SwiftUI
     cellColumns=IndexSet(cellColumns.map(moved))
     if let anchor {self.anchor=(anchor.row,moved(anchor.column))}
   }
+  @objc func selectAllCells(_ sender:Any?=nil) {
+    if let window,!window.makeFirstResponder(self) {return}
+    owner.cellColumns=IndexSet()
+    owner.selectAll(sender)
+    owner.cellSelectionChanged?()
+  }
   func selectGutterRow(_ row:Int, extending:Bool=false, dragging:Bool=false) {
     guard row >= 0, row < numberOfRows else { return }
     window?.makeFirstResponder(self)
@@ -173,7 +179,7 @@ import SwiftUI
     if GridShortcuts.matchesHeaders(event) { copyHeaders?(); return }
     if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "c" { copyRows?(); return }
     if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "a" {
-      owner.cellColumns = IndexSet(); owner.selectAll(nil); return
+      selectAllCells(nil); return
     }
     if let step=[123:-1,124:1][Int(event.keyCode)], let navigateCell {navigateCell(step);return}
     super.keyDown(with: event)

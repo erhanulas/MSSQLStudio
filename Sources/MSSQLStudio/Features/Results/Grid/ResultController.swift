@@ -332,6 +332,8 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     target.setAccessibilityIdentifier(identifier)
     target.toolTip="Düzenlemek için çift tıklayın veya Enter’a basın. Değişiklikler yalnız SQL önizlemesinden onayla gönderilir."
     target.focusRingType = .none; scroll.focusRingType = .none
+    scroll.borderType = .noBorder
+    scroll.drawsBackground=false
     scroll.backgroundColor = StudioTheme.resultCanvas
     scroll.horizontalScrollElasticity = .none; scroll.verticalScrollElasticity = .none
     target.rowActions = { [weak self] in self?.editingMenu() ?? [] }
@@ -377,8 +379,8 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     scroll.automaticallyAdjustsContentInsets=false; scroll.contentInsets = NSEdgeInsets(top:0,left:0,bottom:0,right:0)
     scroll.hasVerticalScroller = true
     scroll.hasHorizontalScroller = true
-    scroll.autohidesScrollers = false
-    scroll.scrollerStyle = .legacy
+    scroll.autohidesScrollers = true
+    scroll.scrollerStyle = .overlay
     scroll.usesPredominantAxisScrolling = true
     rowGutter.label = { [weak self] row in
       guard let self, row >= 0, row < pageCount else { return ("",StudioTheme.muted) }
@@ -391,7 +393,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     scroll.documentView = table
     rowGutter.connect(table)
     frozenScroll.hasHorizontalScroller=true; frozenScroll.hasVerticalScroller=false
-    frozenScroll.autohidesScrollers=false; frozenScroll.scrollerStyle = .legacy
+    frozenScroll.autohidesScrollers=true; frozenScroll.scrollerStyle = .overlay
     frozenScroll.automaticallyAdjustsContentInsets=false
     frozenScroll.contentInsets=NSEdgeInsets(top:0,left:0,bottom:0,right:0)
     frozenScroll.usesPredominantAxisScrolling=true; frozenScroll.isHidden=true
@@ -444,8 +446,6 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     StudioTheme.resultSurface(bar)
     bar.spacing = 3
     bar.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
-    view.addSubview(selectionSummary.bar)
-    selectionSummary.bar.translatesAutoresizingMaskIntoConstraints=false
     let chipScroll = NSScrollView()
     chipScroll.hasHorizontalScroller = true
     chipScroll.autohidesScrollers = true
@@ -481,11 +481,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       scroll.leadingAnchor.constraint(equalTo: frozenScroll.trailingAnchor),
       scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       scroll.topAnchor.constraint(equalTo: chipScroll.bottomAnchor),
-      scroll.bottomAnchor.constraint(equalTo: selectionSummary.bar.topAnchor),
-      selectionSummary.bar.leadingAnchor.constraint(equalTo:view.leadingAnchor),
-      selectionSummary.bar.trailingAnchor.constraint(equalTo:view.trailingAnchor),
-      selectionSummary.bar.bottomAnchor.constraint(equalTo:view.bottomAnchor),
-      selectionSummary.bar.heightAnchor.constraint(equalToConstant:26),
+      scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
     ])
     if !toolbarHosted {
       NSLayoutConstraint.activate([
@@ -789,7 +785,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     let columns=visibleColumnOrdinals.filter {table.cellColumns.isEmpty || selected.contains($0)}
     selectionSummary.update(.init(rows:result,selection:table.selectedRowIndexes,columns:columns,
       projection:visibleIndices,pageStart:pageStart,basePageCount:basePageCount,newRows:newRowOrder,
-      overrides:pendingEdits.mapValues(\.values)))
+      overrides:pendingEdits.mapValues(\.values),sumEnabled:columns.count==1))
   }
   override func viewDidDisappear() {super.viewDidDisappear();selectionSummary.cancel()}
   override func viewDidAppear() {super.viewDidAppear();scheduleSelectionSummary()}

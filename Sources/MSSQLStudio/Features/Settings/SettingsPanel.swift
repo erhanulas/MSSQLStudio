@@ -339,7 +339,8 @@ struct SettingsPanel: View {
           }
         }
         }
-      }.accessibilityIdentifier("settingsNavigation")
+      }.frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
+        .accessibilityIdentifier("settingsNavigation")
         .allowsHitTesting(search.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
         .opacity(search.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? 1:0)
         .accessibilityHidden(!search.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
@@ -355,9 +356,10 @@ struct SettingsPanel: View {
           .fixedSize(horizontal: false, vertical: true).lineLimit(3)
           .accessibilityIdentifier("settingsMessage")
         Spacer(minLength: 12)
-        StudioActionButton("Uygula", icon: "checkmark", action: applySettings).buttonStyle(StudioPrimaryButton())
+        SettingsApplyButton(apply:applySettings).frame(width:100,height:34)
           .accessibilityIdentifier("settingsApply").disabled(definitionStorage.busy)
-      }.padding(14)
+          .fixedSize(horizontal:true,vertical:true).layoutPriority(1)
+      }.frame(minHeight:38).padding(16)
         .background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(nsColor: StudioTheme.border)))
     }.padding(12).studioPanel().onAppear {

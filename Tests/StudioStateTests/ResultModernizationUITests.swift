@@ -55,6 +55,7 @@ private actor PreparationCalls {
     window.isReleasedWhenClosed = false; window.contentViewController = grid; window.setContentSize(NSSize(width: 850, height: 420)); grid.view.frame.size = NSSize(width: 850, height: 420); defer { window.close() }
     window.orderFront(nil); grid.view.layoutSubtreeIfNeeded(); grid.table.reloadData()
     try await Task.sleep(for: .milliseconds(50))
+    grid.table.selectCell(row:0,column:2)
     grid.table.editCell?(0, 2)
     let editor = try #require(window.firstResponder as? NSTextView)
     editor.setSelectedRange(NSRange(location: 0, length: editor.string.utf16.count))
@@ -64,6 +65,9 @@ private actor PreparationCalls {
     #expect(grid.editValidationMessage?.contains("Tam sayı") == true)
     let invalidCommitted = window.makeFirstResponder(grid.table)
     #expect(!invalidCommitted)
+    let columns=grid.table.cellColumns
+    grid.table.selectAllCells(nil)
+    #expect(grid.table.cellColumns==columns && window.firstResponder === editor)
     #expect(grid.pendingEdits.isEmpty && grid.result.values[0][1] == "10")
     grid.setEditValue("2147483648", row: 0, column: 1)
     #expect(grid.pendingEdits.isEmpty)

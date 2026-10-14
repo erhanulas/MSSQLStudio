@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.125",
+    "date": "2026-10-14",
+    "title": "Kolon tipleri, ortak durum çubuğu ve sonuç seçimi",
+    "changes": [
+      "Kolon ve fonksiyon dönüşü hover’ında özel veri türünün yanında temel SQL tipi, uzunluk/precision/scale ve NULL bilgisi gösterilir. Tablo ve view nesnesinin kendisinde kolon listesi önizlemesi açılmaz; scalar/table fonksiyon ayrımı korunur.",
+      "Toplam ve Sayı ayrı sonuç satırı yerine mevcut Ready/son çalıştırma durum çubuğuna taşındı. Ayrılmış sorgu pencerelerinde de genel durum alanında ilgili belgenin özeti gösterilir; sonuç/Messages/Plan ve sorgu sekmesi değişiminde kapsam korunur.",
+      "Toplam yalnız tek kolondaki dikey seçimde hesaplanır; yukarıdan aşağıya ve aşağıdan yukarıya seçim desteklenir. Çok kolonlu/yatay seçimde toplam gösterilmez, NULL olmayan hücre sayısı korunur. # başlığı geçerli tablonun/sayfanın tüm hücrelerini seçer.",
+      "Sonuç grid’inde kalıcı scrollbar şeritleri ve kenar boşlukları kaldırıldı; çerçevesiz overlay kaydırma kullanılır. Sabit kolonlar, seçim ve kaydırma eşliği korunur.",
+      "Ayarlar ilk açılış yerleşimi ve Uygula alanı düzenlendi. Native sabit ölçülü işlem düğmesi, daha geniş başlangıç/minimum ölçüler ve ilk gösterim layout’u manuel genişletme ihtiyacını giderir."
+    ]
+  },
+  {
     "version": "0.2.124",
     "date": "2026-10-14",
     "title": "Sonuç seçiminde Toplam ve Sayı",

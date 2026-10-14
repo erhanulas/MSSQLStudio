@@ -30,7 +30,11 @@ import SQLServerKit
         let analysis=try SQLIntelligence.analyze(source:source,caret:offset,catalog:document.intelligenceCatalog,verified:false)
         var targets:[[String]]=[],column:String?
         if parts.count==2,let resolved=analysis.referenceBindings[parts[0].lowercased()] {targets=[resolved];column=parts[1]}
-        else if document.intelligenceCatalog?.resolve(parts) != nil || parts.count==2 {targets=[parts]}
+        else if let symbol=document.intelligenceCatalog?.resolve(parts) {
+          guard symbol.kind.contains("FUNCTION") else {return}
+          targets=[parts]
+        }
+        else if parts.count==2 {targets=[parts]}
         else if parts.count==3 {targets=[Array(parts.prefix(2))];column=parts[2]}
         else {
           var seen=Set<String>()

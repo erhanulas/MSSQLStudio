@@ -5,6 +5,11 @@ import SwiftUI
 @MainActor final class QueryController: NSViewController, NSTabViewDelegate, NSSplitViewDelegate {
   let document: QueryDocument
   var changed: (() -> Void)?
+  var selectionStatusChanged:(()->Void)?
+  var selectionStatus:(text:String,help:String?)? {
+    guard !resultsHidden,document.offlinePreview==nil,let grid=selectedGrid else {return nil}
+    return (grid.selectionSummary.label.stringValue,grid.selectionSummary.label.toolTip)
+  }
   var favoriteRequested: ((QueryDocument) -> Void)?
   var favorites:FavoriteQueriesModel? {didSet {syncFavoriteButton()}}
   private var removingFavorite=false
@@ -315,8 +320,8 @@ import SwiftUI
       resultStrip.heightAnchor.constraint(equalToConstant: 32),
       resultHeader.topAnchor.constraint(equalTo: stripScroll.bottomAnchor),
       resultHeader.heightAnchor.constraint(equalToConstant: 34),
-      resultTabs.leadingAnchor.constraint(equalTo: resultPane.leadingAnchor, constant: 2),
-      resultTabs.trailingAnchor.constraint(equalTo: resultPane.trailingAnchor, constant: -2),
+      resultTabs.leadingAnchor.constraint(equalTo: resultPane.leadingAnchor),
+      resultTabs.trailingAnchor.constraint(equalTo: resultPane.trailingAnchor),
       resultTabs.topAnchor.constraint(equalTo: resultHeader.bottomAnchor),
       resultTabs.bottomAnchor.constraint(equalTo: resultPane.bottomAnchor),
     ])
@@ -353,6 +358,7 @@ import SwiftUI
       panes.setPosition(panes.bounds.height * savedEditorFraction, ofDividerAt: 0)
     }
     editor.resizeToViewport()
+    selectionStatusChanged?()
   }
   @objc private func updateShortcutHints() {
     copyHeadersButton.toolTip = "Seçili hücreleri veya satırları kolon başlıklarıyla kopyala (\(GridShortcuts.headersLabel))"
@@ -399,6 +405,7 @@ import SwiftUI
     copyHeadersButton.isEnabled = toolbar != nil
     filter.isEnabled = toolbar != nil
     syncDataActions()
+    selectionStatusChanged?()
   }
   private var selectedGrid: ResultController? {
     guard let index = (resultTabs.selectedTabViewItem?.identifier as? NSNumber)?.intValue else { return nil }
@@ -777,6 +784,10 @@ import SwiftUI
             return true
           }
           controller.editsChanged = { [weak self] in self?.syncDataActions() }
+          controller.selectionSummary.changed = { [weak self,weak controller] in
+            guard let self,let controller,selectedGrid === controller else {return}
+            selectionStatusChanged?()
+          }
           controller.table.searchColumns = { [weak self] in self?.showColumnSearch() }
           controller.toolbarHosted = true
           controller.setPageSize(selectedPageSize)

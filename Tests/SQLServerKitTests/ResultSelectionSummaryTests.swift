@@ -34,6 +34,11 @@ import Testing
     #expect(summary.sum=="36" && summary.count==5 && summary.numericCount==3)
     #expect(rows.values[1][0]=="20" && rows.values.count==3 && rows.values.diskBacked)
   }
+  @Test func horizontalSelectionCanDisableSumWhilePreservingNonNullCount() throws {
+    let rows=Rows(fields:[Field("A",type:4),Field("B",type:3)],values:[["1","2.50"],[nil,"3.50"]])
+    let summary=try ResultSelectionSummary.compute(.init(rows:rows,selection:IndexSet(integersIn:0..<2),columns:[0,1],sumEnabled:false))
+    #expect(summary.sum==nil && summary.count==3 && summary.numericCount==0)
+  }
   @Test func invalidNumericAndStaleMappingsFailWithoutPartialResults() throws {
     for text in ["NaN","Infinity","1oops","1,23","1e401","",String(repeating:"1",count:513)] {
       #expect(throws:SQLFailure.self) {try sum(["1",text])}

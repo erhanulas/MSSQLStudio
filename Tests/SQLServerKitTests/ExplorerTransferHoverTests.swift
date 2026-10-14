@@ -31,9 +31,18 @@ struct ExplorerTransferHoverTests {
     let col=SQLObjectHover.decode(execution([["7","dbo","T","USER_TABLE","Amount","decimal(28,8) NOT NULL"]]),column:"Amount")
     #expect(col?.title=="dbo.T.Amount" && col?.detail=="decimal(28,8) NOT NULL")
     #expect(SQLObjectHover.decode(execution([["7","dbo","T","USER_TABLE","A","int"],["8","dbo","U","USER_TABLE","A","int"]]),column:"A")==nil)
+    for kind in ["USER_TABLE","VIEW"] {
+      #expect(SQLObjectHover.decode(execution([["7","dbo","T",kind,"Amount","AmountType (decimal(18,8)) NOT NULL"]]))==nil)
+      #expect(SQLObjectHover.decode(execution([["7","dbo","T",kind,"Amount","AmountType (decimal(18,8)) NOT NULL"]]),column:"Amount")?.detail=="AmountType (decimal(18,8)) NOT NULL")
+    }
+    let objectQuery=try SQLObjectHover.query(targets:[["dbo","T"]])
+    #expect(objectQuery.contains("o.type IN ('IF','TF','FT')") && !objectQuery.contains("o.type IN ('U','V'"))
     let sql=try SQLObjectHover.query(targets:[["dbo","T'x"]],column:"A'B")
     #expect(sql.contains("T''x") && sql.contains("A''B") && sql.contains("parameter_id=0") && sql.contains("precision"))
     #expect(throws:SQLFailure.self) {try SQLObjectHover.query(targets:Array(repeating:["T"],count:9))}
+    #expect(sql.contains("b.user_type_id=c.system_type_id") && sql.contains("COALESCE(b.name,t.name)") && sql.contains("user_type_id<>t.system_type_id"))
+    #expect(Catalog.children(.columns,object:7).contains("bt.user_type_id=c.system_type_id"))
+    #expect(Catalog.children(.parameters,object:7).contains("bt.user_type_id=p.system_type_id"))
     #expect(Catalog.children(.columns,object:7).contains("precision"))
   }
   @Test func unavailableDefinitionsDoNotWarnButMissingReadableDefinitionsStillDo() throws {

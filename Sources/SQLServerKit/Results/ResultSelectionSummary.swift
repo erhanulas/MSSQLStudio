@@ -15,11 +15,12 @@ public struct ResultSelectionSummary:Sendable,Equatable {
     public let basePageCount:Int
     public let newRows:[Int]
     public let overrides:[Int:[String?]]
+    public let sumEnabled:Bool
     public init(rows:Rows,selection:IndexSet,columns:[Int],projection:[Int]?=nil,pageStart:Int=0,
-                basePageCount:Int?=nil,newRows:[Int]=[],overrides:[Int:[String?]]=[:]) {
+                basePageCount:Int?=nil,newRows:[Int]=[],overrides:[Int:[String?]]=[:],sumEnabled:Bool=true) {
       self.rows=rows;self.selection=selection;self.columns=columns;self.projection=projection
       self.pageStart=pageStart;self.basePageCount=basePageCount ?? rows.values.count
-      self.newRows=newRows;self.overrides=overrides
+      self.newRows=newRows;self.overrides=overrides;self.sumEnabled=sumEnabled
     }
   }
   public static func compute(_ request:Request) throws -> Self {
@@ -38,7 +39,7 @@ public struct ResultSelectionSummary:Sendable,Equatable {
     guard request.selection.count<=5_000_000/columns.count else {
       throw SQLFailure("Seçim özeti en fazla 5.000.000 hücre için hesaplanabilir. Daha küçük bir alan seçin.")
     }
-    let numeric=Set(columns.filter {request.rows.fields[$0].numeric && request.rows.fields[$0].type != -7})
+    let numeric=Set(columns.filter {request.sumEnabled && request.rows.fields[$0].numeric && request.rows.fields[$0].type != -7})
     let deadline=ContinuousClock.now.advanced(by:.seconds(10))
     var accumulator=SelectionDecimalSum(),count=0,numericCount=0,bytes=0,visited=0
     for row in request.selection {

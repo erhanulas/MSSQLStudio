@@ -80,11 +80,11 @@ private actor ImportedProfiles122 {
     server.online=true
     var reads=0
     server.asyncCatalogFixture={_ in
-      reads+=1;var e=Execution();e.results=[Rows(values:[["42","dbo","T","USER_TABLE","Amount","decimal(18,2) NOT NULL"]])];return e
+      reads+=1;var e=Execution();e.results=[Rows(values:[["42","dbo","T","USER_TABLE","Amount","AmountType (decimal(18,2)) NOT NULL"]])];return e
     }
-    let source="SELECT t.Amount FROM dbo.T t;"
+    let source="SELECT t.Amount FROM dbo.T t JOIN dbo.V v ON t.Amount=v.Amount;"
     let doc=state.newQuery(server:server,database:"Demo",text:source),controller=EditorController(document:doc),editor=controller.editor
-    doc.intelligenceCatalog = .init(snapshot:.init(symbols:[.init(schema:"dbo",name:"T",columns:["Amount"])]))
+    doc.intelligenceCatalog = .init(snapshot:.init(symbols:[.init(schema:"dbo",name:"T",columns:["Amount"]),.init(schema:"dbo",name:"V",columns:["Amount"],kind:"VIEW")]))
     let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:800,height:400),styleMask:[.titled],backing:.buffered,defer:false)
     window.isReleasedWhenClosed=false;window.contentView=controller.surface;window.makeKeyAndOrderFront(nil);defer {window.close()}
     controller.surface.layoutSubtreeIfNeeded();controller.resizeToViewport()
@@ -95,7 +95,7 @@ private actor ImportedProfiles122 {
     editor.hoverMoved?(point)
     let deadline=ContinuousClock.now.advanced(by:.seconds(3))
     while StudioHoverHelp.shared.visibleTitle==nil,ContinuousClock.now<deadline {try await Task.sleep(for:.milliseconds(5))}
-    #expect(StudioHoverHelp.shared.visibleTitle=="dbo.T.Amount" && StudioHoverHelp.shared.visibleDetail=="decimal(18,2) NOT NULL")
+    #expect(StudioHoverHelp.shared.visibleTitle=="dbo.T.Amount" && StudioHoverHelp.shared.visibleDetail=="AmountType (decimal(18,2)) NOT NULL")
     #expect(reads==1 && editor.string==source && editor.selectedRange()==selection && editor.undoManager?.canUndo==hadUndo)
     if let popup=window.childWindows?.first(where:{$0 is NSPanel}),let view=popup.contentView {
       view.layoutSubtreeIfNeeded();popup.displayIfNeeded()
@@ -103,6 +103,15 @@ private actor ImportedProfiles122 {
       try bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/MSSQLStudio-type-hover122.png"))
     }
     editor.dismissSuggestions?();#expect(StudioHoverHelp.shared.visibleTitle==nil && doc.sql==source)
+    for object in ["dbo.T","dbo.V"] {
+      let objectRange=(source as NSString).range(of:object)
+      let rect=editor.firstRect(forCharacterRange:NSRange(location:NSMaxRange(objectRange)-1,length:0),actualRange:nil)
+      let local=editor.convert(window.convertFromScreen(rect),from:nil)
+      editor.hoverMoved?(NSPoint(x:local.minX+1,y:local.midY))
+      let deadline=ContinuousClock.now.advanced(by:.milliseconds(600))
+      while ContinuousClock.now<deadline,reads==1,StudioHoverHelp.shared.visibleTitle==nil {try await Task.sleep(for:.milliseconds(5))}
+      #expect(reads==1 && StudioHoverHelp.shared.visibleTitle==nil)
+    }
   }
   @Test func indexIconsStayVisibleAfterSidebarResizeWithoutCollapsingTree() throws {
     let (_,server,host,window)=fixture();defer {window.close()}
