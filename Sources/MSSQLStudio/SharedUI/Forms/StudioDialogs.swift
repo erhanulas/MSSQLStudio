@@ -5,30 +5,35 @@ import SwiftUI
 
 @MainActor class StudioAssociatedWindow:NSWindow {
   var didClose:(()->Void)?
-  private var associating=false
+  private(set) weak var associatedOwner:NSWindow?
   func associate(with owner:NSWindow?) {
-    guard parent==nil,!associating,let owner,owner !== self else {return}
-    associating=true;collectionBehavior.insert(.fullScreenAuxiliary)
-    owner.addChildWindow(self,ordered:.above);associating=false
+    if associatedOwner == nil,let owner,owner !== self {associatedOwner=owner}
+    // A child window is composited with its parent in Mission Control and cannot
+    // be selected independently. Ownership must not impose native child ordering.
+    parent?.removeChildWindow(self)
+    level = .normal
+    collectionBehavior.subtract([.transient,.ignoresCycle])
+    collectionBehavior.formUnion([.managed,.participatesInCycle,.fullScreenAuxiliary])
+    isExcludedFromWindowsMenu=false
+    tabbingMode = .disallowed
   }
   override func order(_ place:NSWindow.OrderingMode,relativeTo otherWin:Int) {
-    if place != .out,parent==nil,!associating {
+    if place != .out {
       let focused=NSApp.keyWindow ?? NSApp.mainWindow
-      let owner=focused?.sheetParent ?? (focused is NSPanel ? focused?.parent ?? NSApp.mainWindow:focused)
-      if owner?.isVisible == true {associate(with:owner)}
+      associate(with:focused?.sheetParent ?? focused)
     }
     super.order(place,relativeTo:otherWin)
+    if place != .out,!title.isEmpty {NSApp.addWindowsItem(self,title:title,filename:false)}
   }
   override func makeKeyAndOrderFront(_ sender:Any?) {
-    if parent==nil {
-      let focused=NSApp.keyWindow ?? NSApp.mainWindow
-      associate(with:focused?.sheetParent ?? (focused is NSPanel ? focused?.parent ?? NSApp.mainWindow:focused))
-    }
+    let focused=NSApp.keyWindow ?? NSApp.mainWindow
+    associate(with:focused?.sheetParent ?? focused)
     super.makeKeyAndOrderFront(sender)
   }
   override func close() {
     let callback=didClose;didClose=nil
     parent?.removeChildWindow(self)
+    associatedOwner=nil;NSApp.removeWindowsItem(self)
     super.close();callback?()
   }
 }

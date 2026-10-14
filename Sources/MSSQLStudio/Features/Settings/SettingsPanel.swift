@@ -419,10 +419,11 @@ struct SettingsPanel: View {
     searchFocused=false;expandedCards.insert(result.card);selectedTab=result.section;searchTarget=result;search=""
   }
   private func settingsCard<Content: View>(_ title: String, icon: String, tint: Color = Color(nsColor: StudioTheme.accent), @ViewBuilder content: @escaping () -> Content) -> some View {
-    DisclosureGroup(isExpanded:Binding(get:{expandedCards.contains(title)},set:{if $0 {expandedCards.insert(title)} else {expandedCards.remove(title)}})) {
-      VStack(alignment:.leading,spacing:10) {content()}.padding(.top,8)
-    } label: {
-      Label {Text(title).font(.system(size:12,weight:.semibold))} icon: {Image(systemName:icon).foregroundStyle(tint).frame(width:18)}
+    VStack(alignment:.leading,spacing:0) {
+      StudioDisclosureHeader(title:title,icon:icon,tint:NSColor(tint),expanded:expandedCards.contains(title)) {
+        if expandedCards.contains(title) {expandedCards.remove(title)} else {expandedCards.insert(title)}
+      }.frame(height:32)
+      if expandedCards.contains(title) {VStack(alignment:.leading,spacing:10) {content()}.padding(.top,8)}
     }.frame(maxWidth:.infinity,alignment:.leading).studioCard().id(title)
       .overlay(RoundedRectangle(cornerRadius:12).strokeBorder(searchTarget?.card == title ? Color(nsColor:StudioTheme.accent):.clear,lineWidth:2))
   }

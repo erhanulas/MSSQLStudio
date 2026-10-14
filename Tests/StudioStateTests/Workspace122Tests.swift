@@ -29,7 +29,7 @@ private actor ImportedProfiles122 {
     // SwiftPM has no active application/key window in this environment. Inject
     // only the OS focus boundary; native target/action and close/delegate remain real.
     host.focusedWindowProvider={ [weak panel] in panel }
-    #expect(panel.parent === main && host.focusedWindowProvider() === panel)
+    #expect((panel as? StudioAssociatedWindow)?.associatedOwner === main && panel.parent == nil && host.focusedWindowProvider() === panel)
     #expect(host.commandDocument==nil)
     host.formatSQL();#expect(doc.sql=="select 1;")
     #expect(NSApp.sendAction(#selector(WorkbenchController.closeFocusedWindow),to:host,from:nil))

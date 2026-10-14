@@ -71,6 +71,7 @@ extension WorkbenchController {
           watcher.arguments=["--reopen-after-update",prepared.version,String(ProcessInfo.processInfo.processIdentifier)]
           watcher.standardInput=FileHandle.nullDevice;watcher.standardOutput=FileHandle.nullDevice;watcher.standardError=FileHandle.nullDevice
           try watcher.run()
+          Application.updateWatcher=watcher
         }
         Application.updateTerminationApproved=true
         NSApp.terminate(nil)

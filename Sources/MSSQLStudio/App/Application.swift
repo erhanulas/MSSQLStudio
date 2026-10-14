@@ -4,6 +4,8 @@ import SwiftUI
 
 @main @MainActor final class Application: NSObject, NSApplicationDelegate {
   static var updateTerminationApproved = false
+  static var updateWatcher:Process?
+  private let termination=ApplicationTermination()
   private var terminationPrompt:StudioCloseWindowController?
   private var window: NSWindow!
   private let studio = StudioState()
@@ -209,39 +211,43 @@ import SwiftUI
     window.backgroundColor = StudioTheme.chrome
     if let content = window.contentView { StudioTheme.decorate(content) }
   }
-  private var savingHistoryForTermination=false
-  private func completeTermination(_ sender:NSApplication) {
-    guard !savingHistoryForTermination else {return}
-    savingHistoryForTermination=true
-    Task { @MainActor [weak self] in
-      guard let self else {return}
-      var saved=await studio.flushHistory()
-      if !saved {
-        let alert=StudioAlert();alert.messageText="Geçmiş kaydedilemedi"
-        alert.informativeText="Son geçmiş ve kapatılan sekme kayıtları diske yazılamadı. Mevcut dosya korunur. Kaydetmeden çıkarsanız bu oturumdaki yeni geçmiş kayıtları kaybolabilir."
-        alert.addButton(withTitle:"Çıkışı İptal Et");alert.addButton(withTitle:"Geçmişi Kaydetmeden Çık")
-        saved=alert.runModal() == .alertSecondButtonReturn
-      }
-      savingHistoryForTermination=false
-      sender.reply(toApplicationShouldTerminate:saved)
-    }
+  private func cancelUpdateTermination() {
+    Self.updateTerminationApproved=false
+    if let watcher=Self.updateWatcher,watcher.isRunning {watcher.terminate()}
+    Self.updateWatcher=nil
   }
-  func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-    guard SchemaComparisonModel.activeApplications==0 else {NSSound.beep();return .terminateCancel}
-    if savingHistoryForTermination {return .terminateLater}
-    if Self.updateTerminationApproved {completeTermination(sender);return .terminateLater}
-    if let terminationPrompt {terminationPrompt.window?.makeKeyAndOrderFront(nil);return .terminateLater}
+  private func completeTermination(_ sender:NSApplication) {
+    termination.prepare(flush:{ [self] in await studio.flushHistory() },discardHistory:{
+      let alert=StudioAlert();alert.messageText="Geçmiş kaydedilemedi"
+      alert.informativeText="Son geçmiş ve kapatılan sekme kayıtları diske yazılamadı. Mevcut dosya korunur. Kaydetmeden çıkarsanız bu oturumdaki yeni geçmiş kayıtları kaybolabilir."
+      alert.addButton(withTitle:"Çıkışı İptal Et");alert.addButton(withTitle:"Geçmişi Kaydetmeden Çık")
+      return alert.runModal() == .alertSecondButtonReturn
+    },mayTerminate:{ [self] in
+      SchemaComparisonModel.activeApplications==0 && studio.canQuit()
+    },terminate:{sender.terminate(nil)},cancelled:{ [self] in cancelUpdateTermination() })
+  }
+  func applicationShouldTerminate(_ sender:NSApplication)->NSApplication.TerminateReply {
+    guard SchemaComparisonModel.activeApplications==0 else {cancelUpdateTermination();NSSound.beep();return .terminateCancel}
+    if termination.consumeApproval() {return .terminateNow}
+    // Cancel this request while asynchronous preparation uses the regular loop;
+    // the coordinator requests termination again only after persistence succeeds.
+    if termination.preparing {return .terminateCancel}
+    if Self.updateTerminationApproved {completeTermination(sender);return .terminateCancel}
+    if let terminationPrompt {terminationPrompt.window?.makeKeyAndOrderFront(nil);return .terminateCancel}
     guard studio.canBeginBulkClose() else {return .terminateCancel}
-    guard studio.needsBulkCloseConfirmation else {guard studio.canQuit() else {return .terminateCancel};completeTermination(sender);return .terminateLater}
+    guard studio.needsBulkCloseConfirmation else {
+      guard studio.canQuit() else {return .terminateCancel}
+      completeTermination(sender);return .terminateCancel
+    }
     let prompt=StudioCloseWindowController(title:"MSSQL Studio’yu kapat",count:studio.documents.count) {[weak self] choice in
       guard let self else {return true}
-      if choice == .cancel {terminationPrompt=nil;sender.reply(toApplicationShouldTerminate:false);return true}
+      if choice == .cancel {terminationPrompt=nil;return true}
       guard studio.canQuit(choice:choice) else {return false}
       terminationPrompt=nil;completeTermination(sender);return true
     }
     terminationPrompt=prompt
     Task { @MainActor in prompt.showWindow(nil);prompt.window?.makeKeyAndOrderFront(nil) }
-    return .terminateLater
+    return .terminateCancel
   }
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
   private func createMenu() {

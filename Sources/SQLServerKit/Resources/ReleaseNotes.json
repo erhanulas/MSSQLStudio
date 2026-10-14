@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.123",
+    "date": "2026-10-14",
+    "title": "Tam alan ayar başlıkları ve güvenilir pencere/kapanış yönetimi",
+    "changes": [
+      "Ayar kartlarında ok, ikon, metin ve boşluk dahil tüm başlık tıklanabilir; hover/basılı vurgu ve klavye/erişilebilirlik desteği eklendi. Taslaklar aç/kapat işleminde korunur.",
+      "Yardımcı pencereler Mission Control ve Pencere menüsünden bağımsız seçilebilir; arka pencereye geçtikten sonra yeniden erişilebilir. Öndeki pencereye komut yönlendirmesi korunur.",
+      "Güncelle ve Yeniden Aç/Güncelle ve Kapat akışında asenkron geçmiş kaydının AppKit kapanış döngüsünde beklemesi giderildi. Kayıt ve son güvenlik kontrolü sonrası uygulama kapanır; iptal durumunda yeniden açma bekleyicisi durdurulur."
+    ]
+  },
+  {
     "version": "0.2.122",
     "date": "2026-10-14",
     "title": "Pencere yönetimi, kompakt ayarlar ve Explorer aktarımı",

@@ -105,6 +105,26 @@ import Testing
     #expect(try repositoryField().stringValue == "team/unsaved-repository")
     #expect(UserDefaults.standard.string(forKey: "githubUpdateRepository") == "erhanulas/MSSQLStudio")
   }
+  @Test func cardHeaderCollapsesAndRestoresItsFieldsWithoutLosingDraft() async throws {
+    _=NSApplication.shared
+    let (window,host)=window(.updates);defer {window.close()}
+    try await settle(host)
+    func header() throws -> StudioDisclosureButton {
+      try #require(descendants(host.view).compactMap {$0 as? StudioDisclosureButton}.first {$0.title=="GitHub yayınları"})
+    }
+    func field()->NSTextField? {
+      descendants(host.view).compactMap {$0 as? NSTextField}.first {$0.isEditable && $0.placeholderString=="kullanıcı/depo veya GitHub depo adresi"}
+    }
+    let repository=try #require(field());repository.stringValue="fixture/unsaved"
+    repository.delegate?.controlTextDidChange?(Notification(name:NSControl.textDidChangeNotification,object:repository))
+    let open=try header();#expect(open.expanded && open.bounds.width>400)
+    #expect(NSApp.sendAction(try #require(open.action),to:open.target,from:open))
+    try await settle(host)
+    let closed=try header();#expect(!closed.expanded && field()==nil)
+    #expect(NSApp.sendAction(try #require(closed.action),to:closed.target,from:closed))
+    try await settle(host)
+    #expect(try header().expanded && field()?.stringValue=="fixture/unsaved")
+  }
   @Test func globalSearchFindsEverySectionAndTurkishAliasesWithoutChangingPreferences() {
     let old=UserDefaults.standard.object(forKey:"ssmsTheme")
     #expect(SettingsSearch.results("KOSELI PARANTEZ").contains {$0.id=="brackets"})
