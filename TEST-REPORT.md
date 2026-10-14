@@ -1,3 +1,20 @@
+## 14 Ekim 2026 — v0.2.133 / build 134 public yayın doğrulandı
+
+- [Public/latest v0.2.133](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.133), kaynak `89501eec015149f257c4e6db5b8c2d5cef2d7e0d`; [Actions 38634622153](https://github.com/erhanulas/MSSQLStudio/actions/runs/38634622153) bütün adımlarıyla başarılı. DML/EXEC yürütmesinin seçili satır sınırından ayrılması, row-count kotası düzeltmesi ve tek sonuç satır sınırı yayımlandı.
+- CI gerçek yayın paketleriyle **434 app +361 core +8 text =803 test; 775 geçti /28 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 210.861 /14.293 /0.007 sn (`/tmp/mssql133-ci.log`). Sabit kimlik/izole Keychain fixture ve geçici kimlik temizliği geçti.
+- Dört public asset bağımsız indirildi: GitHub digest/SHA-256, manifest URL/hash, exact 0.2.133/build134 bundle metadata ve kaynak/paket/GitHub sürüm notları eşliği doğrulandı. ZIP/PKG app/helper strict/deep sabit imza/DR, binary/metadata/notlar ve frozen helper byte/hash eşliği geçti; helper yeniden derlenmedi/imzalanmadı. PKG için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu exact `Foundation updater feed verified: 0.2.133` verdi. Kanıt `/tmp/MSSQLStudio-133-public-verification/verification.json` ve `foundation-feed.log`.
+- Native açık/koyu/dar/geniş görseller ve regresyonlar aşağıdadır. Gerçek SQL Server DML/EXEC/#temp doğrulaması dış koşul nedeniyle atlandı; kullanıcının INSERT’i yeniden çalıştırılmadı. Gerçek fare menü akışı ve Installer kurulumu denenmedi. Kurulu uygulama, SQL oturumları, kullanıcı verileri ve `.vscode/` korunur.
+
+Public asset SHA-256 değerleri:
+
+| Dosya | SHA-256 |
+|---|---|
+| MSSQLStudio-0.2.133.pkg | `7249da3406946e8ffe5aa4b887b337065b11b17cf9aa32b7f77710ad58a4aa3e` |
+| MSSQLStudio-0.2.133.zip | `b4935dd9229dd2143722e412630947fae48191fb42ae57adbb56feec4d638adc` |
+| MSSQLStudio-CredentialAgent-v1.zip | `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713` |
+| update.json | `c1ec90330aa805f86ffb970306a16ed43ad1f112ac2983d9e0a240ef1df55540` |
+
 ## 14 Ekim 2026 — v0.2.133 / build 134 yayın hazırlığı
 
 - Sonuç kümesi sınırı mesajının kod yolu SQLRowCount bildirimlerini result set olarak sayıyordu; 100 bildirimin ardından SQLCancelHandle çağrılabiliyordu. Gerçek field’lı rowset kotası ayrıldı, ardışık sayısal bildirimler toplandı. Kullanıcının INSERT SQL’i gerçek DB’de yeniden yürütülmedi.
