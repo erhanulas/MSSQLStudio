@@ -86,7 +86,7 @@ import Testing
     let rect=controller.view.convert(popup.bounds,from:popup)
     #expect(rect.width == 128 && rect.maxX<=830 && rect.minX>=0, "Pagination control frame: \(rect); alignment insets: \(popup.alignmentRectInsets)")
     func choose(_ section:String,_ value:Int) throws {
-      let item=try #require(popup.itemArray.first {$0.identifier?.rawValue == section}?.submenu?.items.first {$0.tag == value && !$0.isSeparatorItem})
+      let item=try #require(popup.itemArray.first {$0.identifier?.rawValue == section && $0.tag == value && !$0.isSeparatorItem})
       #expect(NSApp.sendAction(try #require(item.action),to:item.target,from:item))
     }
     #expect(!popup.itemArray.contains {$0.identifier?.rawValue == "gridPageChoices"})
@@ -98,7 +98,7 @@ import Testing
     controller.applyLoadingPreferences(rows:5_000_000,refresh:10,save:false)
     #expect(doc.limits.rows == 5_000_000 && doc.initialRefreshSeconds == 10 && doc.lastExecutedSQL == nil)
     #expect(grid.pageSize == 0 && !popup.title.contains(" · "))
-    controller.applyLoadingPreferences(rows:0,refresh:10,save:false)
+    controller.applyLoadingPreferences(rows:-1,refresh:10,save:false)
     #expect(doc.limits.rows == 5_000_000)
   }
   @Test func autoRefreshHasVisiblePresetsPendingStateAndEditingGuards() throws {

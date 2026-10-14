@@ -84,7 +84,7 @@ import Testing
     let controller=QueryController(document:doc);_=controller.view
     doc.execute();await doc.task?.value;controller.update()
     let popup=try #require(descendants(controller.view).compactMap {$0 as? NSPopUpButton}.first {$0.accessibilityIdentifier() == "gridRowOptions"})
-    let limit=try #require(popup.itemArray.first {$0.identifier?.rawValue == "gridReadChoices"}?.submenu?.items.first {$0.tag == 10})
+    let limit=try #require(popup.itemArray.first {$0.identifier?.rawValue == "gridReadChoices" && $0.tag == 10})
     #expect(NSApp.sendAction(try #require(limit.action),to:limit.target,from:limit))
     #expect(requests == [100] && doc.results.map {$0.values.count} == [100,100])
     #expect(doc.limits.rows == 10 && popup.toolTip?.contains("Son okuma sınırı: 100") == true)

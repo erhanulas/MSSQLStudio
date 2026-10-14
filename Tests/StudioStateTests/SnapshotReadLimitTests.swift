@@ -12,7 +12,7 @@ import Testing
   }
   private func choose(_ value:Int,controller:QueryController) throws {
     let popup=try #require(descendants(controller.view).compactMap {$0 as? NSPopUpButton}.first {$0.accessibilityIdentifier() == "gridRowOptions"})
-    let item=try #require(popup.itemArray.first {$0.identifier?.rawValue == "gridReadChoices"}?.submenu?.items.first {$0.tag == value})
+    let item=try #require(popup.itemArray.first {$0.identifier?.rawValue == "gridReadChoices" && $0.tag == value})
     #expect(NSApp.sendAction(try #require(item.action),to:item.target,from:item))
   }
   private func rows(_ count:Int)throws->Rows {

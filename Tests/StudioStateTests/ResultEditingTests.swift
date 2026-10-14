@@ -339,7 +339,7 @@ import Testing
     let new=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"New")
     #expect(new.limits.rows == 12345 && existing.limits.rows == original)
     #expect(ResultReadPreferences.refreshSeconds == 17)
-    #expect(ResultReadPreferences.limits(rows:0).rows == 50_000)
+    #expect(ResultReadPreferences.limits(rows:0).rows == Int.max)
     #expect(ResultReadPreferences.limits(rows:100000).totalBytes == 2_147_483_648)
   }
 }

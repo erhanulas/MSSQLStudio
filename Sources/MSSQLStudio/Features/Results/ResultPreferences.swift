@@ -5,17 +5,20 @@ import SwiftUI
 @MainActor enum ResultReadPreferences {
   static let changed = Notification.Name("MSSQLStudio.resultReadPreferencesChanged")
   static func bounded(_ value: Int, range: ClosedRange<Int>, fallback: Int) -> Int { range.contains(value) ? value : fallback }
-  static var readLimit: Int { bounded(UserDefaults.standard.object(forKey:"gridReadLimit") as? Int ?? 50_000,range:1...5_000_000,fallback:50_000) }
+  static var readLimit: Int {
+    let stored=UserDefaults.standard.object(forKey:"gridReadLimit") as? Int ?? 500
+    return stored==0 ? Int.max:bounded(stored,range:1...5_000_000,fallback:500)
+  }
   static var refreshSeconds: Int { bounded(UserDefaults.standard.integer(forKey:"gridRefreshSeconds"),range:0...3600,fallback:0) }
   static func limits(rows: Int) -> Limits {
     var limits = Limits(); limits.diskResults = true
-    limits.rows = bounded(rows,range:1...5_000_000,fallback:50_000)
+    limits.rows = rows==0 || rows==Int.max ? Int.max:bounded(rows,range:1...5_000_000,fallback:500)
     limits.totalBytes = limits.rows <= 50_000 ? 67_108_864 : 2_147_483_648
     limits.timeout = limits.rows <= 50_000 ? 60 : 600
     return limits
   }
   static func save(rows: Int, refresh: Int) {
-    UserDefaults.standard.set(bounded(rows,range:1...5_000_000,fallback:50_000),forKey:"gridReadLimit")
+    UserDefaults.standard.set(rows==Int.max ? 0:bounded(rows,range:0...5_000_000,fallback:500),forKey:"gridReadLimit")
     UserDefaults.standard.set(bounded(refresh,range:0...3600,fallback:0),forKey:"gridRefreshSeconds")
     NotificationCenter.default.post(name:changed,object:nil)
   }
@@ -35,7 +38,7 @@ struct ResultLoadingPanel: View {
         VStack(alignment:.leading,spacing:14) {
           StudioFormField("Sonuç başına satır sınırı") {TextField("Satır",value:$rows,format:.number.grouping(.never)).textFieldStyle(.roundedBorder)}.disabled(!readLimitAllowed)
           StudioFormField("Yenileme aralığı") {HStack {TextField("Saniye",value:$refresh,format:.number.grouping(.never)).textFieldStyle(.roundedBorder);Text("sn").foregroundStyle(.secondary)}}.disabled(!refreshAllowed)
-          Text("Satır sınırı: 1–5.000.000 · Yalnız SELECT sonuçlarına uygulanır; DML ve EXEC işlemlerini sınırlamaz. Mevcut önbelleğe anında uygulanır; daha fazla veri için SELECT’i yenileyin. Yenileme: 0–3.600 sn (0 = kapalı).").font(.caption).foregroundStyle(.secondary)
+          Text("Satır sınırı: 0–5.000.000 (0 = Tümü) · Yalnız SELECT sonuçlarına uygulanır; DML ve EXEC işlemlerini sınırlamaz. Mevcut önbelleğe anında uygulanır; daha fazla veri için SELECT’i yenileyin. Yenileme: 0–3.600 sn (0 = kapalı).").font(.caption).foregroundStyle(.secondary)
           if !readLimitAllowed {Label("Satır sınırı için düzenleme modunu ve dışa aktarmayı tamamlayın.",systemImage:"lock").font(.caption).foregroundStyle(.secondary)}
           if !refreshAllowed {Label("Düzenleme sırasında otomatik yenileme kapalıdır.",systemImage:"pause.circle").font(.caption).foregroundStyle(.secondary)}
           Toggle("Yeni sorgular için varsayılan yap",isOn:$saveDefault)
@@ -44,7 +47,7 @@ struct ResultLoadingPanel: View {
       }
       Divider()
       HStack {Spacer();StudioActionButton("Uygula",icon:"checkmark") {
-        guard (1...5_000_000).contains(rows),(0...3600).contains(refresh) else {message="Lütfen belirtilen aralıklarda değerler girin.";return}
+        guard (0...5_000_000).contains(rows),(0...3600).contains(refresh) else {message="Lütfen belirtilen aralıklarda değerler girin.";return}
         apply(rows,refreshAllowed ? refresh:0,saveDefault)
       }.buttonStyle(StudioPrimaryButton())}
     }.padding(StudioMetrics.gap).frame(maxWidth:.infinity,maxHeight:.infinity).studioPanel()

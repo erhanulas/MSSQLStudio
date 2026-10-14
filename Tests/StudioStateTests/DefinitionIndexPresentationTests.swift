@@ -29,7 +29,7 @@ import Testing
         if inventories == 1 { throw SQLFailure("Synthetic A failure") }
         return output([["1", "dbo", "Example", "V", "stamp", "0"]])
       }
-      return output([["1", "CREATE VIEW dbo.Example AS SELECT 1 AS n", "1", "1", "0", nil]])
+      return output([["1", "CREATE VIEW dbo.Example AS SELECT 1 AS n", "1", "1", "0", nil, String("CREATE VIEW dbo.Example AS SELECT 1 AS n".utf16.count*2)]])
     }
     await server.definitionIndex.configure()
     server.definitionIndex.refresh()

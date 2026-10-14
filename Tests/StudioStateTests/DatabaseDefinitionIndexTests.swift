@@ -74,7 +74,7 @@ import Testing
     server.profile.setDefinitionIndex(false, database: "B", known: ["A", "B"])
     let change = Task { await server.definitionIndex.configure() }
     await Task.yield()
-    continuation?.resume(returning: output([["1", "CREATE PROC dbo.P AS SELECT 1", "1", "1", "0", nil]]))
+    continuation?.resume(returning: output([["1", "CREATE PROC dbo.P AS SELECT 1", "1", "1", "0", nil, String("CREATE PROC dbo.P AS SELECT 1".utf16.count*2)]]))
     await change.value
     #expect(try await disk.definitionStatus(scope: CatalogDiskIndex.scope(profile: profile, database: "B")).count == 0)
     server.definitionIndex.refresh()
@@ -90,7 +90,7 @@ import Testing
     server.catalogFixture = { sql in
       reads += 1
       if sql.contains("Inventory") { return output([["1", "dbo", "P", "P", "1", "0"]]) }
-      return output([["1", "CREATE PROC dbo.P AS SELECT 1", "1", "1", "0", nil]])
+      return output([["1", "CREATE PROC dbo.P AS SELECT 1", "1", "1", "0", nil, String("CREATE PROC dbo.P AS SELECT 1".utf16.count*2)]])
     }
     await server.definitionIndex.configure(); server.definitionIndex.refresh(force: true, database: "A")
     for _ in 0..<400 where server.definitionIndex.isRefreshing { try await Task.sleep(for: .milliseconds(5)) }

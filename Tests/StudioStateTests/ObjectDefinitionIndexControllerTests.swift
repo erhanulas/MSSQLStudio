@@ -38,7 +38,7 @@ import Testing
       }
       if sql.contains("m.definition") {
         reads += 1
-        return output([["9", body, "1", "1", "0", nil]])
+        return output([["9", body, "1", "1", "0", nil, String(body.utf16.count*2)]])
       }
       if sql.contains("OBJECT_DEFINITION") {
         reads += 1
@@ -132,7 +132,8 @@ import Testing
       reads += 1
       if sql.contains("IN (1,2)") { var partial = output([["1", "incomplete", "1", "1", "0", nil]]); partial.partial = true; return partial }
       let id = sql.contains("IN (1)") ? "1" : "2"
-      return output([[id, "CREATE PROC dbo.P" + id + " AS SELECT 1;", "1", "1", "0", nil]])
+      let body="CREATE PROC dbo.P" + id + " AS SELECT 1;"
+      return output([[id, body, "1", "1", "0", nil, String(body.utf16.count*2)]])
     }
     await server.definitionIndex.configure(); server.definitionIndex.refresh()
     try await wait(server.definitionIndex)
@@ -158,7 +159,10 @@ import Testing
       let list = sql.components(separatedBy: "IN (").last!.components(separatedBy: ")").first!
       let ids = list.split(separator: ",").map(String.init)
       #expect(ids.count <= 200)
-      return output(ids.map { [$0, "CREATE PROCEDURE dbo.P" + $0 + " AS SELECT 1;", "1", "1", "0", nil] })
+      return output(ids.map { id in
+        let body="CREATE PROCEDURE dbo.P" + id + " AS SELECT 1;"
+        return [id,body,"1","1","0",nil,String(body.utf16.count*2)]
+      })
     }
     let began = Date()
     await server.definitionIndex.configure(); server.definitionIndex.refresh()

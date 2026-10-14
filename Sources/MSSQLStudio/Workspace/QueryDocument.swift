@@ -241,13 +241,14 @@ struct ObjectEditorKey: Codable, Equatable {
     let executionServer=server,executionServerGeneration=server.generation,executionDatabase=database
     var executionLimits=limits
     executionLimits.readOnlyRowLimit=true
-    if !TSQL.usesResultRowLimit(query) {executionLimits.rows=Int.max}
+    let appliesRowLimit=TSQL.usesResultRowLimit(query)
+    if !appliesRowLimit {executionLimits.rows=Int.max}
     repeating = repeatRead
     resultGeneration += 1
     lastExecutionSucceeded = false
     lastExecutedSQL = estimated ? nil : query
     lastExecutedDatabase = database
-    lastExecutedReadLimit = executionLimits.rows == Int.max ? nil:executionLimits.rows
+    lastExecutedReadLimit = appliesRowLimit ? executionLimits.rows:nil
     lastExecutionDate=Date()
     state = .running
     results = []

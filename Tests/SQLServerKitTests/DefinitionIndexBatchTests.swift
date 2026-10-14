@@ -9,8 +9,8 @@ struct DefinitionIndexBatchTests {
   @Test func identitiesMissingEncryptedAndPartialPages() throws {
     let entries = try [entry(1), entry(2), entry(3)]
     var result = Execution()
-    result.results = [Rows(values: [["2", nil, "1", "1", "0", nil],
-      ["1", "CREATE PROC dbo.P1 AS SELECT 1;", "1", "1", "0", nil]])]
+    result.results = [Rows(values: [["2", nil, "1", "1", "0", nil, nil],
+      ["1", "CREATE PROC dbo.P1 AS SELECT 1;", "1", "1", "0", nil, String("CREATE PROC dbo.P1 AS SELECT 1;".utf16.count*2)]])]
     let decoded = try DefinitionIndexBatch.decode(result, entries: entries, fetched: Date())
     #expect(decoded.values.map(\.id) == [1])
     #expect(decoded.unavailable == [2, 3])
@@ -20,6 +20,27 @@ struct DefinitionIndexBatchTests {
     #expect(throws: SQLFailure.self) { try DefinitionIndexBatch.decode(result, entries: entries, fetched: Date()) }
     #expect(throws: SQLFailure.self) { try DefinitionIndexBatch.query([entries[0], entries[0]]) }
     #expect(try DefinitionIndexBatch.query([entry(5, type: "U"), entry(6, type: "SN")]).contains("sys.columns"))
+  }
+  @Test func fullUnicodeModuleLengthIsVerifiedBeforeIndexing() throws {
+    let body="CREATE PROC dbo.P1 AS\r"+String(repeating:"-- İstanbul 🦊\r",count:10000)+"SELECT N'FINAL_MARKER';"
+    var result=Execution();result.results=[Rows(values:[["1",body,"1","1","0",nil,String(body.utf16.count*2)]])]
+    let decoded=try DefinitionIndexBatch.decode(result,entries:[entry(1)],fetched:Date())
+    #expect(decoded.values.first?.original==body && decoded.values.first?.sql.contains("FINAL_MARKER';")==true)
+    result.results[0]=Rows(values:[["1",String(body.prefix(500)),"1","1","0",nil,String(body.utf16.count*2)]])
+    #expect(throws:SQLFailure.self) {try DefinitionIndexBatch.decode(result,entries:[entry(1)],fetched:Date())}
+    #expect(try DefinitionIndexBatch.query([entry(1)]).contains("DATALENGTH(m.definition)"))
+  }
+  @Test func longDefinitionSurvivesDiskRoundTripWithOriginalAndTail() async throws {
+    let folder=URL(fileURLWithPath:"/tmp/LongDefinition-"+UUID().uuidString)
+    defer {try? FileManager.default.removeItem(at:folder)}
+    let disk=CatalogDiskIndex(url:folder.appendingPathComponent("index.sqlite")),owner=UUID()
+    let lease=try #require(try await disk.configureDefinitions(owner:owner,enabled:true))
+    let generation=try await disk.generation(scope:"long")
+    let body="CREATE PROC dbo.P1 AS\r"+String(repeating:"-- İstanbul 🦊\r",count:10000)+"SELECT N'FINAL_MARKER';"
+    let value=IndexedObjectDefinition(id:1,schema:"dbo",name:"P1",type:"P",sql:body,original:body)
+    try await disk.saveDefinitions([value],owner:owner,lease:lease,scope:"long",generation:generation)
+    let restored=try #require(try await disk.definition(scope:"long",id:1))
+    #expect(restored.sql.utf8.elementsEqual(body.utf8) && restored.original==body && restored.digest==value.digest)
   }
   @Test func structuralBatchPreservesTableBoundariesAndSynonym() throws {
     var result = Execution()

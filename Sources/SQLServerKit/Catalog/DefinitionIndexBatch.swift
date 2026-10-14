@@ -27,7 +27,7 @@ public enum DefinitionIndexBatch {
     if entries[0].isModule {
       return """
         -- StudioDefinitionModuleBatch
-        SELECT m.object_id,m.definition,m.uses_ansi_nulls,m.uses_quoted_identifier,ISNULL(t.is_disabled,0),CASE WHEN t.parent_class=0 THEN N'DATABASE' ELSE QUOTENAME(OBJECT_SCHEMA_NAME(t.parent_id))+N'.'+QUOTENAME(OBJECT_NAME(t.parent_id)) END
+        SELECT m.object_id,m.definition,m.uses_ansi_nulls,m.uses_quoted_identifier,ISNULL(t.is_disabled,0),CASE WHEN t.parent_class=0 THEN N'DATABASE' ELSE QUOTENAME(OBJECT_SCHEMA_NAME(t.parent_id))+N'.'+QUOTENAME(OBJECT_NAME(t.parent_id)) END,DATALENGTH(m.definition)
         FROM sys.sql_modules m LEFT JOIN sys.triggers t ON t.object_id=m.object_id
         WHERE m.object_id IN (\(entries.map { String($0.object.objectID) }.joined(separator: ",")));
         """
@@ -48,9 +48,12 @@ public enum DefinitionIndexBatch {
       guard output.results.count == 1 else { throw SQLFailure("Tanım grubu doğrulanamadı.") }
       let ids = Set(entries.map { $0.object.objectID })
       for row in output.results[0].values {
-        guard row.count == 6, let id = row[0].flatMap(Int.init), ids.contains(id), inputs[id] == nil
+        guard row.count == 7, let id = row[0].flatMap(Int.init), ids.contains(id), inputs[id] == nil
         else { throw SQLFailure("Tanım grubu kimlikleri doğrulanamadı.") }
-        var result = Execution(); result.results = [Rows(values: [Array(row.dropFirst())])]
+        if let body=row[1] {
+          guard row[6].flatMap(Int.init)==body.utf16.count*2 else {throw SQLFailure("Nesne tanımı eksik okundu; önceki indeks korundu.")}
+        }
+        var result = Execution(); result.results = [Rows(values: [Array(row[1...5])])]
         inputs[id] = result
       }
     } else {

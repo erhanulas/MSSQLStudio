@@ -54,6 +54,17 @@ struct QueryReadBudgetTests {
     #expect(try !ServerReadLimit.configure(sql:"SELECT 1",rows:Int.max,write:{_ in wrote=true},read:{1}))
     #expect(!wrote)
   }
+  @Test func unlimitedReadDoesNotBecomeMutationDrainMode() async throws {
+    let calls=Calls()
+    var limits=Limits();limits.rows=Int.max;limits.resultSets=1;limits.readOnlyRowLimit=true
+    let result=try await TSQL.run("SELECT 1;\nGO\nSELECT 2;",limits:limits) {_,budget,_ in
+      await calls.add(budget)
+      var output=Execution();output.results=[Rows(fields:[Field("Value")],values:[["1"]])];return output
+    }
+    let budgets=await calls.budgets
+    #expect(budgets.count==1 && budgets[0].rows==Int.max && !budgets[0].preserveExecution)
+    #expect(result.partial && result.stoppedEarly)
+  }
   @Test func driverLimitIsRequiredAndVerifiedForReadOnlySQL() throws {
     for sql in ["SELECT * FROM TBLSTSABIT AS T WITH(NOLOCK)","SELECT 1; SELECT 2;", ";WITH q AS (SELECT 1 AS ID) SELECT * FROM q;"] {
       var applied=0

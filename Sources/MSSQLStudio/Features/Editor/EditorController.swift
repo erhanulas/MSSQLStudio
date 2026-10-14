@@ -17,6 +17,13 @@ import SQLServerKit
   let document: QueryDocument
   var edited: (() -> Void)?
   var position: ((Int, Int) -> Void)?
+  private var measuredSource:String?
+  private var measuredDisplaySource:String?
+  private var measuredFont:NSFont?
+  private var longestLineWidth:CGFloat=0
+  private var sourceLineCount=1
+  private var displayLineCount=1
+  private var lastClipOrigin=NSPoint.zero
   private var occurrenceTask: Task<Void,Never>?
   private let parameterPopover=NSPopover()
   private var parameterTask:Task<Void,Never>?
@@ -113,7 +120,7 @@ import SQLServerKit
     editor.jumpToMatchingPair = { [weak self] in self?.jumpToMatchingPair() }
     editor.revealInExplorer = { [weak document] parts in guard let document else {return};document.revealInExplorer?(parts,document.server,document.database) }
     editor.navigateDefinition = { [weak self] in self?.navigateDefinition() }
-    editor.mouseSelectionEnded = { [weak self] in self?.occurrenceTask?.cancel();self?.insertPresentation.requestPreview();self?.updateOccurrences();self?.updateCommentHint() }
+    editor.mouseSelectionEnded = { [weak self] in self?.occurrenceTask?.cancel();self?.lastClipOrigin=self?.scroll.contentView.bounds.origin ?? .zero;self?.insertPresentation.requestPreview();self?.updateOccurrences();self?.updateCommentHint() }
     editor.unfoldSelection = { [weak self] range in
       guard let self,let marker=collapsedMarkers.first(where:{NSIntersectionRange($0.range,range).length > 0}) else {return false}
       toggleFold(marker.region);return true
@@ -236,38 +243,51 @@ import SQLServerKit
     ruler.needsDisplay = true
   }
   func resizeToViewport() {
-    let gutterWidth=LineNumbers.width(lineCount:document.sql.utf16.reduce(1) {$1 == 10 ? $0+1:$0},font:StudioTheme.codeFont)
+    let font=editor.font ?? StudioTheme.codeFont
+    var geometryChanged=false
+    if measuredSource != document.sql || measuredFont != font {
+      measuredSource=document.sql;measuredFont=font;geometryChanged=true
+      sourceLineCount=document.sql.utf16.reduce(1) {$1 == 10 ? $0+1:$0}
+      let metrics:[NSAttributedString.Key:Any]=[.font:font,.paragraphStyle:Self.codeParagraph()]
+      longestLineWidth=document.sql.components(separatedBy:"\n").map {($0 as NSString).size(withAttributes:metrics).width}.max() ?? 0
+    }
+    if measuredDisplaySource != editor.string {
+      measuredDisplaySource=editor.string;geometryChanged=true
+      displayLineCount=editor.string.utf16.reduce(1) {$1 == 10 ? $0+1:$0}
+    }
+    let gutterWidth=LineNumbers.width(lineCount:sourceLineCount,font:StudioTheme.codeFont)
     if rulerWidth?.constant != gutterWidth {
       rulerWidth?.constant=gutterWidth;ruler.ruleThickness=gutterWidth
       surface.layoutSubtreeIfNeeded()
     }
     scroll.tile()
-    let metrics: [NSAttributedString.Key:Any] = [.font:editor.font ?? StudioTheme.codeFont,.paragraphStyle:Self.codeParagraph()]
-    let longest = document.sql.components(separatedBy:"\n").map { ($0 as NSString).size(withAttributes:metrics).width }.max() ?? 0
-    let textWidth = ceil(longest) + editor.textContainerInset.width * 2 + 10
+    let textWidth = ceil(longestLineWidth) + editor.textContainerInset.width * 2 + 10
     let horizontal = textWidth > scroll.contentView.bounds.width + 1
     (scroll.contentView as? SQLClipView)?.allowsHorizontalMovement = horizontal
     scroll.hasHorizontalScroller = horizontal
     let width = max(scroll.contentView.bounds.width,textWidth)
     let containerWidth = max(1,width - editor.textContainerInset.width * 2)
     if editor.textContainer?.containerSize.width != containerWidth {
+      geometryChanged=true
       editor.textContainer?.containerSize = NSSize(width:containerWidth,height:CGFloat.greatestFiniteMagnitude)
     }
     // Resolve bounded documents before using TextKit's height: its lazy estimates
     // change as paragraphs enter the viewport. Font leading can exceed the configured
     // paragraph height, so counting lines is not an accurate scroll geometry.
-    if editor.string.utf16.count <= 250_000,let content=editor.textContentStorage {
+    if geometryChanged,editor.string.utf16.count <= 250_000,let content=editor.textContentStorage {
       editor.textLayoutManager?.ensureLayout(for:content.documentRange)
     }
-    let lineCount=editor.string.utf16.reduce(1) {$1 == 10 ? $0+1 : $0}
     let measuredHeight=editor.textLayoutManager?.usageBoundsForTextContainer.maxY ?? 0
-    let textHeight=max(measuredHeight,CGFloat(lineCount)*18)+editor.textContainerInset.height*2
+    let textHeight=max(measuredHeight,CGFloat(displayLineCount)*18)+editor.textContainerInset.height*2
     // Trailing space lets the final fold header stay under the pointer near EOF.
     let height=max(scroll.contentView.bounds.height,textHeight+scroll.contentView.bounds.height)
     if editor.frame.size != NSSize(width: width, height: height) {
       editor.setFrameSize(NSSize(width: width, height: height))
       editor.needsDisplay = true
     }
+    // Populate newly exposed TextKit fragments within this resize transaction.
+    editor.layoutSubtreeIfNeeded()
+    editor.textLayoutManager?.textViewportLayoutController.layoutViewport()
     if width <= scroll.contentView.bounds.width + 0.5 && scroll.contentView.bounds.origin.x != 0 {
       scroll.contentView.scroll(to: NSPoint(x: 0, y: scroll.contentView.bounds.origin.y))
       scroll.reflectScrolledClipView(scroll.contentView)
@@ -336,8 +356,9 @@ import SQLServerKit
   }
   @objc private func scrolled() {
     objectHover.hide()
-    insertPresentation.hidePreview()
     let clip = scroll.contentView
+    if clip.bounds.origin != lastClipOrigin {insertPresentation.hidePreview()}
+    lastClipOrigin=clip.bounds.origin
     occurrenceHighlights.frame=clip.bounds
     occurrenceHighlights.needsDisplay=true
     if editor.frame.width <= clip.bounds.width + 1 && abs(clip.bounds.origin.x) > 0.5 {

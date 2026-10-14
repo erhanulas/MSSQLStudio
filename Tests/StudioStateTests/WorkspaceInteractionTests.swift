@@ -175,6 +175,7 @@ import Testing
     let old = UserDefaults.standard.object(forKey: "gridDefaultPageSize")
     defer { if let old { UserDefaults.standard.set(old,forKey:"gridDefaultPageSize") } else { UserDefaults.standard.removeObject(forKey:"gridDefaultPageSize") } }
     let doc = QueryDocument(server: ConnectedServer(profile: ServerProfile(),password:""),database:"master",title:"Pages")
+    doc.limits.rows=5000
     doc.results = [Rows(fields:[Field("ID",type:4)],values:(0..<1200).map { [String($0)] })]
     let query = QueryController(document:doc); _ = query.view
     let grid = try #require(query.children.compactMap { $0 as? ResultController }.first)

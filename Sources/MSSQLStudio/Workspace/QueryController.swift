@@ -904,7 +904,7 @@ import SwiftUI
   @objc private func showLoadingOptions() {
     optionsPopover?.close()
     let popup=NSPopover()
-    let panel=ResultLoadingPanel(rows:document.limits.rows,refresh:effectiveRefreshSeconds,refreshAllowed:!tables.values.contains {$0.editDefinition != nil},readLimitAllowed:canChangeReadLimit) { [weak self,weak popup] rows,refresh,save in
+    let panel=ResultLoadingPanel(rows:document.limits.rows == Int.max ? 0:document.limits.rows,refresh:effectiveRefreshSeconds,refreshAllowed:!tables.values.contains {$0.editDefinition != nil},readLimitAllowed:canChangeReadLimit) { [weak self,weak popup] rows,refresh,save in
       guard let self,!document.busy,!submittingData else {return}
       applyLoadingPreferences(rows:rows,refresh:refresh,save:save);popup?.close()
     }
@@ -928,7 +928,7 @@ import SwiftUI
   private func configurePageMenu() {syncPageMenu()}
   private var effectiveRefreshSeconds:Int {defaultRefreshApplied ? selectedRefreshSeconds : document.initialRefreshSeconds ?? ResultReadPreferences.refreshSeconds}
   func applyLoadingPreferences(rows:Int,refresh:Int,save:Bool) {
-    guard !document.busy,!submittingData,(1...5_000_000).contains(rows),(0...3600).contains(refresh) else {return}
+    guard !document.busy,!submittingData,(0...5_000_000).contains(rows),(0...3600).contains(refresh) else {return}
     guard rows == document.limits.rows || canChangeReadLimit else {return}
     let seconds=tables.values.contains {$0.editDefinition != nil} ? 0:refresh
     document.limits=ResultReadPreferences.limits(rows:rows)
@@ -963,41 +963,38 @@ import SwiftUI
   private func syncPageMenu() {
     syncReadOptions()
     let menu=StudioMenu();menu.autoenablesItems=false
-    func compact(_ value:Int) -> String {value>=1000 && value%1000 == 0 ? "\(value/1000)k":value.formatted()}
-    let title=NSMenuItem(title:"\(compact(document.limits.rows)) satır",action:nil,keyEquivalent:"")
+    let selected=document.limits.rows == Int.max ? 0:document.limits.rows
+    let defaultValue=ResultReadPreferences.readLimit == Int.max ? 0:ResultReadPreferences.readLimit
+    let title=NSMenuItem(title:selected==0 ? "Tümü":"\(selected.formatted()) satır",action:nil,keyEquivalent:"")
     title.image=NSImage(systemSymbolName:"tablecells",accessibilityDescription:nil);menu.addItem(title)
-    func section(_ label:String,values:[Int],selected:Int,action:Selector,identifier:String) {
-      let item=NSMenuItem(title:label,action:nil,keyEquivalent:"");item.identifier = .init(identifier)
-      let choices=StudioMenu();choices.autoenablesItems=false
-      for value in values + (values.contains(selected) ? []:[selected]) {
-        let option=NSMenuItem(title:value == 0 ? "Sınır içindeki tüm satırlar":value.formatted(),action:action,keyEquivalent:"")
-        option.target=self;option.tag=value;option.state=value == selected ? .on:.off;choices.addItem(option)
-      }
-      choices.addItem(.separator())
-      let custom=NSMenuItem(title:"Özel…",action:#selector(showLoadingOptions),keyEquivalent:"");custom.target=self;choices.addItem(custom)
-      item.submenu=choices;menu.addItem(item)
-    }
-    section("Satır sınırı · \(document.limits.rows.formatted()) / sonuç",values:[10,100,500,1000,10_000,50_000,100_000,1_000_000,5_000_000],selected:document.limits.rows,action:#selector(changeReadLimit(_:)),identifier:"gridReadChoices")
-    let readChoices=menu.items.first {$0.identifier?.rawValue == "gridReadChoices"}
-    readChoices?.isEnabled=canChangeReadLimit
     menu.addItem(.separator())
-    let custom=NSMenuItem(title:"Özel satır sınırı…",action:#selector(showLoadingOptions),keyEquivalent:"");custom.target=self;custom.tag = -1;menu.addItem(custom)
+    menu.addItem(NSMenuItem(title:"Satır Sınırı",action:nil,keyEquivalent:""))
+    let presets=[10,100,250,500,1000]
+    let extra=[selected,defaultValue].filter {$0>0 && !presets.contains($0)}
+    for value in presets+Array(Set(extra)).sorted()+[0] {
+      let name=value==0 ? "Tümü":value.formatted()
+      let item=NSMenuItem(title:name+(value==defaultValue ? "  Varsayılan":""),action:#selector(changeReadLimit(_:)),keyEquivalent:"")
+      item.identifier = .init("gridReadChoices");item.target=self;item.tag=value
+      item.state=value==selected ? .on:.off;item.isEnabled=canChangeReadLimit;menu.addItem(item)
+    }
+    let custom=NSMenuItem(title:"Özel…",action:#selector(showLoadingOptions),keyEquivalent:"");custom.target=self;custom.isEnabled=canChangeReadLimit;menu.addItem(custom)
+    menu.addItem(.separator())
     let save=NSMenuItem(title:"Varsayılan Yap",action:#selector(saveLoadingDefaults),keyEquivalent:"");save.target=self;save.tag = -2;menu.addItem(save)
     rowLimit.menu=menu;rowLimit.selectItem(at:0)
     syncReadOptionsHelp()
   }
   private func syncReadOptionsHelp() {
-    rowLimit.toolTip="Satır sınırı: \(document.limits.rows.formatted()) / sonuç · Yalnız doğrulanmış SELECT sorgularında uygulanır. INSERT/UPDATE/DELETE/EXEC yürütmesini veya çıktısını sınırlamaz. Mevcut SELECT önbelleğine anında uygulanır; artırmak yeni SQL çalıştırmaz."
+    rowLimit.toolTip="Satır sınırı: \(document.limits.rows == Int.max ? "Tümü":document.limits.rows.formatted()) / sonuç · Yalnız doğrulanmış SELECT sorgularında uygulanır. INSERT/UPDATE/DELETE/EXEC yürütmesini veya çıktısını sınırlamaz. Mevcut SELECT önbelleğine anında uygulanır; artırmak yeni SQL çalıştırmaz."
     if let previous=document.lastExecutedReadLimit,previous != document.limits.rows,!document.results.isEmpty {
-      rowLimit.toolTip! += "\nSon okuma sınırı: \(previous.formatted()). Sınırı büyütmek yalnızca önbellekteki satırları geri gösterir; ek satır okumak için Sonuçları yenile veya Çalıştır’a basın."
+      rowLimit.toolTip! += "\nSon okuma sınırı: \(previous == Int.max ? "Tümü":previous.formatted()). Sınırı büyütmek yalnızca önbellekteki satırları geri gösterir; ek satır okumak için Sonuçları yenile veya Çalıştır’a basın."
     }
     if !canChangeReadLimit {rowLimit.toolTip! += "\nSatır sınırını değiştirmek için düzenleme modunu ve devam eden dışa aktarmayı tamamlayın."}
-    rowLimit.menu?.items.first {$0.identifier?.rawValue == "gridReadChoices"}?.isEnabled=canChangeReadLimit
+    for item in rowLimit.menu?.items ?? [] where item.identifier?.rawValue == "gridReadChoices" {item.isEnabled=canChangeReadLimit}
     for item in rowLimit.menu?.items.first(where:{$0.identifier?.rawValue == "gridReadChoices"})?.submenu?.items ?? [] {item.isEnabled=canChangeReadLimit}
     rowLimit.setAccessibilityHelp(rowLimit.toolTip)
   }
   @objc private func changeReadLimit(_ item:NSMenuItem) {
-    guard !document.busy,!submittingData,canChangeReadLimit,(1...5_000_000).contains(item.tag) else {return}
+    guard !document.busy,!submittingData,canChangeReadLimit,(0...5_000_000).contains(item.tag) else {return}
     document.limits=ResultReadPreferences.limits(rows:item.tag)
     syncPageMenu()
     update();changed?()
@@ -1005,6 +1002,7 @@ import SwiftUI
   @objc private func saveLoadingDefaults() {
     guard !document.busy,!submittingData else {return}
     ResultReadPreferences.save(rows:document.limits.rows,refresh:effectiveRefreshSeconds)
+    syncPageMenu()
   }
   func applyPageSize(_ value: Int, makeDefault: Bool = false) {
     guard (0...1_000_000).contains(value) else { return }

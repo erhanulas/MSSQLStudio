@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.134",
+    "date": "2026-10-15",
+    "title": "Sonuç sınırı ve uzun SQL önizleme düzeltmeleri",
+    "changes": [
+      "Sonuç satır sınırı düz menüye dönüştürüldü: 10, 100, 250, 500, 1.000, Tümü, Özel ve Varsayılan Yap. Yeni kurulum varsayılanı 500; kayıtlı tercihler korunur. Tümü satır kotasını kaldırır, byte ve süre güvenliği korunur.",
+      "Sonuç alanı dikey genişletilirken editörün yeni görünen satırları aynı yerleşim adımında hazırlanır; tam metin ölçümleri boyut sürüklemesi boyunca tekrar edilmez.",
+      "INSERT kolonlarıyla SELECT/VALUES ifadeleri arasındaki tıklama önizlemesi ve vurgusu düzeltildi. Yeniden çizim bildirimi artık gerçek kaydırma gibi önizlemeyi kapatmaz.",
+      "Çevrimdışı uzun nesne önizlemelerinde yatay kırpma ve CR/Unicode satır sonu geometrisi düzeltildi. İndeks modül okumaları sunucunun UTF-16 uzunluğuyla doğrulanır; eksik yanıt önceki sağlam tanımın üzerine yazılmaz."
+    ]
+  },
+  {
     "version": "0.2.133",
     "date": "2026-10-14",
     "title": "Güvenli DML yürütmesi ve tek sonuç satır sınırı",

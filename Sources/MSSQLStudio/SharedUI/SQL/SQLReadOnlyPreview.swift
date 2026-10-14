@@ -84,7 +84,7 @@ import SwiftUI
     scroll.tile()
     let width=max(measuredWidth,scroll.contentView.bounds.width),height=max(scroll.contentView.bounds.height,CGFloat(lineStarts.count)*20+32)
     if preview.frame.size != NSSize(width:width,height:height) {
-      preview.textContainer?.containerSize=NSSize(width:max(1,width-28),height:10000000)
+      preview.textContainer?.containerSize=NSSize(width:max(1,width-28),height:CGFloat.greatestFiniteMagnitude)
       preview.setFrameSize(NSSize(width:width,height:height))
       preview.needsLayout=true;preview.layoutSubtreeIfNeeded()
     }
@@ -98,8 +98,14 @@ import SwiftUI
     let paragraph=NSMutableParagraphStyle();paragraph.minimumLineHeight=20;paragraph.maximumLineHeight=20
     attributed.addAttribute(.paragraphStyle,value:paragraph,range:NSRange(location:0,length:attributed.length))
     preview.textContentStorage?.textStorage?.setAttributedString(attributed)
-    lineStarts=[0];for (index,unit) in sql.utf16.enumerated() where unit==10 {lineStarts.append(index+1)}
-    measuredWidth=min(100000,max(40,(sql.components(separatedBy:"\n").map {($0 as NSString).size(withAttributes:[.font:StudioTheme.codeFont]).width}.max() ?? 0)+40))
+    lineStarts=[0]
+    let units=Array(sql.utf16)
+    for (index,unit) in units.enumerated() {
+      if unit==13 {lineStarts.append(index+1+(index+1<units.count && units[index+1]==10 ? 1:0))}
+      else if unit==10 {if index==0 || units[index-1] != 13 {lineStarts.append(index+1)}}
+      else if [UInt16(0x85),0x2028,0x2029].contains(unit) {lineStarts.append(index+1)}
+    }
+    measuredWidth=max(40,(sql.components(separatedBy:.newlines).map {($0 as NSString).size(withAttributes:[.font:StudioTheme.codeFont]).width}.max() ?? 0)+40)
     updateGeometry()
     if same {preview.selectedRanges=selection;scroll.contentView.scroll(to:origin)}
     else {preview.setSelectedRange(NSRange(location:0,length:0));scroll.contentView.scroll(to:.zero)}

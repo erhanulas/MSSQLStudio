@@ -20,7 +20,7 @@ extension TSQL {
     var output = Execution()
     var budget = limits
     let preserveExecution=limits.readOnlyRowLimit && !usesResultRowLimit(sql)
-    if preserveExecution {budget.rows=Int.max}
+    if preserveExecution {budget.rows=Int.max;budget.preserveExecution=true}
     for (batchIndex, batch) in try batches(sql).enumerated() {
       if !preserveExecution && (budget.resultSets <= 0 || budget.totalBytes <= 0) {
         output.partial = true

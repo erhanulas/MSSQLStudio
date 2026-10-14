@@ -161,7 +161,7 @@ public final class ODBCConnection: @unchecked Sendable {
         }
       }
     }
-    let preserveExecution=limits.readOnlyRowLimit && (limits.rows == Int.max || !TSQL.canRepeatRead(text))
+    let preserveExecution=limits.readOnlyRowLimit && (limits.preserveExecution || !TSQL.canRepeatRead(text))
     let fetchRows=preserveExecution ? Int.max:limits.rows
     let serverLimited=try ServerReadLimit.configure(sql:text,rows:fetchRows,write:{maximum in
       try check(SQLSetStmtAttr(handle,SQLINTEGER(SQL_ATTR_MAX_ROWS),UnsafeMutableRawPointer(bitPattern:maximum),0),kind:SQLSMALLINT(SQL_HANDLE_STMT),handle:handle)
