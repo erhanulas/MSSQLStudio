@@ -43,6 +43,9 @@ import Testing
           let rect = host.view.convert(control.bounds, from: control)
           #expect(rect.minX >= -1 && rect.maxX <= 781, "\(theme) \(section) horizontal control overflow: \(rect)")
         }
+        let apply=try #require(nativeButtons.first {$0.accessibilityIdentifier()=="settingsApply"})
+        let applyRect=host.view.convert(apply.bounds,from:apply)
+        #expect(applyRect.minX>=20 && applyRect.maxX<=host.view.bounds.maxX-20 && applyRect.minY>=20 && applyRect.maxY<=host.view.bounds.maxY-20)
         if section == .shortcuts {
           let capture = views.compactMap { $0 as? NSButton }.filter { $0.title.contains("Değiştir") }
           #expect(capture.count == GridShortcuts.Action.allCases.count)

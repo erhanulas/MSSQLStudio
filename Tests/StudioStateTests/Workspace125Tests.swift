@@ -95,7 +95,11 @@ import Testing
     let window=try #require(host.auxiliaryWindows.compactMap(\.window).first {$0.identifier?.rawValue=="studio.settings"})
     defer {window.close()}
     let root=try #require(window.contentView)
-    #expect(root.bounds.size==NSSize(width:960,height:720))
+    let requested=window.frameRect(forContentRect:NSRect(origin:window.frame.origin,size:NSSize(width:960,height:720)))
+    let fitted=window.constrainFrameRect(requested,to:window.screen)
+    let expected=window.contentRect(forFrameRect:fitted).size
+    #expect(root.bounds.size==expected)
+    #expect(root.bounds.width>=820 && root.bounds.height>=620)
     try await wait {descendants(root).contains {$0.accessibilityIdentifier()=="settingsApply"}}
     root.layoutSubtreeIfNeeded()
     let apply=try #require(descendants(root).compactMap {$0 as? NSButton}.first {$0.accessibilityIdentifier()=="settingsApply"})

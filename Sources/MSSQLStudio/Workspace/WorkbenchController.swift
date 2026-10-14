@@ -800,6 +800,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     window.setContentSize(NSSize(width: width, height: height))
     window.minSize = NSSize(width: min(width, minWidth), height: min(height, minHeight))
     window.center()
+    // Resolve AppKit's screen-height constraint before the hosting view's first
+    // layout instead of letting orderFront change its proposal afterward.
+    window.setFrame(window.constrainFrameRect(window.frame,to:window.screen),display:false)
     let owner = NSWindowController(window: window)
     auxiliaryWindows.append(owner)
     window.didClose={ [weak self,weak window] in
