@@ -113,8 +113,8 @@ import Testing
   }
   @Test func contextualMenusKeepNativeActionsAndLegacyAuxiliaryWindowsSupportEscape() throws {
     _=NSApplication.shared
-    let menu=StudioMenu();let item=menu.addItem(withTitle:"Klasöre Taşı",action:nil,keyEquivalent:"")
-    #expect(item.image != nil && menu.minimumWidth>=220 && menu.font?.pointSize==13)
+    let menu=StudioMenu();let item=NSMenuItem(title:"Klasöre Taşı",action:nil,keyEquivalent:"");item.image=NSImage(systemSymbolName:"folder",accessibilityDescription:nil);menu.addItem(item)
+    #expect(item.image != nil && menu.minimumWidth>=220 && menu.font?.pointSize==14)
     let state=state(),host=WorkbenchController(state:state);_=host.view
     let window=host.present(Text("Legacy form"),title:"Old auxiliary",width:480,height:240,minWidth:400,minHeight:200)
     #expect(window is StudioPanelWindow && window.isVisible)

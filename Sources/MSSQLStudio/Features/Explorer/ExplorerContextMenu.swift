@@ -97,12 +97,6 @@ extension WorkbenchController {
       addGroupColorMenu(to:menu,id:id)
       command("Klasörü Kaldır…",#selector(removeExplorerGroup));return
     }
-    if case .server=node.kind {
-      addMoveMenu(to:menu,group:nil,server:node.server.id)
-      command("Kayıtlı Bağlantıyı Sil…",#selector(deleteExplorerConnection))
-      menu.items.last?.toolTip="Kayıtlı profili ve bu profile ait parolayı siler; açık sorgu sekmeleri korunur."
-      menu.addItem(.separator())
-    }
     if case .favorite = node.kind {
       let favorites=favoriteMenu(for:node)
       for item in favorites.items {favorites.removeItem(item);menu.addItem(item)}
@@ -114,7 +108,27 @@ extension WorkbenchController {
       command("Adı Kopyala",#selector(copyNodeName));menu.items.last?.isEnabled=true
       return
     }
-    if case .server = node.kind {command("Favori Sorgular…",#selector(showFavoritesAtNode))}
+    if case .server = node.kind {
+      command("Yeni Sorgu",#selector(newQueryAtNode))
+      if node.server.online && !node.server.reconnecting {command("Yenile",#selector(refreshContextNode))}
+      menu.addItem(.separator())
+      command("Favori Sorgular…",#selector(showFavoritesAtNode))
+      menu.addItem(.separator())
+      command("Bağlantı ayarları…",#selector(editConnection))
+      if node.server.online && !node.server.reconnecting {
+        command("Aktif Bağlantıyı Kapat",#selector(closeExplorerConnection(_:)))
+        menu.items.last?.representedObject=node.server
+      } else {command(node.server.reconnecting ? "Bağlanıyor…":"Yeniden Bağlan",#selector(reconnectServer))}
+      menu.addItem(.separator())
+      addMoveMenu(to:menu,group:nil,server:node.server.id)
+      command("Explorer’dan Kaldır…",#selector(disconnectServer))
+      menu.items.last?.toolTip="Explorer’dan kaldırır; kayıtlı profil, parola ve açık sorgu sekmeleri korunur."
+      command("Kayıtlı Bağlantıyı Sil…",#selector(deleteExplorerConnection))
+      menu.items.last?.toolTip="Kayıtlı profili ve bu profile ait parolayı siler; açık sorgu sekmeleri korunur."
+      menu.addItem(.separator())
+      command("Adı Kopyala",#selector(copyNodeName))
+      return
+    }
     if case .database = node.kind {command("Favori Sorgular…",#selector(showFavoritesAtNode))}
 
     if !node.server.online || node.server.reconnecting {
@@ -123,10 +137,6 @@ extension WorkbenchController {
       }
       command(node.server.reconnecting ? "Bağlanıyor…" : "Yeniden Bağlan", #selector(reconnectServer))
       command("Bağlantı ayarları…", #selector(editConnection))
-      if case .server = node.kind {
-        command("Explorer’dan Kaldır…", #selector(disconnectServer))
-        menu.items.last?.toolTip="Explorer’dan kaldırır; kayıtlı profil, parola ve açık sorgu sekmeleri korunur."
-      }
       command("Yeni Sorgu", #selector(newQueryAtNode))
       return
     }
@@ -134,15 +144,6 @@ extension WorkbenchController {
       let linkedCommands=linkedMenu(for:node)
       for item in linkedCommands.items {linkedCommands.removeItem(item);menu.addItem(item)}
       return
-    }
-    if case .server = node.kind {
-      command("Bağlantı ayarları…",#selector(editConnection))
-      command("Aktif Bağlantıyı Kapat",#selector(closeExplorerConnection(_:)))
-      menu.items.last?.representedObject=node.server
-      menu.items.last?.image=NSImage(systemSymbolName:"power",accessibilityDescription:nil)
-      menu.items.last?.isEnabled = !node.server.reconnecting
-      command("Explorer’dan Kaldır…", #selector(disconnectServer))
-      menu.items.last?.toolTip="Explorer’dan kaldırır; kayıtlı profil, parola ve açık sorgu sekmeleri korunur."
     }
     if case .database=node.kind {
       command("DDL Karşılaştır…",#selector(compareDatabasesAtNode))

@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.128",
+    "date": "2026-10-14",
+    "title": "Sade menüler ve kategorili kısayollar",
+    "changes": [
+      "Ortak sağ tık menüleri daha ferah metin ölçüsü, sakin ve seçici simgeler, hizalı kısayollar ve belirgin işlem gruplarıyla yenilendi. Explorer bağlantı menüsünde sorgu, favoriler, bağlantı ve kaldırma işlemleri ayrı gruplardır.",
+      "Ayarlar kısayolları yedi kategoriye ayrıldı. Tüm kategorilerde Türkçe harf toleranslı arama ve atanmış/atanmamış filtreleri eklendi; yalnız ilgili komutlar gösterilir.",
+      "Genel ayar aramasından seçilen kısayolun kategorisi otomatik açılır. Mevcut atamalar, anlık değiştirme/kaldırma/sıfırlama, çakışma kontrolleri ve native menü klavye/erişilebilirlik davranışları korunur."
+    ]
+  },
+  {
     "version": "0.2.127",
     "date": "2026-10-14",
     "title": "Ortak menüler, aramalı seçimler ve editör etkileşimleri",

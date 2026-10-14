@@ -48,7 +48,7 @@ import Testing
         #expect(applyRect.minX>=20 && applyRect.maxX<=host.view.bounds.maxX-20 && applyRect.minY>=20 && applyRect.maxY<=host.view.bounds.maxY-20)
         if section == .shortcuts {
           let capture = views.compactMap { $0 as? NSButton }.filter { $0.title.contains("Değiştir") }
-          #expect(capture.count == GridShortcuts.Action.allCases.count)
+          #expect(capture.count == ShortcutCatalog.actions(category:.workspace).count)
           #expect(capture.allSatisfy { !($0.toolTip ?? "").isEmpty && !($0.accessibilityLabel() ?? "").isEmpty })
         }
         let rep = try #require(host.view.bitmapImageRepForCachingDisplay(in: host.view.bounds))

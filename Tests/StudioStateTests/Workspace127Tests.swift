@@ -67,7 +67,7 @@ import Testing
     parts=[];editor.revealInExplorer=nil
     #expect(!StudioCommandCatalog.dispatch(event("g"),to:editor,menu:{editor.makeSQLMenu(at:20)}) && parts.isEmpty)
     let menu=editor.makeSQLMenu(at:20)
-    #expect(menu is StudioMenu && menu.items.filter {!$0.isSeparatorItem}.allSatisfy {$0.image != nil})
+    #expect(menu is StudioMenu && menu.items.contains {$0.action == Selector(("revealExplorerObject:")) && $0.image != nil})
   }
   @Test func editorSelectionPreservesSyntaxInkAndSourceAcrossThemes() throws {
     _=NSApplication.shared

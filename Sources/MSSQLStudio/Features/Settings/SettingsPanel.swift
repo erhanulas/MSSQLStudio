@@ -3,52 +3,6 @@ import CoreText
 import SQLServerKit
 import SwiftUI
 
-@MainActor private final class ShortcutCaptureButton: NSButton {
-  var shortcutAction = GridShortcuts.Action.headers
-  var report: ((String) -> Void)?
-  private var monitor: Any?
-  var recording = false
-  override var acceptsFirstResponder: Bool { true }
-  override func mouseDown(with event:NSEvent) {beginRecording()}
-  override func performClick(_ sender:Any?) {beginRecording()}
-  override func accessibilityPerformPress()->Bool {guard isEnabled else {return false};beginRecording();return true}
-  @objc func beginRecording() {
-    guard isEnabled else {return}
-    stop(); recording = true; title = "Tuşlara basın… (Esc: iptal)"
-    window?.makeFirstResponder(self)
-    monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      let handled = MainActor.assumeIsolated {
-        guard let self, self.recording else { return false }
-        guard event.window === self.window,self.window?.isVisible == true,self.window?.firstResponder === self else {self.stop();return false}
-        if event.keyCode == 53 { self.stop(); return true }
-        if let message = GridShortcuts.save(event,action: self.shortcutAction) { self.report?(message) }
-        else { self.report?("Kısayol kaydedildi."); self.stop() }
-        return true
-      }
-      return handled ? nil : event
-    }
-  }
-  func stop() {
-    if let monitor { NSEvent.removeMonitor(monitor) }
-    monitor = nil; recording = false
-    title = GridShortcuts.binding(shortcutAction).label + " · Değiştir…"
-  }
-  override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); if window == nil { stop() } }
-}
-private struct ShortcutCapture: NSViewRepresentable {
-  let action: GridShortcuts.Action
-  var report: (String) -> Void
-  func makeNSView(context: Context) -> ShortcutCaptureButton {
-    let button = ShortcutCaptureButton(); button.bezelStyle = .rounded; button.shortcutAction = action; button.report = report; button.target=button;button.action=#selector(ShortcutCaptureButton.beginRecording);button.stop()
-    button.setAccessibilityLabel(GridShortcuts.title(action)+" kısayolunu değiştir")
-    button.toolTip = GridShortcuts.title(action)+" kısayolunu değiştir"
-    return button
-  }
-  func updateNSView(_ button: ShortcutCaptureButton, context: Context) {
-    button.report = report
-    if !button.recording { button.title = GridShortcuts.binding(action).label + " · Değiştir…" }
-  }
-}
 enum SettingsSection: String, CaseIterable {
   case appearance, editor, shortcuts, workspace, updates, security
   var title: String {
@@ -85,7 +39,6 @@ struct SettingsPanel: View {
   @State private var validation = UserDefaults.standard.object(forKey:"sqlValidateReferences") as? Bool ?? true
   @State private var aliases = UserDefaults.standard.object(forKey:"sqlAutomaticAliases") as? Bool ?? true
   @State private var noLock = UserDefaults.standard.bool(forKey:"sqlAutomaticNoLock")
-  @State private var shortcutRevision = 0
   @State private var history = false
   @State private var closedTabLimit = QueryHistoryPolicy.defaultClosedTabLimit
   @State private var historyDays = QueryHistoryPolicy.defaultDays
@@ -237,21 +190,7 @@ struct SettingsPanel: View {
           }
         }
         settingsPage(.shortcuts, subtitle: "Sık kullandığınız işlemlere tek bir tuş birleşimiyle ulaşın.") {
-          settingsCard("Klavye kısayolları", icon: "keyboard") {
-            ForEach(Array(GridShortcuts.Action.allCases.enumerated()), id: \.element.rawValue) { index, action in
-              if index > 0 { Divider() }
-              HStack(spacing: 12) {
-                Text(GridShortcuts.title(action)).frame(maxWidth: .infinity, alignment: .leading)
-                ShortcutCapture(action: action) { message = $0; shortcutRevision += 1 }.frame(width: 220, height: 28)
-                StudioActionButton("Kaldır", icon:"xmark",tint:.secondary) {GridShortcuts.clear(action);shortcutRevision += 1}.controlSize(.small)
-                StudioActionButton("Sıfırla", icon: "arrow.counterclockwise", tint: .accentColor) { GridShortcuts.reset(action); shortcutRevision += 1 }.controlSize(.small)
-              }.id(shortcutRevision).id("shortcut."+action.rawValue)
-            }
-          }
-          settingsNote("Değiştir’e basıp ⌘ veya ⌃ ile harf, rakam, / , . [ ], Space veya Enter kullanın. Çakışan ve ayrılmış kısayollar reddedilir; Escape iptal eder. Değişiklikler hemen kaydedilir.", icon: "bolt.circle")
-          settingsNote("Editörde ⌘Z / ⌘⇧Z ve ⌃Z / ⌃Y / ⌃⇧Z geri al / ileri al için kullanılabilir.", icon: "arrow.uturn.backward")
-          settingsNote("SQL editöründe ⌥← / ⌥→ değişken, kelime ve operatör sınırlarında ilerler. @ / @@ önekleri değişkenle birlikte kalır.", icon: "arrow.left.and.right")
-          settingsNote("⌘← / ⌘→ önce kodun başına / sonuna, ikinci basışta girinti / sondaki boşluk sınırına gider. ⇧ ekleyerek aynı hareketlerle seçim yapabilirsiniz.", icon: "selection.pin.in.out")
+          ShortcutSettings(target: searchTarget?.id) { message = $0 }
         }
         settingsPage(.workspace, subtitle: "Bu Mac’te tutulan sorgu geçmişini ve oturum kurtarmayı yönetin.") {
           settingsCard("Nesne tanım indeksi",icon:"externaldrive") {
@@ -387,7 +326,7 @@ struct SettingsPanel: View {
         content()
       }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
     }.background(Color(nsColor: StudioTheme.panel))
-      .onChange(of:searchTarget) {_,target in if let target,target.section == section {proxy.scrollTo(target.scrollID,anchor:.center)}}
+      .task(id:searchTarget) {if let target=searchTarget,target.section == section {await Task.yield();proxy.scrollTo(target.scrollID,anchor:.center)}}
       .onChange(of:selectedTab) {_,selected in if selected == section,let target=searchTarget,target.section == section {proxy.scrollTo(target.scrollID,anchor:.center)}}
       .onAppear {if let target=searchTarget,target.section == section {proxy.scrollTo(target.scrollID,anchor:.center)}}
     }} }
