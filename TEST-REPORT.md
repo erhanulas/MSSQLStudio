@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.123 / build 124 public yayın doğrulandı
+
+- [Public/latest v0.2.123](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.123), kaynak `f2695e6409c4f8ab76a3da67e367443430008b12`; [Actions 38574874949](https://github.com/erhanulas/MSSQLStudio/actions/runs/38574874949) bütün adımlarıyla başarılı. Tam alan ayar başlıkları, bağımsız erişilebilir yardımcı pencereler ve asenkron kapanış düzeltmesi yayımlandı.
+- CI gerçek yayın paketleriyle **396 app +341 core +8 text =745 test; 718 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 85.582 /9.677 /0.003 sn (`/tmp/MSSQLStudio-123-ci-tests.log`). Sabit kimlik/izole Keychain denetimi ve geçici kimlik temizliği başarılı.
+- Dört public asset indirildi: GitHub digest/SHA-256, ZIP/PKG URL/hash manifest eşliği, exact 0.2.123/build124 metadata/binary/notlar ve kaynak ReleaseNotes byte eşliği doğrulandı. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği geçti; helper yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu `Foundation updater feed verified: 0.2.123` verdi. Kanıt `/tmp/MSSQLStudio-123-public-verification/verification.json` içindedir.
+- Kapanış normal AppKit döngüsüyle izole süreçte doğrulandı; fiziksel Mission Control/CUA ve gerçek Installer tamamlanması/yeniden açma uçtan uca denenmedi. Canlı SQL Server denenmedi. Kullanıcı uygulaması/SQL/Keychain/history/favoriler ve `.vscode/` korunur; kurulum veya yeniden başlatma yapılmadı.
+
+Public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.123.pkg`: `19c1b2f61a267f7dc1342f1d545aee2824f01650c3dbd91c98a0aa0410935865`.
+- `MSSQLStudio-0.2.123.zip`: `3c9d76648051954d9f951a74fac7b7bbf23f7cb5bdd82c1d9a2fd3e08b6f6733`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `a6d0ff35282d958a3c6fb6c4e60850037c83caa6130e6df2a695252c0000e95d`.
+
 ## 14 Ekim 2026 — v0.2.123 / build 124 yayın hazırlığı
 
 - Ayar kartlarındaki varsayılan DisclosureGroup oku yerine ortak StudioDisclosureHeader native kontrolü kullanılır. Başlık boyunca ok/ikon/metin/sağ boşluk tek eylemdir; StudioFullAreaButtonCell tüm sınırları izler. Gövdeye gesture yoktur; iç kontroller bağımsız kalır. Hover/basılı yüzey, native odak/Space ve açık/kapalı AX değeri vardır. Native test 2/100/300/478 pt noktalarında hit/trackable kontrolü, dört gerçek target/action ve disabled hit reddini doğruladı. Gerçek SettingsPanel kartını kapatıp açınca alan kaldırılır/yeniden oluşturulur ve kaydedilmemiş depo taslağı korunur. Kalıcı kural AGENTS.md Görünüm/Ayarlar sözleşmesine eklendi.
