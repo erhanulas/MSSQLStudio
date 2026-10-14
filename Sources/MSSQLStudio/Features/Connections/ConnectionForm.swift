@@ -299,7 +299,7 @@ struct ConnectionForm: View {
             .buttonStyle(StudioPrimaryButton()).disabled(true)
         }
       }
-    }.padding(22).studioPanel().frame(width: 940, height: 620)
+    }.padding(22).studioPanel().frame(minWidth:820,idealWidth:820,maxWidth:.infinity,minHeight:620,idealHeight:620,maxHeight:.infinity)
       .onChange(of: profile) { old, new in
         var previous = old
         previous.name = new.name

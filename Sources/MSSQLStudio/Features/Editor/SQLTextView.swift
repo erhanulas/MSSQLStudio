@@ -8,6 +8,16 @@ import SQLServerKit
     finder.isIncrementalSearchingEnabled=true;finder.incrementalSearchingShouldDimContentView=false
     return finder
   }()
+  var hoverMoved:((NSPoint?)->Void)?
+  private var hoverArea:NSTrackingArea?
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas();if let hoverArea {removeTrackingArea(hoverArea)}
+    let area=NSTrackingArea(rect:.zero,options:[.mouseMoved,.mouseEnteredAndExited,.activeInKeyWindow,.inVisibleRect],owner:self,userInfo:nil)
+    addTrackingArea(area);hoverArea=area
+  }
+  override func mouseMoved(with event:NSEvent) {hoverMoved?(convert(event.locationInWindow,from:nil));super.mouseMoved(with:event)}
+  override func mouseExited(with event:NSEvent) {hoverMoved?(nil);super.mouseExited(with:event)}
+  override func viewWillMove(toWindow newWindow:NSWindow?) {if newWindow==nil {hoverMoved?(nil)};super.viewWillMove(toWindow:newWindow)}
   var findMatchesChanged:(([NSRange])->Void)?
   private var findObservation:NSKeyValueObservation?
   func configureFinder(in container:any NSTextFinderBarContainer) {

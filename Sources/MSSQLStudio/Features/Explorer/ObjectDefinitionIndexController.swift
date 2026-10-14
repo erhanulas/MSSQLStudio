@@ -215,7 +215,7 @@ import SQLServerKit
     activities[db] = nil
     notify(db)
     synchronizedAt[db] = Date()
-    status = "\(db) · Eşitleme tamamlandı · \(unavailable) okunamadı"
+    status = "\(db) · Eşitleme tamamlandı"
   }
   private func fetchPage(
     _ entries: [DefinitionIndexEntry], database: String, scope: String, generation: UUID, token: UUID,

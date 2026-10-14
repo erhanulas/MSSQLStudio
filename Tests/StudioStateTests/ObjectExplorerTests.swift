@@ -360,7 +360,7 @@ import SQLServerKit
     let offline=host.explorerConnectionMenu(server:server)
     let reconnect=try #require(offline.items.first {$0.title == "Yeniden Bağlan"})
     server.reconnecting=true
-    #expect(host.explorerConnectionMenu(server:server).items.last?.isEnabled == false)
+    #expect(host.explorerConnectionMenu(server:server).items.first(where:{$0.title=="Yeniden Bağlan"})?.isEnabled == false)
     server.reconnecting=false
     var attempts=0;server.reconnectFixture={attempts += 1}
     #expect(NSApp.sendAction(try #require(reconnect.action),to:reconnect.target,from:reconnect))

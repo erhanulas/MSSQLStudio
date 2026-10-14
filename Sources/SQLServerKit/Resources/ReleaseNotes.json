@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.2.122",
+    "date": "2026-10-14",
+    "title": "Pencere yönetimi, kompakt ayarlar ve Explorer aktarımı",
+    "changes": [
+      "Yardımcı pencereler sahip pencereyle ilişkilendirildi. ⌘W öndeki pencereyi kapatır; arkadaki sorgu sekmesini kapatmaz. Kaydet/Çalıştır/Formatla komutları yardımcı penceredeyken arka sorguya gönderilmez. Ayrılmış sorguda ilgili belge kullanılır.",
+      "Ayarlar, sol kategori listesi ve açılır/kapanır kompakt gruplarla yenilendi. Genel arama ilgili grubu açar; taslaklar gezinmede korunur. Çalışma Alanı’nda kaydedilmemiş SQL için sekme kapatma uyarısı ayarlanabilir; çalışan sorgu, transaction ve veritabanı düzenleme korumaları sürer.",
+      "Explorer indeks ikonları sabit ayrı sütunda tutulur; daraltıp açmaya gerek kalmadan yeniden boyutlanır. Tekrarlanan sağ tık Yerel İndeks Durumu kaldırıldı. Okunamayan tanımların sayısı ve bunlardan kaynaklanan kısmi indeks uyarısı gösterilmez; gerçek ağ/disk hataları ve eksik okunabilir kayıt uyarısı korunur.",
+      "Explorer bağlantıları, sıralaması, klasörleri ve renkleri JSON ile dışa/içe aktarılabilir. Parolalar, sorgular ve indeksler aktarılmaz. Mevcut profiller korunur, çakışan kimlikler yeniden eşlenir; yeni bağlantılar çevrimdışı eklenir.",
+      "Editör kolonlarında ve Explorer kolon/parametre/fonksiyonlarında hover veri tipi bilgisi eklendi. Scalar fonksiyonun dönüş tipi ile table-valued fonksiyonun TABLE/kolon çıktısı ayrılır. Bilgi odak almaz, tıklama/yazma/kaydırmada kapanır; metadata ayrı bağlantıda sınırlı ve tek uçuşlu önbellekle alınır.",
+      "Bağlantı yönetimi aranabilir profil listesi ve ayrı form düzenine geçti. Kaydedilmemiş taslak koruması sürer. Özel ortam etiketinden başka bir ortama geçince eski özel etiket temizlenir; kayıtlı eski etiket yeni ortamı gölgelemez."
+    ]
+  },
+  {
     "version": "0.2.121",
     "date": "2026-10-14",
     "title": "DB bazlı sekme geçmişi ve editör etkileşimleri",

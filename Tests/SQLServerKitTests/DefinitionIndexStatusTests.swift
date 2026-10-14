@@ -32,7 +32,7 @@ struct DefinitionIndexStatusTests {
     let empty = try await reopened.definitionStatus(scope: b)
     #expect(
       status.count == 1 && status.lastFetched != nil && status.synchronizedAt != nil
-        && status.unavailable == 1 && status.incomplete)
+        && status.unavailable == 1 && !status.incomplete)
     #expect(empty.count == 0 && empty.synchronizedAt != nil && !empty.incomplete)
     try await disk.setExcluded(true, scope: a)
     #expect(try await reopened.definitionStatus(scope: a).synchronizedAt == nil)

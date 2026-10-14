@@ -6,7 +6,7 @@ import AppKit
   private let label = NSTextField(labelWithString: "")
   init(query: QueryController) {
     self.query = query
-    let window = NSWindow(
+    let window = StudioAssociatedWindow(
       contentRect: NSRect(x: 0, y: 0, width: 1050, height: 740),
       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false
     )

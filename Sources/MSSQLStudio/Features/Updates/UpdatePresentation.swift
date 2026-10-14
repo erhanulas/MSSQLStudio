@@ -8,7 +8,7 @@ import SwiftUI
   let spinner=NSProgressIndicator()
   let done=NSButton(title:"Kapat",target:nil,action:nil)
   init() {
-    let window=NSWindow(contentRect:NSRect(x:0,y:0,width:440,height:170),styleMask:[.titled],backing:.buffered,defer:false)
+    let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:440,height:170),styleMask:[.titled],backing:.buffered,defer:false)
     window.title="MSSQL Studio Güncellemesi";window.isReleasedWhenClosed=false
     super.init(window:window)
     spinner.style = .spinning;spinner.startAnimation(nil)
@@ -21,7 +21,7 @@ import SwiftUI
   }
   required init?(coder:NSCoder) {fatalError()}
   func phase(_ text:String) {status.stringValue=text}
-  func finish(_ text:String) {phase(text);spinner.stopAnimation(nil);spinner.isHidden=true;done.isEnabled=true;done.keyEquivalent="\r"}
+  func finish(_ text:String) {phase(text);spinner.stopAnimation(nil);spinner.isHidden=true;done.isEnabled=true;window?.styleMask.insert(.closable);done.keyEquivalent="\r"}
   @objc private func closeProgress() {close()}
 }
 

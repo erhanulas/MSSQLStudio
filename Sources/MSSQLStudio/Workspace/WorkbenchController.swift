@@ -8,6 +8,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   NSOutlineViewDelegate, NSMenuDelegate, NSUserInterfaceValidations
 {
   let state: StudioState
+  var focusedWindowProvider:()->NSWindow? = {NSApp.keyWindow}
+  var explorerTransferBusy=false
   var updateInProgress=false
   var updateProgress:UpdateProgressController?
   let split = NSSplitViewController()
@@ -431,7 +433,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     if let initialFocus, let id=state.active?.id {
       DispatchQueue.main.async { [weak self, weak initialFocus] in
         guard let self,state.active?.id == id,detached[id] == nil,
-          content.subviews.first === initialFocus?.view,view.window?.attachedSheet == nil else {return}
+          content.subviews.first === initialFocus?.view,view.window?.attachedSheet == nil,
+          focusedWindowProvider() == nil || focusedWindowProvider() === view.window else {return}
         initialFocus?.focusEditor()
       }
     }
@@ -555,6 +558,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     auxiliaryWindows.append(owner)
     owner.closed={ [weak self,weak owner] in Task { @MainActor [weak self,weak owner] in self?.auxiliaryWindows.removeAll {$0 === owner} } }
+    (owner.window as? StudioAssociatedWindow)?.associate(with:view.window)
     owner.showWindow(nil);owner.window?.makeKeyAndOrderFront(nil)
   }
   @objc func closeAllWithoutSaving() {
@@ -584,6 +588,13 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       }
     }
   }
+  @objc func closeFocusedWindow() {
+    if let panel=(NSApp.modalWindow ?? focusedWindowProvider()) as? NSSavePanel {panel.cancel(nil);return}
+    guard NSApp.modalWindow == nil,let key=focusedWindowProvider() else {return}
+    if let sheet=key.attachedSheet {sheet.performClose(nil);return}
+    if key !== view.window {key.performClose(nil);return}
+    closeTab()
+  }
   @objc func closeTab() {
     if let doc = state.active, state.close(doc) {
       controllers.removeValue(forKey: doc.id)?.removeFromParent()
@@ -608,28 +619,35 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     state.newQuery(server:server,database:database)
   }
 
-  @objc func execute() {guard let doc=state.active,doc.canExecute else {return};(controllers[doc.id] ?? detached[doc.id]?.query)?.focusEditor();doc.execute()}
-  @objc func cancel() { state.active?.cancel() }
-  @objc func estimatedPlan() {guard let doc=state.active,doc.canExecute else {return};(controllers[doc.id] ?? detached[doc.id]?.query)?.focusEditor();doc.execute(estimated:true)}
+  var commandDocument:QueryDocument? {
+    if let key=focusedWindowProvider() {
+      if let detached=detached.values.first(where:{$0.window === key}) {return detached.query.document}
+      if key !== view.window {return nil}
+    }
+    return state.active
+  }
+  @objc func execute() {guard let doc=commandDocument,doc.canExecute else {return};(controllers[doc.id] ?? detached[doc.id]?.query)?.focusEditor();doc.execute()}
+  @objc func cancel() { commandDocument?.cancel() }
+  @objc func estimatedPlan() {guard let doc=commandDocument,doc.canExecute else {return};(controllers[doc.id] ?? detached[doc.id]?.query)?.focusEditor();doc.execute(estimated:true)}
   @objc func toggleActualPlan() {
-    if let doc = state.active {
+    if let doc = commandDocument {
       doc.actualPlan.toggle()
       controllers[doc.id]?.update()
       updateControls()
     }
   }
   @objc func formatSQL() {
-    if let doc = state.active {
+    if let doc = commandDocument {
       (controllers[doc.id] ?? detached[doc.id]?.query)?.format()
       renderTabs()
       state.scheduleSnapshot()
     }
   }
-  @objc func beginTransaction() { state.active?.execute(override: "BEGIN TRANSACTION;") }
-  @objc func commitTransaction() { state.active?.execute(override: "COMMIT;") }
-  @objc func rollbackTransaction() { state.active?.execute(override: "ROLLBACK;") }
-  @objc func saveSQL() { if let doc = state.active { state.save(doc) } }
-  @objc func saveAsSQL() { if let doc = state.active { state.save(doc, asNew: true) } }
+  @objc func beginTransaction() { commandDocument?.execute(override: "BEGIN TRANSACTION;") }
+  @objc func commitTransaction() { commandDocument?.execute(override: "COMMIT;") }
+  @objc func rollbackTransaction() { commandDocument?.execute(override: "ROLLBACK;") }
+  @objc func saveSQL() { if let doc = commandDocument { state.save(doc) } }
+  @objc func saveAsSQL() { if let doc = commandDocument { state.save(doc, asNew: true) } }
   @objc func openSQL() {
     guard let server = selectedServer else {
       showConnect()
@@ -699,15 +717,17 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     sheet.animationBehavior = .none
     sheet.cancelAction={ [weak self] in guard let self,!connectionSheetBusy else {return};finishSheet() }
     sheet.title = "Bağlantılar"
-    sheet.styleMask = [.titled,.closable]
+    sheet.styleMask = [.titled,.closable,.resizable]
+    sheet.setContentSize(NSSize(width:1020,height:660));sheet.minSize=sheet.frameRect(forContentRect:NSRect(x:0,y:0,width:1020,height:640)).size
     sheet.isReleasedWhenClosed=false;sheet.center()
     self.sheet = sheet
+    sheet.associate(with:view.window)
     sheet.makeKeyAndOrderFront(nil)
   }
   private func finishSheet() {
     if let sheet {
       if sheet.sheetParent != nil {sheet.sheetParent?.endSheet(sheet)}
-      sheet.orderOut(nil)
+      sheet.orderOut(nil);sheet.close()
     }
     sheet = nil;connectionSheetBusy=false
   }
@@ -760,10 +780,18 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     window.center()
     let owner = NSWindowController(window: window)
     auxiliaryWindows.append(owner)
-    owner.showWindow(nil)
+    window.didClose={ [weak self,weak window] in
+      Task { @MainActor [weak self,weak window] in
+        guard let window else {return};self?.auxiliaryWindows.removeAll {$0.window === window};window.contentViewController=nil
+      }
+    }
+    window.associate(with:view.window)
+    owner.showWindow(nil);window.makeKeyAndOrderFront(nil)
     return window
   }
   func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+    if item.action == #selector(closeFocusedWindow) {return NSApp.modalWindow is NSSavePanel || NSApp.modalWindow == nil && focusedWindowProvider() != nil}
+    if commandDocument == nil,[#selector(execute),#selector(cancel),#selector(estimatedPlan),#selector(toggleActualPlan),#selector(formatSQL),#selector(beginTransaction),#selector(commitTransaction),#selector(rollbackTransaction),#selector(saveSQL),#selector(saveAsSQL),#selector(closeTab),#selector(detachQuery)].contains(item.action) {return false}
     if item.action == #selector(installUpdate) {return !updateInProgress}
     if let menuItem=item as? NSMenuItem,let node=menuItem.representedObject as? TreeNode,
        item.action == #selector(agentMenuAction(_:)) {
@@ -774,7 +802,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       default:return true
       }
     }
-    if item.action == #selector(execute) || item.action == #selector(estimatedPlan) {return state.active?.canExecute == true}
+    if item.action == #selector(execute) || item.action == #selector(estimatedPlan) {return commandDocument?.canExecute == true}
     if [
       #selector(beginTransaction),
       #selector(commitTransaction), #selector(rollbackTransaction),

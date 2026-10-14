@@ -31,12 +31,14 @@ import Testing
         try await settle(host)
         #expect(host.view.bounds.size == NSSize(width: 780, height: 600))
         let views = descendants(host.view)
-        let tabs = try #require(views.compactMap { $0 as? NSTabView }.first)
-        #expect(tabs.numberOfTabViewItems == 6)
-        #expect(tabs.tabViewItems.map(\.label) == SettingsSection.allCases.map(\.title))
-        #expect(tabs.selectedTabViewItem?.label == section.title)
-        let tabRect = host.view.convert(tabs.bounds, from: tabs)
-        #expect(tabRect.minX >= 0 && tabRect.maxX <= 780 && tabRect.minY >= 55 && tabRect.maxY <= 530)
+        let nativeButtons:[NSButton]=views.compactMap {$0 as? NSButton}
+        let categoryButtons:[NSButton]=nativeButtons.filter {button in (button.accessibilityIdentifier() ?? "").hasPrefix("settingsSection_")}
+        let categories:[NSButton]=categoryButtons.sorted {left,right in left.tag<right.tag}
+        #expect(categories.count==6 && categories.map(\.title)==SettingsSection.allCases.map(\.title))
+        #expect(categories.first(where:{$0.state == .on})?.title==section.title)
+        let navigation=try #require(categories.first?.superview)
+        let navRect=host.view.convert(navigation.bounds,from:navigation)
+        #expect(navRect.minX>=0 && navRect.maxX<=190 && navRect.minY>=55 && navRect.maxY<=530)
         for control in views.compactMap({ $0 as? NSControl }) where !control.isHiddenOrHasHiddenAncestor {
           let rect = host.view.convert(control.bounds, from: control)
           #expect(rect.minX >= -1 && rect.maxX <= 781, "\(theme) \(section) horizontal control overflow: \(rect)")
@@ -91,14 +93,15 @@ import Testing
       try await settle(host)
       #expect(try repositoryField().stringValue=="team/unsaved-repository")
     }
-    let tabs = try #require(descendants(host.view).compactMap { $0 as? NSTabView }.first)
-    for section in [0, 1, 2, 3, 5] {
-      tabs.selectTabViewItem(at: section)
-      try await settle(host)
+    func choose(_ section:SettingsSection) throws {
+      let button=try #require(descendants(host.view).compactMap {$0 as? NSButton}.first {$0.accessibilityIdentifier()=="settingsSection_"+section.rawValue})
+      #expect(NSApp.sendAction(try #require(button.action),to:button.target,from:button))
+    }
+    for section in [SettingsSection.appearance,.editor,.shortcuts,.workspace,.security] {
+      try choose(section);try await settle(host)
     }
     StudioTheme.apply("dark")
-    tabs.selectTabViewItem(at: 4)
-    try await settle(host)
+    try choose(.updates);try await settle(host)
     #expect(try repositoryField().stringValue == "team/unsaved-repository")
     #expect(UserDefaults.standard.string(forKey: "githubUpdateRepository") == "erhanulas/MSSQLStudio")
   }

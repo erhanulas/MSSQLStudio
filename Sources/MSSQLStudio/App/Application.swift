@@ -274,13 +274,15 @@ import SwiftUI
       keyEquivalent: "q")
     let file = menu("Dosya")
     command(file, "Yeni Sorgu", #selector(WorkbenchController.newQuery), "n")
+    command(file,"Explorer’ı Dışa Aktar…",#selector(WorkbenchController.exportExplorer))
+    command(file,"Explorer’ı İçe Aktar…",#selector(WorkbenchController.importExplorer))
     command(file, "SQL Dosyası Aç…", #selector(WorkbenchController.openSQL), "o")
     command(file, "Kaydet", #selector(WorkbenchController.saveSQL), "s")
     command(
       file, "Farklı Kaydet…", #selector(WorkbenchController.saveAsSQL), "s",
       modifiers: [.command, .shift])
     file.addItem(.separator())
-    command(file, "Sekmeyi Kapat", #selector(WorkbenchController.closeTab), "w")
+    command(file, "Pencereyi / Sekmeyi Kapat", #selector(WorkbenchController.closeFocusedWindow), "w")
     let reopen=GridShortcuts.binding(.reopenTab)
     command(file, "Kapatılan Sekmeyi Aç", #selector(WorkbenchController.reopenLastClosedTab), reopen.key,modifiers:reopen.flags)
     let edit = menu("Düzen")

@@ -10,6 +10,7 @@ import SQLServerKit
   let editor = SQLTextView(usingTextLayoutManager: true)
   let occurrenceHighlights = OccurrenceHighlights()
   let insertPresentation = EditorInsertPresentation()
+  lazy var objectHover=EditorObjectHover(document:document,editor:editor)
   let commentHint=StudioToolbarButton(symbol:"text.bubble",label:"Seçili satırları yorum yap / kaldır",title:"",width:28)
   private let ruler: LineNumbers
   private var rulerWidth:NSLayoutConstraint?
@@ -169,7 +170,8 @@ import SQLServerKit
       highlight()
     }
     editor.requestSuggestions = { [weak self] in self?.scheduleIntelligence(manual:true) }
-    editor.dismissSuggestions = { [weak self] in self?.completion.close();self?.dismissParameterHelp();self?.insertPresentation.dismissPreview() }
+    editor.hoverMoved = { [weak self] point in guard let self else {return};if completionShown || parameterShown || insertPresentation.isShown {objectHover.hide()} else {objectHover.move(point)} }
+    editor.dismissSuggestions = { [weak self] in self?.objectHover.hide(); self?.completion.close();self?.dismissParameterHelp();self?.insertPresentation.dismissPreview() }
     editor.suggestionKey = { [weak self] in self?.completion.handleSuggestionKey($0) ?? false }
     NotificationCenter.default.addObserver(self,selector:#selector(catalogChanged),name:.init("sqlCatalogChanged"),object:document)
     NotificationCenter.default.addObserver(self,selector:#selector(catalogChanged),name:.init("sqlEditorPreferencesChanged"),object:nil)
@@ -333,6 +335,7 @@ import SQLServerKit
     resizeToViewport()
   }
   @objc private func scrolled() {
+    objectHover.hide()
     insertPresentation.hidePreview()
     let clip = scroll.contentView
     occurrenceHighlights.frame=clip.bounds
@@ -413,6 +416,7 @@ import SQLServerKit
     scheduleIntelligence()
   }
   func textDidChange(_ notification: Notification) {
+    objectHover.hide()
     textRevision = UUID();executionRequest=UUID()
     guard !changingPresentation else { return }
     clearOccurrences()
@@ -440,6 +444,7 @@ import SQLServerKit
     }
   }
   func textViewDidChangeSelection(_ notification: Notification) {
+    objectHover.hide()
     guard !paintingOccurrences, !changingPresentation else {return}
     let range = editor.selectedRange()
     updateCommentHint()

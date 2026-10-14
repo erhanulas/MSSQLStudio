@@ -37,6 +37,7 @@ struct SettingsSearchEntry:Identifiable,Equatable {
         ("comments","Seçili SQL satırlarını yorum yap / kaldır","comment uncomment açıklama klavye kısayol"),
         ("aliases","Otomatik alias ekle","takma ad from join"),
         ("nolock","Alias sonrasında WITH(NOLOCK) ekle","kilit kirli okuma read uncommitted")]),
+      (.workspace,"Sekmeler ve pencereler",[("closeWarning","Sekme kapatırken kaydetme uyarısı","pencere kapat uyarı onay sql kaydet cmd w")]),
       (.workspace,"Geçmiş ve kurtarma",[
         ("history","Sorgu geçmişini sakla","timeline sql yerel kayıt"),
         ("closedTabs","Kapatılan sekmeler / DB","history sekme sayısı limit veritabanı"),

@@ -89,7 +89,8 @@ extension WorkbenchController {
     }
     guard let node = contextNode else {
       command("Yeni Klasör…",#selector(createExplorerGroup(_:)))
-      command("Yeni Bağlantı…",#selector(showConnect));return
+      command("Yeni Bağlantı…",#selector(showConnect))
+      command("Explorer’ı Dışa Aktar…",#selector(exportExplorer));command("Explorer’ı İçe Aktar…",#selector(importExplorer));return
     }
     if let id=node.connectionGroupID {
       command("Alt Klasör…",#selector(createExplorerGroup(_:)));menu.items.last?.representedObject=id.uuidString
@@ -215,7 +216,6 @@ extension WorkbenchController {
         let item=NSMenuItem(title:title,action:selector,keyEquivalent:"");item.target=self;item.image=NSImage(systemSymbolName:icon,accessibilityDescription:nil);create.addItem(item)
       }
       let item=NSMenuItem(title:"Yeni Nesne",action:nil,keyEquivalent:"");item.submenu=create;menu.addItem(item)
-      command("Yerel İndeks Durumu…",#selector(showContextIndex))
       menu.addItem(.separator())
       command("Veritabanı bilgileri…", #selector(databaseProperties))
     }

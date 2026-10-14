@@ -49,7 +49,6 @@ struct DefinitionIndexPresentation {
     if let date = stored?.lastFetched {
       lines.append("Son içerik okuma: " + date.formatted(date: .numeric, time: .shortened))
     }
-    if let stored, stored.unavailable > 0 { lines.append("\(stored.unavailable) nesne okunamadı") }
     if let stored, let expected = stored.expected, stored.count < expected - stored.unavailable {
       lines.append("Bazı tanımlar kotadan dolayı temizlenmiş veya henüz alınmamış olabilir.")
     }

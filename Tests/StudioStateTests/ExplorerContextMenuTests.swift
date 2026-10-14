@@ -34,7 +34,7 @@ import Testing
       }
       #expect(Set(actions).count == actions.count)
     }
-    #expect(menu(host,nil).items.map(\.title)==["Yeni Klasör…","Yeni Bağlantı…"])
+    #expect(menu(host,nil).items.map(\.title)==["Yeni Klasör…","Yeni Bağlantı…","Explorer’ı Dışa Aktar…","Explorer’ı İçe Aktar…"])
     let jobs=menu(host,TreeNode("Jobs",kind:.folder(.jobs),server:server))
     #expect(jobs.items.filter {$0.title=="New SQL Agent Job…"}.count==1)
   }

@@ -45,10 +45,10 @@ import Testing
     server.online=false; var actions=0
     let manager=ConnectionManager(servers:[server],initial:nil,connect:{_,_,_ in actions += 1},save:{_,_,_,_ in actions += 1},loadingChanged:{_ in},cancel:{})
     let host=NSHostingView(rootView:manager)
-    let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:940,height:680),styleMask:[.titled],backing:.buffered,defer:false)
+    let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:1020,height:680),styleMask:[.titled],backing:.buffered,defer:false)
     window.isReleasedWhenClosed=false;window.contentView=host;defer {window.close()}
     host.layoutSubtreeIfNeeded()
-    #expect(host.fittingSize.width <= 950 && host.fittingSize.height <= 700)
+    #expect(host.fittingSize.width <= 1030 && host.fittingSize.height <= 700)
     #expect(actions == 0 && !server.online && server.profile.name == "Synthetic saved")
     let old=StudioTheme.mode;defer {StudioTheme.apply(old)}
     for mode in ["light","dark"] {

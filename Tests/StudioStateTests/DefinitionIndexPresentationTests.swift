@@ -54,7 +54,7 @@ import Testing
     let partial = DefinitionIndexPresentation(
       enabled: true, online: false, stored: stored, activity: nil)
     #expect(
-      partial.title == "Kısmi indeks" && partial.detail.contains("1 nesne okunamadı")
+      partial.title == "Kısmi indeks" && !partial.detail.contains("nesne okunamadı")
         && partial.detail.contains("kotadan"))
     let building = DefinitionIndexPresentation(
       enabled: true, online: true, stored: stored,

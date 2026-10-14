@@ -3,7 +3,37 @@ import CoreText
 import SQLServerKit
 import SwiftUI
 
-@MainActor class StudioPanelWindow:NSWindow {
+@MainActor class StudioAssociatedWindow:NSWindow {
+  var didClose:(()->Void)?
+  private var associating=false
+  func associate(with owner:NSWindow?) {
+    guard parent==nil,!associating,let owner,owner !== self else {return}
+    associating=true;collectionBehavior.insert(.fullScreenAuxiliary)
+    owner.addChildWindow(self,ordered:.above);associating=false
+  }
+  override func order(_ place:NSWindow.OrderingMode,relativeTo otherWin:Int) {
+    if place != .out,parent==nil,!associating {
+      let focused=NSApp.keyWindow ?? NSApp.mainWindow
+      let owner=focused?.sheetParent ?? (focused is NSPanel ? focused?.parent ?? NSApp.mainWindow:focused)
+      if owner?.isVisible == true {associate(with:owner)}
+    }
+    super.order(place,relativeTo:otherWin)
+  }
+  override func makeKeyAndOrderFront(_ sender:Any?) {
+    if parent==nil {
+      let focused=NSApp.keyWindow ?? NSApp.mainWindow
+      associate(with:focused?.sheetParent ?? (focused is NSPanel ? focused?.parent ?? NSApp.mainWindow:focused))
+    }
+    super.makeKeyAndOrderFront(sender)
+  }
+  override func close() {
+    let callback=didClose;didClose=nil
+    parent?.removeChildWindow(self)
+    super.close();callback?()
+  }
+}
+
+@MainActor class StudioPanelWindow:StudioAssociatedWindow {
   var cancelAction:(()->Void)?
   var focusOrder:[NSView]=[]
   @discardableResult func advanceDialogFocus(backward:Bool=false)->Bool {
@@ -171,6 +201,9 @@ import SwiftUI
       for child in view.subviews {style(child)}
     }
     if let content=window.contentView {style(content)}
+    let parent=NSApp.keyWindow ?? NSApp.mainWindow
+    if let parent,parent !== window {parent.addChildWindow(window,ordered:.above)}
+    defer {window.parent?.removeChildWindow(window)}
     return super.runModal()
   }
 }

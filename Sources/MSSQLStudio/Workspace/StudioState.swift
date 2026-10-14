@@ -101,6 +101,8 @@ import UniformTypeIdentifiers
   lazy var favorites = FavoriteQueriesModel(url: (Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" || ProcessInfo.processInfo.arguments.contains("--ui-smoke") || ProcessInfo.processInfo.arguments.contains(where:{$0.contains(".xctest")})
     ? URL(fileURLWithPath:"/tmp/MSSQLStudio-UI-\(ProcessInfo.processInfo.processIdentifier)") : folder).appendingPathComponent("favorites.json"))
   private var nextQueryNumber = 1
+  var warnOnTabClose=UserDefaults.standard.object(forKey:"warnOnTabClose") as? Bool ?? true
+  func requiresCloseConfirmation(_ doc:QueryDocument)->Bool {doc.hasPendingDatabaseChanges || warnOnTabClose && doc.dirty}
   var historyEnabled = UserDefaults.standard.bool(forKey: "historyEnabled")
   var historyRetentionDays = QueryHistoryPolicy.days(UserDefaults.standard.object(forKey: "historyRetentionDays") as? Int ?? QueryHistoryPolicy.defaultDays)
   private var snapshotTask: Task<Void, Never>?
@@ -263,10 +265,10 @@ import UniformTypeIdentifiers
     }
   }
   func rememberExplorer(_ id: UUID, selected: Bool) {
-    var ids = UserDefaults.standard.stringArray(forKey: "explorerActiveServerIDs") ?? servers.filter(\.remembered).map { $0.id.uuidString }
+    var ids = explorerOrderDefaults.stringArray(forKey: "explorerActiveServerIDs") ?? servers.filter(\.remembered).map { $0.id.uuidString }
     ids.removeAll { $0 == id.uuidString }
     if selected { ids.append(id.uuidString) }
-    UserDefaults.standard.set(ids, forKey: "explorerActiveServerIDs")
+    explorerOrderDefaults.set(ids, forKey: "explorerActiveServerIDs")
   }
   func restoreExplorers() async -> Bool {
     do {
@@ -454,7 +456,7 @@ import UniformTypeIdentifiers
   }
   func confirmSave(_ doc: QueryDocument) -> Bool {
     guard doc.confirmDiscardResultEdits?() != false else { return false }
-    guard doc.needsCloseConfirmation else { return true }
+    guard requiresCloseConfirmation(doc) else { return true }
     let alert = StudioAlert()
     alert.messageText = "\(doc.title) kaydedilsin mi?"
     if doc.hasPendingDatabaseChanges {alert.informativeText="Bu nesnede veritabanına uygulanmamış düzenlemeler var. Dosyaya kaydetmek veritabanına uygulamaz."}
@@ -509,7 +511,7 @@ import UniformTypeIdentifiers
       else {showError("Çalışan sorguları ve açık transaction’ları tamamlayın.")}
       return nil
     }
-    guard documents.contains(where:{$0.needsCloseConfirmation || $0.hasResultEdits?() == true}) else {return true}
+    guard documents.contains(where:{requiresCloseConfirmation($0) || $0.hasResultEdits?() == true}) else {return true}
     let choice:BulkCloseChoice
     if let fixture=bulkCloseChoiceFixture {choice=fixture()}
     else {
@@ -521,7 +523,7 @@ import UniformTypeIdentifiers
     }
     return approveBulkClose(choice) ? true:nil
   }
-  var needsBulkCloseConfirmation:Bool {documents.contains {$0.needsCloseConfirmation || $0.hasResultEdits?() == true}}
+  var needsBulkCloseConfirmation:Bool {documents.contains {requiresCloseConfirmation($0) || $0.hasResultEdits?() == true}}
   func canBeginBulkClose()->Bool {
     guard documents.allSatisfy({!$0.busy && $0.transactionCount==0 && $0.closeOperationBlocked?() != true}) else {
       if let fixture=closeErrorFixture {fixture("Çalışan sorguları ve açık transaction’ları tamamlayın.")}

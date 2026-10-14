@@ -85,11 +85,13 @@ struct SettingsPanel: View {
   @State private var closedTabLimit = QueryHistoryPolicy.defaultClosedTabLimit
   @State private var historyDays = QueryHistoryPolicy.defaultDays
   @State private var recovery = false
+  @State private var warnOnTabClose = true
   @State private var updateRepository = UserDefaults.standard.string(forKey:"githubUpdateRepository") ?? ""
   @State private var keychainMessage = ""
   @State private var renewingKeychain = false
   @State private var message = ""
   @State private var selectedTab: SettingsSection
+  @State private var expandedCards:Set<String>=["Renk teması","Otomatik tamamlama","Klavye kısayolları","Sekmeler ve pencereler","GitHub yayınları","Parola erişimi"]
   @State private var search=""
   @State private var searchTarget:SettingsSearchEntry?
   @FocusState private var searchFocused:Bool
@@ -111,7 +113,7 @@ struct SettingsPanel: View {
           Text("MSSQL Studio’yu çalışma biçiminize göre düzenleyin.").font(.callout).foregroundStyle(.secondary)
         }
         Spacer()
-        Button {selectedTab = .workspace} label: {
+        Button {selectedTab = .workspace;expandedCards.insert("Nesne tanım indeksi")} label: {
           VStack(alignment:.trailing,spacing:3) {
             Label("Tanım indeksi",systemImage:"internaldrive").font(.caption)
             Text(definitionStorage.usageText).font(.caption2).monospacedDigit()
@@ -128,7 +130,11 @@ struct SettingsPanel: View {
             .buttonStyle(.plain).help("Aramayı temizle").accessibilityLabel("Aramayı temizle")
         }
       }
-      TabView(selection: $selectedTab) {
+      HStack(alignment:.top,spacing:0) {
+        SettingsCategoryPicker(selected:selectedTab) {section in selectedTab=section;searchTarget=nil}
+          .padding(8).frame(width:164)
+        Divider()
+        ZStack(alignment:.topLeading) {
         settingsPage(.appearance, subtitle: "Sakin yüzeyler, net ayrımlar ve tema uyumlu SQL renkleri.") {
           settingsCard("Renk teması", icon: "circle.lefthalf.filled") {
             StudioFormField("Çalışma ortamı") {
@@ -164,7 +170,7 @@ struct SettingsPanel: View {
             }
             settingsNote("Açık ve koyu temalarda SSMS sözdizimi renk kategorileri korunur.", icon: "checkmark.circle")
           }
-        }.tabItem { Label(SettingsSection.appearance.title, systemImage: SettingsSection.appearance.icon) }.tag(SettingsSection.appearance)
+        }
         settingsPage(.editor, subtitle: "Tamamlama, doğrulama ve yazım yardımcıları.") {
           settingsCard("Otomatik tamamlama", icon: "text.badge.plus") {
             settingsToggle("Yazarken önerileri göster", detail: "Aktif veritabanındaki nesne ve kolonları önerir; kolon adlarının içinde de arar.", value: $completion)
@@ -224,7 +230,7 @@ struct SettingsPanel: View {
             Divider()
             settingsToggle("Alias sonrasında WITH(NOLOCK) ekle", detail: "Varsayılan kapalıdır. Henüz commit edilmemiş verileri okuyabilir.", value: $noLock).disabled(!aliases)
           }
-        }.tabItem { Label(SettingsSection.editor.title, systemImage: SettingsSection.editor.icon) }.tag(SettingsSection.editor)
+        }
         settingsPage(.shortcuts, subtitle: "Sık kullandığınız işlemlere tek bir tuş birleşimiyle ulaşın.") {
           settingsCard("Klavye kısayolları", icon: "keyboard") {
             ForEach(Array(GridShortcuts.Action.allCases.enumerated()), id: \.element.rawValue) { index, action in
@@ -240,7 +246,7 @@ struct SettingsPanel: View {
           settingsNote("Editörde ⌘Z / ⌘⇧Z ve ⌃Z / ⌃Y / ⌃⇧Z geri al / ileri al için kullanılabilir.", icon: "arrow.uturn.backward")
           settingsNote("SQL editöründe ⌥← / ⌥→ değişken, kelime ve operatör sınırlarında ilerler. @ / @@ önekleri değişkenle birlikte kalır.", icon: "arrow.left.and.right")
           settingsNote("⌘← / ⌘→ önce kodun başına / sonuna, ikinci basışta girinti / sondaki boşluk sınırına gider. ⇧ ekleyerek aynı hareketlerle seçim yapabilirsiniz.", icon: "selection.pin.in.out")
-        }.tabItem { Label(SettingsSection.shortcuts.title, systemImage: SettingsSection.shortcuts.icon) }.tag(SettingsSection.shortcuts)
+        }
         settingsPage(.workspace, subtitle: "Bu Mac’te tutulan sorgu geçmişini ve oturum kurtarmayı yönetin.") {
           settingsCard("Nesne tanım indeksi",icon:"externaldrive") {
             StudioFormField("Toplam disk kotası") {
@@ -269,6 +275,9 @@ struct SettingsPanel: View {
             if !definitionStorage.error.isEmpty {Label(definitionStorage.error,systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange)}
             settingsNote("Varsayılan 1 GB (1024 MB). Kota ve otomatik artış Uygula ile kaydedilir. Üst sınır dolunca veya kota küçültülürse en eski tanımlar temizlenir. Otomatik artış fiziksel diskte boş alan oluşturmaz. Doluluk tanım verisini ölçer; SQLite dosya/WAL ve diğer katalog alanları dahil değildir. İndeksleme bağlantı ayarlarından açılır.",icon:"info.circle")
           }
+          settingsCard("Sekmeler ve pencereler",icon:"macwindow") {
+            settingsToggle("Sekme kapatırken kaydetme uyarısı",detail:"Kaydedilmemiş SQL için sorar. Kapalıysa SQL kaydedilmeden kapanır. Çalışan sorgu, açık transaction ve veritabanı düzenlemesi korumaları sürer.",value:$warnOnTabClose)
+          }
           settingsCard("Geçmiş ve kurtarma", icon: "clock.arrow.circlepath") {
             settingsToggle("Sorgu geçmişini sakla", detail: "Çalıştırılan sorgular History üzerinden yeniden açılabilir.", value: $history)
             StudioFormField("Saklama süresi") {
@@ -295,7 +304,7 @@ struct SettingsPanel: View {
               StudioActionButton("Yerel Kayıtları Sil", icon: "trash", tint: Color(nsColor: StudioTheme.danger), action: removeLocalRecords).id("removeRecords")
             }
           }
-        }.tabItem { Label(SettingsSection.workspace.title, systemImage: SettingsSection.workspace.icon) }.tag(SettingsSection.workspace)
+        }
         settingsPage(.updates, subtitle: "Uygulamanın yeni sürümler için kontrol edeceği yayın kaynağı.") {
           settingsCard("GitHub yayınları", icon: "shippingbox") {
             StudioFormField("Yayın deposu") {
@@ -310,7 +319,7 @@ struct SettingsPanel: View {
               .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             settingsNote("Herkese açık Releases kullanılır. Bağlantı parolaları ve sorgular GitHub’a gönderilmez.", icon: "lock.shield")
           }
-        }.tabItem { Label(SettingsSection.updates.title, systemImage: SettingsSection.updates.icon) }.tag(SettingsSection.updates)
+        }
         settingsPage(.security, subtitle: "Bağlantı parolalarınız macOS Anahtar Zinciri’nde korunur.") {
           settingsCard("Parola erişimi", icon: "lock.shield", tint: Color(nsColor: StudioTheme.success)) {
             Text("Parolalara sürümler arasında aynı kalan imzalı MSSQL Studio parola bileşeni erişir.")
@@ -328,8 +337,9 @@ struct SettingsPanel: View {
             }
             if !keychainMessage.isEmpty { Text(keychainMessage).font(.caption).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
           }
-        }.tabItem { Label(SettingsSection.security.title, systemImage: SettingsSection.security.icon) }.tag(SettingsSection.security)
-      }.accessibilityIdentifier("settingsTabs")
+        }
+        }
+      }.accessibilityIdentifier("settingsNavigation")
         .allowsHitTesting(search.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
         .opacity(search.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? 1:0)
         .accessibilityHidden(!search.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
@@ -350,28 +360,29 @@ struct SettingsPanel: View {
       }.padding(14)
         .background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(nsColor: StudioTheme.border)))
-    }.padding(18).studioPanel().onAppear {
+    }.padding(12).studioPanel().onAppear {
       history = state.historyEnabled
       historyDays = state.historyRetentionDays
       closedTabLimit = state.closedTabLimit
       recovery = state.recoveryEnabled
+      warnOnTabClose=state.warnOnTabClose
     }.task {await definitionStorage.refresh()}
   }
   private func settingsPage<Content: View>(_ section: SettingsSection, subtitle: String, @ViewBuilder content: @escaping () -> Content) -> some View {
-    ScrollViewReader {proxy in
+    Group {if selectedTab==section {ScrollViewReader {proxy in
     ScrollView {
-      VStack(alignment: .leading, spacing: 14) {
+      VStack(alignment: .leading, spacing: 10) {
         VStack(alignment: .leading, spacing: 4) {
           Text(section.title).font(.system(size: 17, weight: .semibold))
           Text(subtitle).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         content()
-      }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
+      }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
     }.background(Color(nsColor: StudioTheme.panel))
       .onChange(of:searchTarget) {_,target in if let target,target.section == section {proxy.scrollTo(target.scrollID,anchor:.center)}}
       .onChange(of:selectedTab) {_,selected in if selected == section,let target=searchTarget,target.section == section {proxy.scrollTo(target.scrollID,anchor:.center)}}
       .onAppear {if let target=searchTarget,target.section == section {proxy.scrollTo(target.scrollID,anchor:.center)}}
-    }
+    }} }
   }
   private var searchResults:some View {
     let results=SettingsSearch.results(search)
@@ -405,15 +416,14 @@ struct SettingsPanel: View {
       .background(Color(nsColor:StudioTheme.panel)).accessibilityIdentifier("settingsSearchResults")
   }
   private func openSearchResult(_ result:SettingsSearchEntry) {
-    searchFocused=false;selectedTab=result.section;searchTarget=result;search=""
+    searchFocused=false;expandedCards.insert(result.card);selectedTab=result.section;searchTarget=result;search=""
   }
-  private func settingsCard<Content: View>(_ title: String, icon: String, tint: Color = Color(nsColor: StudioTheme.accent), @ViewBuilder content: () -> Content) -> some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Label { Text(title).font(.system(size: 12, weight: .semibold)) } icon: {
-        Image(systemName: icon).foregroundStyle(tint).frame(width: 18)
-      }
-      content()
-    }.frame(maxWidth: .infinity, alignment: .leading).studioCard().id(title)
+  private func settingsCard<Content: View>(_ title: String, icon: String, tint: Color = Color(nsColor: StudioTheme.accent), @ViewBuilder content: @escaping () -> Content) -> some View {
+    DisclosureGroup(isExpanded:Binding(get:{expandedCards.contains(title)},set:{if $0 {expandedCards.insert(title)} else {expandedCards.remove(title)}})) {
+      VStack(alignment:.leading,spacing:10) {content()}.padding(.top,8)
+    } label: {
+      Label {Text(title).font(.system(size:12,weight:.semibold))} icon: {Image(systemName:icon).foregroundStyle(tint).frame(width:18)}
+    }.frame(maxWidth:.infinity,alignment:.leading).studioCard().id(title)
       .overlay(RoundedRectangle(cornerRadius:12).strokeBorder(searchTarget?.card == title ? Color(nsColor:StudioTheme.accent):.clear,lineWidth:2))
   }
   private func settingsToggle(_ title: String, detail: String, value: Binding<Bool>) -> some View {
@@ -484,6 +494,8 @@ struct SettingsPanel: View {
           UserDefaults.standard.set(aliases,forKey:"sqlAutomaticAliases")
           UserDefaults.standard.set(noLock,forKey:"sqlAutomaticNoLock")
           NotificationCenter.default.post(name:Notification.Name("sqlEditorPreferencesChanged"),object:nil)
+          state.warnOnTabClose=warnOnTabClose
+          UserDefaults.standard.set(warnOnTabClose,forKey:"warnOnTabClose")
           state.historyEnabled = history
           state.historyRetentionDays = historyDays
           UserDefaults.standard.set(historyDays, forKey: "historyRetentionDays")

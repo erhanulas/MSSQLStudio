@@ -160,16 +160,16 @@ import SwiftUI
     let host=WorkbenchController(state:state);host.loadViewIfNeeded()
     let server=ConnectedServer(profile:ServerProfile(name:"Badge fixture"),password:"")
     let node=TreeNode("DemoDB",kind:.database,server:server,database:"DemoDB")
-    let cell=try #require(host.outlineView(NSOutlineView(),viewFor:nil,item:node) as? NSTableCellView)
-    let window=NSWindow(contentRect:NSRect(x:0,y:0,width:210,height:25),styleMask:[],backing:.buffered,defer:false)
-    window.isReleasedWhenClosed=false
-    window.contentView=cell;cell.layoutSubtreeIfNeeded()
-    defer {window.close()}
-    let badge=try #require(cell.subviews.compactMap {$0 as? NSButton}.first)
-    let label=try #require(cell.textField)
-    #expect(badge.frame.minX >= label.frame.maxX)
-    #expect(badge.frame.maxX <= cell.bounds.width)
-    #expect(badge.frame.width == 24 && badge.frame.height == 24)
+    let cell=try #require(host.outlineView(host.outline,viewFor:host.outline.tableColumns[0],item:node) as? NSTableCellView)
+    let icons=try #require(host.outlineView(host.outline,viewFor:host.outline.tableColumns[1],item:node) as? NSTableCellView)
+    let row=NSView(frame:NSRect(x:0,y:0,width:210,height:27));cell.frame=NSRect(x:0,y:0,width:154,height:27);icons.frame=NSRect(x:154,y:0,width:56,height:27)
+    row.addSubview(cell);row.addSubview(icons)
+    let window=NSWindow(contentRect:row.frame,styleMask:[],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=row;row.layoutSubtreeIfNeeded();defer {window.close()}
+    let badge=try #require(icons.subviews.compactMap {$0 as? NSButton}.first),label=try #require(cell.textField)
+    let badgeRect=row.convert(badge.bounds,from:badge),labelRect=row.convert(label.bounds,from:label)
+    #expect(badgeRect.minX>=labelRect.maxX && badgeRect.maxX<=row.bounds.width)
+    #expect(badge.frame.width==24 && badge.frame.height==24)
     #expect(badge.accessibilityLabel()?.contains("DemoDB") == true)
   }
   @Test func databaseRefreshReadsLoadedBranchesAndPreservesFolderIdentity() async throws {

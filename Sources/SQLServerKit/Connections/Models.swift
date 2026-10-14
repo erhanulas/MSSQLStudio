@@ -251,7 +251,8 @@ public struct ServerAppearance: Codable, Equatable, Sendable {
       }
       value.colorHex = hex
     }
-    if customLabel.count > 40 {
+    if environment != .custom {value.customLabel=""}
+    if value.customLabel.count > 40 {
       throw SQLFailure("Özel ortam etiketi en fazla 40 karakter olmalı.")
     }
     return value
@@ -261,7 +262,7 @@ public struct ServerAppearance: Codable, Equatable, Sendable {
   }
   public var isMarked: Bool { environment != .unspecified || Self.normalizedHex(colorHex) != nil }
   public var badge: String {
-    if environment == .custom || !customLabel.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
+    if environment == .custom {
       let label = customLabel.components(separatedBy: .newlines).joined(separator: " ")
         .trimmingCharacters(in: .whitespacesAndNewlines)
       return label.isEmpty ? "Özel" : String(label.prefix(40))

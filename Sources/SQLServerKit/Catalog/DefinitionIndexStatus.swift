@@ -7,7 +7,7 @@ public struct DefinitionIndexStatus: Sendable {
   public let synchronizedAt: Date?
   public let expected: Int?
   public let unavailable: Int
-  public var incomplete: Bool { expected.map { count < $0 } ?? true }
+  public var incomplete: Bool { expected.map { count < max(0,$0-unavailable) } ?? true }
 }
 extension CatalogDiskIndex {
   func prepareDefinitionStatus() throws {

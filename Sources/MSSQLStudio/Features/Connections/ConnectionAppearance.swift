@@ -48,6 +48,7 @@ struct ConnectionAppearanceFields: View {
             get: { appearance.environment },
             set: { value in
               appearance.environment = value
+              if value != .custom {appearance.customLabel=""}
               appearance.colorHex = nil
             })
         ) {

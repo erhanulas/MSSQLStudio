@@ -14,6 +14,7 @@ extension WorkbenchController {
       Task { @MainActor [weak self,weak owner] in self?.auxiliaryWindows.removeAll {$0 === owner} }
     }
     if ProcessInfo.processInfo.arguments.contains(where:{$0.contains(".xctest")}) {owner.window?.setFrameOrigin(NSPoint(x:-20_000,y:-20_000))}
+    (owner.window as? StudioAssociatedWindow)?.associate(with:view.window)
     owner.showWindow(nil);owner.window?.makeKeyAndOrderFront(nil)
     return owner
   }

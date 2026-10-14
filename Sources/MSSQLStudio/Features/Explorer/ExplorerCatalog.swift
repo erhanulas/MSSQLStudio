@@ -108,6 +108,10 @@ extension WorkbenchController {
       action.toolTip=server.profile.name+" · Açık sorgu oturumları korunur."
       menu.addItem(action)
     }
+    menu.addItem(.separator())
+    for (title,action) in [("Explorer’ı Dışa Aktar…",#selector(exportExplorer)),("Explorer’ı İçe Aktar…",#selector(importExplorer))] {
+      let item=NSMenuItem(title:title,action:action,keyEquivalent:"");item.target=self;item.isEnabled = !explorerTransferBusy;menu.addItem(item)
+    }
     return menu
   }
   @objc func showExplorerConnections(_ sender:NSButton) {

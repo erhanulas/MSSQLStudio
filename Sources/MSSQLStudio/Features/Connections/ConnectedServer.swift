@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
   var generation = UUID()
   var databases: [CatalogItem] = []
   var remembered = false
+  lazy var hoverMetadata=SQLHoverMetadata(server:self)
   static let explorerConnectionChanged = Notification.Name("explorerConnectionChanged")
   var online = true {
     didSet {

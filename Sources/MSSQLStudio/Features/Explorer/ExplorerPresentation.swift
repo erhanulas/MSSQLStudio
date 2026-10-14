@@ -32,6 +32,7 @@ extension WorkbenchController {
     explorerSearch.placeholderString = "Nesnelerde filtrele"
     explorerSearch.target = self
     explorerSearch.action = #selector(filterExplorer)
+    outline.style = .plain
     outline.headerView = nil
     outline.rowHeight = 27
     outline.intercellSpacing = NSSize(width: 1, height: 1)
@@ -39,8 +40,13 @@ extension WorkbenchController {
     outline.selectionHighlightStyle = .regular
     outline.usesAlternatingRowBackgroundColors = false
     let column = NSTableColumn(identifier: .init("object"))
-    column.width = 330
+    column.width = 274;column.minWidth=40;column.resizingMask = .autoresizingMask
+    outline.autoresizesOutlineColumn=false
+    outline.columnAutoresizingStyle = .noColumnAutoresizing
+    outline.autoresizingMask = [.width]
     outline.addTableColumn(column)
+    let indexes=NSTableColumn(identifier:.init("indexes"));indexes.width=56;indexes.minWidth=56;indexes.maxWidth=56;indexes.resizingMask=[]
+    outline.addTableColumn(indexes)
     outline.outlineTableColumn = column
     outline.allowsMultipleSelection = true
     outline.dataSource = self
@@ -52,13 +58,14 @@ extension WorkbenchController {
     outline.setDraggingSourceOperationMask(.move,forLocal:true)
     outline.setDraggingSourceOperationMask([],forLocal:false)
     outline.setAccessibilityHelp("Bağlantı başlıklarını sürükleyerek sıralayın. Command-tıklama ile iki veritabanı seçip sağ tıktan DDL Karşılaştır’ı açın.")
+    indexStatus.setContentCompressionResistancePriority(.required,for:.horizontal)
     let menu = StudioMenu()
     menu.delegate = self
     outline.menu = menu
-    let scroll = NSScrollView()
+    let scroll = ExplorerScrollView()
     scroll.documentView = outline
     scroll.hasVerticalScroller = true
-    scroll.hasHorizontalScroller = true
+    scroll.hasHorizontalScroller = false
     scroll.drawsBackground = false
     searchOperator.addItems(withTitles: ["İçerir", "Eşittir", "İle başlar", "İle biter", "İçermez"])
     searchOperator.target = self; searchOperator.action = #selector(filterExplorer)
@@ -73,7 +80,7 @@ extension WorkbenchController {
       control.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
       (control.cell as? NSPopUpButtonCell)?.lineBreakMode = .byTruncatingTail
     }
-    for control in [indexStatus,searchStatus,explorerSearch,explorerTabs] {
+    for control in [searchStatus,explorerSearch,explorerTabs] {
       control.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
     }
     searchOperator.setAccessibilityLabel("Nesne arama operatörü")
@@ -227,7 +234,8 @@ extension WorkbenchController {
     -> NSView?
   {
     guard let node = item as? TreeNode else { return nil }
-    let cell = NSTableCellView()
+    if tableColumn?.identifier.rawValue == "indexes" {return indexCell(for:node)}
+    let cell = ExplorerMetadataCell();cell.node=node
     let label = NSTextField(
       labelWithString: node.displayTitle + (node.loading ? " …" : "")
         + (node.error != nil ? " ⚠" : ""))
@@ -260,30 +268,10 @@ extension WorkbenchController {
       image.widthAnchor.constraint(equalToConstant: 16),
       image.heightAnchor.constraint(equalToConstant: 16),
       label.leadingAnchor.constraint(equalTo: image.trailingAnchor, constant: 6),
-      {if case .database = node.kind {return label.trailingAnchor.constraint(lessThanOrEqualTo:cell.trailingAnchor,constant:-56)};return label.trailingAnchor.constraint(equalTo:cell.trailingAnchor,constant:-3)}(),
+      label.trailingAnchor.constraint(equalTo:cell.trailingAnchor,constant:-3),
       label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
     ])
-    if case .database = node.kind {
-      let activity=node.server.definitionIndex.activities[node.database]
-      for content in [false,true] {
-        let badge=DatabaseIndexButton();badge.node=node;badge.target=self;badge.action=#selector(showDatabaseIndex(_:))
-        let enabled = !content || node.server.allowsDefinitionIndex(node.database)
-        let details=indexDetailsByDatabase[node.server.id.uuidString+"|"+node.database] ?? ""
-        let ready = content ? details.contains("nesne içerikleri · Hazır") : details.contains("nesne indeksi")
-        let failed = content ? activity?.phase == .failed || details.contains("nesne içerikleri · Kısmi indeks") : node.server.indexErrors[node.database] != nil
-        let building = content ? activity?.phase == .building || activity?.phase == .waiting : node.server.indexingDatabases.contains(node.database)
-        let title = content ? "Nesne içerikleri" : "Nesne indeksi"
-        badge.image=NSImage(systemSymbolName:content ? "doc.text.magnifyingglass":"square.stack.3d.up",accessibilityDescription:nil)
-        badge.contentTintColor = !enabled ? StudioTheme.muted : failed ? .systemOrange : building ? StudioTheme.accent : ready ? .systemGreen : StudioTheme.muted
-        badge.bezelStyle = .inline;badge.isBordered=false;badge.imagePosition = .imageOnly
-        badge.toolTip=node.database + " · " + title + " · " + (enabled ? failed ? "Hata" : building ? "Hazırlanıyor" : "Durumu göster" : "Kapalı")
-        if content,let activity {badge.toolTip=(badge.toolTip ?? "")+" · \(activity.processed) / \(activity.total.map(String.init) ?? "…")"}
-        badge.setAccessibilityLabel(badge.toolTip)
-        badge.setAccessibilityIdentifier((content ? "databaseDefinitionIndex_":"databaseIndex_")+node.database)
-        cell.addSubview(badge);badge.translatesAutoresizingMaskIntoConstraints=false
-        NSLayoutConstraint.activate([badge.trailingAnchor.constraint(equalTo:cell.trailingAnchor,constant:content ? -2:-28),badge.centerYAnchor.constraint(equalTo:cell.centerYAnchor),badge.widthAnchor.constraint(equalToConstant:24),badge.heightAnchor.constraint(equalToConstant:24)])
-      }
-    }
+    if node.objectFolder == .columns || node.objectFolder == .parameters || node.objectFolder == .functions {cell.toolTip=nil}
     cell.textField = label
     cell.imageView = image
     cell.toolTip = node.error ?? (!node.server.online ? "Explorer bağlantısı kapalı. Son yüklenen nesneler gösteriliyor. Bağlantı işlemleri menüsünden yeniden bağlanabilirsiniz; açık sorgu oturumları korunur." : nil) ?? node.item?.detail ?? "\(node.server.profile.name) · \(node.server.profile.host),\(node.server.profile.port) · \(node.database)"
@@ -301,6 +289,7 @@ extension WorkbenchController {
     }
     if case .favorites = node.kind {cell.toolTip="Yerel favori sorgular · Bağlantı kapalıyken de açılabilir"}
     if let id=node.connectionGroupID {cell.toolTip=organization.path(id)+" · Yerel bağlantı klasörü · Bağlantıları buraya sürükleyebilirsiniz";label.setAccessibilityLabel(node.title)}
+    if [.columns,.parameters,.functions].contains(node.objectFolder) {cell.toolTip=nil}
     return cell
   }
   func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {

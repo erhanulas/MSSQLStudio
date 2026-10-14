@@ -63,8 +63,8 @@ private actor Interaction117Gate {
     var frames:[NSRect]=[]
     for name in ["A","VeryLongDatabaseName"] {
       let node=TreeNode(name,kind:.database,server:server,database:name)
-      let cell=try #require(host.outlineView(host.outline,viewFor:host.outline.tableColumns.first,item:node))
-      window.contentView=cell;window.setContentSize(NSSize(width:280,height:27));cell.needsLayout=true;cell.layoutSubtreeIfNeeded()
+      let cell=try #require(host.outlineView(host.outline,viewFor:host.outline.tableColumns.first(where:{$0.identifier.rawValue=="indexes"}),item:node))
+      window.contentView=cell;window.setContentSize(NSSize(width:56,height:27));cell.needsLayout=true;cell.layoutSubtreeIfNeeded()
       let buttons=cell.subviews.compactMap {$0 as? DatabaseIndexButton}.sorted {$0.frame.minX<$1.frame.minX}
       #expect(buttons.count==2)
       let first=try #require(buttons.first),last=try #require(buttons.last)

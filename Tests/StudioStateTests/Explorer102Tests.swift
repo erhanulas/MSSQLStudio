@@ -77,7 +77,7 @@ import Testing
   }
   @Test func appearanceUsesInheritedQueryAccentAndTooltipOnlyCustomLabel() throws {
     _=NSApplication.shared
-    let state=state(),server=ConnectedServer(profile:ServerProfile(name:"Reports",appearance:.init(customLabel:"Özel Sunucum",colorHex:"238B65")),password:"");server.online=false;state.servers=[server]
+    let state=state(),server=ConnectedServer(profile:ServerProfile(name:"Reports",appearance:.init(environment:.custom,customLabel:"Özel Sunucum",colorHex:"238B65")),password:"");server.online=false;state.servers=[server]
     let host=WorkbenchController(state:state),window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false;defer {window.close()}
     let outline=try #require(views(host.view).compactMap {$0 as? NSOutlineView}.first),root=try #require(outline.item(atRow:0) as? TreeNode)
     #expect(!root.displayTitle.contains("Özel") && server.profile.appearance?.badge=="Özel Sunucum")
