@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.112 / build 113 public yayın doğrulandı
+
+- [Public/latest v0.2.112](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.112), kaynak `d1cc57314b539303d21b8488164a460679d503e6`; [Actions 38489437174](https://github.com/erhanulas/MSSQLStudio/actions/runs/38489437174) bütün adımlarıyla başarılı. Veritabanı bazında içerik tercihi, toplu tablo metadata’sı, uyarlanabilir gruplama ve prepared statement yazımı yayımlandı.
+- CI gerçek yayın paketleriyle **344 app +322 core +8 text =674 test; 647 geçti /27 dış koşullu atlandı, 0 issue**; tamamlanmış özetler 79.448 /9.414 /0.003 sn. Sentetik 7.000 modül 37 detay sorgusuyla 1.072 sn; 7.000 tablo 110 detay sorgusu/770 rowset ile 0.844 sn. Bunlar gerçek DB/ağ süreleri değildir. Sabit kimlik/izole Keychain fixture ve geçici CI kimliği temizliği geçti. Loglar `/tmp/MSSQLStudio-112-ci-tests.log`, `112-ci-feed.log`, `112-ci-logs.zip`.
+- GitHub’dan indirilen dört public asset SHA-256 değerleri GitHub digest’leriyle aynı; ZIP/PKG URL/hash eşliği manifest ile doğrulandı. Exact 0.2.112/build 113, ZIP/PKG metadata/binary/notlar eşliği, kaynak ReleaseNotes byte eşliği ve yayın metni geçti. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği doğrulandı; helper v1 yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed app kendi Foundation/URLSession updater yoluyla `Foundation updater feed verified: 0.2.112` verdi. Kanıt `/tmp/MSSQLStudio-112-public-verification/verification.json` altında.
+- Yerel native/geometry, SQL grammar, scoped persistence ve performans kanıtları aşağıdadır. Gerçek uygulama/SQL/Keychain/geçmiş ve `.vscode/` değiştirilmedi; kurulum yapılmadı. Canlı SQL Server, gerçek CUA fare akışı ve Installer denenmedi. Önceki smoke geçmiş olayı/kurtarma belirsizliği tarihsel kayıtta korunur; yeni yayın bunu çözülmüş saymaz.
+
+Public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.112.pkg`: `5782c962148d83c9f41a36db2e89da8c492151a3031f1b96d9bc049244315cc0`.
+- `MSSQLStudio-0.2.112.zip`: `28c812cd1833d38b432005460150308f8b98a03c2ecd453cb01f821fb54b83d5`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `ea84ec66eebfab8967d59a7dba76c08e634e5a4f21803855e777ebdc9bb93583`.
+
 ## 14 Ekim 2026 — v0.2.112 / build 113 yayın hazırlığı
 
 - Sondaki küçük ilerleme için kaynak kanıtı: v0.2.111 modülleri önce 64’lü, tabloları sonra 8’li okuyor ve tablo başına yedi rowset oluşturuyordu. Yeni ObjectMetadata.tableBatch grup başına yedi ortak rowset + object ID prefix kullanır; decoder kimlik bazında ayırır, yanlış/yabancı kimlikte bütün grubu reddeder. Ayrı envanterlenen trigger gövdeleri tablo sorgusunda tekrar okunmaz, synonym set sorgusudur. Modül 64→en çok 200, yapı 32→en çok 64 nesne; 8 MB/30 sn sınırı, partial split ve sonraki gruba küçülen boyutu taşıma korunur. SQLite insert prepared statement grup içinde tekrar kullanılır. Tek reader/query oturumu ayrımı ve worker analiz/decode sürer.
