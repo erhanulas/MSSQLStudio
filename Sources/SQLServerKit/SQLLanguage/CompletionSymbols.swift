@@ -382,13 +382,46 @@ public enum SQLIntelligence {
           diagnostics.append(Diagnostic(range:range,message:"Nesne güncel DDL indeksinde bulunamadı: \(parts.joined(separator:"."))"))
         }
       }
-      var outputAliases = Set(tokens.indices.compactMap { i -> String? in
-        guard i > 0, tokens[i-1].text.uppercased() == "AS", tokens[i].kind == .word else { return nil }; return raw(tokens[i].text).lowercased()
-      })
-      var clauses: [String?] = [], clause: String?
-      for token in tokens {
-        if ["SELECT","FROM","JOIN","WHERE","ON","SET","HAVING","ORDER","GROUP","BY"].contains(token.text.uppercased()) { clause = token.text.uppercased() }
-        clauses.append(clause)
+      var outputAliasTokens=Set<Int>()
+      var outputAliases:[Int:Set<String>]=[:]
+      func registerOutputAlias(_ i:Int,select:Int) {
+        outputAliasTokens.insert(i)
+        outputAliases[select,default:[]].insert(raw(tokens[i].text).lowercased())
+      }
+      // Only SELECT-list identifiers define output aliases. Assignment-style
+      // aliases are expression heads, never WHERE comparisons or UPDATE targets.
+      for select in selects where tokens[select].text.uppercased()=="SELECT" {
+        var first=select+1
+        if first<tokens.count && ["DISTINCT","ALL"].contains(tokens[first].text.uppercased()) {first+=1}
+        if first<tokens.count && tokens[first].text.uppercased()=="TOP" {
+          first+=1
+          if let close=closes[first] {first=close+1} else {first+=1}
+          if first<tokens.count && tokens[first].text.uppercased()=="PERCENT" {first+=1}
+          if first+1<tokens.count && tokens[first].text.uppercased()=="WITH" && tokens[first+1].text.uppercased()=="TIES" {first+=2}
+        }
+        ignored.formUnion((select+1)..<min(first,tokens.count))
+        let peers=tokens.indices.filter {$0>=first && parents[$0]==parents[select] && contains(scope(select),tokens[$0].range.location)}
+        var head=true
+        for i in peers {
+          let upper=tokens[i].text.uppercased()
+          if ["FROM","INTO","WHERE","UNION","EXCEPT","INTERSECT",";","GO"].contains(upper) {break}
+          if tokens[i].text=="," {head=true;continue}
+          if head && (tokens[i].kind == .number || tokens[i].kind == .variable || tokens[i].text=="(") {head=false;continue}
+          if tokens[i].kind == .word {
+            if head && i+1<tokens.count && tokens[i+1].text=="=" {registerOutputAlias(i,select:select)}
+            if i>0 && tokens[i-1].text.uppercased()=="AS" {registerOutputAlias(i,select:select)}
+          }
+          head=false
+        }
+      }
+      var clauses: [String?] = [], clausesByParent:[Int:String]=[:]
+      for i in tokens.indices {
+        let key=parents[i] ?? -1,upper=tokens[i].text.uppercased()
+        if ["SELECT","FROM","JOIN","WHERE","ON","SET","HAVING","ORDER","GROUP"].contains(upper) {clausesByParent[key]=upper}
+        var parent=key
+        while clausesByParent[parent]==nil && parent != -1 {parent=parents[parent] ?? -1}
+        clauses.append(clausesByParent[parent])
+        if i>0,tokens[i-1].text.uppercased()=="AS",let open=parents[i],open>0,["CAST","TRY_CAST"].contains(tokens[open-1].text.uppercased()) {ignored.insert(i)}
       }
       var predecessors: [Int:Lexeme] = [:], preceding: Lexeme?
       for token in all where token.kind != .space && token.kind != .comment {
@@ -398,14 +431,14 @@ public enum SQLIntelligence {
       for i in tokens.indices where i > 0 && tokens[i].kind == .word && clauses[i] == "SELECT" {
         let previous = predecessors[tokens[i].range.location] ?? tokens[i-1]
         if (previous.kind == .word || previous.kind == .string || previous.kind == .number || previous.text == ")") && (i+1 == tokens.count || [",","FROM"].contains(tokens[i+1].text.uppercased())) {
-          outputAliases.insert(raw(tokens[i].text).lowercased())
+          if let select=selects.last(where:{$0<i && parents[$0]==parents[i] && contains(scope($0),tokens[i].range.location) && tokens[$0].text.uppercased()=="SELECT"}) {registerOutputAlias(i,select:select)}
         }
       }
       let commaSources = tokens.indices.contains { tokens[$0].text == "," && clauses[$0] == "FROM" }
       for i in tokens.indices where tokens[i].kind == .word && !ignored.contains(i) {
         try Task.checkCancellation()
         let token = tokens[i], name = raw(token.text).lowercased()
-        if isEditing(token.range) || outputAliases.contains(name) { continue }
+        if isEditing(token.range) || outputAliasTokens.contains(i) { continue }
         let visible = activeBindings(token.range.location)
         if i >= 2 && tokens[i-1].text == "." {
           let qualifier = raw(tokens[i-2].text).lowercased()
@@ -415,6 +448,7 @@ public enum SQLIntelligence {
           }
           continue
         }
+        if clauses[i]=="ORDER" && outputAliases.contains(where:{contains(scope($0.key),token.range.location) && parents[$0.key]==parents[i] && $0.value.contains(name)}) {continue}
         if i+1 < tokens.count && [".","("].contains(tokens[i+1].text) { continue }
         guard !commaSources, !visible.isEmpty, visible.allSatisfy({ $0.columns?.isEmpty == false }) else { continue }
         // Restrict bare-column inspection to ordinary SELECT/expression clauses, not declarations or aliases.

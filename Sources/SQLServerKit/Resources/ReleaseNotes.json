@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.135",
+    "date": "2026-10-15",
+    "title": "SELECT alias doğrulaması ve Studio S uygulama simgesi",
+    "changes": [
+      "SELECT listesindeki alias = ifade, ifade AS alias ve örtük çıktı adları artık geçersiz kolon gibi işaretlenmez. İç sorgu, UNION ve ardışık SELECT kapsamları ayrılır; alias adıyla aynı olan gerçek hatalı nitelikli kolonların doğrulaması korunur.",
+      "CAST/TRY_CAST tür adları ve SELECT TOP/PERCENT/WITH TIES değiştiricileri kolon doğrulamasından ayrıldı. SQL metni, seçim ve yürütme davranışı değiştirilmez.",
+      "Sağlanan Studio S tasarımı uygulamanın ortak simgesine uygulandı. 16–1024 piksel boyutları Dock, Finder, uygulama geçişi, Etkinlik Monitörü ve Hakkında görünümünde aynı bundle kaynağını kullanır."
+    ]
+  },
+  {
     "version": "0.2.134",
     "date": "2026-10-15",
     "title": "Sonuç sınırı ve uzun SQL önizleme düzeltmeleri",
