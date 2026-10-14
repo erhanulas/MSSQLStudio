@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.121 / build 122 public yayın doğrulandı
+
+- [Public/latest v0.2.121](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.121), kaynak `8512812beda11f931b14d12b3898a4c70201c880`; [Actions 38562522780](https://github.com/erhanulas/MSSQLStudio/actions/runs/38562522780) bütün adımlarıyla başarılı. DB bazlı sayısı ayarlanabilen kapatılan sekme History, ayrı native Bul alanı, formatlama caret koruması, Explorer ikon/gezinme düzeltmeleri, son çalıştırma tarihi ve kompakt INSERT SELECT eşlemesi yayımlandı.
+- CI gerçek yayın paketleriyle **385 app +338 core +8 text =731 test; 704 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 92.381 /12.118 /0.003 sn (`/tmp/MSSQLStudio-121-ci-tests.log`). Sabit imza kimliği/izole Keychain denetimi ve geçici kimlik temizliği başarılı.
+- Dört public asset indirildi: GitHub digest/SHA-256, ZIP/PKG URL/hash manifest eşliği, exact 0.2.121/build122 metadata/binary/notlar ve kaynak ReleaseNotes byte eşliği doğrulandı. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği geçti; helper yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu `Foundation updater feed verified: 0.2.121` verdi. Kanıt `/tmp/MSSQLStudio-121-public-verification/verification.json` içindedir.
+- CUA native pipe hatası nedeniyle gerçek fare turu yapılamadı; native fixture/geometry/bitmap başarıları bu kontrolün yerine sayılmaz. Canlı SQL Server ve gerçek Installer denenmedi. Kullanıcı uygulaması/SQL/Keychain/history/favoriler ve `.vscode/` korunur; kurulum veya yeniden başlatma yapılmadı.
+
+Public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.121.pkg`: `98821a0ca24848d42be0724794ab9af2b97b3e65dbf4125db417d4029f7ee041`.
+- `MSSQLStudio-0.2.121.zip`: `78b4fa33f598aee8a3b95b50c3a30b386afaecba4fd6dd57f28dbc292d3d849e`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `39d9df0ebbc023c0e473c164a611ff088d9b456b16cf24d7e7e40843bb2bafd3`.
+
 ## 14 Ekim 2026 — v0.2.121 / build 122 yayın hazırlığı
 
 - Kullanıcının yayın isteğiyle yerel geliştirme değişiklikleri v0.2.121/build122 olarak hazırlandı; Debug/Release ve ReleaseNotes tek kaynağı eşlendi. Ayrıntılı özellik/native/CUA kanıtları aşağıdaki yerel geliştirme kaydındadır.
