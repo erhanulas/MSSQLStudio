@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.132",
+    "date": "2026-10-14",
+    "title": "Fonksiyon tamamlaması ve biçimlendirme düzeltmeleri",
+    "changes": [
+      "Kullanıcı fonksiyonları, tamamlamada şema adı ekleme tercihi kapalı olsa da kendi şemasıyla eklenir. SQL/CLR scalar ve tablo değerli fonksiyonlar ile EXEC bağlamı aynı kuralı izler; yazılmış şema çoğaltılmaz, köşeli parantez tercihi korunur. Tablo ve view tamamlaması mevcut tercihi izlemeye devam eder.",
+      "INSERT/VALUES biçimlendirmesinde GETDATE(), NEWID(), SYSDATETIME() ve iç içe argümanlı fonksiyonlar artık dış değer listesinin satır kırma kuralıyla parçalanmaz. Çok satırlı kolon/değer listeleri, SQL tokenları, yorumlar, seçim ve undo davranışı korunur."
+    ]
+  },
+  {
     "version": "0.2.131",
     "date": "2026-10-14",
     "title": "DDL uyumluluk düzeltmesi ve hizalı fonksiyon önizlemesi",

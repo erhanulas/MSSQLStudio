@@ -137,8 +137,9 @@ public enum SQLIntelligence {
     }
     public func isAmbiguous(_ parts: [String]) -> Bool { parts.count == 1 && (names[parts[0].lowercased()]?.count ?? 0) > 1 && qualified[Self.key("dbo",parts[0])] == nil }
     fileprivate func needsSchema(_ item: CatalogSymbol) -> Bool {
-      // A bare name cannot identify a chosen entry when more than one schema owns it.
-      (names[item.name.lowercased()]?.count ?? 0) > 1 || item.kind.contains("SCALAR_FUNCTION")
+      // User functions always retain their owning schema. Bare relation names
+      // are permitted only when the catalog has no naming ambiguity.
+      (names[item.name.lowercased()]?.count ?? 0) > 1 || item.kind.contains("FUNCTION")
     }
     public func matchingRoutines(_ text:String,schema:String?=nil,limit:Int=100) throws -> [CatalogSymbol] {
       try containing(text,schema:schema,limit:limit,in:routines)

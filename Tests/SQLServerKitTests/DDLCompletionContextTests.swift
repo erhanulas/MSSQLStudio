@@ -49,6 +49,21 @@ import Testing
       #expect(items.allSatisfy {!$0.text.contains("Rows") && !$0.text.contains("()") && !$0.text.contains("NOLOCK") && !$0.text.contains(" AS ")})
     }
   }
+  @Test func allUserFunctionsKeepSchemaWhenSchemaPreferenceIsDisabled() throws {
+    for brackets in [true,false] {
+      for (source,name) in [("SELECT DemoSc","DemoScalar"),("SELECT DemoCLRSc","DemoCLRScalar"),("SELECT * FROM DemoRo","DemoRows"),("SELECT * FROM DemoMultiRo","DemoMultiRows"),("SELECT * FROM DemoCLRRo","DemoCLRRows"),("EXEC DemoSc","DemoScalar")] {
+        let result=try #require(analyze(source,schema:false,brackets:brackets).suggestions.first {$0.kind == .function})
+        let expected=brackets ? "[dbo].[\(name)]":"dbo.\(name)"
+        #expect(result.text==expected+(source.hasPrefix("EXEC") ? "":"()"))
+      }
+      let table=try #require(analyze("SELECT * FROM DemoTa",schema:false,brackets:brackets).suggestions.first {$0.kind == .table})
+      #expect(!table.text.contains("dbo"))
+      let view=try #require(analyze("SELECT * FROM DemoVi",schema:false,brackets:brackets).suggestions.first {$0.kind == .view})
+      #expect(!view.text.contains("dbo"))
+      let typed=try #require(analyze("SELECT * FROM dbo.DemoRo",schema:false,brackets:brackets).suggestions.first)
+      #expect(typed.text==(brackets ? "[DemoRows]()":"DemoRows()"))
+    }
+  }
   @Test func callsKeepExistingParenthesesAndSchemaEscapingPreferences() throws {
     let fresh=try #require(analyze("SELECT DemoScalar",schema:false,brackets:false).suggestions.first {$0.kind == .function})
     #expect(fresh.text=="dbo.DemoScalar()" && fresh.caretOffset==fresh.text.utf16.count-1)

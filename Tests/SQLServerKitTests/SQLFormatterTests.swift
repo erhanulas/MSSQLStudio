@@ -28,6 +28,26 @@ struct SQLFormatterTests {
       }
     }
   }
+  @Test func insertValueFunctionsKeepTheirOwnParenthesesAndArgumentsTogether() {
+    for options in [SQLFormattingOptions(),.init(commaStyle:.leading),.init(keywordCase:.lower),.init(multilineLists:false)] {
+      for source in [
+        "INSERT INTO dbo.Events (CreatedAt, Id) VALUES (GETDATE(), NEWID());",
+        "INSERT INTO dbo.Events (CreatedAt, Id) VALUES (GETDATE(), NEWID()), (SYSDATETIME(), NEWID());",
+        "INSERT INTO dbo.Events (CreatedAt, Amount) VALUES (DATEADD(day, 1, GETDATE()), CONVERT(decimal(18,2), 12.5));",
+        "INSERT INTO dbo.Events (CreatedAt) VALUES (dbo.Clock(GETDATE()));",
+        "SELECT GETDATE(), SYSDATETIME(), NEWID() FROM dbo.Events;"
+      ] {
+        let result=TSQL.format(source,options:options)
+        let folded=result.uppercased()
+        for name in ["GETDATE","SYSDATETIME","NEWID"] where source.contains(name+"()") {
+          #expect(folded.contains(name+"()"),"\(result)")
+        }
+        if source.contains("DATEADD") {#expect(folded.contains("DATEADD(DAY, 1, GETDATE())"),"\(result)")}
+        #expect(SQLFormatter.preservesSQLTokens(source,formatted:result))
+        #expect(TSQL.format(result,options:options)==result)
+      }
+    }
+  }
   @Test func contextualKeywordIdentifiersKeepTheirOriginalCase() {
     for options in [SQLFormattingOptions(), .init(keywordCase:.lower)] {
       let source="select 1 as Go, 2 as Try from dbo.Go as Catch"

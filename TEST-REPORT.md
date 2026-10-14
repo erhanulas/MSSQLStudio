@@ -1,3 +1,11 @@
+## 14 Ekim 2026 — v0.2.132 / build 133 yayın hazırlığı
+
+- Fonksiyon tamamlama için Catalog.needsSchema kuralı yalnız scalar yerine tüm FUNCTION türlerini kapsar. SQL/CLR scalar ve inline/multi-statement/CLR TVF, EXEC dahil, şema tercihi kapalıyken de nitelendirilir; yazılmış qualifier ve güvenli identifier/parantez tercihi korunur. Tablo/view tercihi ve yerleşik sistem fonksiyonları değişmez. Ayar açıklaması bu istisnayı açıkça bildirir.
+- Formatter’da dış INSERT/VALUES listesi iç fonksiyon frame’lerine list=true aktarıyordu; GETDATE() açılış/kapanış parantezleri yanlış satır kırıyordu. Çok satırlı DML listesi yalnız dış parantezde açılır. GETDATE/NEWID/SYSDATETIME, DATEADD/CONVERT/nested UDF, çoklu VALUES, virgül/harf seçenekleri, token eşliği ve idempotence regresyonları eklendi.
+- Hedefli testler: 4 EditorFormatShortcutTests ve 21 core DDLCompletionContextTests/CompletionOptionsTests/SQLFormatterTests; **25/25 geçti**, skip/issue yok (`/tmp/mssql132-targeted.log`).
+- Son tam seri suite **433 app +358 core +8 text =799 test; 772 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 131.282 /6.403 /0.001 sn (`/tmp/mssql132-full.log`). Exact Release geçti (`/tmp/mssql132-release.log`).
+- Debug/Release ve tek kaynak ReleaseNotes.json 0.2.132/build133 eşitlendi. Mimari/Xcode kaynak eşliği ve diff kontrolü geçti. Son tam suite ve public paket kanıtı tamamlanınca ayrıca kaydedilecektir. Gerçek kullanıcı uygulaması, SQL/oturum/credential verileri ve `.vscode/` korunur.
+
 ## 14 Ekim 2026 — v0.2.131 / build 132 public yayın doğrulandı
 
 - [Public/latest v0.2.131](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.131), kaynak `00ee901b2e32d7ad39778f5f81371e195283e075`; [Actions 38624820288](https://github.com/erhanulas/MSSQLStudio/actions/runs/38624820288) bütün adımlarıyla başarılı. DDL TRY_CONVERT uyumluluk düzeltmesi, eksiksiz/hizalı TVF önizlemesi ve sonuç araç çubuğu iyileştirmeleri yayımlandı.

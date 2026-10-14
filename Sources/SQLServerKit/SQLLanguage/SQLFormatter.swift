@@ -182,7 +182,9 @@ public enum SQLFormatter {
       write(text, space: space)
       if upper == "(" {
         let query = ["SELECT","WITH"].contains(next)
-        let list = options.multilineLists && ["INTO","INSERT","VALUES"].contains(frames[frameIndex].clause)
+        // Only the outer DML list owns column/value line breaks. A nested
+        // function call inherits the clause, but never its list layout.
+        let list = options.multilineLists && frames.count == 1 && ["INTO","INSERT","VALUES"].contains(frames[frameIndex].clause)
         let base = frames[frameIndex].indent
         frames.append(Frame(clause: frames[frameIndex].clause, query: query, list: list, indent: base + (query || list ? 1 : 0)))
         if query || list { newline() }

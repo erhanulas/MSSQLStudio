@@ -142,7 +142,7 @@ struct SettingsPanel: View {
             }.id("delay")
             settingsNote("Kısa süre daha hızlı öneri gösterir. ⌃Space, beklemeden açar; Tab / Enter kabul eder, Escape kapatır.", icon: "keyboard")
             Divider()
-            settingsToggle("Tamamlamada şema adını ekle", detail: "Kapalıyken SQL Server’ın varsayılan şema çözümü kullanılır. Aynı adlı nesnelerde ve gerekli fonksiyonlarda şema korunur.", value: $completionSchema)
+            settingsToggle("Tamamlamada şema adını ekle", detail: "Kapalıyken SQL Server’ın varsayılan şema çözümü kullanılır. Aynı adlı nesnelerde ve tüm kullanıcı fonksiyonlarında şema her zaman korunur.", value: $completionSchema)
               .accessibilityIdentifier("settingsCompletionSchema")
             Divider()
             settingsToggle("Tamamlamada köşeli parantez kullan", detail: "Kapalıyken sade adlar kullanılır; boşluk, ayrılmış sözcük ve özel karakter içeren adlar SQL’in geçerli kalması için korunur.", value: $completionBrackets)
