@@ -75,6 +75,15 @@ import UniformTypeIdentifiers
   func catalogIndexStatus(database: String) async throws -> CatalogIndexStatus? {
     try await diskIndex.status(scope: CatalogDiskIndex.scope(profile: profile, database: database))
   }
+  func completionIndexDate(database:String) async throws -> Date? {
+    if let application=visibilityApplication {await application.task.value}
+    guard allowsCatalogIndex(database) else {return nil}
+    return try await diskIndex.completionDate(scope:CatalogDiskIndex.scope(profile:profile,database:database))
+  }
+  func catalogScopeUsage(database:String) async throws -> CatalogScopeUsage {
+    if let application=visibilityApplication {await application.task.value}
+    return try await diskIndex.scopeUsage(scope:CatalogDiskIndex.scope(profile:profile,database:database))
+  }
   func cachedCompletionCatalog(database:String) async throws -> SQLIntelligence.Catalog? {
     if let application=visibilityApplication {await application.task.value}
     return try await completionIndexService.cached(profile:profile,database:database)

@@ -20,7 +20,7 @@ struct StudioActionButton: View {
       } icon: {
         if let tint, !primary { Image(systemName: icon).foregroundStyle(enabled ? tint : Color.secondary) }
         else { Image(systemName: icon) }
-      }.contentShape(Rectangle())
+      }
     }.accessibilityLabel(title).help(title)
   }
 }

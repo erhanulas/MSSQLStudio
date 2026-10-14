@@ -18,7 +18,7 @@ Editörde **⌘Enter**, seçili SQL’i çalıştırır; seçim yokken birden fa
 
 Yeni sorgu sekmesi hemen açılır; bağlantı **Çalıştır** ile denenir. Bağlantı yönetimi ayrı pencerede çalışır, işlem ve hata alt durum çubuğunda görünür. History/Favorilerde çift tıklama mevcut editörde imlece SQL ekler; yeni sekmede açma ayrı eylemdir.
 
-Bağlantılar ekranındaki seçiciden yeni veya mevcut Explorer profilini açabilirsiniz. Genel/Gelişmiş seçenekleri korunur; test/liste yükleme tek eylemdir, mevcut profil çevrimdışı kaydedilebilir. Explorer’da **Nesneleri Yenile** sunucudaki yüklenmiş nesne listelerini yeniden okur; **Yerel İndeksi Yenile** arama/tamamlama önbelleğini yeniler. İndeks ayrıntıları veritabanı adının yanındaki düğmeden açılır.
+Bağlantılar ekranındaki seçiciden yeni veya mevcut Explorer profilini açabilirsiniz. Genel/Gelişmiş seçenekleri korunur; test/liste yükleme tek eylemdir, mevcut profil çevrimdışı kaydedilebilir. Explorer’da **Nesneleri Yenile** sunucudaki yüklenmiş nesne listelerini yeniden okur; **Yerel İndeksi Yenile** arama/tamamlama önbelleğini yeniler. İndeks ayrıntıları veritabanı satırının sağındaki ayrı nesne ve içerik ikonlarından açılır; DB’ye ait saklanan yerel veri boyutu gösterilir. Veritabanı değişince katalog eşitlemesini beklemeden sorguda çalışmaya devam edebilirsiniz.
 
 Ayarlar (⌘,) altı sekmede tema, editör, kısayollar, yerel kayıt, güncelleme kaynağı ve Keychain erişimini yönetir. v0.2.52 ile yeni güncelleme akışı, uygulama menüsündeki **Güncellemeleri Kontrol Et** ile PKG indirip içindeki uygulamanın sabit imzasını doğrular ve macOS Kurulum ekranını açar. Kurulumu tamamlayıp uygulamayı Uygulamalar’dan yeniden açın; önceki sürüm yedeği oluşturulmaz. **Hakkında** ekranındaki sürüm notları çevrimdışı okunabilir.
 

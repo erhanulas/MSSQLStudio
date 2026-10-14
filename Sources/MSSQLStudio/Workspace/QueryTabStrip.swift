@@ -3,17 +3,27 @@ import SQLServerKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-@MainActor class DocumentButton: NSButton, NSDraggingSource {
+@MainActor class DocumentButton: StudioFullAreaButton, NSDraggingSource {
   var document: QueryDocument?
   var showMenu: ((NSEvent) -> Void)?
   var draggable = false
+  weak var selectionSurface: NSView?
+  var trackingEventFixture: (() -> NSEvent?)?
+  private func nextTrackingEvent(in window:NSWindow)->NSEvent? {
+    if let trackingEventFixture {return trackingEventFixture()}
+    return window.nextEvent(matching:[.leftMouseDragged,.leftMouseUp])
+  }
+  func acceptsRelease(at point: NSPoint) -> Bool {
+    let surface = selectionSurface ?? self
+    return surface.bounds.contains(surface.convert(point, from: nil))
+  }
   override func rightMouseDown(with event: NSEvent) { showMenu?(event) }
   override func mouseDown(with event: NSEvent) {
     guard draggable, let document, let window else { super.mouseDown(with: event); return }
     let origin = event.locationInWindow
     highlight(true)
-    while let next = window.nextEvent(matching: [.leftMouseDragged,.leftMouseUp]) {
-      if next.type == .leftMouseUp { highlight(false); if bounds.contains(convert(next.locationInWindow,from:nil)),let action { _ = sendAction(action,to: target) }; return }
+    while let next = nextTrackingEvent(in:window) {
+      if next.type == .leftMouseUp { highlight(false); if acceptsRelease(at: next.locationInWindow),let action { _ = sendAction(action,to: target) }; return }
       if hypot(next.locationInWindow.x-origin.x,next.locationInWindow.y-origin.y) > 4 {
         highlight(false)
         let item = NSPasteboardItem(); item.setString(document.id.uuidString,forType: QueryTabStrip.type)
@@ -89,6 +99,12 @@ import UniformTypeIdentifiers
     CATransaction.begin(); CATransaction.setDisableActions(true)
     activeIndicator.frame = NSRect(x: 10, y: isFlipped ? max(0, bounds.height-2) : 0, width: max(0, bounds.width-20), height: 2)
     CATransaction.commit()
+  }
+  override func hitTest(_ point: NSPoint) -> NSView? {
+    guard let hit = super.hitTest(point) else { return nil }
+    if hit is QueryTabCloseButton { return hit }
+    primaryButton?.selectionSurface = self
+    return primaryButton ?? hit
   }
   // Padding and the document icon belong to the same draggable/selectable tab.
   override func mouseDown(with event: NSEvent) { primaryButton?.mouseDown(with: event) }

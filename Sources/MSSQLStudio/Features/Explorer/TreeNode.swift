@@ -3,7 +3,7 @@ import SQLServerKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-@MainActor final class DatabaseIndexButton:NSButton { weak var node:TreeNode? }
+@MainActor final class DatabaseIndexButton:StudioFullAreaButton { weak var node:TreeNode? }
 @MainActor final class TreeNode: NSObject {
   enum Kind {
     case server, group, database, favorites, favorite, connectionGroup

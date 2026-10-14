@@ -244,6 +244,8 @@ extension WorkbenchController {
     }
   }
   @objc func catalogIndexUpdated(_ notification: Notification) {
+    // Editor snapshots do not change Explorer metadata or index status.
+    if notification.name.rawValue == "sqlCatalogChanged" { return }
     if notification.userInfo?["definitionsOnly"] as? Bool == true {
       if notification.userInfo?["definitionProgress"] as? Bool != true {lastIndexStatusCheck = .distantPast;updateIndexStatus()}
       for row in 0..<outline.numberOfRows {
@@ -308,7 +310,7 @@ extension WorkbenchController {
     let databases = searchDatabases(scope), key = scope.server.id.uuidString + databases.joined(separator:"|")
     guard key != lastIndexStatusScope || Date().timeIntervalSince(lastIndexStatusCheck) > 2 else { return }
     lastIndexStatusScope = key; lastIndexStatusCheck = Date(); indexStatusTask?.cancel()
-    let profile = scope.server.profile, server = scope.server
+    let server = scope.server
     indexStatusTask = Task { [weak self] in
       var lines: [String] = [], ready = 0
       var definitions:[String:DefinitionIndexPresentation]=[:]
@@ -318,13 +320,13 @@ extension WorkbenchController {
           let definition=try await server.definitionIndex.presentation(database:db)
           definitions[db]=definition
           lines.append("\(db): nesne içerikleri · "+definition.detail)
-          let objects = try await CatalogDiskIndex.shared.status(scope:CatalogDiskIndex.scope(profile:profile,database:db))
-          let columns = try await SQLCatalogService.shared.cached(profile:profile,database:db)
+          let objects = try await server.catalogIndexStatus(database:db)
+          let columnDate = try await server.completionIndexDate(database:db)
           if let objects {
             ready += 1
             let stamp = objects.synchronizedAt.formatted(date:.numeric,time:.shortened)
-            let columnStamp = columns?.snapshot.synchronizedAt.formatted(date:.numeric,time:.shortened) ?? "yok"
-            lines.append("\(db): nesne indeksi \(objects.count) nesne · \(stamp)\nKolon indeksi: \(columnStamp) · \(columns?.fresh == true ? "güncel" : "yenileme gerekli")")
+            let columnStamp = columnDate?.formatted(date:.numeric,time:.shortened) ?? "yok"
+            lines.append("\(db): nesne indeksi \(objects.count) nesne · \(stamp)\nKolon indeksi: \(columnStamp) · \(columnDate.map { Date().timeIntervalSince($0) < 300 } == true ? "güncel" : "yenileme gerekli")")
           } else { lines.append("\(db): indeks henüz hazır değil / hazırlanıyor") }
         } catch { lines.append("\(db): indeks okunamadı · \(error.localizedDescription)") }
       }
@@ -343,6 +345,10 @@ extension WorkbenchController {
       }
       indexStatus.toolTip = lines.joined(separator:"\n\n")
       indexStatus.setAccessibilityLabel(indexStatus.toolTip ?? "Yerel indeks")
+      let databaseSet=Set(databases)
+      for row in 0..<outline.numberOfRows {
+        if let node=outline.item(atRow:row) as? TreeNode,case .database=node.kind,node.server === server,databaseSet.contains(node.database) {reloadExplorer(item:node)}
+      }
     }
   }
 }

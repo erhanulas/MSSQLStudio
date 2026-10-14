@@ -20,7 +20,7 @@ import SwiftUI
 }
 
 /// Native tabs retain keyboard, target/action and accessibility behavior.
-@MainActor final class StudioResultTabButton: NSButton {
+@MainActor final class StudioResultTabButton: StudioFullAreaButton {
   private var hoverArea: NSTrackingArea?
   var source: SQLResultSource? {
     didSet {
@@ -57,7 +57,19 @@ import SwiftUI
   }
 }
 
-@MainActor final class StudioToolbarButtonCell: NSButtonCell {
+/// Borderless buttons must track their padded surface, including empty corners.
+@MainActor class StudioFullAreaButtonCell: NSButtonCell {
+  override func hitTest(for event:NSEvent,in cellFrame:NSRect,of controlView:NSView)->NSCell.HitResult {
+    guard isEnabled,cellFrame.contains(controlView.convert(event.locationInWindow,from:nil)) else {return []}
+    return [.contentArea,.trackableArea]
+  }
+}
+@MainActor class StudioFullAreaButton: NSButton {
+  override var alignmentRectInsets:NSEdgeInsets {.init(top:0,left:0,bottom:0,right:0)}
+  override init(frame:NSRect) {super.init(frame:frame);cell=StudioFullAreaButtonCell()}
+  required init?(coder:NSCoder) {super.init(coder:coder)}
+}
+@MainActor final class StudioToolbarButtonCell: StudioFullAreaButtonCell {
   func contentFrame(_ bounds:NSRect) -> NSRect {
     bounds.insetBy(dx:title.isEmpty ? 4:10,dy:3)
   }

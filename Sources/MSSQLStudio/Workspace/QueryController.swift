@@ -52,8 +52,8 @@ import SwiftUI
   private var editorHeaderHeight:NSLayoutConstraint?
   private var editorHeaderConstraints:[NSLayoutConstraint]=[]
   private weak var editorToolbarHost:NSView?
-  private let compareModuleButton = NSButton()
-  private let submitModuleButton = NSButton()
+  private let compareModuleButton = StudioFullAreaButton()
+  private let submitModuleButton = StudioFullAreaButton()
   private var checkingModuleSubmission = false
   private let position = NSTextField(labelWithString: "Ln 1, Col 1")
   private let summary = NSTextField(labelWithString: "")
@@ -122,7 +122,7 @@ import SwiftUI
     connectionBadge.lineBreakMode = .byTruncatingMiddle
     connectionBadge.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     connectionBadge.setAccessibilityIdentifier("queryConnectionBadge")
-    let toggle = NSButton(
+    let toggle = StudioFullAreaButton(
       image: NSImage(
         systemSymbolName: "rectangle.bottomthird.inset.filled",
         accessibilityDescription: "Sonuçları Göster / Gizle")!, target: self,

@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.117",
+    "date": "2026-10-14",
+    "title": "Tam alan tıklama ve bağımsız indeksleme durumu",
+    "changes": [
+      "Sorgu sekmelerinin başlığı, ikonu ve boş kenarları aynı seçim/sürükleme alanıdır. Kapatma düğmesi bağımsız 24×24 alanını korur; dışarıda bırakılan tıklama işlem yapmaz. Ortak native araç düğmeleri, sonuç sekmeleri ve borderless işlemler tüm yüzeylerinde tıklanabilir; form ve durum kartlarının etkileşim alanları iyileştirildi.",
+      "Explorer’da nesne listesi ve nesne içeriği indeksleri ayrı, sabit hizalı ikonlarla gösterilir. Ayrı açıklamalar, ilerleme ve hata renkleri ilgili kapsamı belirtir.",
+      "Veritabanı indeks durumu, nesne/kolon/içerik/düzenleme önbelleğinin yerel veri boyutunu ve toplamını gösterir. Ortak SQLite sayfaları, indeks overhead’i ve geçici dosyalar bu DB boyutuna dahil edilmez.",
+      "Veritabanı değişiminde USE tamamlanınca sorgu hemen hazır olur; katalog yenilemesi beklenmez. İndeksleme bağımsız metadata bağlantılarında devam eder. Durum gösterimi tam kolon kataloğu oluşturmaz; içerik ilerlemesi kartları yeniden yaratmaz ve Explorer’ı gereksiz topluca yenilemez; tek satır güncellemesinde bütün ağacın genişleme durumu yeniden uygulanmaz."
+    ]
+  },
+  {
     "version": "0.2.116",
     "date": "2026-10-14",
     "title": "⌘Enter SQL seçicisi ve SELECT / DECLARE boş satırları",

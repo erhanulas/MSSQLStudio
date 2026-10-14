@@ -27,6 +27,7 @@ struct ObjectEditorKey: Codable, Equatable {
   private(set) var lastExecutedDatabase: String?
   private(set) var lastExecutedReadLimit: Int?
   // In-process test injection; normal documents always use their independent ODBC session.
+  var databaseChangeFixture: ((String) async throws -> Void)?
   var connectionFixture: ((ServerProfile, String) async throws -> Void)?
   var connectionError: String?
   var offlinePreviewRequest=UUID()
@@ -183,7 +184,10 @@ struct ObjectEditorKey: Codable, Equatable {
       changed?()
     }
     do {
-      if let cached = try await server.cachedCompletionCatalog(database:database) { publish(cached,verified:!force && cached.fresh) }
+      if let cached = try await server.cachedCompletionCatalog(database:database) {
+        publish(cached,verified:!force && cached.fresh)
+        if !force && cached.fresh {return}
+      }
       guard server.online,server.catalogIndexRevision==indexRevision,server.allowsCatalogIndex(database) else {return}
       let catalog = try await server.refreshCompletionCatalog(database:database,force:force)
       publish(catalog,verified:true)
@@ -201,21 +205,23 @@ struct ObjectEditorKey: Codable, Equatable {
     task = Task { [weak self] in
       guard let self else { return }
       do {
-        _ = try await connection.execute("USE \(SQL.identifier(name));")
+        if let databaseChangeFixture {try await databaseChangeFixture(name)}
+        else {_ = try await connection.execute("USE \(SQL.identifier(name));")}
         database = name
         clearSymbols()
         messages += "Veritabanı: \(name)\n"
-        changed?()
-        await loadSymbols()
         state = .ready
+        task = nil
         changed?()
+        Task { [weak self] in await self?.loadSymbols() }
+        return
       } catch {
-        state = .ready
         await recordConnectionFailure(error)
+        if state != .disconnected { state = .ready }
         messages += error.localizedDescription + "\n"
+        task = nil
         changed?()
       }
-      task = nil
     }
   }
   func execute(override: String? = nil, estimated: Bool = false, repeatRead: Bool = false) {

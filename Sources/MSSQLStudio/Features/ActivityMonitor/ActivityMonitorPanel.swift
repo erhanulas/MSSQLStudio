@@ -333,6 +333,7 @@ struct ActivityMonitorPanel:View {
                 .padding(.horizontal,9).padding(.vertical,6)
                 .background(Color(nsColor:session == id ? StudioTheme.danger:StudioTheme.muted).opacity(session == id ? 0.12:0.06),in:RoundedRectangle(cornerRadius:7))
                 .overlay(RoundedRectangle(cornerRadius:7).stroke(Color(nsColor:session == id ? StudioTheme.danger:StudioTheme.border).opacity(0.5)))
+                .contentShape(Rectangle())
             }.buttonStyle(.plain).disabled(leaf || node == nil)
               .help(leaf ? "Seçili bloklanan sorgu solda gösterilir":"Bu oturumun sorgu ve bağlantı ayrıntılarını göster")
               .accessibilityIdentifier("activityChainSession\(id)")

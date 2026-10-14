@@ -8,26 +8,19 @@ import UniformTypeIdentifiers
   let databases:[String]
   let refresh:()->Void
   let setDefinitionIndex: (String, Bool) async throws -> Void
-  @State private var revision=UUID()
-  @State private var definitionRevisions:[String:UUID]=[:]
   var body:some View {
     VStack(alignment:.leading,spacing:14) {
       Label("Yerel indeks",systemImage:"externaldrive").font(.title3.bold())
       Text(server.profile.name).foregroundStyle(.secondary)
       ScrollView {
         VStack(spacing:12) {
-          ForEach(databases,id:\.self) {db in ExplorerIndexCard(server:server,database:db,setDefinitionIndex:setDefinitionIndex).id(revision.uuidString+(definitionRevisions[db]?.uuidString ?? "")+db)}
+          ForEach(databases,id:\.self) {db in ExplorerIndexCard(server:server,database:db,setDefinitionIndex:setDefinitionIndex)}
         }
       }.frame(maxHeight:420)
       Text("Bu Mac’teki arama ve SQL önerisi önbelleği.").font(.caption).foregroundStyle(.secondary)
       StudioActionButton("Yerel İndeksi Yenile",icon:"arrow.clockwise",tint:.accentColor,action:refresh).disabled(!server.online)
     }.padding(18).frame(maxWidth:.infinity,maxHeight:.infinity).studioPanel()
-      .onReceive(NotificationCenter.default.publisher(for:.init("catalogIndexUpdated"))) {note in
-        if let updated=note.object as? ConnectedServer,updated === server {
-          if note.userInfo?["definitionsOnly"] as? Bool == true,let db=note.userInfo?["database"] as? String {definitionRevisions[db]=UUID()}
-          else {revision=UUID()}
-        }
-      }
+
   }
 }
 
@@ -44,6 +37,8 @@ import UniformTypeIdentifiers
   @State private var fresh=false
   @State private var loading=true
   @State private var error:String?
+  @State private var usage: CatalogScopeUsage?
+  @State private var revision = UUID()
   private var sourcePending:Bool {definition?.building == true || definition?.activity?.phase == .waiting}
   private var headerTitle:String {
     if error != nil || definition?.failed == true {return "Hata"}
@@ -75,20 +70,38 @@ import UniformTypeIdentifiers
       Text("Kodları bu Mac’te saklar. Kapatınca yalnız bu veritabanının içerik indeksi silinir.").font(.caption2).foregroundStyle(.secondary)
       if let definitionError { Label(definitionError, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange) }
       if let definition {DefinitionIndexMetric(value:definition)}
+      if let usage {
+        Label("Yerel veri: " + bytes(usage.total),systemImage:"externaldrive").font(.caption)
+        Text("Nesneler: \(bytes(usage.objects)) · Kolonlar: \(bytes(usage.columns)) · İçerikler: \(bytes(usage.definitions)) · Düzenleme: \(bytes(usage.editing))").font(.caption2).foregroundStyle(.secondary)
+        Text("Bu DB’ye ait saklanan veri; ortak SQLite sayfaları ve geçici dosyalar hariç.").font(.caption2).foregroundStyle(.secondary)
+      }
       if let error {Label(error,systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange).textSelection(.enabled)}
       if !server.online {Label("Bağlantı kapalı · önbellek bilgisi",systemImage:"network.slash").font(.caption).foregroundStyle(.secondary)}
     }.padding(14).frame(maxWidth:.infinity,alignment:.leading).explorerInfoCard()
-      .task {
+      .onReceive(NotificationCenter.default.publisher(for:.init("catalogIndexUpdated"))) { note in
+        guard let updated = note.object as? ConnectedServer, updated === server,
+          note.userInfo?["database"] as? String == database else { return }
+        if note.userInfo?["definitionProgress"] as? Bool == true {
+          if let previous = definition {
+            definition = .init(enabled:previous.enabled,online:server.online,stored:previous.stored,activity:server.definitionIndex.activities[database])
+          }
+        } else { revision = UUID() }
+      }
+      .task(id:revision) {
         do {
           definition=try await server.definitionIndex.presentation(database:database)
           let objects=try await server.catalogIndexStatus(database:database)
-          let columns=try await server.cachedCompletionCatalog(database:database)
-          count=objects?.count;objectDate=objects?.synchronizedAt;columnDate=columns?.snapshot.synchronizedAt;fresh=columns?.fresh == true
+          let date=try await server.completionIndexDate(database:database)
+          let size=try await server.catalogScopeUsage(database:database)
+          guard !Task.isCancelled else {return}
+          count=objects?.count;objectDate=objects?.synchronizedAt;columnDate=date;fresh=date.map {Date().timeIntervalSince($0)<300} == true
+          usage=size
           error=server.indexErrors[database]
-        } catch {self.error=error.localizedDescription}
+        } catch {guard !Task.isCancelled else {return};self.error=error.localizedDescription}
         loading=false
       }
   }
+  private func bytes(_ value:Int64)->String {value<1024 ? "\(value) B":ByteCountFormatter.string(fromByteCount:value,countStyle:.binary)}
   private func metric(_ title:String,value:String,icon:String,date:Date?) -> some View {
     VStack(alignment:.leading,spacing:7) {
       Label(title,systemImage:icon).font(.caption).foregroundStyle(.secondary)

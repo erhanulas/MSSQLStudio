@@ -114,7 +114,7 @@ struct SettingsPanel: View {
           VStack(alignment:.trailing,spacing:3) {
             Label("Tanım indeksi",systemImage:"internaldrive").font(.caption)
             Text(definitionStorage.usageText).font(.caption2).monospacedDigit()
-          }
+          }.padding(4).contentShape(Rectangle())
         }.buttonStyle(.plain).foregroundStyle(.secondary).accessibilityIdentifier("definitionIndexUsageSummary")
       }
       HStack(spacing:8) {
