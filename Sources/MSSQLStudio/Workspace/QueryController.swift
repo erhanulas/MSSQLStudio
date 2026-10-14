@@ -80,9 +80,10 @@ import SwiftUI
     document.hasResultEdits = { [weak self] in self?.hasDataEdits == true }
     document.confirmDiscardResultEdits = { [weak self] in
       guard let self else { return true }
-      view.window?.makeFirstResponder(nil)
+      _ = view // Preserve lazy result setup without resigning the SQL responder.
       guard !submittingData else { return false }
       guard hasDataEdits else { return true }
+      if let field=view.window?.firstResponder as? NSTextView,field.isFieldEditor {view.window?.makeFirstResponder(nil)}
       let alert = StudioAlert(); alert.messageText = "Gönderilmemiş sonuç düzenlemeleri var"
       alert.informativeText = "Devam ederseniz bu yerel değişiklikler silinir. Veritabanına göndermek için Önizle'yi kullanın."
       alert.addButton(withTitle: "Düzenlemeleri Sil ve Devam Et"); alert.addButton(withTitle: "Geri Dön")
@@ -614,7 +615,13 @@ import SwiftUI
       child.bottomAnchor.constraint(equalTo: parent.bottomAnchor),
     ])
   }
-  func focusEditor() { if document.offlinePreview == nil {view.window?.makeFirstResponder(editor.editor)} }
+  func focusEditor() {
+    guard document.offlinePreview == nil,!document.definitionLoading else {return}
+    editor.resizeToViewport()
+    view.window?.makeFirstResponder(editor.editor)
+    editor.editor.scrollRangeToVisible(editor.editor.selectedRange())
+    editor.editor.updateInsertionPointStateAndRestartTimer(true)
+  }
   func setText() { editor.setText() }
   func format() { guard document.offlinePreview == nil else {return};editor.formatSQL(options: SQLEditorPreferences.formatting()) }
   @objc private func refreshTheme() {
@@ -710,7 +717,7 @@ import SwiftUI
         guard let self else {return};document.offlinePreview=nil;document.changed?();focusEditor()
       },navigate:{[weak self] parts in
         guard let self else {return};document.openOfflineReference?(parts,preview.server,preview.database)
-      })
+      },revealInExplorer:{[weak self] parts in self?.document.revealInExplorer?(parts,preview.server,preview.database)})
       if let host=offlinePreviewHost {host.rootView=root}
       else if let pane=editor.surface.superview {
         let host=NSHostingView(rootView:root);offlinePreviewHost=host;pane.addSubview(host)

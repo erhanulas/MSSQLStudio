@@ -52,7 +52,7 @@ import Testing
     let (_,server,host)=fixture()
     for folder in [Folder.activity,.sessions,.locks,.files,.jobHistory] {
       let result=menu(host,TreeNode(folder.rawValue,kind:.folder(folder),server:server))
-      #expect(!result.items.contains {$0.title=="Nesneleri Yenile"})
+      #expect(!result.items.contains {$0.title=="Yenile"})
       if folder == .jobHistory {
         #expect(result.items.contains {$0.title=="View History…"})
         #expect(!result.items.contains {$0.title=="Verileri Aç"})
@@ -84,7 +84,7 @@ import Testing
       let busy=menu(host,node);busy.update()
       #expect(!busy.autoenablesItems)
       #expect(busy.items.filter {$0.submenu == nil && $0.action != nil}.allSatisfy {!$0.isEnabled})
-      #expect(!busy.items.contains {$0.title=="Nesneleri Yenile"})
+      #expect(!busy.items.contains {$0.title=="Yenile"})
       server.reconnecting=false
     }
   }
@@ -96,7 +96,7 @@ import Testing
     let loaded=TreeNode("Procedures",kind:.folder(.procedures),server:server);loaded.loaded=true
     let lazy=TreeNode("Functions",kind:.folder(.functions),server:server)
     let nested=TreeNode("Nested",kind:.group,server:server);nested.children=[loaded,lazy];group.children=[nested]
-    let result=menu(host,group),refresh=try #require(result.items.first {$0.title=="Nesneleri Yenile"})
+    let result=menu(host,group),refresh=try #require(result.items.first {$0.title=="Yenile"})
     #expect(requests.isEmpty)
     #expect(NSApp.sendAction(try #require(refresh.action),to:refresh.target,from:refresh))
     for _ in 0..<200 where loaded.loading {await Task.yield()}

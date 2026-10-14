@@ -18,7 +18,7 @@ struct HistoryPanel: View {
   @State private var slowest = false
   var filtered: [QueryRecord] {
     records.filter {
-      (search.isEmpty || ($0.text + $0.database + $0.server).localizedCaseInsensitiveContains(search)) &&
+      (search.isEmpty || ($0.text + $0.database + $0.server + ($0.tabTitle ?? "")).localizedCaseInsensitiveContains(search)) &&
       (server.isEmpty || $0.server == server) && (database.isEmpty || $0.database == database) &&
       (status.isEmpty || $0.status == status) && (period == 0 || $0.time >= Date().addingTimeInterval(-Double(period)*86400))
     }.sorted { slowest ? $0.seconds > $1.seconds : $0.time > $1.time }
@@ -29,7 +29,7 @@ struct HistoryPanel: View {
   }
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      StudioPanelHeading(title: "Timeline", icon: "clock.arrow.circlepath", subtitle: "Sorgularını bul, sürelerini karşılaştır ve yeniden aç")
+      StudioPanelHeading(title: "History", icon: "clock.arrow.circlepath", subtitle: "Sorgularını bul, sürelerini karşılaştır ve yeniden aç")
       HStack {
         Label("\(records.count) sorgu", systemImage: "text.badge.checkmark")
         Spacer()
@@ -40,7 +40,7 @@ struct HistoryPanel: View {
       HStack {
         Picker("Sunucu", selection: $server) { Text("Tümü").tag(""); ForEach(Array(Set(records.map(\.server))).sorted(), id: \.self) { Text($0).tag($0) } }
         Picker("Veritabanı", selection: $database) { Text("Tümü").tag(""); ForEach(Array(Set(records.map(\.database))).sorted(), id: \.self) { Text($0).tag($0) } }
-        Picker("Durum", selection: $status) { Text("Tümü").tag(""); ForEach(["Başarılı", "Hata", "Kısmi"], id: \.self) { Text($0).tag($0) } }
+        Picker("Durum", selection: $status) { Text("Tümü").tag(""); ForEach(["Başarılı", "Hata", "Kısmi", "Kapatılan Sekme"], id: \.self) { Text($0).tag($0) } }
         Picker("Tarih", selection: $period) { Text("Tümü").tag(0); Text("24 saat").tag(1); Text("7 gün").tag(7); Text("30 gün").tag(30) }
         Toggle("En yavaş önce", isOn: $slowest)
       }.controlSize(.small)
@@ -49,10 +49,14 @@ struct HistoryPanel: View {
         TableColumn("Zaman") { Text($0.time.formatted(date: .abbreviated, time: .standard)) }.width(min: 150, ideal: 175)
         TableColumn("Sunucu", value: \.server)
         TableColumn("Veritabanı", value: \.database)
-        TableColumn("Sorgu") { Text($0.text.replacingOccurrences(of: "\n", with: " ")).lineLimit(1) }.width(min: 180, ideal: 300)
-        TableColumn("Durum") { Label($0.status, systemImage: $0.status == "Hata" ? "xmark.circle" : $0.status == "Kısmi" ? "exclamationmark.circle" : "checkmark.circle").foregroundStyle($0.status == "Hata" ? Color.red : Color.secondary) }
+        TableColumn("Sorgu") { Text(($0.tabTitle.map {$0+" · "} ?? "")+$0.text.replacingOccurrences(of: "\n", with: " ")).lineLimit(1) }.width(min: 180, ideal: 300)
+        TableColumn("Durum") { Label($0.status, systemImage: $0.tabTitle != nil ? "clock.arrow.circlepath" : $0.status == "Hata" ? "xmark.circle" : $0.status == "Kısmi" ? "exclamationmark.circle" : "checkmark.circle").foregroundStyle($0.status == "Hata" ? Color.red : Color.secondary) }
         TableColumn("Süre") { Text(String(format: "%.3f sn", $0.seconds)).monospacedDigit() }.width(85)
-      }.contextMenu(forSelectionType: UUID.self) { _ in } primaryAction: { ids in
+      }.contextMenu(forSelectionType: UUID.self) { ids in
+        if let id=ids.first,let record=filtered.first(where:{$0.id==id}) {
+          Button(record.tabTitle == nil ? "Yeni Sekmede Aç":"Kapatılan Sekmeyi Aç") {open(record)}.disabled(state.historyServer(record)==nil)
+        }
+      } primaryAction: { ids in
         if let id=ids.first,let record=filtered.first(where:{$0.id == id}) {insertRecord(record)}
       }.frame(minHeight: 180)
       if !insertError.isEmpty {Text(insertError).foregroundStyle(.red)}

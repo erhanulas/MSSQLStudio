@@ -71,7 +71,7 @@ import Testing
       #expect(field.stringValue == text)
     }
   }
-  @Test func smokeAndNativeTestHistoryWritesUseTemporaryStateFolder() throws {
+  @Test func smokeAndNativeTestHistoryWritesUseTemporaryStateFolder() async throws {
     let state=StudioState()
     #expect(state.folder.path.hasPrefix("/tmp/MSSQLStudio-UI-"))
     let url=state.folder.appendingPathComponent("history.json")
@@ -81,6 +81,7 @@ import Testing
       else {try? FileManager.default.removeItem(at:url)}
     }
     state.history=[];state.saveHistory()
+    #expect(await state.flushHistory())
     #expect(try Data(contentsOf:url)==Data("[]".utf8))
   }
 

@@ -194,7 +194,7 @@ import Testing
     let picker=FavoriteQueryPickerController(model:model,serverID:server.id,database:"Sales",contextLabel:"Fixture / Sales",open:{opened=$0.sql},manage:{})
     let window=NSWindow(contentViewController:picker);window.isReleasedWhenClosed=false;window.setContentSize(NSSize(width:840,height:540));defer {window.close()}
     try await Task.sleep(for:.milliseconds(40))
-    let preview=try #require(descendants(picker.view).compactMap {$0 as? SQLPreviewScrollView}.first?.documentView as? NSTextView)
+    let preview=try #require(descendants(picker.view).compactMap {$0 as? SQLPreviewView}.first?.textView as? NSTextView)
     #expect(preview.string.count == 64_000 && preview.string == String(sql.prefix(64_000)))
     picker.openSelected()
     #expect(opened == sql && opened?.hasSuffix("-- final SQL") == true)
@@ -213,8 +213,8 @@ import Testing
         let rect=picker.view.convert(control.bounds,from:control)
         #expect(rect.minX>=0 && rect.maxX<=721 && rect.minY>=0 && rect.maxY<=441,"\(theme): \(rect)")
       }
-      let preview=try #require(descendants(picker.view).compactMap {$0 as? SQLPreviewScrollView}.first)
-      let editor=try #require(preview.documentView as? NSTextView)
+      let preview=try #require(descendants(picker.view).compactMap {$0 as? SQLPreviewView}.first)
+      let editor=try #require(preview.textView as? NSTextView)
       #expect(editor.string.contains("N'İstanbul'") && editor.backgroundColor == StudioTheme.editorCanvas)
       if let rep=picker.view.bitmapImageRepForCachingDisplay(in:picker.view.bounds) {picker.view.cacheDisplay(in:picker.view.bounds,to:rep);try rep.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-favorite-picker-\(theme).png"))}
       window.close()

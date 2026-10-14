@@ -85,7 +85,12 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
   }
 }
 
-@MainActor final class SQLInlineDiffRuler: NSRulerView {
+@MainActor final class SQLInlineDiffRuler: NSView {
+  override var isFlipped:Bool {true}
+  weak var scrollView:NSScrollView?
+  var ruleThickness:CGFloat=36
+  init(scrollView:NSScrollView) {self.scrollView=scrollView;super.init(frame:.zero)}
+  required init?(coder:NSCoder) {fatalError()}
   weak var textView: SQLInlineDiffTextView?
   var numbers: [Int?] = []
   fileprivate var styles: [SQLInlineDiffRowStyle] = []
@@ -95,7 +100,7 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
     let width=(String(number) as NSString).size(withAttributes:[.font:font]).width
     return NSPoint(x:ruleThickness-width-8,y:geometry.baseline-(scrollView?.contentView.bounds.minY ?? 0)-font.ascender)
   }
-  override func drawHashMarksAndLabels(in rect: NSRect) {
+  override func draw(_ rect: NSRect) {
     NSGraphicsContext.saveGraphicsState();defer {NSGraphicsContext.restoreGraphicsState()};bounds.clip()
     StudioTheme.editorCanvas.setFill(); bounds.fill()
     guard let clip=scrollView?.contentView else { return }
@@ -125,6 +130,8 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
   static let maximumRows = 10_000
   static let maximumCharacters = 1_000_000
   let left=NSScrollView(), right=NSScrollView()
+  private(set) lazy var leftRuler=SQLInlineDiffRuler(scrollView:left)
+  private(set) lazy var rightRuler=SQLInlineDiffRuler(scrollView:right)
   let leftText=SQLInlineDiffTextView(usingTextLayoutManager: true)
   let rightText=SQLInlineDiffTextView(usingTextLayoutManager: true)
   // Pane identities stay attached to original/edited SQL when their physical
@@ -147,8 +154,9 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
 
   override init(frame frameRect: NSRect) {
     super.init(frame: frameRect)
-    clipsToBounds=true
+    wantsLayer=true;clipsToBounds=true
     for (scroll, text, label) in [(left, leftText, "Hedef SQL farkları"), (right, rightText, "Kaynak SQL farkları")] {
+      scroll.wantsLayer=true;text.wantsLayer=true
       text.identifier = .init("sqlSourcePreview"); text.isEditable=false; text.isSelectable=true
       text.drawsBackground=false; text.font=StudioTheme.codeFont; text.textColor=StudioTheme.editorText
       text.isVerticallyResizable=true; text.isHorizontallyResizable=true; text.autoresizingMask=[]
@@ -162,10 +170,10 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
       scroll.documentView=text; scroll.borderType = .noBorder
       scroll.hasVerticalScroller=true; scroll.hasHorizontalScroller=true; scroll.autohidesScrollers=true
       scroll.contentView.postsBoundsChangedNotifications=true
-      let ruler=SQLInlineDiffRuler(scrollView: scroll, orientation: .verticalRuler)
+      let ruler=scroll === left ? leftRuler:rightRuler
       ruler.textView=text;ruler.clipsToBounds=true;scroll.clipsToBounds=true
-      ruler.ruleThickness=36; scroll.verticalRulerView=ruler; scroll.hasVerticalRuler=true; scroll.rulersVisible=true
-      addSubview(scroll)
+      ruler.ruleThickness=36;ruler.wantsLayer=true
+      addSubview(ruler);addSubview(scroll)
       NotificationCenter.default.addObserver(self, selector: #selector(scrolled(_:)), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
     }
     setAccessibilityChildren([left,right])
@@ -212,15 +220,18 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
     let half=max(0, (bounds.width-1)/2)
     let leading=NSRect(x: 0, y: 0, width: half, height: bounds.height)
     let trailing=NSRect(x: half+1, y: 0, width: max(0,bounds.width-half-1), height: bounds.height)
-    left.frame=editedOnLeft ? trailing:leading
-    right.frame=editedOnLeft ? leading:trailing
+    for (scroll,ruler,pane) in [(left,leftRuler,editedOnLeft ? trailing:leading),(right,rightRuler,editedOnLeft ? leading:trailing)] {
+      let width=min(pane.width,ruler.ruleThickness)
+      ruler.frame=NSRect(x:pane.minX,y:pane.minY,width:width,height:pane.height)
+      scroll.frame=NSRect(x:pane.minX+width,y:pane.minY,width:max(0,pane.width-width),height:pane.height)
+    }
     resizeDocuments()
     if preserveViewport {
       // Retiling can backing-align clip bounds or reveal an offscreen selection.
       // Keep each SQL pane's viewport before applying explicit diff navigation.
       for (scroll,origin) in zip([left,right],origins) {
         scroll.contentView.scroll(to:origin);scroll.reflectScrolledClipView(scroll.contentView)
-        scroll.verticalRulerView?.needsDisplay=true
+        (scroll === left ? leftRuler:rightRuler).needsDisplay=true
       }
       syncing=previouslySyncing
     }
@@ -235,7 +246,7 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
     let other=clip === left.contentView ? right : left
     other.contentView.scroll(to: NSPoint(x: other.contentView.bounds.minX, y: clip.bounds.minY))
     other.reflectScrolledClipView(other.contentView)
-    left.verticalRulerView?.needsDisplay=true; right.verticalRulerView?.needsDisplay=true
+    leftRuler.needsDisplay=true;rightRuler.needsDisplay=true
   }
   private func revealPendingChange() {
     guard let row=pendingChangeRow, left.contentView.bounds.height > 0, right.contentView.bounds.height > 0 else { return }
@@ -244,7 +255,7 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
     for scroll in [left, right] {
       let y=min(desired, max(0,(scroll.documentView?.bounds.height ?? 0)-scroll.contentView.bounds.height+scroll.contentView.contentInsets.bottom))
       scroll.contentView.scroll(to: NSPoint(x: -scroll.contentView.contentInsets.left, y: y)); scroll.reflectScrolledClipView(scroll.contentView)
-      scroll.verticalRulerView?.needsDisplay=true
+      (scroll === left ? leftRuler:rightRuler).needsDisplay=true
     }
   }
   private func resizeDocuments() {
@@ -288,7 +299,7 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
       let text=index == 0 ? leftText : rightText
       if preservingViewport { text.selectedRanges=selections[index]; scroll.contentView.scroll(to: origins[index]) }
       else { text.setSelectedRange(NSRange(location:0,length:0)); scroll.contentView.scroll(to:NSPoint(x:-scroll.contentView.contentInsets.left,y:0)) }
-      scroll.reflectScrolledClipView(scroll.contentView); scroll.verticalRulerView?.needsDisplay=true
+      scroll.reflectScrolledClipView(scroll.contentView); (scroll === left ? leftRuler:rightRuler).needsDisplay=true
     }
     syncing=false; renderCount += 1; needsDisplay=true
   }
@@ -346,7 +357,8 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
     text.defaultParagraphStyle=paragraph; text.rowRanges=ranges; text.copyRanges=copyRanges;text.copySourceRanges=copySourceRanges;text.sourceSQL=source as NSString; text.sourceNumbers=numbers; text.rowStyles=styles
     text.textContentStorage?.textStorage?.setAttributedString(attributed); text.needsDisplay=true
     scroll.backgroundColor=StudioTheme.editorCanvas
-    if let ruler=scroll.verticalRulerView as? SQLInlineDiffRuler {
+    do {
+      let ruler=scroll === left ? leftRuler:rightRuler
       ruler.numbers=numbers; ruler.styles=styles
       let digits=String(numbers.compactMap { $0 }.max() ?? 1).count
       ruler.ruleThickness=max(36, CGFloat(digits)*7+16)

@@ -39,6 +39,7 @@ import SQLServerKit
   }
   func didReplaceCharacters() {didChangeText()}
   override func validateUserInterfaceItem(_ item:any NSValidatedUserInterfaceItem)->Bool {
+    if item.action == #selector(revealExplorerObject(_:)) {return revealInExplorer != nil && (item as? NSMenuItem)?.representedObject is [String]}
     if item.action == #selector(runSQLStatement(_:)) {return isEditable && !hasMarkedText() && canRunStatement?() == true}
     if item.action == #selector(formatSQLText(_:)) {return isEditable && !hasMarkedText() && requestFormat != nil}
     if item.action == #selector(toggleSQLComment(_:)) || item.action == #selector(uncommentSQL(_:)) {return isEditable && !hasMarkedText() && selectedRanges.count == 1}
@@ -291,6 +292,13 @@ import SQLServerKit
     defer {trackingMouseSelection=false;mouseSelectionEnded?()}
     dismissSuggestions?()
     window?.makeFirstResponder(self)
+    if string.isEmpty,isEditable {
+      setSelectedRange(NSRange(location:0,length:0))
+      textLayoutManager?.textViewportLayoutController.layoutViewport()
+      scrollRangeToVisible(selectedRange())
+      updateInsertionPointStateAndRestartTimer(true)
+      return
+    }
     super.mouseDown(with: event)
     if event.clickCount == 2, unfoldSelection?(selectedRange()) == true {return}
     if event.clickCount == 2 { normalizeSQLWordSelection() }
@@ -336,6 +344,8 @@ import SQLServerKit
   var requestParameterInfo:(()->Void)?
   @objc private func goToMatchingPair(_ sender:Any?) {jumpToMatchingPair?()}
   @objc private func showParameterInfo(_ sender:Any?) {requestParameterInfo?()}
+  var revealInExplorer: (([String]) -> Void)?
+  @objc private func revealExplorerObject(_ item:NSMenuItem) {if let parts=item.representedObject as? [String] {revealInExplorer?(parts)}}
   var navigateDefinition: (() -> Void)?
   var unfoldSelection: ((NSRange) -> Bool)?
   @objc private func goToDefinition(_ sender: Any?) { navigateDefinition?() }
@@ -385,6 +395,11 @@ import SQLServerKit
     for (title,action) in [("Eşleşen Ayırıcıya Git ("+GridShortcuts.binding(.matchingPair).label+")",#selector(goToMatchingPair(_:))),("Parametre Bilgisi ("+GridShortcuts.binding(.parameterInfo).label+")",#selector(showParameterInfo(_:)))] {
       let item=NSMenuItem(title:title,action:action,keyEquivalent:"");item.target=self;menu.addItem(item)
     }
+    let point=convert(event.locationInWindow,from:nil)
+    let parts=DefinitionReference.parts(in:string,at:characterIndexForInsertion(at:point),maxParts:3)
+    let reveal=NSMenuItem(title:"Explorer’da Git",action:#selector(revealExplorerObject(_:)),keyEquivalent:"")
+    reveal.target=self;reveal.representedObject=parts;reveal.isEnabled=parts != nil && revealInExplorer != nil
+    menu.addItem(reveal)
     let definition = NSMenuItem(title:"Nesne Tanımına Git (⌘B / ⌘tık)",action:#selector(goToDefinition(_:)),keyEquivalent:""); definition.target = self; menu.addItem(definition)
     for (title, action) in [("Bloğu Daralt / Aç (⌥⌘[)", #selector(toggleCodeOutline(_:))), ("Tüm Blokları Aç (⌥⌘])", #selector(expandCodeOutline(_:)))] {
       let item = NSMenuItem(title:title,action:action,keyEquivalent:""); item.target = self; menu.addItem(item)

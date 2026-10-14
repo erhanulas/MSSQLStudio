@@ -146,6 +146,10 @@ public struct QueryRecord: Codable, Sendable, Identifiable {
   public var rowCount: Int?
   public var seconds: Double
   public var status: String
+  public var tabTitle: String?
+  public var caret: Int?
+  public var selectionLength: Int?
+  public var reopenedAt: Date?
   public init(server: String, database: String, text: String, serverID: UUID? = nil, errorMessage: String? = nil, rowCount: Int? = nil, seconds: Double, status: String) {
     self.server = server
     self.serverID = serverID; self.errorMessage = errorMessage; self.rowCount = rowCount

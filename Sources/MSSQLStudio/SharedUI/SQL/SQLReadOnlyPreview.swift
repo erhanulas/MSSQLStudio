@@ -3,25 +3,23 @@ import CoreText
 import SQLServerKit
 import SwiftUI
 
-@MainActor private final class SQLPreviewRuler: NSRulerView {
-  var lines = 1
-  override func drawHashMarksAndLabels(in rect: NSRect) {
-    StudioTheme.editorCanvas.setFill(); bounds.fill()
-    guard let clip=scrollView?.contentView else { return }
-    let top=clip.bounds.minY
-    let first=max(0,Int((top-10)/20)), last=min(lines-1,Int((top+clip.bounds.height)/20)+1)
-    guard first <= last else { return }
-    for line in first...last {
-      let label=String(line+1) as NSString
-      let attributes:[NSAttributedString.Key:Any] = [.font:NSFont.monospacedDigitSystemFont(ofSize:11,weight:.regular),.foregroundColor:StudioTheme.lineNumber]
-      let width=label.size(withAttributes:attributes).width
-      label.draw(at:NSPoint(x:ruleThickness-width-10,y:10+CGFloat(line)*20-top+3),withAttributes:attributes)
-    }
-    StudioTheme.border.setFill(); NSRect(x:bounds.maxX-1,y:bounds.minY,width:1,height:bounds.height).fill()
-  }
-}
 @MainActor private final class DefinitionPreviewTextView: NSTextView {
   var navigateDefinition: (([String]) -> Void)?
+  var revealInExplorer: (([String]) -> Void)?
+  @objc private func reveal(_ item:NSMenuItem) {if let parts=item.representedObject as? [String] {revealInExplorer?(parts)}}
+  override func validateUserInterfaceItem(_ item:any NSValidatedUserInterfaceItem)->Bool {
+    if item.action == #selector(reveal(_:)) {return revealInExplorer != nil && (item as? NSMenuItem)?.representedObject is [String]}
+    return super.validateUserInterfaceItem(item)
+  }
+  override func menu(for event:NSEvent)->NSMenu? {
+    let menu=super.menu(for:event) ?? StudioMenu()
+    if revealInExplorer != nil {
+      let item=NSMenuItem(title:"Explorer’da Git",action:#selector(reveal(_:)),keyEquivalent:"")
+      item.target=self;item.representedObject=DefinitionReference.parts(in:string,at:characterIndexForInsertion(at:convert(event.locationInWindow,from:nil)),maxParts:3)
+      item.isEnabled=item.representedObject != nil;menu.addItem(.separator());menu.addItem(item)
+    }
+    return menu
+  }
   override func keyDown(with event: NSEvent) {
     if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, event.charactersIgnoringModifiers?.lowercased() == "b", let navigateDefinition {
       if let parts=DefinitionReference.parts(in:string,at:selectedRange().location) {navigateDefinition(parts)}
@@ -30,49 +28,84 @@ import SwiftUI
     super.keyDown(with:event)
   }
 }
-@MainActor final class SQLPreviewScrollView: NSScrollView {
-  private let preview = DefinitionPreviewTextView(usingTextLayoutManager:true)
-  var navigateDefinition: (([String]) -> Void)? {didSet {preview.navigateDefinition=navigateDefinition}}
-  private var lastSQL: String?
-  private var lastDark: Bool?
-  override init(frame frameRect: NSRect) {
-    super.init(frame:frameRect)
-    clipsToBounds=true
-    preview.identifier=NSUserInterfaceItemIdentifier("sqlSourcePreview")
-    preview.isEditable=false; preview.isSelectable=true
-    preview.isHorizontallyResizable=true; preview.isVerticallyResizable=true
+/// A fixed sibling gutter, shared with the editor, stays outside the scrolling text viewport.
+@MainActor final class SQLPreviewView: NSView {
+  let scroll=NSScrollView()
+  let ruler:LineNumbers
+  private let preview=DefinitionPreviewTextView(usingTextLayoutManager:true)
+  var textView:NSTextView {preview}
+  var navigateDefinition: (([String])->Void)? {didSet {preview.navigateDefinition=navigateDefinition}}
+  var revealInExplorer: (([String])->Void)? {didSet {preview.revealInExplorer=revealInExplorer}}
+  private var lastSQL:String?
+  private var lastDark:Bool?
+  private var lineStarts=[0]
+  private var measuredWidth:CGFloat=1
+  override var isFlipped:Bool {true}
+  override init(frame:NSRect) {
+    ruler=LineNumbers(scrollView:scroll)
+    super.init(frame:frame)
+    wantsLayer=true;clipsToBounds=true
+    preview.wantsLayer=true;scroll.wantsLayer=true;ruler.wantsLayer=true
+    preview.identifier = .init("sqlSourcePreview")
+    preview.isEditable=false;preview.isSelectable=true
+    preview.isHorizontallyResizable=false;preview.isVerticallyResizable=false
+    preview.textLayoutManager?.usesFontLeading=false
     preview.textContainer?.widthTracksTextView=false
+    preview.textContainer?.lineBreakMode = .byClipping
     preview.textContainerInset=NSSize(width:14,height:10)
     preview.setAccessibilityLabel("SQL önizleme editörü")
-    documentView=preview; hasVerticalScroller=true; hasHorizontalScroller=true
-    borderType = .noBorder
-    let ruler=SQLPreviewRuler(scrollView:self,orientation:.verticalRuler); ruler.ruleThickness=48;ruler.clipsToBounds=true
-    verticalRulerView=ruler; hasVerticalRuler=true; rulersVisible=true
+    scroll.documentView=preview;scroll.hasVerticalScroller=true;scroll.hasHorizontalScroller=true
+    scroll.autohidesScrollers=true;scroll.borderType = .noBorder;scroll.clipsToBounds=true
+    ruler.editor=preview;ruler.ruleThickness=48;ruler.numberPadding=10;ruler.clipsToBounds=true
+    ruler.sourceText={ [weak self] in self?.lastSQL ?? "" }
+    ruler.lineNumber={ [weak self] offset in
+      guard let self else {return 1}
+      var low=0,high=lineStarts.count
+      while low<high {let mid=(low+high)/2;if lineStarts[mid]<=offset {low=mid+1} else {high=mid}}
+      return max(1,low)
+    }
+    ruler.selectLine={ [weak preview] range in preview?.window?.makeFirstResponder(preview);preview?.setSelectedRange(range) }
+    addSubview(ruler);addSubview(scroll)
+    ruler.translatesAutoresizingMaskIntoConstraints=false;scroll.translatesAutoresizingMaskIntoConstraints=false
+    NSLayoutConstraint.activate([ruler.leadingAnchor.constraint(equalTo:leadingAnchor),ruler.topAnchor.constraint(equalTo:topAnchor),ruler.bottomAnchor.constraint(equalTo:bottomAnchor),ruler.widthAnchor.constraint(equalToConstant:48),scroll.leadingAnchor.constraint(equalTo:ruler.trailingAnchor),scroll.trailingAnchor.constraint(equalTo:trailingAnchor),scroll.topAnchor.constraint(equalTo:topAnchor),scroll.bottomAnchor.constraint(equalTo:bottomAnchor)])
+    scroll.contentView.postsBoundsChangedNotifications=true
+    NotificationCenter.default.addObserver(self,selector:#selector(scrolled),name:NSView.boundsDidChangeNotification,object:scroll.contentView)
     NotificationCenter.default.addObserver(self,selector:#selector(themeChanged),name:StudioTheme.changed,object:nil)
   }
-  required init?(coder: NSCoder) { fatalError() }
-  @objc private func themeChanged() { if let lastSQL { display(lastSQL) } }
-  func display(_ sql: String) {
-    guard lastSQL != sql || lastDark != StudioTheme.dark else { return }
-    let sameSource=lastSQL == sql, selection=preview.selectedRanges, origin=contentView.bounds.origin
-    lastSQL=sql; lastDark=StudioTheme.dark
-    preview.backgroundColor=StudioTheme.editorCanvas; backgroundColor=StudioTheme.editorCanvas
+  required init?(coder:NSCoder) {fatalError()}
+  @objc private func scrolled() {ruler.needsDisplay=true}
+  @objc private func themeChanged() {if let lastSQL {display(lastSQL)}}
+  override func layout() {super.layout();updateGeometry();ruler.needsDisplay=true}
+  private func updateGeometry() {
+    scroll.tile()
+    let width=max(measuredWidth,scroll.contentView.bounds.width),height=max(scroll.contentView.bounds.height,CGFloat(lineStarts.count)*20+32)
+    if preview.frame.size != NSSize(width:width,height:height) {
+      preview.textContainer?.containerSize=NSSize(width:max(1,width-28),height:10000000)
+      preview.setFrameSize(NSSize(width:width,height:height))
+      preview.needsLayout=true;preview.layoutSubtreeIfNeeded()
+    }
+  }
+  func display(_ sql:String) {
+    guard lastSQL != sql || lastDark != StudioTheme.dark else {return}
+    let same=lastSQL==sql,selection=preview.selectedRanges,origin=scroll.contentView.bounds.origin
+    lastSQL=sql;lastDark=StudioTheme.dark
+    preview.backgroundColor=StudioTheme.editorCanvas;scroll.backgroundColor=StudioTheme.editorCanvas
     let attributed=NSMutableAttributedString(attributedString:SQLSourceHighlighting.attributed(sql))
-    let paragraph=NSMutableParagraphStyle(); paragraph.minimumLineHeight=20; paragraph.maximumLineHeight=20
+    let paragraph=NSMutableParagraphStyle();paragraph.minimumLineHeight=20;paragraph.maximumLineHeight=20
     attributed.addAttribute(.paragraphStyle,value:paragraph,range:NSRange(location:0,length:attributed.length))
     preview.textContentStorage?.textStorage?.setAttributedString(attributed)
-    let lines=sql.components(separatedBy:"\n")
-    let width=min(100000,max(600,(lines.map { ($0 as NSString).size(withAttributes:[.font:StudioTheme.codeFont]).width }.max() ?? 0)+40))
-    preview.textContainer?.containerSize=NSSize(width:width,height:10000000)
-    preview.setFrameSize(NSSize(width:width,height:max(200,CGFloat(lines.count)*20+32)))
-    (verticalRulerView as? SQLPreviewRuler)?.lines=lines.count
-    verticalRulerView?.needsDisplay=true
-    if sameSource { preview.selectedRanges=selection; contentView.scroll(to:origin); reflectScrolledClipView(contentView) }
+    lineStarts=[0];for (index,unit) in sql.utf16.enumerated() where unit==10 {lineStarts.append(index+1)}
+    measuredWidth=min(100000,max(40,(sql.components(separatedBy:"\n").map {($0 as NSString).size(withAttributes:[.font:StudioTheme.codeFont]).width}.max() ?? 0)+40))
+    updateGeometry()
+    if same {preview.selectedRanges=selection;scroll.contentView.scroll(to:origin)}
+    else {preview.setSelectedRange(NSRange(location:0,length:0));scroll.contentView.scroll(to:.zero)}
+    scroll.reflectScrolledClipView(scroll.contentView);ruler.needsDisplay=true
   }
 }
-struct SQLReadOnlyPreview: NSViewRepresentable {
-  let sql: String
-  var navigateDefinition: (([String]) -> Void)? = nil
-  func makeNSView(context: Context) -> SQLPreviewScrollView { SQLPreviewScrollView(frame:.zero) }
-  func updateNSView(_ scroll: SQLPreviewScrollView, context: Context) { scroll.navigateDefinition=navigateDefinition; scroll.display(sql) }
+struct SQLReadOnlyPreview:NSViewRepresentable {
+  let sql:String
+  var navigateDefinition:(([String])->Void)?=nil
+  var revealInExplorer:(([String])->Void)?=nil
+  func makeNSView(context:Context)->SQLPreviewView {SQLPreviewView(frame:.zero)}
+  func updateNSView(_ view:SQLPreviewView,context:Context) {view.navigateDefinition=navigateDefinition;view.revealInExplorer=revealInExplorer;view.display(sql)}
 }

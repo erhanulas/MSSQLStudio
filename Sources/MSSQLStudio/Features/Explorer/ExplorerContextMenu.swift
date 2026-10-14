@@ -99,7 +99,6 @@ extension WorkbenchController {
       command("Klasörü Kaldır…",#selector(removeExplorerGroup));return
     }
     if case .server=node.kind {
-      command("Bağlantıyı Yeniden Adlandır…",#selector(renameExplorerConnection))
       addMoveMenu(to:menu,group:nil,server:node.server.id)
       command("Kayıtlı Bağlantıyı Sil…",#selector(deleteExplorerConnection))
       menu.items.last?.toolTip="Kayıtlı profili ve bu profile ait parolayı siler; açık sorgu sekmeleri korunur."
@@ -153,8 +152,8 @@ extension WorkbenchController {
     }
     command("Yeni Sorgu", #selector(newQueryAtNode))
     if node.expandable || node.objectFolder != nil {
-      command("Nesneleri Yenile", #selector(refreshContextNode))
-      menu.items.last?.toolTip="Bu dalın nesne listesini sunucudan yeniden okur; açık SQL sekmelerini çalıştırmaz ve yerel disk indeksini yeniden oluşturmaz."
+      command("Yenile", #selector(refreshContextNode))
+      menu.items.last?.toolTip="Seçili dalı yeniler; veritabanı/bağlantı kapsamında yerel nesne ve içerik indekslerini de eşitler. Açık sorguları çalıştırmaz."
     }
     menu.addItem(.separator())
     if case .object(let folder) = node.kind {
@@ -217,7 +216,6 @@ extension WorkbenchController {
       }
       let item=NSMenuItem(title:"Yeni Nesne",action:nil,keyEquivalent:"");item.submenu=create;menu.addItem(item)
       command("Yerel İndeks Durumu…",#selector(showContextIndex))
-      command("Yerel İndeksi Yenile",#selector(rebuildContextIndex))
       menu.addItem(.separator())
       command("Veritabanı bilgileri…", #selector(databaseProperties))
     }

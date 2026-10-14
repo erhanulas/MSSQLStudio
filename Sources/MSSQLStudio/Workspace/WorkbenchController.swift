@@ -20,6 +20,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   let searchType = NSPopUpButton()
   var searchScopes: [TreeNode] = []
   var searchDatabaseByServer: [UUID:String] = [:]
+  var explorerRevealTask:Task<Void,Never>?
+  var explorerRevealID=UUID()
   let indexStatus = StudioToolbarButton(symbol: "externaldrive", label: "Yerel indeks durumu ve işlemleri", tone: .neutral, width: 26)
   var indexDetailsByDatabase:[String:String]=[:]
   var indexPopover:NSPopover?
@@ -79,7 +81,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     NotificationCenter.default.addObserver(self,selector:#selector(favoriteWindowClosed(_:)),name:NSWindow.willCloseNotification,object:nil)
     state.changed = { [weak self] in self?.reloadWorkspace() }
   }
-  deinit {agentPolling?.cancel()}
+  deinit {agentPolling?.cancel();explorerRevealTask?.cancel()}
   @objc func themeChanged() {
     tabSignature=nil
     guard isViewLoaded else { return }
@@ -240,6 +242,10 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
           let binding = GridShortcuts.binding(.format)
           item.keyEquivalent = binding.key; item.keyEquivalentModifierMask = binding.flags
         }
+        if item.action == #selector(showHistory) || item.action == #selector(reopenLastClosedTab) {
+          let binding=GridShortcuts.binding(item.action == #selector(showHistory) ? .history:.reopenTab)
+          item.keyEquivalent=binding.key;item.keyEquivalentModifierMask=binding.flags
+        }
         if item.action == #selector(newQuery) {
           let binding = GridShortcuts.binding(.newQuery)
           item.keyEquivalent = binding.key; item.keyEquivalentModifierMask = binding.flags
@@ -377,6 +383,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         doc.openOfflineReference = { [weak self,weak doc] parts,server,db in
           guard let self,let doc else {return};openOfflineDefinition(named:parts,server:server,database:db,in:doc)
         }
+        doc.revealInExplorer = { [weak self,weak doc] parts,server,database in
+          guard let self,let doc else {return};revealExplorerObject(parts,document:doc,targetServer:server,targetDatabase:database)
+        }
         controller = QueryController(document: doc)
         initialFocus = controller
         controller.favorites=state.favorites
@@ -394,6 +403,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         hostedQuery?.hostEditorToolbar(in:nil)
         controller.hostEditorToolbar(in:queryToolbarHost);hostedQuery=controller
         queryToolbarHost.isHidden=false
+        initialFocus=controller
       }
     } else {
       hostedQuery?.hostEditorToolbar(in:nil);hostedQuery=nil;queryToolbarHost.isHidden=true
@@ -491,6 +501,13 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       let item = menu.addItem(withTitle: title, action: #selector(tabMenuAction(_:)), keyEquivalent: "")
       item.target = self; item.tag = index; item.representedObject = document
     }
+    menu.addItem(.separator())
+    for (title,action,shortcut) in [("Kapatılan Sekmeyi Aç",#selector(reopenLastClosedTab),GridShortcuts.Action.reopenTab),("History…",#selector(showHistory),.history)] {
+      let binding=GridShortcuts.binding(shortcut)
+      let item=NSMenuItem(title:title,action:action,keyEquivalent:binding.key);item.target=self;item.keyEquivalentModifierMask=binding.flags
+      if shortcut == .reopenTab {item.isEnabled=state.lastClosedTab != nil}
+      menu.addItem(item)
+    }
     return menu
   }
   @objc private func tabMenuAction(_ item: NSMenuItem) {
@@ -578,9 +595,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     state.newQuery(server:server,database:database)
   }
 
-  @objc func execute() { state.active?.execute() }
+  @objc func execute() {guard let doc=state.active,doc.canExecute else {return};(controllers[doc.id] ?? detached[doc.id]?.query)?.focusEditor();doc.execute()}
   @objc func cancel() { state.active?.cancel() }
-  @objc func estimatedPlan() { state.active?.execute(estimated: true) }
+  @objc func estimatedPlan() {guard let doc=state.active,doc.canExecute else {return};(controllers[doc.id] ?? detached[doc.id]?.query)?.focusEditor();doc.execute(estimated:true)}
   @objc func toggleActualPlan() {
     if let doc = state.active {
       doc.actualPlan.toggle()
@@ -752,6 +769,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       return state.active?.state == .ready
     }
     if item.action == #selector(addFavorite) {return favoriteContextDocument?.sql.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty == false}
+    if item.action == #selector(reopenLastClosedTab) {return state.lastClosedTab != nil}
     if item.action == #selector(cancel) { return state.active?.state == .running || state.active?.state == .connecting }
     if [
       #selector(saveSQL), #selector(saveAsSQL), #selector(formatSQL), #selector(closeTab),

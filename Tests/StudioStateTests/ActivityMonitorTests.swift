@@ -196,7 +196,7 @@ import Testing
       let window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false;window.setContentSize(NSSize(width:920,height:700))
       defer {window.close()}
       try await Task.sleep(for:.milliseconds(100));host.view.layoutSubtreeIfNeeded()
-      let texts=descendants(host.view).compactMap {$0 as? SQLPreviewScrollView}.compactMap {($0.documentView as? NSTextView)?.string}
+      let texts=descendants(host.view).compactMap {$0 as? SQLPreviewView}.compactMap {($0.textView as? NSTextView)?.string}
       #expect(texts.count == 2 && texts.contains(model.diagnostics.blocked.first!.sql))
       #expect(!texts.contains("SELECT N'explicit-first-request';"))
       if chosen == nil {#expect(texts.contains { $0.contains("Gösterilecek SQL yok") })}
@@ -247,7 +247,7 @@ import Testing
           #expect(rect.minX>=0 && rect.maxX<=size.width+1 && rect.minY>=0 && rect.maxY<=size.height+1,"\(theme) state\(state) control \(rect)")
         }
         if mode == 2 {
-          let preview=try #require(views.compactMap {$0 as? SQLPreviewScrollView}.first)
+          let preview=try #require(views.compactMap {$0 as? SQLPreviewView}.first)
           let previewRect=host.view.convert(preview.bounds,from:preview)
           #expect(previewRect.width>=(kind == 0 ? 350:700) && previewRect.height>=100)
           #expect(previewRect.minX>=0 && previewRect.maxX<=920 && previewRect.minY>=0 && previewRect.maxY<=700,"\(theme) state\(state) SQL \(previewRect)")
@@ -257,7 +257,7 @@ import Testing
           let tableRect=host.view.convert(tableScroll.bounds,from:tableScroll)
           #expect(tableRect.height>=120 && tableRect.minX>=0 && tableRect.maxX<=920 && tableRect.minY>=0 && tableRect.maxY<=700,"\(theme) state\(state) table \(tableRect)")
           #expect(previewRect.maxY<=tableRect.minY || tableRect.maxY<=previewRect.minY)
-          #expect(views.compactMap {$0 as? SQLPreviewScrollView}.contains {(($0.documentView as? NSTextView)?.string) == rows.first?.sql})
+          #expect(views.compactMap {$0 as? SQLPreviewView}.contains {(($0.textView as? NSTextView)?.string) == rows.first?.sql})
         }
         if let rep=host.view.bitmapImageRepForCachingDisplay(in:host.view.bounds) {
           host.view.cacheDisplay(in:host.view.bounds,to:rep)

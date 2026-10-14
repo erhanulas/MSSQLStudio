@@ -298,10 +298,12 @@ import Testing
     let old=UserDefaults.standard.object(forKey:"ssmsTheme")
     defer { UserDefaults.standard.set(old,forKey:"ssmsTheme"); NotificationCenter.default.post(name:StudioTheme.changed,object:nil) }
     UserDefaults.standard.set("light",forKey:"ssmsTheme")
-    let scroll=SQLPreviewScrollView(frame:NSRect(x:0,y:0,width:800,height:400))
+    let scroll=SQLPreviewView(frame:NSRect(x:0,y:0,width:800,height:400))
+    let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:800,height:400),styleMask:[],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=scroll;scroll.layoutSubtreeIfNeeded();defer {window.close()}
     let sql="SELECT @x, N'Value' FROM dbo.T;\n-- comment"
     scroll.display(sql)
-    let text=try #require(scroll.documentView as? NSTextView)
+    let text=try #require(scroll.textView as? NSTextView)
     #expect(text.textLayoutManager != nil)
     text.setSelectedRange(NSRange(location:7,length:2))
     StudioTheme.decorate(scroll)
@@ -310,7 +312,7 @@ import Testing
     UserDefaults.standard.set("dark",forKey:"ssmsTheme"); NotificationCenter.default.post(name:StudioTheme.changed,object:nil)
     #expect(text.string == sql && text.selectedRange() == NSRange(location:7,length:2))
     #expect(text.textContentStorage?.textStorage?.attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor == SQLSourceHighlighting.attributed(sql).attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor)
-    #expect(scroll.hasVerticalRuler && scroll.rulersVisible)
+    #expect(!scroll.ruler.isHidden && scroll.ruler.frame.width==48)
   }
   @Test func columnRevealUsesOrdinalAfterReorderAndCustomShortcutRoutes() throws {
     _ = NSApplication.shared

@@ -24,6 +24,12 @@ import SQLServerKit
     roots=servers.compactMap {server in roots.first {$0.server === server}}
     return !removed.isEmpty
   }
+  func databaseNode(server:ConnectedServer,database:String)->TreeNode? {
+    guard let root=roots.first(where:{$0.server === server}),
+      let folder=root.children.first(where:{if case .folder(.databases)=$0.kind {return true};return false}) else {return nil}
+    let candidates=folder.children+folder.children.flatMap {node->[TreeNode] in if case .group=node.kind {return node.children};return []}
+    return candidates.first {if case .database=$0.kind {return $0.database==database};return false}
+  }
   func serverTree(_ server: ConnectedServer) -> TreeNode {
     func folder(_ value: Folder, database: String = "master", item: CatalogItem? = nil) -> TreeNode
     {

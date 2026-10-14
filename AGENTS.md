@@ -295,8 +295,8 @@ Numara alanı genişliği kaynak/snapshot değişince hesaplanır; scroll çizim
 - Kök DB kimlik listesi modelden izlenir. Her UI değişiminde yüklenmiş/kapalı ağacı yeniden kurmayın; başarısız reconnect seçim/node/genişletmeyi korur.
 - Nesne araması yalnız seçili Explorer'ın tüm seçili DB'leri veya tek DB kapsamındadır. Bağlantı başına çalışma sırasındaki DB tercihi korunur; eski explorerSearchScope yalnız aynı UUID'de restore edilir. Temizleme/tema/ağaca dönüş kapsamı bozmaz; kaldırılan DB/bağlantıda geçerli kapsama düşülür.
 - Sağ tık seçili node için tek kaynaktan kurulur. Mükerrer ALTER editörü eklemeyin: Modify editörü açar, Script As → ALTER Clipboard/File hedeflerini korur. View kolonunda Modify owning view'ı açar. Hata satırı üst dalı tekrar denetir; normal detay yalnız kopyalanır.
-- Nesneleri Yenile yalnız seçili dalın yüklenmiş kataloglarını yeniler, lazy klasörleri korur. İzleme yaprağında etkisiz yenileme yoktur; Job History sağ tık/çift tık aynı native yolu kullanır. Açık sorgu/IntelliSense zorla tam yenilenmez.
-- Yerel İndeksi Yenile ayrı, açık kapsamlı işlemdir. Header'da kompakt indeks düğmesi, DB adının yanında 24 pt durum düğmesi vardır; dar görünümde uzak sağ kenarda kaybolmaz. Popup nesne/kolon zamanı, hata/yükleme ve açık yenileme sunar; offline yenileme pasiftir.
+- Tek Yenile eylemi refreshExplorerScope üzerinden yürür. Klasör/nesne yalnız yüklenmiş ilgili dalı okur, lazy dallar korunur. DB ayrıca yerel nesne/kolon/tanım indeksini force eşitler; sunucu önce DB listesini okur, sonra indeks hazırlar. Opt-in/single-flight korunur; SQL çalıştırılmaz. Job History kendi native yenileme yolunu kullanır.
+- Bağlantı adlandırması yalnız bağlantı ayarlarındadır; klasör ve SQL nesnesi adlandırması farklı kapsam olarak korunur. Ayrı indeks yenileme sağ tık eylemi yoktur. Header/DB ikonları durum/opt-in açar; panel Yenile aynı refreshExplorerScope yoludur ve offline pasiftir.
 
 ### Nesne tanım indeksi ve çevrimdışı kaynak
 
@@ -324,6 +324,11 @@ Numara alanı genişliği kaynak/snapshot değişince hesaplanır; scroll çizim
 ## SQL editörü sözleşmesi
 
 ### Metin, undo, find ve folding
+
+- Yürütmede yalnız gerçek sonuç field editor düzenlemesi commit edilir; SQL firstResponder koşulsuz boşaltılmaz. Manuel ana/detached Çalıştır editörü odaklar. İlk setText document.selectedRange alanını UTF-16 sınırında kurar; focusEditor caret görünürlüğü ve blink sağlar. Boş viewport tıklaması SQL/satır/undo yaratmaz.
+- SQLPreviewView, LineNumbers bileşenini sabit sibling sütunda kullanır; SQLInlineDiffView ghost/source numaralarını kendi sabit sibling gutter’ında tutar. Native NSRulerView kaydırma/inset davranışına bağlı değildir. TextKit 2, SSMS renkleri, viewport render, tema/seçim/kaydırma/kopya ve fark yönü korunur.
+- Explorer’da Git tıklanan identifier snapshot’ını kullanır. En çok üç parçalı ad hedef DB’ye bağlanır; dört parçalı sunucu tahmin edilmez. Katalog veya sınırlı metadata, offline yalnız yerel tanım indeksi okunur. Belge/SQL/seçim/server generation/request kimliği eski cevabın odak almasını engeller; tüm nesne ağacı taranmaz. SQL ve query oturumu değişmez.
+
 
 - TextKit 2 korunur; `layoutManager` erişimiyle TextKit 1'e düşmeyin. Renklendirme metni yeniden atamaz; yalnız attribute aralıklarını günceller. IME marked text sırasında boyama/biçimlendirme ertelenir.
 - Her editörün ayrı UndoManager'ı vardır; aynı controller detach/redock'ta taşınır. Ctrl+Z, Ctrl+Y/Ctrl+Shift+Z ve ⌘Z/⌘⇧Z aynı geçmişi kullanır. Standart undo:/redo:, validation, menü ve klavye aynı geçmişe bağlıdır; find/başka field editor odağında SQL geçmişi çalınmaz.
@@ -510,9 +515,11 @@ Koyu palet uygulama uyarlamasıdır; Microsoft'un birebir koyu paleti diye sunul
 - Close sonrası MainActor turunda auxiliaryWindows/contentViewController/subscription sahipliği temizlenir; aynı notification içinde erken serbest bırakılmaz. Async kayıt yalnız başladığı gerçek NSWindow'u weak kapatır; aynı UUID ile yeni açılmış taslağı kapatmaz. Native hit testing ve gerçek fare akışı regresyonu korunur.
 - Explorer Favori Sorgular dalı çevrimdışı yerel açılır; node/seçim/genişletme korunur. Boş SQL yıldızı pasiftir. SQL eşleşmesi yalnız dış whitespace kırpar; harf/string içi değişmez. Açılan UUID sonra DB/bağlantı/genel önceliğiyle kaldırılır; başka DB/sunucu kaydı etkilenmez.
 - Favori DB elle yazılmaz; bağımsız Catalog.databases okuması 5.000 satır/8 MB/15 sn'dir, Explorer görünürlük filtresiyle daralmaz. Offline/partial/hata mevcut DB'yi korur; profil değişiminde yeni profil varsayılanı kullanılır. Açık Sorguda Aç eylemi baseline'lı yeni sekmedir, SQL yürütmez; kayıtlı UUID yoksa kullanıcıya bildirilir. DB favorisi kayıtlı DB'yi; bağlantı favorisi aynı sunucu bağlamında seçilen DB'yi, başka bağlamda profil varsayılanını; genel favori açıkça gösterilen hedefi kullanır.
-- Timeline server UUID kullanır; eski ad bazlı kaydı yalnız tek eşleşmede açar. Filtre/sort/önizleme/kopya/kendi sunucusunda açma korunur. historyRetentionDays 1–3650, varsayılan 30; Ayarlar’da elle gün girilir, geçersiz taslak hiçbir ayar kaydedilmeden reddedilir; açılış/yeni kayıt/Uygula'da temizlenir. Bütçe 20.000 kayıt/16 MB; mevcut Codable kayıtları korunur.
+- History server UUID kullanır; eski ad bazlı kaydı yalnız tek eşleşmede açar. Filtre/sort/önizleme/kopya/kendi sunucusunda açma korunur. historyRetentionDays 1–3650, varsayılan 30; Ayarlar’da elle gün girilir, geçersiz taslak hiçbir ayar kaydedilmeden reddedilir; açılış/yeni kayıt/Uygula'da temizlenir. Bütçe 20.000 kayıt/16 MB; mevcut Codable kayıtları korunur.
 - History/Favoriler Explorer/yerel yönetim listesi ve native seçici çift tıklaması, pencere açılışında yakalanan mevcut ana/detached editöre standart seçim değiştirme/imlece ekleme yapar; tek undo adımıdır, SQL yürütmez, hedef session/DB/baseline/favoriteID değiştirmez. Önizleme/IME/kapalı hedefte görünür hata verir. Yeni Sekmede Aç ayrı eylemdir.
-- History/recovery opt-in'dir, atomik 0700/0600 kullanır; SQL değer içerebilir, parola içermez. Test için kullanıcı geçmişi/favorisi silinmez veya okunmaz.
+- Kapatılan sekme History optional tabTitle/caret/selectionLength/reopenedAt alanlarıyla eski QueryRecord decode’unu korur. Açma yeni disconnected query oluşturur; SQL yürütmez, eski dosya yolu/ALTER conflict baseline bağlamaz. Command+Shift+T son kullanılmamış kaydı, Option+Command+H History’yi açar; GridShortcuts ile ayarlanır. History kapalıyken yalnız RAM’de en çok 100/16 MB ham SQL geri açma kaydı vardır. Çalışan sorgu/transaction/pending write koruması kapanıştan önce geçer.
+- QueryHistoryStore actor retention/JSON/atomik 0700/0600 yazımı yapar. StudioState fiziksel önceki yazıyı bekler ve ara snapshot’ları birleştirir; geç sonuç yeni belleği ezmez. Pending yazıda History eski disk verisini yüklemez. Normal çıkış flushHistory bekler; gerçek hata yalnız açık kaydetmeden çık seçimiyle atlanır. Bozuk/büyük dosya otomatik üzerine yazılmaz.
+- History/recovery opt-in’dir, atomik 0700/0600 kullanır; SQL değer içerebilir, parola içermez. Test için kullanıcı geçmişi/favorisi silinmez veya okunmaz.
 
 ### SQL Agent, Linked Server, AI ve şablonlar
 

@@ -10,28 +10,20 @@ extension WorkbenchController {
     showIndexDetails(scope,relativeTo:sender)
   }
   @objc func showContextIndex() {showIndexDetails(contextNode,relativeTo:indexStatus)}
-  @objc func rebuildContextIndex() {
-    guard let node=contextNode,node.server.online else {return}
-    refreshIndexInBackground(server:node.server,database:node.database,force:true)
-  }
   private func showIndexDetails(_ scope:TreeNode?,relativeTo button:NSButton) {
     guard let scope else {return}
+    let refreshScope:TreeNode
+    if case .server=scope.kind {refreshScope=scope}
+    else {refreshScope=explorerTree.databaseNode(server:scope.server,database:scope.database) ?? TreeNode(scope.database,kind:.database,server:scope.server,database:scope.database)}
     let popover=NSPopover();popover.animates = false;popover.behavior = .transient
     let panel=ExplorerIndexPanel(server:scope.server,databases:searchDatabases(scope), refresh: { [weak self] in
-      if case .server = scope.kind {scope.server.prepareCatalogIndexes(force:true)}
-      else {self?.refreshIndexInBackground(server:scope.server,database:scope.database,force:true)}
+      self?.refreshExplorerScope(refreshScope)
     }, setDefinitionIndex: { [weak self] database, enabled in
       guard let self else { throw CancellationError() }
       try await state.setDefinitionIndex(scope.server, database: database, enabled: enabled)
     })
     indexPopover?.close();indexPopover=popover
     StudioPopover.show(popover,content:panel,from:button,size:NSSize(width:420,height:500))
-  }
-  @objc private func rebuildCatalogIndex() {
-    guard let scope = searchScope ?? selected ?? roots.first else { return }
-    searchStatus.stringValue = "Disk indeksleri eşitleniyor…"
-    if case .server = scope.kind { scope.server.prepareCatalogIndexes(force: true) }
-    else { refreshIndexInBackground(server: scope.server, database: scope.database, force: true) }
   }
   func searchDatabases(_ scope: TreeNode) -> [String] {
     if case .server = scope.kind { return scope.server.databases.map(\.name) }
@@ -64,7 +56,7 @@ extension WorkbenchController {
     if let scope = searchScope { UserDefaults.standard.set("\(scope.server.id.uuidString)|\(scope.database)",forKey:"explorerSearchScope") }
     filterExplorer()
   }
-  private func showExplorerSearch(_ show: Bool) {
+  func showExplorerSearch(_ show: Bool) {
     guard show != showingSearch else { return }
     if show {
       savedExpanded = (0..<outline.numberOfRows).compactMap { outline.item(atRow:$0) as? TreeNode }.filter { outline.isItemExpanded($0) }

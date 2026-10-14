@@ -26,7 +26,7 @@ import Testing
     #expect(view.rightText.string==edited+"\n")
     #expect(view.leftText.selectedSQL(in:NSRange(location:0,length:view.leftText.string.utf16.count))==original)
     #expect(view.rightText.selectedSQL(in:NSRange(location:0,length:view.rightText.string.utf16.count))==edited)
-    #expect(view.left.verticalRulerView?.ruleThickness==36)
+    #expect(view.leftRuler.ruleThickness==36)
     #expect(view.changeRows==[1])
     let reversed=preview(edited,original)
     #expect(reversed.rightText.string==view.leftText.string)
@@ -45,11 +45,12 @@ import Testing
     let comparison=SQLTextDiff.compareIgnoringSQLWhitespace(original,edited)
     for width in [CGFloat(900),CGFloat(901)] {
       let view=preview(original,edited,width:width,ignoringWhitespace:true,editedOnLeft:true)
-      #expect(view.right.frame.minX==0 && view.left.frame.minX>view.right.frame.maxX)
+      #expect(view.rightRuler.frame.minX==0 && view.leftRuler.frame.minX>view.right.frame.maxX)
       let accessibilityOrder=try #require(view.accessibilityChildren() as? [NSView])
       #expect(accessibilityOrder.count==2 && accessibilityOrder.first===view.right && accessibilityOrder.last===view.left)
-      let originalRuler=try #require(view.left.verticalRulerView as? SQLInlineDiffRuler)
-      let editedRuler=try #require(view.right.verticalRulerView as? SQLInlineDiffRuler)
+      #expect(view.left.frame.minX==view.leftRuler.frame.maxX && view.right.frame.minX==view.rightRuler.frame.maxX)
+      let originalRuler=view.leftRuler
+      let editedRuler=view.rightRuler
       #expect(view.convert(editedRuler.bounds,from:editedRuler).minX<view.convert(originalRuler.bounds,from:originalRuler).minX)
       #expect(originalRuler.numbers[2]==nil && editedRuler.numbers[2]==3)
       #expect(comparison.added==2)
@@ -71,7 +72,7 @@ import Testing
       let origins=[view.left.contentView.bounds.origin,view.right.contentView.bounds.origin],renders=view.renderCount
       view.display(comparison:comparison,original:original,edited:edited,changeIndex:-1)
       view.layoutSubtreeIfNeeded()
-      #expect(view.left.frame.minX==0 && view.right.frame.minX>view.left.frame.maxX)
+      #expect(view.leftRuler.frame.minX==0 && view.right.frame.minX>view.left.frame.maxX)
       let defaultAccessibilityOrder=try #require(view.accessibilityChildren() as? [NSView])
       #expect(defaultAccessibilityOrder.first===view.left && defaultAccessibilityOrder.last===view.right)
       #expect(view.renderCount==renders && view.rightText.selectedRange()==selection)
@@ -87,7 +88,7 @@ import Testing
       #expect(hex(new.attribute(.backgroundColor,at:added,effectiveRange:nil) as? NSColor)==0xACE0C4)
       view.display(comparison:comparison,original:original,edited:edited,changeIndex:1,editedOnLeft:true)
       view.layoutSubtreeIfNeeded()
-      #expect(view.right.frame.minX==0 && view.left.contentView.bounds.minY>1500)
+      #expect(view.rightRuler.frame.minX==0 && view.left.contentView.bounds.minY>1500)
       #expect(abs(view.left.contentView.bounds.minY-view.right.contentView.bounds.minY)<1)
       #expect(view.renderCount==renders)
     }
@@ -111,7 +112,7 @@ import Testing
     #expect(hex(new.attribute(.backgroundColor,at:added.location,effectiveRange:nil) as? NSColor)==0xACE0C4)
     let indentation=(new.string as NSString).range(of:"\tC.INCKEYNO")
     #expect(hex(new.attribute(.backgroundColor,at:indentation.location,effectiveRange:nil) as? NSColor)==0xE3F3EA)
-    let oldRuler=try #require(view.left.verticalRulerView as? SQLInlineDiffRuler),newRuler=try #require(view.right.verticalRulerView as? SQLInlineDiffRuler)
+    let oldRuler=view.leftRuler,newRuler=view.rightRuler
     #expect(oldRuler.numbers==[1,2,3,nil,4,5] && newRuler.numbers==[1,2,3,4,5,6])
     let select=(view.leftText.string as NSString).range(of:"SELECT    A.ID,  -- Müşteri kodu  \n")
     #expect(view.leftText.selectedSQL(in:select)=="SELECT    A.ID,  -- Müşteri kodu  \r\n")
@@ -272,7 +273,7 @@ import Testing
     let source=Array(repeating:"SELECT 1;",count:10_010).joined(separator:"\n")
     let view=preview(source,source)
     #expect(view.renderedRows==SQLInlineDiffView.maximumRows && view.truncated)
-    #expect(view.left.verticalRulerView?.ruleThickness==51 && view.right.verticalRulerView?.ruleThickness==51)
+    #expect(view.leftRuler.ruleThickness==51 && view.rightRuler.ruleThickness==51)
     #expect(view.left.contentView.bounds.minX == -view.left.contentView.contentInsets.left)
     let huge=String(repeating:"x",count:SQLInlineDiffView.maximumCharacters+1)
     view.display(comparison:SQLTextDiff.compare(huge,huge),original:huge,edited:huge,changeIndex:-1)
@@ -294,7 +295,7 @@ import Testing
       for (scroll,text) in [(view.left,view.leftText),(view.right,view.rightText)] {
         let storage=try #require(text.textContentStorage?.textStorage)
         storage.addAttribute(.font,value:font,range:NSRange(location:0,length:storage.length))
-        let ruler=try #require(scroll.verticalRulerView as? SQLInlineDiffRuler)
+        let ruler=scroll === view.left ? view.leftRuler:view.rightRuler
         #expect(ruler.clipsToBounds && text.textLayoutManager?.usesFontLeading==false)
         for row in [0,9,11] {
           let geometry=try #require(text.lineGeometry(forRow:row))

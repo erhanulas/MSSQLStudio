@@ -8,14 +8,14 @@ extension WorkbenchController {
     guard let node=notification.object as? TreeNode else {return}
     if case .folder = node.kind {refresh(node)} else {refresh(node.parent ?? node)}
   }
-  func refresh(_ node: TreeNode) {
+  func refresh(_ node: TreeNode,indexForce:Bool=false) {
     if case .favorites = node.kind {Task {await state.favorites.load()};return}
     if case .favorite = node.kind {return}
     if case .object = node.kind, !node.expandable,let parent=node.parent {refresh(parent);return}
     if case .folder(.databases) = node.kind,
       let root = roots.first(where: { $0.server === node.server })
     {
-      refresh(root)
+      refresh(root,indexForce:indexForce)
       return
     }
     guard !node.server.reconnecting else { return }
@@ -37,7 +37,7 @@ extension WorkbenchController {
           node.server.startupError = nil
           node.error = nil
           node.server.databases = node.server.profile.visibleItems(from: rows)
-          node.server.prepareCatalogIndexes()
+          node.server.prepareCatalogIndexes(force:indexForce)
           rebuildSearchScopes()
           node.children = serverTree(node.server).children
           synchronizeFavorites(in:node)
@@ -71,8 +71,13 @@ extension WorkbenchController {
       }
     }
   }
+  func refreshExplorerScope(_ node:TreeNode) {
+    refresh(node,indexForce:true)
+    guard node.server.online else {return}
+    if case .database=node.kind {refreshIndexInBackground(server:node.server,database:node.database,force:true)}
+  }
   @objc func refreshExplorer() {
-    if let node = selected ?? roots.first { refresh(node) }
+    if let node = selected ?? roots.first { refreshExplorerScope(node) }
   }
   @objc func reconnectQuery() {
     guard let doc = state.active, !doc.busy else { return }

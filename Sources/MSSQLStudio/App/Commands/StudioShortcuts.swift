@@ -3,9 +3,11 @@ import SQLServerKit
 import SwiftUI
 
 @MainActor enum GridShortcuts {
-  enum Action: String, CaseIterable { case format, headers, newQuery, favorites, columns, matchingPair, parameterInfo, undo, redo, comment, uncomment }
+  enum Action: String, CaseIterable { case history, reopenTab, format, headers, newQuery, favorites, columns, matchingPair, parameterInfo, undo, redo, comment, uncomment }
   static func title(_ action:Action)->String {
     switch action {
+    case .history: return "History · Sorgu ve sekme geçmişi"
+    case .reopenTab: return "Kapatılan sekmeyi aç"
     case .format: return "Editör · SQL Formatla"
     case .headers: return "Grid · Başlıklarla kopyala"
     case .newQuery: return "Yeni sorgu"
@@ -31,6 +33,8 @@ import SwiftUI
   static let changed = Notification.Name("MSSQLStudio.gridShortcutsChanged")
   static func binding(_ action: Action) -> Binding {
     if let data = UserDefaults.standard.data(forKey: "shortcut.\(action.rawValue)"), let binding = try? JSONDecoder().decode(Binding.self, from: data) { return binding }
+    if action == .history {return Binding(key:"h",modifiers:NSEvent.ModifierFlags([.command,.option]).rawValue)}
+    if action == .reopenTab {return Binding(key:"t",modifiers:NSEvent.ModifierFlags([.command,.shift]).rawValue)}
     if action == .format {return Binding(key:"f",modifiers:NSEvent.ModifierFlags([.command,.shift]).rawValue)}
     if action == .undo {return Binding(key:"z",modifiers:NSEvent.ModifierFlags.control.rawValue)}
     if action == .redo {return Binding(key:"y",modifiers:NSEvent.ModifierFlags.control.rawValue)}

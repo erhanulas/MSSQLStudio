@@ -60,7 +60,7 @@ import AppKit
     window?.subtitle = label.stringValue
     query.updateConnectionAppearance()
   }
-  @objc private func execute() { query.document.execute() }
+  @objc private func execute() {guard query.document.canExecute else {return};query.focusEditor();query.document.execute()}
   @objc private func stop() { query.document.cancel() }
   @objc private func dock() { close() }
   func windowWillClose(_ notification: Notification) {

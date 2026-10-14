@@ -10,7 +10,7 @@ extension WorkbenchController {
     explorer.view = background
     let label = NSTextField(labelWithString: "EXPLORER")
     label.font = .systemFont(ofSize: 10, weight: .semibold)
-    let refresh = symbolButton("arrow.clockwise", tip: "Seçili dalın nesnelerini sunucudan yenile", action: #selector(refreshExplorer))
+    let refresh = symbolButton("arrow.clockwise", tip: "Seçili dalı ve kapsamındaki yerel indeksleri yenile", action: #selector(refreshExplorer))
     let connect = symbolButton("network", tip: "Bağlantı işlemleri", action: #selector(showExplorerConnections(_:)))
     connect.setAccessibilityIdentifier("explorerConnectionActions")
     let collapse = symbolButton("sidebar.left", tip: "Object Explorer’ı gizle", action: #selector(toggleExplorer))

@@ -78,16 +78,6 @@ extension WorkbenchController {
     guard let parts=sender.representedObject as? [String],parts.count==2,let id=UUID(uuidString:parts[0]) else {return}
     do {try state.changeExplorerOrganization {try $0.setColor(id,hex:parts[1].isEmpty ? nil:parts[1])}} catch {state.showError(error.localizedDescription)}
   }
-  @objc func renameExplorerConnection() {
-    guard let server=contextNode?.server,!server.updatingProfile,!server.reconnecting else {return}
-    Task { @MainActor [weak self] in
-      self?.presentExplorerName(title:"Bağlantıyı yeniden adlandır",value:server.profile.name) {[weak self] name in
-        guard let self else {throw CancellationError()}
-        var profile=server.profile;profile.name=name
-        try await state.saveConnectionProfile(server,profile:profile,password:server.password,remember:server.remembered)
-      }
-    }
-  }
   @objc func deleteExplorerConnection() {
     guard let server=contextNode?.server,!server.updatingProfile,!server.reconnecting else {return}
     Task {[weak self] in

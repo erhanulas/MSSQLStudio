@@ -33,6 +33,7 @@ struct ObjectEditorKey: Codable, Equatable {
   var offlinePreviewRequest=UUID()
   var offlinePreview: OfflineDefinitionPreview? {didSet {offlinePreviewRequest=UUID()}}
   var openOfflineReference: (([String], ConnectedServer, String) -> Void)?
+  var revealInExplorer: (([String],ConnectedServer,String) -> Void)?
   var openDefinitionNamed: (([String]) -> Void)?
   var canExecute: Bool { !busy && !definitionLoading && offlinePreview == nil && !server.updatingProfile }
   var executionFixture: ((String, Limits) async throws -> Execution)?

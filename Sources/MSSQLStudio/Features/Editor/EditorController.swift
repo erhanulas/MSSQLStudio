@@ -108,6 +108,7 @@ import SQLServerKit
     editor.requestFormat = { [weak self] in self?.formatSQL(options: SQLEditorPreferences.formatting()) }
     editor.requestParameterInfo = { [weak self] in self?.scheduleParameters(manual:true) }
     editor.jumpToMatchingPair = { [weak self] in self?.jumpToMatchingPair() }
+    editor.revealInExplorer = { [weak document] parts in guard let document else {return};document.revealInExplorer?(parts,document.server,document.database) }
     editor.navigateDefinition = { [weak self] in self?.navigateDefinition() }
     editor.mouseSelectionEnded = { [weak self] in self?.occurrenceTask?.cancel();self?.insertPresentation.requestPreview();self?.updateOccurrences();self?.updateCommentHint() }
     editor.unfoldSelection = { [weak self] range in
@@ -367,6 +368,7 @@ import SQLServerKit
   func setText() {
     // A host refresh is not a request to unfold or replace an unchanged document.
     if initializedText && document.sql == (projection?.source ?? editor.string) { return }
+    let selection=document.selectedRange
     occurrenceTask?.cancel(); clearOccurrences(); highlightedSource=nil
     folded.removeAll(); projection = nil;collapsedMarkers=[]
     // Even an empty initial document must initialize NSTextView's text input/layout state.
@@ -384,6 +386,9 @@ import SQLServerKit
     updateOutline()
     highlight()
     resizeToViewport()
+    let length=(editor.string as NSString).length
+    let start=min(max(0,selection.location),length)
+    editor.setSelectedRange(NSRange(location:start,length:min(max(0,selection.length),length-start)))
     ruler.needsDisplay = true
     updateOccurrences()
     scheduleIntelligence()

@@ -93,7 +93,7 @@ extension WorkbenchController {
       openNewQuery(server: node.server, database: name)
     }
   }
-  @objc func refreshContextNode() { if let node = contextNode { refresh(node) } }
+  @objc func refreshContextNode() { if let node = contextNode { refreshExplorerScope(node) } }
   @objc func refreshContextParent() {if let node=contextNode?.parent {refresh(node)}}
   @objc func selectRows() {
     if let node = contextNode, let item = node.item {

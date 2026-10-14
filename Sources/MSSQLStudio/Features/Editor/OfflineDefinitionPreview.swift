@@ -13,6 +13,7 @@ struct InlineOfflineDefinitionView: View {
   let preview: OfflineDefinitionPreview
   let back: () -> Void
   let navigate: ([String]) -> Void
+  var revealInExplorer: (([String])->Void)? = nil
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack {
@@ -25,13 +26,13 @@ struct InlineOfflineDefinitionView: View {
         .font(.caption).foregroundStyle(.secondary)
       Text("Sunucudaki tanım farklı olabilir. SQL’iniz ve sonuçlarınız korunur.")
         .font(.caption).foregroundStyle(.secondary)
-      SQLReadOnlyPreview(sql: preview.value.sql, navigateDefinition: navigate)
+      SQLReadOnlyPreview(sql: preview.value.sql, navigateDefinition: navigate,revealInExplorer:revealInExplorer)
     }.padding(12).studioPanel()
   }
 }
 
 enum DefinitionReference {
-  static func parts(in sql: String, at caret: Int) -> [String]? {
+  static func parts(in sql: String, at caret: Int,maxParts:Int=2) -> [String]? {
     guard sql.utf16.count <= 100_000 else {return nil}
     let tokens=TSQL.lex(sql).filter {![.space,.comment].contains($0.kind)}
     guard let i=tokens.firstIndex(where: {caret >= $0.range.location && caret < NSMaxRange($0.range) || caret == NSMaxRange($0.range) && $0.kind == .word}),tokens[i].kind == .word else {return nil}
@@ -44,7 +45,7 @@ enum DefinitionReference {
     while start >= 2,tokens[start-1].text == ".",tokens[start-2].kind == .word {start -= 2}
     while end+2 < tokens.count,tokens[end+1].text == ".",tokens[end+2].kind == .word {end += 2}
     let parts=stride(from:start,through:end,by:2).map {raw(tokens[$0].text)}
-    return parts.count <= 2 ? parts:nil // Never resolve another database against the current scope.
+    return parts.count <= maxParts ? parts:nil // Default definition navigation remains limited to the current database.
   }
 }
 

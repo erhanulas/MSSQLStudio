@@ -19,10 +19,11 @@ extension WorkbenchController {
         state: state,
         open: { [weak self] record in
           guard let self, let server = state.historyServer(record) else { return }
+          if record.tabTitle != nil {_=state.reopenClosedTab(record);return}
           state.newQuery(
             server: server, database: record.database, text: record.text,
-            title: "Timeline · \(record.time.formatted())")
-        },insert:{[weak self,weak document] record in guard let self else {return};try insertSavedSQL(record.text,into:document)}), title: "Timeline — Sorgu Geçmişi", width: 1120, height: 760, minWidth: 1000, minHeight: 650, identity: "studio.timeline")
+            title: "History · \(record.time.formatted())")
+        },insert:{[weak self,weak document] record in guard let self else {return};try insertSavedSQL(record.text,into:document)}), title: "History — Sorgu ve Sekme Geçmişi", width: 1120, height: 760, minWidth: 1000, minHeight: 650, identity: "studio.timeline")
   }
   func showAIWindow() {
     present(

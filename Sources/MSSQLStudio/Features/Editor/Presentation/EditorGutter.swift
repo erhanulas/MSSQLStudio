@@ -71,6 +71,7 @@ import SQLServerKit
 @MainActor final class LineNumbers: NSView, NSViewToolTipOwner {
   weak var scrollView: NSScrollView?
   var ruleThickness: CGFloat = 44
+  var numberPadding:CGFloat = 25
   static func width(lineCount:Int,font:NSFont) -> CGFloat {
     max(44,ceil((String(max(1,lineCount)) as NSString).size(withAttributes:[.font:font]).width)+28)
   }
@@ -171,7 +172,7 @@ import SQLServerKit
         lastHeight = max(18, line.typographicBounds.height)
         drewEmptyLine = line.characterRange.length == 0
         value.draw(
-          at: NSPoint(x: ruleThickness - size.width - 25, y: baseline - font.ascender),
+          at: NSPoint(x: ruleThickness - size.width - numberPadding, y: baseline - font.ascender),
           withAttributes: attrs)
         let region = foldRegions?().first(where: { $0.header.location == originalLine.location })
         let top = baseline-font.ascender
@@ -202,7 +203,7 @@ import SQLServerKit
       let original = (sourceText?() ?? editor.string) as NSString
       hits.append((baseline-font.ascender,original.lineRange(for:NSRange(location:original.length,length:0)),nil))
       value.draw(
-        at: NSPoint(x: ruleThickness - size.width - 25, y: baseline - font.ascender),
+        at: NSPoint(x: ruleThickness - size.width - numberPadding, y: baseline - font.ascender),
         withAttributes: attrs)
     }
   }

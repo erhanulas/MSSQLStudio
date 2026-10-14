@@ -91,6 +91,12 @@ import UniformTypeIdentifiers
   var active: QueryDocument?
   var changed: (() -> Void)?
   var history: [QueryRecord] = []
+  var closedTabs: [QueryRecord] = []
+  let historyStore=QueryHistoryStore()
+  var historySaveTask:Task<Bool,Never>?
+  var historyWriteRevision=UUID()
+  var historyWriteError:String?
+  var historyLoadFailed=false
   lazy var favorites = FavoriteQueriesModel(url: (Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" || ProcessInfo.processInfo.arguments.contains("--ui-smoke") || ProcessInfo.processInfo.arguments.contains(where:{$0.contains(".xctest")})
     ? URL(fileURLWithPath:"/tmp/MSSQLStudio-UI-\(ProcessInfo.processInfo.processIdentifier)") : folder).appendingPathComponent("favorites.json"))
   private var nextQueryNumber = 1
@@ -297,7 +303,7 @@ import UniformTypeIdentifiers
   }
   @discardableResult func newQuery(
     server: ConnectedServer, database: String? = nil, text: String = "", title: String? = nil,
-    run: Bool = false, refreshSeconds: Int? = nil, startConnection:Bool = false
+    run: Bool = false, refreshSeconds: Int? = nil, startConnection:Bool = false, selection:NSRange? = nil
   ) -> QueryDocument {
     let doc = QueryDocument(
       server: server, database: database ?? server.profile.database,
@@ -305,6 +311,10 @@ import UniformTypeIdentifiers
     nextQueryNumber += 1
     doc.sql = text
     doc.savedText = text // Generated/opened text is the baseline, not a user edit.
+    if let selection {
+      let length=(text as NSString).length,start=min(max(0,selection.location),length)
+      doc.selectedRange=NSRange(location:start,length:min(max(0,selection.length),length-start))
+    }
     doc.completed = { [weak self, weak doc] sql, result, error in
       guard let self, let doc, self.historyEnabled else { return }
       self.history.insert(
@@ -313,7 +323,6 @@ import UniformTypeIdentifiers
           serverID: doc.server.id, errorMessage: error, rowCount: result?.results.reduce(0) { $0 + $1.values.count },
           seconds: result?.elapsed ?? 0,
           status: error == nil ? (result?.partial == true ? "Kısmi" : "Başarılı") : "Hata"), at: 0)
-      self.history = QueryHistoryPolicy.retained(self.history, days: self.historyRetentionDays)
       self.saveHistory()
     }
     documents.append(doc)
@@ -390,20 +399,17 @@ import UniformTypeIdentifiers
     let matching = servers.filter { $0.profile.name == record.server }
     return matching.count == 1 ? matching.first : nil
   }
-  func saveHistory() {
-    history = QueryHistoryPolicy.retained(history, days: historyRetentionDays)
-    do { try write(history, name: "history.json"); NotificationCenter.default.post(name: .init("queryHistoryChanged"), object: self) } catch { showError(error.localizedDescription) }
-  }
   func loadHistory() {
+    guard historySaveTask == nil,historyWriteError == nil else {return}
     do {
       let data = try Data(contentsOf: folder.appendingPathComponent("history.json"))
-      if data.count < 20_000_000 {
-        history = QueryHistoryPolicy.retained(try JSONDecoder().decode([QueryRecord].self, from: data), days: historyRetentionDays)
-        saveHistory()
-      }
+      guard data.count<20_000_000 else {throw SQLFailure("Sorgu geçmişi 20 MB okuma sınırını aşıyor; mevcut dosya korunuyor.")}
+      history = QueryHistoryPolicy.retained(try JSONDecoder().decode([QueryRecord].self, from: data), days: historyRetentionDays)
+      saveHistory()
     } catch {
       if FileManager.default.fileExists(atPath: folder.appendingPathComponent("history.json").path)
       {
+        historyLoadFailed=true;historyWriteError=error.localizedDescription
         showError(error.localizedDescription)
       }
     }
@@ -418,7 +424,9 @@ import UniformTypeIdentifiers
     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
   }
   private var noticeWindows:[NSWindowController]=[]
+  var errorFixture:((String)->Void)?
   func showError(_ message:String) {
+    if let errorFixture {errorFixture(message);return}
     let owner=StudioNoticeWindowController(message:message)
     noticeWindows.append(owner)
     owner.closed={ [weak self,weak owner] in Task { @MainActor [weak self,weak owner] in self?.noticeWindows.removeAll {$0 === owner} } }
@@ -434,6 +442,7 @@ import UniformTypeIdentifiers
       return false
     }
     guard discardChanges || confirmSave(doc) else { return false }
+    rememberClosedTab(doc)
     doc.definitionTask?.cancel();doc.definitionTask=nil
     doc.disconnect()
     documents.removeAll { $0.id == doc.id }

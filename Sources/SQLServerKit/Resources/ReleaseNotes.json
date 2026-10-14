@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.2.119",
+    "date": "2026-10-14",
+    "title": "Editör odağı, sekme History ve sade Explorer",
+    "changes": [
+      "Sorgu yürütmede gereksiz odak boşaltma kaldırıldı; imleç, seçim ve kaydırma konumu korunur. Yeni sekme doğru başlangıç konumuyla açılır. Boş editör alanına tıklamak SQL ve undo değiştirmeden görünür imleci etkinleştirir. Ana ve ayrılmış sorgu araçları editörü odaklar.",
+      "Explorer bağlantısını yeniden adlandırma yalnız bağlantı ayarlarında bırakıldı. Tek Yenile yolu DB/bağlantı kapsamında nesne listesi ve yerel nesne/kolon/içerik indekslerini eşitler; klasör/nesnede ilgili dal kapsamı korunur. Durum ikonları bilgi ve opt-in ayarlarını açar.",
+      "History kapatılan sekmelerin SQL, DB, başlık ve imleç/seçim konumunu saklar. Sekme sağ tık menüsü ve Command+Shift+T geri açar; Option+Command+H History açar. İki kısayol Ayarlar’dan değiştirilebilir. Açma SQL çalıştırmaz. Geçmiş kapalıysa geri açma yalnız oturum belleğindedir.",
+      "Geçmiş kodlama ve atomik disk yazımı seri arka plan deposuna taşındı. Son snapshot korunur, normal çıkış yazımı bekler. Okunamayan geçmiş dosyası yeni kayıtla üzerine yazılmaz; eski kayıt formatı korunur.",
+      "Salt okunur SQL ve SQL fark görünümünde sayaç kaydırmadan bağımsız sabit sütundur. Tema ve kaydırmada satır numaraları, SQL başlangıcı, özgün kopyalama ve fark hizası korunur.",
+      "Editörde ve çevrimdışı önizlemede sağ tık Explorer’da Git eklendi. Doğru bağlantı/DB nesnesi seçilir; SQL ve query oturumu değişmez. Offline tanım indeksi kullanılabilir; geç yanıt kaynak/seçim/bağlantı değişmişse odağı almaz."
+    ]
+  },
+  {
     "version": "0.2.118",
     "date": "2026-10-14",
     "title": "Tam alan tıklama ve bağımsız indeksleme durumu",

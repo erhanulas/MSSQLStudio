@@ -209,17 +209,35 @@ import SwiftUI
     window.backgroundColor = StudioTheme.chrome
     if let content = window.contentView { StudioTheme.decorate(content) }
   }
+  private var savingHistoryForTermination=false
+  private func completeTermination(_ sender:NSApplication) {
+    guard !savingHistoryForTermination else {return}
+    savingHistoryForTermination=true
+    Task { @MainActor [weak self] in
+      guard let self else {return}
+      var saved=await studio.flushHistory()
+      if !saved {
+        let alert=StudioAlert();alert.messageText="Geçmiş kaydedilemedi"
+        alert.informativeText="Son geçmiş ve kapatılan sekme kayıtları diske yazılamadı. Mevcut dosya korunur. Kaydetmeden çıkarsanız bu oturumdaki yeni geçmiş kayıtları kaybolabilir."
+        alert.addButton(withTitle:"Çıkışı İptal Et");alert.addButton(withTitle:"Geçmişi Kaydetmeden Çık")
+        saved=alert.runModal() == .alertSecondButtonReturn
+      }
+      savingHistoryForTermination=false
+      sender.reply(toApplicationShouldTerminate:saved)
+    }
+  }
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     guard SchemaComparisonModel.activeApplications==0 else {NSSound.beep();return .terminateCancel}
-    if Self.updateTerminationApproved {return .terminateNow}
+    if savingHistoryForTermination {return .terminateLater}
+    if Self.updateTerminationApproved {completeTermination(sender);return .terminateLater}
     if let terminationPrompt {terminationPrompt.window?.makeKeyAndOrderFront(nil);return .terminateLater}
     guard studio.canBeginBulkClose() else {return .terminateCancel}
-    guard studio.needsBulkCloseConfirmation else {return studio.canQuit() ? .terminateNow:.terminateCancel}
+    guard studio.needsBulkCloseConfirmation else {guard studio.canQuit() else {return .terminateCancel};completeTermination(sender);return .terminateLater}
     let prompt=StudioCloseWindowController(title:"MSSQL Studio’yu kapat",count:studio.documents.count) {[weak self] choice in
       guard let self else {return true}
       if choice == .cancel {terminationPrompt=nil;sender.reply(toApplicationShouldTerminate:false);return true}
       guard studio.canQuit(choice:choice) else {return false}
-      terminationPrompt=nil;sender.reply(toApplicationShouldTerminate:true);return true
+      terminationPrompt=nil;completeTermination(sender);return true
     }
     terminationPrompt=prompt
     Task { @MainActor in prompt.showWindow(nil);prompt.window?.makeKeyAndOrderFront(nil) }
@@ -263,6 +281,8 @@ import SwiftUI
       modifiers: [.command, .shift])
     file.addItem(.separator())
     command(file, "Sekmeyi Kapat", #selector(WorkbenchController.closeTab), "w")
+    let reopen=GridShortcuts.binding(.reopenTab)
+    command(file, "Kapatılan Sekmeyi Aç", #selector(WorkbenchController.reopenLastClosedTab), reopen.key,modifiers:reopen.flags)
     let edit = menu("Düzen")
     edit.addItem(withTitle: "Geri Al", action: Selector(("undo:")), keyEquivalent: "z")
     edit.addItem(withTitle: "İleri Al", action: Selector(("redo:")), keyEquivalent: "Z")
@@ -305,7 +325,8 @@ import SwiftUI
       view, "Object Explorer Göster / Gizle", #selector(WorkbenchController.toggleExplorer), "b",
       modifiers: [.command, .option])
     command(view, "Sonuçları Göster / Gizle", #selector(WorkbenchController.toggleResults), "r")
-    command(view, "Query History", #selector(WorkbenchController.showHistory))
+    let history=GridShortcuts.binding(.history)
+    command(view, "History", #selector(WorkbenchController.showHistory), history.key,modifiers:history.flags)
     command(view, "Activity Monitor", #selector(WorkbenchController.activity))
     command(view, "AI Assistant", #selector(WorkbenchController.aiAssistant))
     command(view, "Extensions", #selector(WorkbenchController.extensionsPanel))

@@ -18,7 +18,7 @@ import UniformTypeIdentifiers
         }
       }.frame(maxHeight:420)
       Text("Bu Mac’teki arama ve SQL önerisi önbelleği.").font(.caption).foregroundStyle(.secondary)
-      StudioActionButton("Yerel İndeksi Yenile",icon:"arrow.clockwise",tint:.accentColor,action:refresh).disabled(!server.online)
+      StudioActionButton("Yenile",icon:"arrow.clockwise",tint:.accentColor,action:refresh).disabled(!server.online)
     }.padding(18).frame(maxWidth:.infinity,maxHeight:.infinity).studioPanel()
 
   }
