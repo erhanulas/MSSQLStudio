@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.114 / build 115 public yayın doğrulandı
+
+- [Public/latest v0.2.114](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.114), kaynak `9cc867ca09085da118365fbcd0673171d12da881`; [Actions 38539390540](https://github.com/erhanulas/MSSQLStudio/actions/runs/38539390540) bütün adımlarıyla başarılı. Anında lazy sorgu sekmesi, görünür bağlantı durumu/bağımsız yönetim penceresi, aynı sekmede geri dönülebilen çevrimdışı tanım ve History/Favoriler çift tıkla imlece ekleme yayımlandı.
+- CI gerçek yayın paketleriyle **357 app +325 core +8 text =690 test; 663 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 87.589 /10.513 /0.003 sn. Sabit kimlik/izole Keychain denetimi ve geçici CI kimliği temizliği geçti. Loglar `/tmp/MSSQLStudio-114-ci-tests.log`, `114-ci-feed.log`, `114-ci-logs.zip`.
+- GitHub’dan indirilen dört public asset SHA-256/digest eşliği, ZIP/PKG URL/hash manifest eşliği, exact 0.2.114/build115 metadata/binary/notlar, kaynak ReleaseNotes byte eşliği ve GitHub yayın metni doğrulandı. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği geçti; helper v1 yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu `Foundation updater feed verified: 0.2.114` verdi. Kanıt `/tmp/MSSQLStudio-114-public-verification/verification.json` içinde.
+- Yerel/native ve gerçek CUA kanıtları aşağıdadır. Kullanıcı uygulaması/DB/Keychain/geçmiş/favoriler ve `.vscode/` değiştirilmedi; kurulum veya yeniden başlatma yapılmadı. Canlı SQL Server kesintisi/login/modül gönderimi ve gerçek Installer denenmedi. Önceki geçmiş kurtarma belirsizliği tarihsel kayıtta korunur.
+
+Public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.114.pkg`: `68d092699f04f678ade984cd3bda7cce0f419247c0fedb08c31564e47fc5821f`.
+- `MSSQLStudio-0.2.114.zip`: `794de20b3c84e636e31b205b55928f54534916783d791dee51e2a4d1991a7937`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `97cc3a1415d28f24ec4787f38919bf0206b2cdb1e65c02bf3bf546863e231cb0`.
+
 ## 14 Ekim 2026 — v0.2.114 / build 115 yayın hazırlığı
 
 - Yeni sorgu sekmeleri Explorer reconnect beklemeden disconnected açılır; açık Çalıştır tek query bağlantısı kurar ve tıklama anındaki SQL/seçim snapshot’ını yollar. İptal veya generation/DB değişiminde SQL gönderilmez. Query bağlantı kaybının Explorer health doğrulaması ayrı kalır; hatalı login görünürdür ve otomatik yeniden deneme yoktur. Query oturumu açılmadan metadata yüklenir; offline yalnız cache okunur. Online tanım sekmeleri de lazy’dir; onaylı modül gönderiminde bağlantı sonrası SQL/DB/original yeniden doğrulanıp canlı conflict kontrolü yapılır.
