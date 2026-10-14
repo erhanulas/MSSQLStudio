@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.113 / build 114 public yayın doğrulandı
+
+- [Public/latest v0.2.113](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.113), kaynak `ba7b538a930b8697491a947e1c9addfa2c3fe2a3`; [Actions 38534585414](https://github.com/erhanulas/MSSQLStudio/actions/runs/38534585414) bütün adımlarıyla başarılı. Ayarlanabilir Formatla kısayolu, INSERT kolon listesi devamı ve nesne/değişken/keyword interior tamamlama yayımlandı.
+- CI gerçek yayın paketleriyle **347 app +325 core +8 text =680 test; 653 geçti /27 dış koşullu atlandı, 0 issue**; tamamlanmış özetler 79.890 /9.696 /0.003 sn. Sabit kimlik/izole Keychain fixture ve geçici CI kimliği temizliği geçti. Loglar `/tmp/MSSQLStudio-113-ci-tests.log`, `113-ci-feed.log`, `113-ci-logs.zip`.
+- GitHub’dan indirilen dört public asset SHA-256 değerleri GitHub digest’leriyle aynı; ZIP/PKG URL/hash eşliği manifest ile doğrulandı. Exact 0.2.113/build 114, ZIP/PKG metadata/binary/notlar eşliği, kaynak ReleaseNotes byte eşliği ve yayın metni geçti. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği doğrulandı; helper v1 yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed app kendi Foundation/URLSession updater yoluyla `Foundation updater feed verified: 0.2.113` verdi. Kanıt `/tmp/MSSQLStudio-113-public-verification/verification.json` altında.
+- Yerel native klavye/Tab/undo/menu-action/geometry ve core kapsam kanıtları aşağıdadır. Gerçek uygulama/SQL/Keychain/geçmiş ve `.vscode/` değiştirilmedi; kurulum yapılmadı. Canlı SQL Server, gerçek CUA fare akışı ve Installer denenmedi. Önceki smoke geçmiş olayı/kurtarma belirsizliği tarihsel kayıtta korunur; yeni yayın bunu çözülmüş saymaz.
+
+Public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.113.pkg`: `86396c101935691519132a846d268dba08e39cead951843c5f108790bcea8370`.
+- `MSSQLStudio-0.2.113.zip`: `93c58ab88071b652e10029dd31a14fd345a4a4b52a8b7a9f415a46ac939f2ca4`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `f72c3ec43d9b0045e5feb5b424df026828b6eb25317c9fe738062709e27cb976`.
+
 ## 14 Ekim 2026 — v0.2.113 / build 114 yayın hazırlığı
 
 - Formatla GridShortcuts.format olarak ayarlanabilir; mevcut ⌘⇧F varsayılanı korunur. Ayarlar araması/11 native capture satırı, anlık kayıt/reset/çakışma denetimi, Düzen ve sağ tık menüsü ile toolbar tooltip aynı binding’i kullanır. SQLTextView callback’i odaktaki EditorController formatter’ını çağırır; seçim/tüm metin, mevcut tercihler, read-only/IME ve tek undo/token güvenliği korunur. Menü responder target’ı nil; başka pencerenin aktif sorgusunu doğrudan hedeflemez. Toolbar mevcut aktif sorgu yolunu korur.
