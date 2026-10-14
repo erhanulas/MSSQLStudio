@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.118 / build 119 public yayın doğrulandı
+
+- [Public/latest v0.2.118](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.118), kaynak `8ac19d0b01586adaaf54312f2b87ff90d0e0dfc9`; [Actions 38548803407](https://github.com/erhanulas/MSSQLStudio/actions/runs/38548803407) bütün adımlarıyla başarılı. Tam alan sekme/düğme tıklaması, hizalı ayrı nesne/içerik indeks ikonları, DB kapsamlı yerel veri boyutu ve sorguyu bekletmeyen metadata/indeks UI akışı yayımlandı. v0.2.117 public olmadı; aşağıdaki başarısız test kaydı/etiketi korunur.
+- CI gerçek yayın paketleriyle **368 app +334 core +8 text =710 test; 683 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 84.771 /10.035 /0.003 sn (`/tmp/MSSQLStudio-118-ci-tests.log`). Kontrollü metadata/yürütme gate regresyonu geçti. Sabit kimlik ve izole Keychain denetimi ile geçici kimlik temizliği başarılı.
+- Dört public asset indirildi: GitHub digest/SHA-256, ZIP/PKG URL/hash manifest eşliği, exact 0.2.118/build119 metadata/binary/notlar ve kaynak ReleaseNotes byte eşliği doğrulandı. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği geçti; helper yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu `Foundation updater feed verified: 0.2.118` verdi. Kanıt `/tmp/MSSQLStudio-118-public-verification/verification.json` içindedir.
+- Native hit/geometry/gate/bitmap kanıtları ve CUA araç engeli aşağıda kaydedilmiştir. Canlı 7.000+ nesneli SQL Server hız/typing benchmark’ı, bütün kontrollerin gerçek fareyle uçtan uca gezilmesi ve gerçek Installer denenmedi. UI kaynak taraması/native test başarısı bu dış koşulların yerine sayılmaz. Kullanıcı uygulaması/DB/Keychain/history/favoriler ve `.vscode/` korunur; kurulum/yeniden başlatma yapılmadı.
+
+Public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.118.pkg`: `220bf913f577760ade88ac91d4801ef61c78137c14166467318b36300918b840`.
+- `MSSQLStudio-0.2.118.zip`: `c96b322f9de738c4f7f26ae0862611439e7739b9975580aaa85690e64a039d76`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `64a588bb0ab485d604391c2779938def050926ccc1eeaf7728f8fd5da68c479a`.
+
 ## 14 Ekim 2026 — v0.2.118 / build 119 hazırlığı; v0.2.117 public olmadı
 
 - v0.2.117 kaynak etiketi `e4adfe8c27c60fdf91847ce747f447b540ae23c3` korunur. [Actions 38547501956](https://github.com/erhanulas/MSSQLStudio/actions/runs/38547501956) build/manifest/imza adımlarını geçti, paket testlerinde yeni gecikmeli metadata assertion’ı başarısız oldu; publish/feed skipped, geçici kimlik cleanup success. GitHub release lookup HTTP 404’tür; public/latest değişmedi. CI 368 app /334 core /8 text çalıştı; app tek issue ile, diğer hedefler başarılı tamamlandı (102.555 /12.059 /0.004 sn). Log `/tmp/MSSQLStudio-117-ci-tests.log`.
