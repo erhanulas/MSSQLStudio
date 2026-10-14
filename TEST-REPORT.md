@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.124 / build 125 public yayın doğrulandı
+
+- [Public/latest v0.2.124](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.124), kaynak `24156aa26265bf390cd9bd65b8a4fcaaf470cdf4`; [Actions 38579296518](https://github.com/erhanulas/MSSQLStudio/actions/runs/38579296518) bütün adımlarıyla başarılı. Sonuç seçiminde hassas Toplam / NULL olmayan hücre Sayı özeti, snapshot kapsamı ve iptal edilebilir arka plan hesaplama yayımlandı.
+- CI gerçek yayın paketleriyle **400 app +348 core +8 text =756 test; 729 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 102.631 /13.313 /0.007 sn (`/tmp/MSSQLStudio-124-ci-tests.log`). Sabit kimlik/izole Keychain denetimi ve geçici kimlik temizliği başarılı.
+- Dört public asset indirildi: GitHub digest/SHA-256, ZIP/PKG URL/hash manifest eşliği, exact 0.2.124/build125 metadata/binary/notlar ve kaynak ReleaseNotes byte eşliği doğrulandı. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği geçti; helper yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu `Foundation updater feed verified: 0.2.124` verdi. Kanıt `/tmp/MSSQLStudio-124-public-verification/verification.json` içindedir.
+- Native seçim/geometri/bitmap ve core hesaplama testleri geçti; CUA native pipe hatası nedeniyle fiziksel fare turu yapılamadı. Canlı SQL Server/Installer denenmedi. Kullanıcı uygulaması/SQL/Keychain/history/favoriler ve `.vscode/` korunur; kurulum veya yeniden başlatma yapılmadı.
+
+Public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.124.pkg`: `84791acc6e7188af28a9b645088a1d22c49e9f610ab4c3bd73626d833fdc27f3`.
+- `MSSQLStudio-0.2.124.zip`: `05034dda4e326e682aae965b8d2ae2c716daf89dcc7feabc363bee6d28e7dff1`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `508fee2223a7a4682037ca94b3316ab5d838e17726f3dc726da2583019adf55a`.
+
 ## 14 Ekim 2026 — v0.2.124 / build 125 yayın hazırlığı
 
 - Her ResultController grid’inin altında 26 pt native seçim özeti eklendi. Toplam seçili numeric temel türlerin (bit hariç) NULL olmayan hücrelerini toplar; Sayı seçili görünür kolonların NULL olmayan hücrelerini sayar (boş metin dahil, sayısal varchar dönüştürülmez). NULL-only/non-numeric seçimde toplam —, boş seçimde Sayı 0’dır. [Microsoft SUM](https://learn.microsoft.com/en-us/sql/t-sql/functions/sum-transact-sql) ve [COUNT](https://learn.microsoft.com/en-us/sql/t-sql/functions/count-transact-sql) NULL/numeric kapsamı için incelendi; bu UI özeti sunucuda bir SUM/COUNT yürütmez, çok kolonlu seçimi yerel hesaplar.
