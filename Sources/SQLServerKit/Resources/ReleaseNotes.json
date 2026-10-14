@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.124",
+    "date": "2026-10-14",
+    "title": "Sonuç seçiminde Toplam ve Sayı",
+    "changes": [
+      "Sonuç tablosunda seçili hücreler için alt bölümde Toplam ve Sayı gösterilir. Toplam sayısal hücreleri (bit hariç), Sayı NULL olmayan tüm seçili hücreleri kapsar; metinler sayıya dönüştürülmez.",
+      "Hesaplama filtre, sıralama, sayfa, satır sınırı, sabitlenmiş/gizli kolonlar ve uygulanmış yerel hücre düzenlemeleriyle aynı görünen snapshot’ı kullanır. Veritabanında sorgu çalıştırılmaz.",
+      "Büyük bigint/decimal değerler ve bilimsel yazım yuvarlanmadan toplanır. Hesaplama arka planda, iptal edilebilir ve tek uçuşludur; kaydırma/render sırasında çalışmaz. Büyük veya okunamayan seçimde kısmi toplam yerine açıklama sunulur."
+    ]
+  },
+  {
     "version": "0.2.123",
     "date": "2026-10-14",
     "title": "Tam alan ayar başlıkları ve güvenilir pencere/kapanış yönetimi",

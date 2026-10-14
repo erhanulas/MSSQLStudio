@@ -6,6 +6,7 @@ import SwiftUI
 final class ResultController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSControlTextEditingDelegate {
   let table = CopyTable()
   let rowGutter = ResultRowGutter()
+  let selectionSummary=ResultSelectionPresentation()
   // Both native tables read the same result/projection/staged edits; only presentation differs.
   let frozenTable = CopyTable()
   let frozenScroll = NSScrollView()
@@ -42,7 +43,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     rebuildFrozenColumns()
     view.layoutSubtreeIfNeeded()
     if !pinned {table.scrollColumnToVisible(table.column(withIdentifier:column.identifier))}
-    editsChanged?()
+    editsChanged?();scheduleSelectionSummary()
   }
   private func rebuildFrozenColumns() {
     synchronizingColumns=true
@@ -145,6 +146,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       table.remapSelectionAfterColumnMove(from:from,to:to)
     }
     frozenTable.needsDisplay=true
+    scheduleSelectionSummary()
   }
   private var generation = -1
   var requestEditing: ((Int, Int) -> Bool)?
@@ -399,14 +401,16 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     frozenScroll.documentView=frozenTable
     frozenTable.searchColumns = { [weak self] in self?.table.searchColumns?() }
     table.cellSelectionChanged = { [weak self] in
-      self?.frozenTable.needsDisplay=true; self?.editsChanged?()
+      self?.frozenTable.needsDisplay=true; self?.editsChanged?(); self?.scheduleSelectionSummary()
     }
     table.selectionColumnOrder = { [weak self] in
       guard let self else {return []}
       return visibleColumnOrdinals.compactMap {ordinal in table.tableColumns.firstIndex {$0.identifier.rawValue == String(ordinal)}}
     }
     table.dataReloaded = { [weak self] in
-      guard let self, !pinnedColumns.isEmpty else {return}
+      guard let self else {return}
+      scheduleSelectionSummary()
+      guard !pinnedColumns.isEmpty else {return}
       frozenTable.reloadData(); synchronizeSelection(from:table)
       synchronizeVerticalScroll(from:table.enclosingScrollView?.contentView)
     }
@@ -440,6 +444,8 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     StudioTheme.resultSurface(bar)
     bar.spacing = 3
     bar.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+    view.addSubview(selectionSummary.bar)
+    selectionSummary.bar.translatesAutoresizingMaskIntoConstraints=false
     let chipScroll = NSScrollView()
     chipScroll.hasHorizontalScroller = true
     chipScroll.autohidesScrollers = true
@@ -475,7 +481,11 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       scroll.leadingAnchor.constraint(equalTo: frozenScroll.trailingAnchor),
       scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       scroll.topAnchor.constraint(equalTo: chipScroll.bottomAnchor),
-      scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+      scroll.bottomAnchor.constraint(equalTo: selectionSummary.bar.topAnchor),
+      selectionSummary.bar.leadingAnchor.constraint(equalTo:view.leadingAnchor),
+      selectionSummary.bar.trailingAnchor.constraint(equalTo:view.trailingAnchor),
+      selectionSummary.bar.bottomAnchor.constraint(equalTo:view.bottomAnchor),
+      selectionSummary.bar.heightAnchor.constraint(equalToConstant:26),
     ])
     if !toolbarHosted {
       NSLayoutConstraint.activate([
@@ -593,6 +603,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   private func reload(debounce:Bool=true) {
     guard isViewLoaded else { return }
     projectionController.cancel()
+    selectionSummary.cancel()
     rebuildChips()
     let rows = result
     let rules = rules
@@ -625,6 +636,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
         info.stringValue="Filtre hatası"
         info.toolTip=error.localizedDescription
         info.isHidden=false
+        scheduleSelectionSummary()
       }
     }
   }
@@ -767,8 +779,20 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   }
   func tableViewSelectionDidChange(_ notification:Notification) {
     guard !synchronizingSelection, let source=notification.object as? NSTableView else {return}
-    synchronizeSelection(from:source); editsChanged?()
+    synchronizeSelection(from:source); editsChanged?(); scheduleSelectionSummary()
   }
+  private func scheduleSelectionSummary() {
+    guard !busy else {selectionSummary.cancel();return}
+    let selected=Set(table.cellColumns.compactMap {position in
+      table.tableColumns.indices.contains(position) ? Int(table.tableColumns[position].identifier.rawValue):nil
+    })
+    let columns=visibleColumnOrdinals.filter {table.cellColumns.isEmpty || selected.contains($0)}
+    selectionSummary.update(.init(rows:result,selection:table.selectedRowIndexes,columns:columns,
+      projection:visibleIndices,pageStart:pageStart,basePageCount:basePageCount,newRows:newRowOrder,
+      overrides:pendingEdits.mapValues(\.values)))
+  }
+  override func viewDidDisappear() {super.viewDidDisappear();selectionSummary.cancel()}
+  override func viewDidAppear() {super.viewDidAppear();scheduleSelectionSummary()}
   func numberOfRows(in tableView: NSTableView) -> Int { pageCount }
   func tableView(
     _ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]

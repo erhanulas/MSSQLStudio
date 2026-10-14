@@ -20,6 +20,8 @@ Kapatılan sekmeyi sekme sağ tık menüsünden veya **Command+Shift+T** ile ger
 
 **Dosya → Explorer’ı Dışa Aktar / İçe Aktar** bağlantı profillerini, sıralamayı, klasör ve renkleri taşır. Parolalar dosyada bulunmaz; içe aktarılan yeni bağlantılar çevrimdışıdır, parolayı bağlantı ayarlarından girin. Ayarlar sol kategori listesi ve kompakt gruplarla düzenlenir; **Çalışma Alanı → Sekmeler ve pencereler** kaydedilmemiş SQL için kapatma uyarısını yönetir. ⌘W öndeki pencereyi kapatır.
 
+Sonuç tablosunda hücre seçince altta **Toplam** ve **Sayı** gösterilir. Toplam sayısal hücreleri (bit hariç), Sayı NULL olmayan seçili hücreleri kapsar; boş metin sayılır, sayısal görünen metin toplanmaz. Satır seçiminde yalnız görünür kolonlar hesaplanır; filtre/sıralama/sayfa ve yerel hücre değişiklikleri dikkate alınır. Hesaplama veritabanına sorgu göndermez.
+
 Yeni sorgu sekmesi hemen açılır; bağlantı **Çalıştır** ile denenir. Bağlantı yönetimi ayrı pencerede çalışır, işlem ve hata alt durum çubuğunda görünür. History/Favorilerde çift tıklama mevcut editörde imlece SQL ekler; yeni sekmede açma ayrı eylemdir.
 
 Bağlantılar ekranındaki seçiciden yeni veya mevcut Explorer profilini açabilirsiniz. Genel/Gelişmiş seçenekleri korunur; test/liste yükleme tek eylemdir, mevcut profil çevrimdışı kaydedilebilir. Explorer’da tek **Yenile** eylemi vardır: DB/bağlantıda nesne listesi ve yerel indeksler birlikte, klasör/nesnede ilgili dal yenilenir. Bağlantı adı bağlantı ayarlarından değiştirilir. İndeks ayrıntıları veritabanı satırının sağındaki ayrı nesne ve içerik ikonlarından açılır; DB’ye ait saklanan yerel veri boyutu gösterilir. Veritabanı değişince katalog eşitlemesini beklemeden sorguda çalışmaya devam edebilirsiniz.
