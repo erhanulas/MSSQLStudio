@@ -8,6 +8,11 @@ struct TemplatesPanel: View {
   @State private var templates: [SQLTemplate] = []
   @State private var selected: String?
   @State private var error = ""
+  init(templates: [SQLTemplate] = [], open: @escaping (SQLTemplate) -> Void) {
+    self.open = open
+    _templates = State(initialValue: templates)
+    _selected = State(initialValue: templates.first?.id)
+  }
   var item: SQLTemplate? { templates.first { $0.id == selected } }
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -38,22 +43,23 @@ struct TemplatesPanel: View {
           } catch let failure { error = failure.localizedDescription }
         }
       }
-      if templates.isEmpty {
-        StudioEmptyState(title: "Şablon koleksiyonunu oluştur", icon: "square.stack.3d.up", detail: "Bir JSON şablonu içe aktarın veya örnek dosyayla başlayın.").frame(height: 150)
-      } else {
-        List(templates, selection: $selected) { Text($0.name).tag($0.id) }.frame(height: 150)
-      }
-      if let item {
-        Text(item.description)
-        ScrollView {
-          Text(item.sql).font(.custom(StudioTheme.codeFont.fontName, size: 13)).textSelection(
-            .enabled
-          ).frame(
-            maxWidth: .infinity, alignment: .leading)
+      VSplitView {
+        Group {
+          if templates.isEmpty {
+            StudioEmptyState(title: "Şablon koleksiyonunu oluştur", icon: "square.stack.3d.up", detail: "Bir JSON şablonu içe aktarın veya örnek dosyayla başlayın.")
+          } else {
+            List(templates, selection: $selected) { Text($0.name).tag($0.id) }
+          }
+        }.frame(minHeight:100,idealHeight:160)
+        if let item {
+          VStack(alignment:.leading,spacing:8) {
+            Text(item.description).foregroundStyle(.secondary)
+            SQLReadOnlyPreview(sql:item.sql).frame(minHeight:120)
+            StudioActionButton("Sorgu Sekmesinde Aç", icon:"arrow.up.forward.square", tint:.accentColor) { open(item) }
+          }.padding(.top,8).frame(minHeight:180)
         }
-        StudioActionButton("Sorgu Sekmesinde Aç", icon:"arrow.up.forward.square", tint:.accentColor) { open(item) }
       }
-      Text(error).font(.caption).foregroundStyle(.red)
-    }.padding(20).studioPanel()
+      StudioFeedback(message: error)
+    }.padding(StudioMetrics.gap).studioPanel()
   }
 }

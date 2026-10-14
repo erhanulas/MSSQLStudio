@@ -11,9 +11,9 @@ struct AgentRelatedPage:View {
   @State private var loading=true
   var body:some View {
     VStack(alignment:.leading,spacing:12) {
-      Text(targets ? "Hedef sunucular":"İşi tetikleyen uyarılar").font(.title2)
+      Text(targets ? "Hedef sunucular":"İşi tetikleyen uyarılar").font(.system(size:StudioMetrics.headingFont,weight:.semibold))
       if loading {ProgressView()}
-      if !error.isEmpty {Text(error).foregroundStyle(.red).textSelection(.enabled)}
+      if !error.isEmpty {StudioFeedback(message:error)}
       List(Array(rows.enumerated()),id:\.offset) {item in Text(item.element.compactMap {$0}.joined(separator:" · ")).textSelection(.enabled)}
       Text(targets ? "Bu sayfa hedef sunucuları salt okunur gösterir; çoklu sunucu dağıtımı yönetilmez.":"Bu sayfa mevcut uyarıları salt okunur gösterir. E-posta koşulları Bildirimler sayfasından düzenlenir.").font(.caption).foregroundStyle(.secondary)
       if rows.isEmpty && !loading && error.isEmpty {Text("Kayıt bulunamadı.").foregroundStyle(.secondary)}

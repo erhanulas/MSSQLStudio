@@ -20,9 +20,9 @@ private struct EditableDataGrid:NSViewRepresentable {
   @ObservedObject var model:ManagedDataModel
   func makeCoordinator() -> Coordinator { Coordinator(model:model) }
   func makeNSView(context:Context) -> NSScrollView {
-    let scroll=NSScrollView(); scroll.hasHorizontalScroller=true; scroll.hasVerticalScroller=true; scroll.usesPredominantAxisScrolling=true
+    let scroll=NSScrollView(); scroll.hasHorizontalScroller=true; scroll.hasVerticalScroller=true; scroll.usesPredominantAxisScrolling=true;scroll.autohidesScrollers=true;scroll.scrollerStyle = .overlay;scroll.borderType = .noBorder
     let table=context.coordinator.table; table.delegate=context.coordinator; table.dataSource=context.coordinator
-    table.usesAlternatingRowBackgroundColors=true; table.rowHeight=25; table.allowsMultipleSelection=false
+    table.usesAlternatingRowBackgroundColors=true; table.style = .plain;table.rowHeight=24; table.allowsMultipleSelection=false
     table.setAccessibilityIdentifier("managedDataGrid")
     scroll.documentView=table; return scroll
   }
@@ -53,7 +53,7 @@ private struct EditableDataGrid:NSViewRepresentable {
     func tableView(_ tableView:NSTableView,willDisplayCell cell:Any,for column:NSTableColumn?,row:Int) {
       guard let cell=cell as? NSTextFieldCell, model.rows.indices.contains(row) else { return }
       cell.font=StudioTheme.uiFont
-      cell.textColor=model.rows[row].deleted ? .systemRed : .labelColor
+      cell.textColor=model.rows[row].deleted ? StudioTheme.danger : StudioTheme.text
     }
   }
 }
@@ -68,17 +68,16 @@ struct DataEditorPanel:View {
     VStack(alignment:.leading,spacing:12) {
       StudioPanelHeading(title:"Edit Top 200 Rows",icon:"pencil.and.list.clipboard",subtitle:model.table?.qualified ?? "Metadata yükleniyor")
       Text("Hücreye çift tıkla: düzenle · Primary key/identity/computed salt okunur · Yeni satırda dokunulmayan alanlar DEFAULT olur.").font(.caption).foregroundStyle(.secondary)
-      HStack {
-        Button { guard let table=model.table, model.rows.filter({$0.original==nil}).count < 200 else {return}; model.rows.append(.init(original:nil,values:Array(repeating:nil,count:table.columns.count))); model.revision += 1 } label:{ Label("Satır Ekle",systemImage:"plus") }.disabled(!ready)
-        Button("Satırı Sil / Geri Al") { let i=model.selectedRow; guard model.rows.indices.contains(i) else {return}; model.rows[i].deleted.toggle(); model.revision += 1 }.disabled(!ready)
-        Picker("NULL kolonu",selection:$nullColumn) { if let table=model.table { ForEach(table.columns.indices,id:\.self) { Text(table.columns[$0].name).tag($0) } } }.frame(width:250)
-        StudioActionButton("NULL Yap", icon:"nosign", tint:.orange) { model.set(nil,row:model.selectedRow,column:nullColumn); model.revision += 1 }.disabled(!ready)
-        Spacer()
-        StudioActionButton("Yenile / Düzenlemeleri Sıfırla", icon:"arrow.clockwise", tint:.orange) { Task { await reload() } }.disabled(!ready)
-      }
+      ViewThatFits(in:.horizontal) {
+        HStack(spacing:8) {rowActions;nullActions;Spacer(minLength:0);reloadAction}
+        VStack(alignment:.leading,spacing:8) {
+          HStack {rowActions;Spacer(minLength:0);reloadAction}
+          nullActions
+        }
+      }.controlSize(.small).fixedSize(horizontal:false,vertical:true)
       if !ready { ProgressView() }
       EditableDataGrid(model:model)
-      Text(error).foregroundStyle(.red).textSelection(.enabled)
+      StudioFeedback(message:error)
       HStack {
         Text("Güncellemeler PK + rowversion veya orijinal kolonlarla denetlenir; eşzamanlı değişiklikte transaction geri alınır.").font(.caption).foregroundStyle(.secondary)
         Spacer()
@@ -88,7 +87,22 @@ struct DataEditorPanel:View {
           catch { self.error=error.localizedDescription }
         }.disabled(!ready)
       }
-    }.padding(18).studioPanel().task { await reload() }
+    }.padding(StudioMetrics.gap).studioPanel().task { await reload() }
+  }
+  private var rowActions:some View {
+    HStack(spacing:8) {
+        Button { guard let table=model.table, model.rows.filter({$0.original==nil}).count < 200 else {return}; model.rows.append(.init(original:nil,values:Array(repeating:nil,count:table.columns.count))); model.revision += 1 } label:{ Label("Satır Ekle",systemImage:"plus") }.disabled(!ready)
+        Button("Satırı Sil / Geri Al") { let i=model.selectedRow; guard model.rows.indices.contains(i) else {return}; model.rows[i].deleted.toggle(); model.revision += 1 }.disabled(!ready)
+    }.fixedSize()
+  }
+  private var nullActions:some View {
+    HStack(spacing:8) {
+        Picker("NULL kolonu",selection:$nullColumn) { if let table=model.table { ForEach(table.columns.indices,id:\.self) { Text(table.columns[$0].name).tag($0) } } }.frame(width:250)
+        StudioActionButton("NULL Yap", icon:"nosign", tint:.orange) { model.set(nil,row:model.selectedRow,column:nullColumn); model.revision += 1 }.disabled(!ready)
+    }.fixedSize()
+  }
+  private var reloadAction:some View {
+        StudioActionButton("Yenile / Düzenlemeleri Sıfırla", icon:"arrow.clockwise", tint:.orange) { Task { await reload() } }.disabled(!ready)
   }
   private func reload() async {
     ready=false

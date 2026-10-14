@@ -19,10 +19,10 @@ struct InlineOfflineDefinitionView: View {
       HStack {
         StudioActionButton("SQL’e Dön", icon: "arrow.uturn.backward", action: back)
           .accessibilityIdentifier("offlineDefinitionBack")
-        Text("Çevrimdışı tanım · Salt okunur").font(.headline)
+        Label("Çevrimdışı tanım · Salt okunur",systemImage:"network.slash").font(.system(size:12,weight:.medium)).foregroundStyle(Color(nsColor:StudioTheme.warning))
         Spacer()
       }
-      Text(preview.database + " · " + preview.value.item.qualified + " · Son okuma: " + preview.value.fetchedAt.formatted(date: .numeric, time: .shortened))
+      Text(preview.database + " · " + preview.value.item.qualified + " · Son okuma: " + preview.value.fetchedAt.formatted(date: .numeric, time: .shortened)).lineLimit(1).truncationMode(.middle).studioHelp(preview.database+" · "+preview.value.item.qualified)
         .font(.caption).foregroundStyle(.secondary)
       Text("Sunucudaki tanım farklı olabilir. SQL’iniz ve sonuçlarınız korunur.")
         .font(.caption).foregroundStyle(.secondary)

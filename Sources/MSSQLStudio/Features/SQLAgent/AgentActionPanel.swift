@@ -23,7 +23,7 @@ struct AgentActionPanel:View {
         Picker("Başlatılacak adım",selection:$startAt) {Text("İşin tanımlı başlangıç adımı").tag("");ForEach(steps) {Text("\($0.id) · \($0.name)").tag($0.name)}}.disabled(busy || done)
       }
       AgentSQLPreview(sql:sql).studioEditor()
-      if !error.isEmpty {Text(error).foregroundStyle(done ? .green:.red).textSelection(.enabled)}
+      StudioFeedback(message:error,tone:done ? .success:.error)
       HStack {
         if busy {ProgressView().controlSize(.small)}
         Spacer()
@@ -31,7 +31,7 @@ struct AgentActionPanel:View {
         // Explicit command action, separate from property/design SQL generation.
         StudioActionButton(action == .delete ? "İşi Sil":"Uygula",icon:action == .delete ? "trash":"checkmark") {apply()}.buttonStyle(StudioPrimaryButton()).disabled(sql.isEmpty || busy || done)
       }
-    }.padding(20).studioPanel().task {
+    }.padding(StudioMetrics.gap).studioPanel().task {
       busy=true;defer {busy=false}
       do {
         let output=try await server.catalog(action == .start ? SQLAgent.details(name:name):SQLAgent.jobs(name:name),database:"msdb")

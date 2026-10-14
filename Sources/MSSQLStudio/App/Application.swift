@@ -100,6 +100,12 @@ import SwiftUI
           studio.servers.append(other)
         }
       }
+      if Bundle.main.object(forInfoDictionaryKey:"StudioHistorySmoke") as? Bool == true {
+        studio.history=(0..<45).map {index in
+          var record=QueryRecord(server:server.profile.name,database:index % 3 == 0 ? "Reporting":"DemoDB",text:"SELECT CustomerID, Name FROM dbo.Customers;\n-- Synthetic history \(index+1)",serverID:server.id,rowCount:105,seconds:Double(index+1)/100,status:index % 9 == 0 ? "Kısmi":"Başarılı")
+          record.time=Date().addingTimeInterval(-Double(index)*120);return record
+        }
+      }
       let document = QueryDocument(server: server, database: "master", title: "SQLQuery1.sql")
       document.sql = ""
       document.savedText = document.sql
@@ -177,6 +183,9 @@ import SwiftUI
       }
       if Bundle.main.object(forInfoDictionaryKey:"StudioSettingsSmoke") as? Bool == true {
         workbench.showSettingsWindow()
+      }
+      if Bundle.main.object(forInfoDictionaryKey:"StudioDesignSmoke") as? Bool == true {
+        workbench.present(StudioDesignGallery(),title:"MSSQL Studio · Design Fixture",width:1200,height:850,minWidth:1100,minHeight:760)
       }
       if Bundle.main.object(forInfoDictionaryKey:"StudioRefreshSmokeSQL") is String {document.execute()}
       return

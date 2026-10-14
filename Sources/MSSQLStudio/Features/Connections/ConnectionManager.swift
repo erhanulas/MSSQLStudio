@@ -24,7 +24,7 @@ struct ConnectionManager: View {
     _selected = State(initialValue: initial?.id)
   }
   var body: some View {
-    HStack(spacing:0) {
+    HSplitView {
       VStack(alignment:.leading,spacing:10) {
         Label("Bağlantılar",systemImage:"server.rack").font(.headline)
         TextField("Bağlantı ara…",text:$search).textFieldStyle(.roundedBorder)
@@ -41,11 +41,14 @@ struct ConnectionManager: View {
                 }.padding(8).frame(maxWidth:.infinity,alignment:.leading)
                   .background(selected==server.id ? Color(nsColor:StudioTheme.selection):.clear,in:RoundedRectangle(cornerRadius:6)).contentShape(Rectangle())
               }.buttonStyle(.plain).accessibilityIdentifier("connectionProfile_"+server.id.uuidString)
+                .accessibilityAddTraits(selected==server.id ? .isSelected:[]).studioHelp(server.profile.name+" · "+server.profile.host)
             }
           }
+          if servers.filter({search.isEmpty || ($0.profile.name+" "+$0.profile.host).localizedCaseInsensitiveContains(search)}).isEmpty {
+            Text(servers.isEmpty ? "Henüz bağlantı yok" : "Eşleşen bağlantı yok").font(.caption).foregroundStyle(.secondary).padding(.vertical,12)
+          }
         }.accessibilityIdentifier("connectionManagerSelection")
-      }.padding(12).frame(width:190).disabled(busy)
-      Divider()
+      }.padding(12).frame(minWidth:170,idealWidth:190,maxWidth:240).disabled(busy)
       let initial = servers.first { $0.id == selected }
       ConnectionForm(initial: initial, connect: connect,
         saveProfile: initial.map { server in { profile, password, remember in try await save(server, profile, password, remember) } },

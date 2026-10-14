@@ -22,7 +22,7 @@ import Testing
     #expect(chooser.handle(event("\r",key:36)) && accepted==["DemoDB"] && closed==1)
     chooser.filter("missing");chooser.commit();#expect(accepted==["DemoDB"])
     #expect(chooser.handle(event("",key:53)) && closed==2)
-    #expect(chooser.table.rowHeight==30)
+    #expect(chooser.table.rowHeight==StudioMetrics.choiceRowHeight)
   }
   @Test func editorActionsBelongToTheirDocumentAndRefreshBusyAndReadOnlyStates() {
     _=NSApplication.shared

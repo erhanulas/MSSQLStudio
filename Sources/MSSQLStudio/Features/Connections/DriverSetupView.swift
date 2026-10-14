@@ -68,9 +68,10 @@ struct DriverSetupView: View {
       }
       if !model.error.isEmpty { Text(model.error).font(.caption).foregroundStyle(.red).textSelection(.enabled).lineLimit(4) }
       if !model.log.isEmpty {
-        DisclosureGroup("Kurulum çıktısı", isExpanded: $showDetails) {
+        StudioDisclosureHeader(title:"Kurulum çıktısı",icon:"terminal",tint:StudioTheme.muted,expanded:showDetails) {showDetails.toggle()}.frame(height:StudioMetrics.controlHeight)
+        if showDetails {
           ScrollView { Text(model.log).font(.system(size: 10, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(height: 90)
-        }.font(.caption)
+        }
       }
       Link("Microsoft kurulum yönergeleri", destination: URL(string: "https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos")!).font(.caption)
     }.padding(12).background(Color(nsColor: StudioTheme.panel), in: RoundedRectangle(cornerRadius: 8))

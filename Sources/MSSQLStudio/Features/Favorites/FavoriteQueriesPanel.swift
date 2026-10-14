@@ -214,7 +214,7 @@ struct FavoriteQueriesPanel:View {
   private var current:FavoriteQuery? {visible.first {$0.id == selected}}
   private var visible:[FavoriteQuery] {model.items.filter {(all || $0.visible(serverID:contextServerID,database:contextDatabase)) && (search.isEmpty || $0.name.localizedStandardContains(search))}}
   var body:some View {
-    VStack(alignment:.leading,spacing:14) {
+    VStack(alignment:.leading,spacing:StudioMetrics.small) {
       StudioPanelHeading(title:"Favori Sorgular",icon:"star",subtitle:"Adlandır, kapsamını seç ve tekrar kullan")
       HStack {
         Picker("Explorer bağlantısı",selection:$contextServerID) {
@@ -234,7 +234,7 @@ struct FavoriteQueriesPanel:View {
           VStack(alignment:.leading,spacing:4) {
             Label(item.name,systemImage:item.scope == .global ? "globe":item.scope == .connection ? "server.rack":"externaldrive")
             Text(scopeLabel(item)).font(.caption).foregroundStyle(.secondary)
-          }.padding(.vertical,5).tag(item.id)
+          }.padding(.vertical,3).tag(item.id)
         }.contextMenu(forSelectionType:UUID.self) { _ in } primaryAction: { ids in
           if let id=ids.first,let item=visible.first(where:{$0.id == id}) {insertFavorite(item)}
         }.frame(minWidth:230,idealWidth:280,maxWidth:360).accessibilityIdentifier("favoriteList")
@@ -262,7 +262,7 @@ struct FavoriteQueriesPanel:View {
         }.buttonStyle(StudioPrimaryButton()).disabled(current == nil).accessibilityIdentifier("favoriteOpen")
       }
       Text("Çift tıklama mevcut editörde imlece ekler. Sorguda Aç yeni bir sekme açar; SQL otomatik çalıştırılmaz.").font(.caption).foregroundStyle(.secondary)
-    }.padding(20).studioPanel().task {await model.load()}
+    }.padding(StudioMetrics.gap).studioPanel().task {await model.load()}
       .confirmationDialog("Seçili favori silinsin mi?",isPresented:$deleting,titleVisibility:.visible) {
         Button("Favoriyi Sil",role:.destructive) {if let current {Task {await model.remove(current.id);selected=nil}}}
         Button("Vazgeç",role:.cancel) {}
@@ -358,7 +358,7 @@ struct FavoriteQueryEditor:View {
     _serverID=State(initialValue:favorite?.serverID ?? contextServerID);_database=State(initialValue:favorite?.database ?? database)
   }
   var body:some View {
-    VStack(alignment:.leading,spacing:14) {
+    VStack(alignment:.leading,spacing:StudioMetrics.small) {
       StudioPanelHeading(title:"Favori Sorgu",icon:"star",subtitle:"SQL’e bir ad ve kullanım kapsamı ver")
       StudioFormField("Ad") {TextField("Örneğin günlük satış özeti",text:$name).accessibilityIdentifier("favoriteName")}
       StudioFormField("Kapsam") {Picker("Kapsam",selection:$scope) {Text("Genel").tag(FavoriteQuery.Scope.global);Text("Explorer bağlantısı").tag(FavoriteQuery.Scope.connection);Text("Veritabanı").tag(FavoriteQuery.Scope.database)}.labelsHidden()}
@@ -372,7 +372,7 @@ struct FavoriteQueryEditor:View {
       if scope == .database {FavoriteDatabasePicker(servers:servers,serverID:serverID,selection:$database)}
       Text("SQL").fontWeight(.semibold)
       AgentCommandEditor(text:$sql).studioEditor().frame(minHeight:220)
-      if !submission.error.isEmpty {Text(submission.error).foregroundStyle(Color(nsColor:StudioTheme.danger)).textSelection(.enabled).accessibilityIdentifier("favoriteSaveError")}
+      if !submission.error.isEmpty {StudioFeedback(message:submission.error).accessibilityIdentifier("favoriteSaveError")}
       HStack {
         StudioActionButton("Vazgeç",icon:"xmark") {close()}.disabled(submission.saving)
         Spacer()
@@ -387,7 +387,7 @@ struct FavoriteQueryEditor:View {
           } catch {submission.report(error.localizedDescription)}
         }.frame(width:154,height:30).disabled(submission.saving)
       }
-    }.padding(20).frame(width:720,height:660).studioPanel()
+    }.padding(StudioMetrics.gap).frame(minWidth:620,idealWidth:720,maxWidth:.infinity,minHeight:540,idealHeight:660,maxHeight:.infinity).studioPanel()
       .onChange(of:serverID) {_,id in database=servers.first {$0.id == id}?.profile.database ?? ""}
   }
 }

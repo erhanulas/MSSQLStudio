@@ -35,6 +35,10 @@ struct AgentPropertiesPanel:View {
   @State private var confirmDetach=false
   @State private var pickSchedule=false
   private let pages=["Genel","Adımlar","Zamanlamalar","Uyarılar","Bildirimler","Hedefler"]
+  init(server:ConnectedServer,name:String,initialPage:String="Genel",open:@escaping (String)->Void,history:@escaping ()->Void = {}) {
+    self.server=server;self.name=name;self.open=open;self.history=history
+    _page=State(initialValue:initialPage)
+  }
   private func pageIcon(_ page: String) -> String {
     switch page {
     case "Genel": return "slider.horizontal.3"
@@ -54,17 +58,17 @@ struct AgentPropertiesPanel:View {
         StudioActionButton("Yenile", icon:"arrow.clockwise", tint:.accentColor) {confirmRefresh=true}.disabled(loading)
       }
       if loading {ProgressView().controlSize(.small)}
-      if !error.isEmpty {Text(error).foregroundStyle(.red).textSelection(.enabled)}
+      if !error.isEmpty {StudioFeedback(message:error)}
       HSplitView {
         VStack(alignment:.leading) {
-          Text("Sayfa seçin").font(.caption).foregroundStyle(.secondary).padding(.horizontal,10)
+          Text("İş ayarları").font(.caption).foregroundStyle(.secondary).padding(.horizontal,10)
           ForEach(pages,id:\.self) {item in
             StudioNavigationItem(title: item, icon: pageIcon(item), selected: page == item) { page = item }
               .accessibilityIdentifier("agentPage" + item)
           }
           Spacer()
           Text("\(server.profile.name)\nmsdb").font(.caption).foregroundStyle(.secondary).padding(10)
-        }.padding(6).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 12)).frame(minWidth:155,idealWidth:170,maxWidth:220)
+        }.padding(6).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: StudioMetrics.cardRadius)).frame(minWidth:155,idealWidth:170,maxWidth:220)
         Group {
           switch page {
           case "Genel":generalPage
@@ -84,7 +88,7 @@ struct AgentPropertiesPanel:View {
           StudioActionButton("Değişiklik SQL’ini Aç", icon:"doc.badge.gearshape") {preparePage()}.buttonStyle(StudioPrimaryButton()).disabled(job == nil || loading).accessibilityIdentifier("agentPropertiesScript")
         }
       }
-    }.padding(20).studioPanel().task(id:generation) {await load()}
+    }.padding(StudioMetrics.gap).studioPanel().task(id:generation) {await load()}
       .confirmationDialog("Kaydedilmemiş alanlar sunucudaki değerlerle değiştirilsin mi?",isPresented:$confirmRefresh) {Button("Sunucudan Yenile",role:.destructive) {generation+=1}}
       .confirmationDialog("Adım silinirse adım numaraları ve akış hedefleri değişebilir; adımın çıktı günlüğü de silinir.",isPresented:$confirmDeleteStep) {Button("Silme SQL’ini Aç",role:.destructive) {if let job,let selected {stage {try SQLAgent.deleteStep(jobID:job.id,stepID:selected)}}}}
       .confirmationDialog("Zamanlamanın yalnız bu işle bağlantısı kaldırılacak. Paylaşılan zamanlama silinmez.",isPresented:$confirmDetach) {Button("Bağlantı Kaldırma SQL’ini Aç") {if let job,let selectedSchedule {stage {try SQLAgent.detachSchedule(jobID:job.id,scheduleID:selectedSchedule)}}}}

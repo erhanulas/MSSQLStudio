@@ -144,7 +144,7 @@ struct ActivityMonitorPanel:View {
         }
       }.frame(maxWidth:.infinity,maxHeight:.infinity)
       footer
-    }.padding(18).studioPanel()
+    }.padding(StudioMetrics.gap).studioPanel()
       .background(MonitorVisibilityProbe {visible=$0;model.setActivity(visible:$0,paused:paused)})
       .onChange(of:paused) {_,value in model.setActivity(visible:visible,paused:value)}
       .onChange(of:diagnosticKind) {_,_ in selectedRequest=nil}

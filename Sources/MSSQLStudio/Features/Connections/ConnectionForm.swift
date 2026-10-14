@@ -93,7 +93,7 @@ private struct DatabaseChoices: View {
               }.buttonStyle(.borderless)
                 .studioHelp("Yeni sorgular için varsayılan yap: \(item.name)")
                 .accessibilityLabel("Varsayılan yap: \(item.name)")
-            }.padding(.horizontal, 10).padding(.vertical, 7)
+            }.padding(.horizontal, 10).padding(.vertical, 4)
             Divider().padding(.leading, 30)
           }
         }.padding(.vertical, 4)
@@ -181,20 +181,20 @@ struct ConnectionForm: View {
     VStack(alignment: .leading, spacing: 12) {
       StudioPanelHeading(title: editing ? "Bağlantı ayarları" : "Yeni bağlantı", icon: "server.rack", subtitle: editing ? "Bağlantı ve görünür veritabanlarını düzenle" : "Sunucuya bağlan, veritabanlarını seç")
       Divider()
-      HStack(alignment: .top, spacing: 18) {
+      HStack(alignment: .top, spacing: 12) {
         VStack(alignment: .leading, spacing: 12) {
-          Text("Sunucu bilgileri").font(.headline)
+          Text("Sunucu bilgileri").font(.system(size:12,weight:.semibold))
           Picker("Bağlantı seçenekleri",selection:$connectionPage) {Text("Genel").tag("Genel");Text("Gelişmiş").tag("Gelişmiş")}.pickerStyle(.segmented)
           ScrollView {
           VStack(alignment:.leading,spacing:14) {
           if connectionPage == "Genel" {
           Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
             GridRow {
-              Text("Görünen ad").frame(width:150,alignment:.leading).foregroundStyle(.secondary)
+              Text("Görünen ad").frame(width:126,alignment:.leading).foregroundStyle(.secondary)
               TextField("Bağlantı adı", text: $profile.name)
             }
             GridRow {
-              Text("Sunucu / port").frame(width:150,alignment:.leading).foregroundStyle(.secondary)
+              Text("Sunucu / port").frame(width:126,alignment:.leading).foregroundStyle(.secondary)
               HStack(spacing: 6) {
                 TextField("Sunucu", text: $profile.host)
                 TextField("Port", value: $profile.port, format: .number.grouping(.never)).frame(
@@ -202,7 +202,7 @@ struct ConnectionForm: View {
               }
             }
             GridRow {
-              Text("Kimlik").frame(width:150,alignment:.leading).foregroundStyle(.secondary)
+              Text("Kimlik").frame(width:126,alignment:.leading).foregroundStyle(.secondary)
               Picker("Kimlik doğrulama", selection: $profile.kerberos) {
                 Text("SQL Server Authentication").tag(false)
                 Text("Windows / Kerberos").tag(true)
@@ -210,16 +210,16 @@ struct ConnectionForm: View {
             }
             if !profile.kerberos {
               GridRow {
-                Text("Kullanıcı").frame(width:150,alignment:.leading).foregroundStyle(.secondary)
+                Text("Kullanıcı").frame(width:126,alignment:.leading).foregroundStyle(.secondary)
                 TextField("Login", text: $profile.login)
               }
               GridRow {
-                Text("Parola").frame(width:150,alignment:.leading).foregroundStyle(.secondary)
+                Text("Parola").frame(width:126,alignment:.leading).foregroundStyle(.secondary)
                 SecureField("Password", text: $password)
               }
             }
             GridRow {
-              Text("Test veritabanı").frame(width:150,alignment:.leading).foregroundStyle(.secondary)
+              Text("Test veritabanı").frame(width:126,alignment:.leading).foregroundStyle(.secondary)
               TextField("master", text: $profile.database)
                 .studioHelp(
                   "Bağlantı testi ve listeleme için kullanılır. Yeni sorguların veritabanını sağdaki yıldızla seçin."
@@ -250,7 +250,7 @@ struct ConnectionForm: View {
           }
           }.padding(2)
           }
-                }.studioCard(padding: 16).frame(width: 420).disabled(loading)
+                }.studioCard().frame(minWidth:350,idealWidth:380,maxWidth:420).disabled(loading)
         Divider()
         VStack(alignment: .leading, spacing: 12) {
           HStack {
@@ -273,7 +273,7 @@ struct ConnectionForm: View {
 
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
           }
-        }.studioCard(padding: 16).frame(maxWidth: .infinity, maxHeight: .infinity)
+        }.studioCard().frame(minWidth:300,maxWidth: .infinity, maxHeight: .infinity)
       }.frame(maxHeight: .infinity)
       Divider()
       HStack {

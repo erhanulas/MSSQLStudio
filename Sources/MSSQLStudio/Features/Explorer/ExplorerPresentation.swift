@@ -8,8 +8,8 @@ extension WorkbenchController {
     let background = NSView()
     StudioTheme.surface(background, sidebar: true)
     explorer.view = background
-    let label = NSTextField(labelWithString: "EXPLORER")
-    label.font = .systemFont(ofSize: 10, weight: .semibold)
+    let label = NSTextField(labelWithString: "Explorer")
+    label.font = .systemFont(ofSize: 12, weight: .semibold)
     let refresh = symbolButton("arrow.clockwise", tip: "Seçili dalı ve kapsamındaki yerel indeksleri yenile", action: #selector(refreshExplorer))
     let connect = symbolButton("network", tip: "Bağlantı işlemleri", action: #selector(showExplorerConnections(_:)))
     connect.setAccessibilityIdentifier("explorerConnectionActions")
@@ -34,8 +34,8 @@ extension WorkbenchController {
     explorerSearch.action = #selector(filterExplorer)
     outline.style = .plain
     outline.headerView = nil
-    outline.rowHeight = 27
-    outline.intercellSpacing = NSSize(width: 1, height: 1)
+    outline.rowHeight = ExplorerDensity.current(in:state.explorerTreeDefaults).rowHeight
+    outline.intercellSpacing = NSSize(width: 1, height: 0)
     outline.indentationPerLevel = 14
     outline.selectionHighlightStyle = .regular
     outline.usesAlternatingRowBackgroundColors = false
@@ -71,6 +71,7 @@ extension WorkbenchController {
     scroll.hasVerticalScroller = true
     scroll.hasHorizontalScroller = false
     scroll.drawsBackground = false
+    scroll.autohidesScrollers = true; scroll.scrollerStyle = .overlay
     searchOperator.addItems(withTitles: ["İçerir", "Eşittir", "İle başlar", "İle biter", "İçermez"])
     searchOperator.target = self; searchOperator.action = #selector(filterExplorer)
     searchType.addItems(withTitles:["Tüm nesneler","Tables","Views","Procedures","Functions","Synonyms"])
@@ -98,29 +99,43 @@ extension WorkbenchController {
     explorerTabs.selectedSegment = 0
     explorerTabs.target = self; explorerTabs.action = #selector(changeExplorerTab)
     explorerTabs.setAccessibilityLabel("Explorer sekmeleri")
-    let stack = NSStackView(views: [header, explorerTabs, searchScopePicker, explorerSearch, searchOptions, searchStatus, scroll])
+    for button in [connect,indexStatus,refresh,collapse] { (button as? StudioToolbarButton)?.flat=true }
+    searchFilters.orientation = .vertical;searchFilters.alignment = .leading;searchFilters.spacing=4
+    searchFilters.addArrangedSubview(searchScopePicker);searchFilters.addArrangedSubview(searchOptions)
+    searchFilters.isHidden = !showingSearch
+    let stack = NSStackView(views: [header, explorerTabs, explorerSearch, searchFilters, searchStatus, scroll])
     stack.orientation = .vertical
     stack.distribution = .fill
     stack.alignment = .leading
-    stack.spacing = 7
+    stack.spacing = 4
     background.addSubview(stack)
     stack.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      stack.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 10),
-      stack.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -10),
-      stack.topAnchor.constraint(equalTo: background.topAnchor, constant: 8),
+      stack.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 8),
+      stack.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -8),
+      stack.topAnchor.constraint(equalTo: background.topAnchor, constant: 4),
       stack.bottomAnchor.constraint(equalTo: background.bottomAnchor, constant: -4),
       header.widthAnchor.constraint(equalTo: stack.widthAnchor),
       explorerTabs.widthAnchor.constraint(equalTo: stack.widthAnchor),
       explorerSearch.widthAnchor.constraint(equalTo: stack.widthAnchor),
-      searchScopePicker.widthAnchor.constraint(equalTo: stack.widthAnchor),
-      searchOptions.widthAnchor.constraint(equalTo: stack.widthAnchor),
+      searchFilters.widthAnchor.constraint(equalTo: stack.widthAnchor),
+      searchScopePicker.widthAnchor.constraint(equalTo: searchFilters.widthAnchor),
+      searchScopePicker.heightAnchor.constraint(equalToConstant:StudioMetrics.controlHeight),
+      explorerSearch.heightAnchor.constraint(equalToConstant:StudioMetrics.controlHeight),
+      searchOptions.widthAnchor.constraint(equalTo: searchFilters.widthAnchor),
       searchStatus.widthAnchor.constraint(equalTo: stack.widthAnchor),
       scroll.widthAnchor.constraint(equalTo: stack.widthAnchor),
     ])
   }
 }
 extension WorkbenchController {
+  @objc func updateExplorerDensity() {
+    guard isViewLoaded else {return}
+    let origin=outline.enclosingScrollView?.contentView.bounds.origin
+    outline.rowHeight=ExplorerDensity.current(in:state.explorerTreeDefaults).rowHeight
+    outline.tile();outline.needsDisplay=true
+    if let origin,let scroll=outline.enclosingScrollView {scroll.contentView.scroll(to:origin);scroll.reflectScrolledClipView(scroll.contentView)}
+  }
   func visible(_ nodes: [TreeNode]) -> [TreeNode] { nodes }
   static let explorerDragType=NSPasteboard.PasteboardType("local.mssqlstudio.explorer-connection")
   func outlineView(_ outlineView:NSOutlineView,pasteboardWriterForItem item:Any) -> (any NSPasteboardWriting)? {
@@ -279,6 +294,7 @@ extension WorkbenchController {
     cell.textField = label
     cell.imageView = image
     cell.toolTip = node.error ?? (!node.server.online ? "Explorer bağlantısı kapalı. Son yüklenen nesneler gösteriliyor. Bağlantı işlemleri menüsünden yeniden bağlanabilirsiniz; açık sorgu oturumları korunur." : nil) ?? node.item?.detail ?? "\(node.server.profile.name) · \(node.server.profile.host),\(node.server.profile.port) · \(node.database)"
+    cell.toolTip=node.displayTitle+"\n"+(cell.toolTip ?? "")
     if case .server = node.kind {
       cell.toolTip=(cell.toolTip ?? "")+" · "+(node.server.profile.appearance?.badge ?? "")+"\nSürükleyerek Explorer bağlantılarının sırasını değiştirin."
       image.setAccessibilityLabel(node.server.updatingProfile ? "Kaydediliyor" : node.server.reconnecting ? "Bağlanıyor" : node.server.online ? "Bağlı" : "Bağlantı kapalı")

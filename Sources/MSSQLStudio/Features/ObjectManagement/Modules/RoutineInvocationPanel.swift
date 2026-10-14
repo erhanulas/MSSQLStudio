@@ -28,8 +28,8 @@ struct RoutineInvocationPanel:View {
           } }
         }.padding(8)
       }
-      Text(error).foregroundStyle(.red).textSelection(.enabled)
+      StudioFeedback(message:error)
       HStack {Spacer();StudioActionButton("SQL Editöründe İncele", icon:"doc.text.magnifyingglass", tint:.accentColor) {do {open(try RoutineScripts.invocation(qualified:qualified,function:function,tableValued:tableValued,parameters:parameters,arguments:arguments));error=""} catch {self.error=error.localizedDescription}}.disabled(!ready)}
-    }.padding(18).studioPanel().task {do {parameters=try await load();for p in parameters {arguments[p.id]=RoutineArgument()};ready=true} catch {self.error=error.localizedDescription}}
+    }.padding(StudioMetrics.gap).studioPanel().task {do {parameters=try await load();for p in parameters {arguments[p.id]=RoutineArgument()};ready=true} catch {self.error=error.localizedDescription}}
   }
 }

@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.130",
+    "date": "2026-10-14",
+    "title": "Uygulama genelinde kompakt ve tutarlı arayüz",
+    "changes": [
+      "Explorer, History, bağlantılar, ayarlar, nesne yönetimi, SQL Agent, DDL, izleme ve yardımcı pencereler ortak kompakt başlık, düğme, boşluk ve yüzey ölçüleriyle yenilendi. Explorer satır yoğunluğu ayarlardan Kompakt veya Rahat seçilebilir.",
+      "Ortak seçiciler içeriğe uygun boyutta açılır; yazınca arama, klavye gezinmesi ve iptal davranışları korunur. History filtreleri daha az alan kaplar; sorgu listesi ve SQL önizlemesi ayarlanabilir ayırıcı kullanır. Boş alanların yanlışlıkla seçici açması ve son liste satırının kesilmesi düzeltildi.",
+      "Bağlantı profilleri, şablonlar, AI yanıtları, index ve iş tasarımı, veritabanı dosyaları ve yönetim formları esnek panellerle düzenlendi. Yardımcı pencere minimumları kullanılabilir içerik alanına göre hesaplanır; dar pencerelerde işlemler erişilebilir kalır.",
+      "Uzun hata ve uyarılar kompakt ortak bildirimde gösterilir; tam metin seçilebilir ve kopyalanabilir ayrıntı kutusundan okunur. Escape ve dış tıklama yalnız ayrıntıyı kapatır. Güncelleme hata ayrıntısı kaydırılır; Kapat düğmesi görünür kalır.",
+      "Yönetim SQL editörü ve salt okunur önizlemeler ortak bileşenlerde birleştirildi. Nesne özelliklerinde Genel/İzinler geçişi form girdisini korur; sonuç/plan araçları, satır yoğunluğu ve kaydırma görünümü sadeleştirildi. SQL yürütme ve bağlantı davranışları korunur."
+    ]
+  },
+  {
     "version": "0.2.129",
     "date": "2026-10-14",
     "title": "Kompakt editör araçları ve yazınca aranan seçiciler",

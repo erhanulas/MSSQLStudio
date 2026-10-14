@@ -28,7 +28,7 @@ import SwiftUI
     let heading=NSTextField(labelWithString:title);heading.font = .systemFont(ofSize:14,weight:.semibold)
     summary.font = .systemFont(ofSize:11);summary.textColor = .secondaryLabelColor
     let top=NSStackView(views:[heading,summary,tabs]);top.orientation = .vertical;top.alignment = .leading;top.spacing=8
-    top.edgeInsets=NSEdgeInsets(top:16,left:18,bottom:12,right:18)
+    top.edgeInsets=NSEdgeInsets(top:12,left:12,bottom:8,right:12)
     tabs.selectedSegment=0;tabs.target=self;tabs.action=#selector(changeTab)
     let diff:NSView
     if ignoringSQLWhitespace {
@@ -68,7 +68,7 @@ import SwiftUI
     let cancel=StudioToolbarButton(symbol:"xmark",label:canApply ? "Vazgeç":"Kapat",tone:.neutral,title:canApply ? "Vazgeç":"Kapat",width:80);cancel.target=self;cancel.action=#selector(closeReview);cancel.keyEquivalent="\u{1b}"
     apply.target=self;apply.action=#selector(submit);apply.bezelStyle = .rounded;apply.isHidden = !canApply;apply.isEnabled=false
     let note=NSTextField(labelWithString:canApply ? "SQL yalnızca Veritabanına Gönder’e bastığınızda gönderilir.":"Bu ekran karşılaştırma içindir; SQL gönderilmez.");note.font = .systemFont(ofSize:11);note.textColor = .secondaryLabelColor
-    let footer=NSStackView(views:[note,NSView(),cancel,apply]);footer.edgeInsets=NSEdgeInsets(top:12,left:18,bottom:14,right:18)
+    let footer=NSStackView(views:[note,NSView(),cancel,apply]);footer.edgeInsets=NSEdgeInsets(top:8,left:12,bottom:12,right:12)
     let stack=NSStackView(views:[top,body,footer]);stack.orientation = .vertical;stack.spacing=0
     embed(stack,in:host)
     for view in [top,body,footer] {view.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true}
@@ -109,7 +109,7 @@ import SwiftUI
     view.backgroundColor=StudioTheme.editorCanvas;view.textColor=StudioTheme.editorText;view.textContentStorage?.textStorage?.setAttributedString(SQLSourceHighlighting.attributed(text));view.textContainerInset=NSSize(width:12,height:8)
     view.isVerticallyResizable=true;view.isHorizontallyResizable=true;view.autoresizingMask=[]
     view.textContainer?.widthTracksTextView=false;view.textContainer?.containerSize=NSSize(width:100_000,height:CGFloat.greatestFiniteMagnitude)
-    scroll.documentView=view;scroll.hasVerticalScroller=true;scroll.hasHorizontalScroller=true;scroll.autohidesScrollers=true
+    scroll.documentView=view;scroll.hasVerticalScroller=true;scroll.hasHorizontalScroller=true;scroll.autohidesScrollers=true;scroll.scrollerStyle = .overlay;scroll.borderType = .noBorder
     size(view,in:scroll,text:text)
   }
   private func size(_ view:NSTextView,in scroll:NSScrollView,text:String) {

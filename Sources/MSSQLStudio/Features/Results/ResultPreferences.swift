@@ -50,7 +50,7 @@ struct ResultLoadingPanel: View {
         guard (1...5_000_000).contains(rows),(0...1_000_000).contains(page),(0...3600).contains(refresh) else {message="Lütfen belirtilen aralıklarda değerler girin.";return}
         apply(rows,page,refreshAllowed ? refresh:0,saveDefault)
       }.buttonStyle(StudioPrimaryButton())}
-    }.padding(20).frame(maxWidth:.infinity,maxHeight:.infinity).studioPanel()
+    }.padding(StudioMetrics.gap).frame(maxWidth:.infinity,maxHeight:.infinity).studioPanel()
   }
 }
 
@@ -68,7 +68,7 @@ struct ResultRefreshPanel:View {
         guard (0...3600).contains(seconds) else {message="0–3.600 saniye girin.";return}
         apply(seconds)
       }.buttonStyle(StudioPrimaryButton())}
-    }.padding(20).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading).studioPanel()
+    }.padding(StudioMetrics.gap).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading).studioPanel()
   }
 }
 

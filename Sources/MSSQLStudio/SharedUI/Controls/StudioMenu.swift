@@ -23,6 +23,7 @@ import SwiftUI
     controller.view.frame=NSRect(origin:.zero,size:placement.size)
     popup.animates=false;popup.behavior = .transient
     popup.contentViewController=controller;popup.contentSize=placement.size
+    (anchor.window as? StudioPanelWindow)?.activePopover=popup
     popup.show(relativeTo:point,of:host,preferredEdge:placement.edge)
   }
 }

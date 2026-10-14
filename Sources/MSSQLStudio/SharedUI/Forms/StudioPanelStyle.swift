@@ -64,18 +64,18 @@ private struct StudioButtonSurface: View {
       .foregroundStyle(ink)
       .frame(minHeight: compact ? 24 : 30)
       .background {
-        RoundedRectangle(cornerRadius: 7).fill(
+        RoundedRectangle(cornerRadius: StudioMetrics.controlRadius).fill(
           LinearGradient(colors: primary && enabled
             ? [Color(nsColor: StudioTheme.accent), Color(nsColor: StudioTheme.accent).opacity(0.88)]
             : [Color(nsColor: StudioTheme.controlSurface), Color(nsColor: StudioTheme.controlSurface)],
             startPoint: .top, endPoint: .bottom))
-          .overlay(RoundedRectangle(cornerRadius: 7).fill(Color(nsColor: StudioTheme.accent).opacity(enabled && (hovered || configuration.isPressed) ? configuration.isPressed ? 0.14 : 0.06 : 0)))
+          .overlay(RoundedRectangle(cornerRadius: StudioMetrics.controlRadius).fill(Color(nsColor: StudioTheme.accent).opacity(enabled && (hovered || configuration.isPressed) ? configuration.isPressed ? 0.14 : 0.06 : 0)))
       }
-      .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(
-        primary && enabled ? Color.white.opacity(0.16) : Color(nsColor: hovered && enabled ? StudioTheme.accent : StudioTheme.controlBorder).opacity(enabled ? 0.8 : 0.4)))
-      .shadow(color: Color.black.opacity(enabled ? primary ? 0.10 : 0.035 : 0), radius: primary ? 3 : 1, y: 1)
+      .overlay(RoundedRectangle(cornerRadius: StudioMetrics.controlRadius).strokeBorder(
+        primary && enabled ? Color.white.opacity(0.16) : Color(nsColor: hovered && enabled ? StudioTheme.accent : StudioTheme.controlBorder).opacity(enabled ? 0.8 : 0.4)).allowsHitTesting(false))
+
       .opacity(enabled ? 1 : 0.5)
-      .contentShape(RoundedRectangle(cornerRadius: 7))
+      .contentShape(RoundedRectangle(cornerRadius: StudioMetrics.controlRadius))
       .environment(\.studioPrimaryAction, primary)
       .onHover { hovered = $0 }
       .animation(.easeOut(duration: 0.10), value: hovered)
@@ -83,7 +83,7 @@ private struct StudioButtonSurface: View {
 }
 struct StudioGroupBoxStyle: GroupBoxStyle {
   func makeBody(configuration: Configuration) -> some View {
-    VStack(alignment: .leading, spacing: 14) {
+    VStack(alignment: .leading, spacing: StudioMetrics.gap) {
       configuration.label.font(.system(size: 12, weight: .semibold)).foregroundStyle(Color(nsColor: StudioTheme.text))
       configuration.content.frame(maxWidth: .infinity, alignment: .leading)
     }.studioCard()
@@ -101,9 +101,9 @@ struct StudioNavigationItem: View {
           .foregroundStyle(Color(nsColor: selected ? StudioTheme.accent : StudioTheme.muted))
         Text(title).font(.system(size: 12, weight: selected ? .semibold : .regular))
         Spacer(minLength: 0)
-      }.padding(.horizontal, 10).padding(.vertical, 9)
+      }.padding(.horizontal, 8).padding(.vertical, 6)
         .foregroundStyle(Color(nsColor: StudioTheme.text))
-        .background(selected ? Color(nsColor: StudioTheme.selection) : .clear, in: RoundedRectangle(cornerRadius: 7))
+        .background(selected ? Color(nsColor: StudioTheme.selection) : .clear, in: RoundedRectangle(cornerRadius: StudioMetrics.controlRadius))
         .overlay(alignment: .leading) {
           if selected { Capsule().fill(Color(nsColor: StudioTheme.accent)).frame(width: 3, height: 16) }
         }.contentShape(Rectangle())
@@ -116,8 +116,8 @@ struct StudioEmptyState: View {
   let icon: String
   let detail: String
   var body: some View {
-    VStack(spacing: 10) {
-      Image(systemName: icon).font(.system(size: 28, weight: .light)).foregroundStyle(.tint)
+    VStack(spacing: 8) {
+      Image(systemName: icon).font(.system(size: 22, weight: .regular)).foregroundStyle(.tint)
       Text(title).font(.system(size: 13, weight: .medium))
       Text(detail).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
     }.padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -130,18 +130,18 @@ struct StudioPanelHeading: View {
   let icon: String
   let subtitle: String
   var body: some View {
-    HStack(alignment: .center, spacing: 12) {
-      Image(systemName: icon).font(.system(size: 20, weight: .medium))
+    HStack(alignment: .center, spacing: 10) {
+      Image(systemName: icon).font(.system(size: 17, weight: .medium))
         .foregroundStyle(Color(nsColor: StudioTheme.accent))
-        .frame(width: 42, height: 42)
-        .background(LinearGradient(colors: [Color(nsColor: StudioTheme.accent).opacity(0.16), Color(nsColor: StudioTheme.accent).opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(nsColor: StudioTheme.accent).opacity(0.12)))
+        .frame(width: 32, height: 32)
+        .background(Color(nsColor: StudioTheme.accent).opacity(0.08), in: RoundedRectangle(cornerRadius: StudioMetrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: StudioMetrics.cardRadius).strokeBorder(Color(nsColor: StudioTheme.accent).opacity(0.12)))
       VStack(alignment: .leading, spacing: 3) {
-        Text(title).font(.system(size: 19, weight: .semibold))
+        Text(title).font(.system(size: StudioMetrics.headingFont, weight: .semibold))
         Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
       }
       Spacer(minLength: 0)
-    }.padding(.bottom, 4)
+    }.fixedSize(horizontal: false, vertical: true)
   }
 }
 struct StudioPanelStyle: ViewModifier {
@@ -154,7 +154,7 @@ struct StudioPanelStyle: ViewModifier {
       .font(.system(size: 12))
       .tint(Color(nsColor: StudioTheme.accent))
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-      .background(LinearGradient(colors: [Color(nsColor: StudioTheme.panel), Color(nsColor: StudioTheme.chrome)], startPoint: .top, endPoint: .bottom))
+      .background(Color(nsColor: StudioTheme.panel))
       .onReceive(NotificationCenter.default.publisher(for: StudioTheme.changed)) { _ in revision += 1 }
       .environment(\.colorScheme, revision >= 0 && StudioTheme.dark ? .dark : .light)
       .overlay(alignment: .top) { Rectangle().fill(Color(nsColor: StudioTheme.border)).frame(height: 1).allowsHitTesting(false) }
@@ -165,13 +165,13 @@ private struct StudioCardStyle: ViewModifier {
   @Environment(\.colorScheme) private var colorScheme
   func body(content: Content) -> some View {
     let _ = colorScheme
-    return content.padding(padding).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: 12))
-      .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(nsColor: StudioTheme.border)))
+    return content.padding(padding).background(Color(nsColor: StudioTheme.canvas), in: RoundedRectangle(cornerRadius: StudioMetrics.cardRadius))
+      .overlay(RoundedRectangle(cornerRadius: StudioMetrics.cardRadius).strokeBorder(Color(nsColor: StudioTheme.border)))
   }
 }
 extension View {
   func studioPanel() -> some View { modifier(StudioPanelStyle()) }
-  func studioCard(padding: CGFloat = 16) -> some View {
+  func studioCard(padding: CGFloat = StudioMetrics.gap) -> some View {
     modifier(StudioCardStyle(padding:padding))
   }
   func studioEditor() -> some View {

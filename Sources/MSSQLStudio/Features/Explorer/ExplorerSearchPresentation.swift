@@ -65,6 +65,7 @@ extension WorkbenchController {
     }
     showingSearch = show
     explorerTabs.selectedSegment = show ? 1 : 0
+    searchFilters.isHidden = !show
     reloadExplorer()
     if !show {
       restoringTree=true

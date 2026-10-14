@@ -34,7 +34,7 @@ struct AgentActivityPanel:View {
       }
       Text(service).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
       if loading {ProgressView().controlSize(.small)}
-      if !error.isEmpty {Text(error).foregroundStyle(.red).textSelection(.enabled)}
+      if !error.isEmpty {StudioFeedback(message:error)}
       Table(visible,selection:$selected,sortOrder:$sortOrder) {
         TableColumn("İş",value:\.name).width(min:150,ideal:250)
         TableColumn("Etkin") {Text($0.enabled ? "Evet":"Hayır")}.width(55)
@@ -63,7 +63,7 @@ struct AgentActivityPanel:View {
         Text("\(visible.count) / \(jobs.count) iş · \(refreshed)").font(.caption).foregroundStyle(.secondary)
       }
       Text("En çok 1.000 iş. Sonraki çalışma bilgisi Agent önbelleği nedeniyle gecikmeli olabilir. Agent servisi sunucu işletim sisteminden yönetilir.").font(.caption).foregroundStyle(.secondary)
-    }.padding(20).studioPanel().task(id:"\(generation)|\(refresh)") {
+    }.padding(StudioMetrics.gap).studioPanel().task(id:"\(generation)|\(refresh)") {
       repeat {
         await load()
         guard refresh>0,!Task.isCancelled else {return}

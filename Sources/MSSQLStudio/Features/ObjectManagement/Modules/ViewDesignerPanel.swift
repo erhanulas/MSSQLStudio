@@ -36,12 +36,12 @@ struct ViewDesignerPanel:View {
       Text("SQL tanımı · Karmaşık JOIN/CTE/sorguları burada düzenleyin. Değişiklik otomatik çalıştırılmaz.").font(.caption).foregroundStyle(.secondary)
       if !ready { ProgressView("Tanım yükleniyor…") }
       ManagedSQLEditor(document:document,source:document.sql).disabled(!ready)
-      Text(error).foregroundStyle(.red).textSelection(.enabled)
+      StudioFeedback(message:error)
       HStack {
         if load != nil { StudioActionButton("Farkları Göster", icon:"rectangle.split.2x1", tint:.accentColor) { error=ModuleEditing.difference(original:document.savedText,edited:document.sql) } }
         Spacer(); StudioActionButton("SQL Editöründe İncele", icon:"doc.text.magnifyingglass", tint:.accentColor) { open(document.sql) }.disabled(!ready)
       }
-    }.padding(18).studioPanel().task {
+    }.padding(StudioMetrics.gap).studioPanel().task {
       do { if let load { document.sql=try await load() }; document.savedText=document.sql; ready=true }
       catch { self.error=error.localizedDescription }
     }

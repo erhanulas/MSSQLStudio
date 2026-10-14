@@ -48,7 +48,7 @@ struct ColumnFilterPanel: View {
                 else { rule.choices?.remove(value) }
               }))
               .toggleStyle(.checkbox).font(.system(size: 12)).lineLimit(1)
-              .padding(.horizontal, 10).padding(.vertical, 6)
+              .padding(.horizontal, 10).padding(.vertical, 4)
               .frame(maxWidth: .infinity, alignment: .leading)
               .studioHelp(String(value.title.prefix(4000)))
           }
@@ -61,7 +61,9 @@ struct ColumnFilterPanel: View {
       Text(rule.choices.map { "\($0.count) değer seçili" } ?? "Tüm değerler · Henüz değer seçimi yok")
         .font(.caption).foregroundStyle(.secondary)
       if truncated { Text("İlk 500 farklı değer gösteriliyor; diğerlerini arayabilirsiniz. Seçimler korunur.").font(.caption).foregroundStyle(.secondary) }
-      DisclosureGroup("Koşul", isExpanded: $conditionExpanded) {
+      StudioDisclosureHeader(title:"Koşul",icon:"line.3.horizontal.decrease",tint:StudioTheme.accent,expanded:conditionExpanded) {conditionExpanded.toggle()}
+        .frame(height:StudioMetrics.controlHeight)
+      if conditionExpanded {
         VStack(alignment: .leading, spacing: 8) {
           Picker("Karşılaştırma", selection: $rule.operation) {
             ForEach(ColumnOperation.allCases, id: \.self) { operation in
@@ -75,7 +77,7 @@ struct ColumnFilterPanel: View {
           }
           if rule.operation == .between { TextField("Bitiş (dahil)", text: $rule.second).textFieldStyle(.roundedBorder) }
         }.padding(.top, 6)
-      }.font(.system(size: 12))
+      }
       if !error.isEmpty { Text(error).font(.caption).foregroundStyle(.red).lineLimit(3) }
       Divider()
       HStack {

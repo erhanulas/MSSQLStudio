@@ -3,24 +3,44 @@ import CoreText
 import SQLServerKit
 import SwiftUI
 
+@MainActor private final class UpdateDetailsView:NSView {
+  override var isFlipped:Bool {true}
+}
+
 @MainActor final class UpdateProgressController:NSWindowController {
   let status=NSTextField(wrappingLabelWithString: "Güncellemeler kontrol ediliyor…")
   let spinner=NSProgressIndicator()
   let done=NSButton(title:"Kapat",target:nil,action:nil)
   init() {
-    let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:440,height:170),styleMask:[.titled],backing:.buffered,defer:false)
+    let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:440,height:220),styleMask:[.titled,.resizable],backing:.buffered,defer:false)
     window.title="MSSQL Studio Güncellemesi";window.isReleasedWhenClosed=false
+    window.contentMinSize=NSSize(width:380,height:180)
     super.init(window:window)
-    spinner.style = .spinning;spinner.startAnimation(nil)
-    status.alignment = .center;status.setAccessibilityIdentifier("updateCheckStatus")
-    done.target=self;done.action=#selector(closeProgress);done.isEnabled=false
-    let stack=NSStackView(views:[spinner,status,done]);stack.orientation = .vertical;stack.spacing=16
-    stack.translatesAutoresizingMaskIntoConstraints=false;window.contentView?.addSubview(stack)
-    NSLayoutConstraint.activate([stack.centerXAnchor.constraint(equalTo:window.contentView!.centerXAnchor),stack.centerYAnchor.constraint(equalTo:window.contentView!.centerYAnchor),stack.widthAnchor.constraint(equalToConstant:392)])
+    let body=window.contentView!
+    StudioTheme.surface(body,card:true)
+    spinner.style = .spinning;spinner.controlSize = .small;spinner.startAnimation(nil)
+    status.alignment = .left;status.font=StudioTheme.uiFont;status.textColor=StudioTheme.text;status.isSelectable=true
+    status.setAccessibilityIdentifier("updateCheckStatus")
+    done.target=self;done.action=#selector(closeProgress);done.isEnabled=false;done.bezelStyle = .rounded
+    let heading=NSTextField(labelWithString:"Uygulama güncellemesi")
+    heading.font = .systemFont(ofSize:StudioMetrics.headingFont,weight:.semibold);heading.textColor=StudioTheme.text
+    let header=NSStackView(views:[spinner,heading,NSView()]);header.spacing=8
+    let scroll=NSScrollView();scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true;scroll.scrollerStyle = .overlay;scroll.drawsBackground=false
+    let document=UpdateDetailsView();scroll.documentView=document
+    document.translatesAutoresizingMaskIntoConstraints=false;status.translatesAutoresizingMaskIntoConstraints=false;document.addSubview(status)
+    NSLayoutConstraint.activate([document.widthAnchor.constraint(equalTo:scroll.contentView.widthAnchor),status.leadingAnchor.constraint(equalTo:document.leadingAnchor),status.trailingAnchor.constraint(equalTo:document.trailingAnchor),status.topAnchor.constraint(equalTo:document.topAnchor),status.bottomAnchor.constraint(equalTo:document.bottomAnchor)])
+    let actions=NSStackView(views:[NSView(),done])
+    let stack=NSStackView(views:[header,scroll,actions]);stack.orientation = .vertical;stack.spacing=12
+    stack.translatesAutoresizingMaskIntoConstraints=false;body.addSubview(stack)
+    NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:body.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:body.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:body.topAnchor,constant:16),stack.bottomAnchor.constraint(equalTo:body.bottomAnchor,constant:-16),header.widthAnchor.constraint(equalTo:stack.widthAnchor),scroll.widthAnchor.constraint(equalTo:stack.widthAnchor),scroll.heightAnchor.constraint(greaterThanOrEqualToConstant:60),actions.widthAnchor.constraint(equalTo:stack.widthAnchor)])
     window.center()
   }
   required init?(coder:NSCoder) {fatalError()}
-  func phase(_ text:String) {status.stringValue=text}
+  func phase(_ text:String) {
+    status.stringValue=text
+    window?.contentView?.layoutSubtreeIfNeeded()
+    status.enclosingScrollView?.documentView?.scroll(.zero)
+  }
   func finish(_ text:String) {phase(text);spinner.stopAnimation(nil);spinner.isHidden=true;done.isEnabled=true;window?.styleMask.insert(.closable);done.keyEquivalent="\r"}
   @objc private func closeProgress() {close()}
 }

@@ -40,6 +40,7 @@ import SwiftUI
 
 @MainActor class StudioPanelWindow:StudioAssociatedWindow {
   var cancelAction:(()->Void)?
+  weak var activePopover:NSPopover?
   var focusOrder:[NSView]=[]
   @discardableResult func advanceDialogFocus(backward:Bool=false)->Bool {
     let available=focusOrder.filter {!$0.isHiddenOrHasHiddenAncestor && ($0 as? NSControl)?.isEnabled != false}
@@ -60,7 +61,11 @@ import SwiftUI
     }
     super.sendEvent(event)
   }
-  override func cancelOperation(_ sender:Any?) {if let cancelAction {cancelAction()} else {performClose(sender)}}
+  override func cancelOperation(_ sender:Any?) {
+    // Native popovers may leave keyboard events on their owning panel.
+    if let activePopover,activePopover.isShown {activePopover.close();return}
+    if let cancelAction {cancelAction()} else {performClose(sender)}
+  }
 }
 
 @MainActor class StudioDialogButton:NSButton {
@@ -98,9 +103,9 @@ import SwiftUI
     saveButton.target=self;saveButton.action=#selector(saveName);saveButton.keyEquivalent="\r";saveButton.bezelStyle = .rounded;saveButton.setAccessibilityIdentifier("explorerNameSave")
     cancelButton.target=self;cancelButton.action=#selector(cancelName);cancelButton.keyEquivalent="\u{1b}";cancelButton.bezelStyle = .rounded
     let spacer=NSView();let actions=NSStackView(views:[spacer,cancelButton,saveButton]);actions.spacing=8
-    let stack=NSStackView(views:[header,hint,nameField,errorLabel,actions]);stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=14
+    let stack=NSStackView(views:[header,hint,nameField,errorLabel,actions]);stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=12
     body.addSubview(stack);stack.translatesAutoresizingMaskIntoConstraints=false
-    NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:body.leadingAnchor,constant:24),stack.trailingAnchor.constraint(equalTo:body.trailingAnchor,constant:-24),stack.topAnchor.constraint(equalTo:body.topAnchor,constant:22),stack.bottomAnchor.constraint(lessThanOrEqualTo:body.bottomAnchor,constant:-20),nameField.widthAnchor.constraint(equalTo:stack.widthAnchor),nameField.heightAnchor.constraint(equalToConstant:30),actions.widthAnchor.constraint(equalTo:stack.widthAnchor),icon.widthAnchor.constraint(equalToConstant:24),icon.heightAnchor.constraint(equalToConstant:24)])
+    NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:body.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:body.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:body.topAnchor,constant:16),stack.bottomAnchor.constraint(lessThanOrEqualTo:body.bottomAnchor,constant:-16),nameField.widthAnchor.constraint(equalTo:stack.widthAnchor),nameField.heightAnchor.constraint(equalToConstant:26),actions.widthAnchor.constraint(equalTo:stack.widthAnchor),icon.widthAnchor.constraint(equalToConstant:24),icon.heightAnchor.constraint(equalToConstant:24)])
     nameField.nextKeyView=saveButton;saveButton.nextKeyView=cancelButton;cancelButton.nextKeyView=nameField
     window.focusOrder=[nameField,saveButton,cancelButton]
     window.initialFirstResponder=nameField;window.center()
@@ -156,7 +161,7 @@ import SwiftUI
     let actions=NSStackView(views:[cancelButton,discardButton,saveButton]);actions.spacing=8
     let stack=NSStackView(views:[title,detail,actions]);stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=20
     body.addSubview(stack);stack.translatesAutoresizingMaskIntoConstraints=false
-    NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:body.leadingAnchor,constant:24),stack.trailingAnchor.constraint(equalTo:body.trailingAnchor,constant:-24),stack.topAnchor.constraint(equalTo:body.topAnchor,constant:24),detail.widthAnchor.constraint(equalTo:stack.widthAnchor),actions.trailingAnchor.constraint(equalTo:stack.trailingAnchor)])
+    NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:body.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:body.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:body.topAnchor,constant:16),detail.widthAnchor.constraint(equalTo:stack.widthAnchor),actions.trailingAnchor.constraint(equalTo:stack.trailingAnchor)])
     window.focusOrder=[saveButton,discardButton,cancelButton]
     window.initialFirstResponder=saveButton;window.center()
   }
@@ -181,11 +186,11 @@ import SwiftUI
     let body=NSView();StudioTheme.surface(body,card:true);window.contentView=body
     let heading=NSTextField(labelWithString:"İşlem tamamlanamadı");heading.font = .systemFont(ofSize:16,weight:.semibold);heading.textColor=StudioTheme.text
     let messageView=StudioTextView();messageView.isEditable=false;messageView.isSelectable=true;messageView.string=String(message.prefix(16_000));messageView.font = .systemFont(ofSize:12);messageView.textColor=StudioTheme.text;messageView.backgroundColor=StudioTheme.canvas;messageView.textContainerInset=NSSize(width:8,height:8);messageView.isVerticallyResizable=true;messageView.autoresizingMask=[.width];messageView.textContainer?.widthTracksTextView=true
-    let scroll=NSScrollView();scroll.documentView=messageView;scroll.hasVerticalScroller=true
+    let scroll=NSScrollView();scroll.documentView=messageView;scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true;scroll.scrollerStyle = .overlay;scroll.borderType = .noBorder
     let done=StudioDialogButton(title:"Tamam",target:self,action:#selector(closeNotice));done.bezelStyle = .rounded;done.keyEquivalent="\r"
-    let stack=NSStackView(views:[heading,scroll,done]);stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=14
+    let stack=NSStackView(views:[heading,scroll,done]);stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=12
     body.addSubview(stack);stack.translatesAutoresizingMaskIntoConstraints=false
-    NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:body.leadingAnchor,constant:24),stack.trailingAnchor.constraint(equalTo:body.trailingAnchor,constant:-24),stack.topAnchor.constraint(equalTo:body.topAnchor,constant:24),stack.bottomAnchor.constraint(equalTo:body.bottomAnchor,constant:-22),scroll.widthAnchor.constraint(equalTo:stack.widthAnchor),scroll.heightAnchor.constraint(greaterThanOrEqualToConstant:100)])
+    NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:body.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:body.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:body.topAnchor,constant:16),stack.bottomAnchor.constraint(equalTo:body.bottomAnchor,constant:-16),scroll.widthAnchor.constraint(equalTo:stack.widthAnchor),scroll.heightAnchor.constraint(greaterThanOrEqualToConstant:100)])
     window.focusOrder=[done]
     window.initialFirstResponder=done;window.center()
   }

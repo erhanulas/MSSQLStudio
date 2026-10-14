@@ -20,35 +20,39 @@ struct IndexPanel: View {
       StudioPanelHeading(title: "Index Designer", icon: "list.number", subtitle: table)
       StudioFormField("İndeks adı") {TextField("İndeks adı", text: $name)}
       Toggle("UNIQUE", isOn: $unique)
-      ScrollView {
-        VStack {
-          ForEach(columns, id: \.id) { column in
-            HStack {
-              Text(column.name).frame(maxWidth: .infinity, alignment: .leading)
-              Toggle("Key", isOn: binding(column.name, set: $keys))
-              Toggle("Include", isOn: binding(column.name, set: $includes))
+      VSplitView {
+        ScrollView {
+          LazyVStack(spacing:6) {
+            ForEach(columns, id: \.id) { column in
+              HStack {
+                Text(column.name).frame(maxWidth: .infinity, alignment: .leading)
+                Toggle("Key", isOn: binding(column.name, set: $keys))
+                Toggle("Include", isOn: binding(column.name, set: $includes))
+              }
             }
           }
-        }
-      }.frame(height: 160)
-      StudioFormField("Filtre") {TextField("Filtre (isteğe bağlı WHERE koşulu)", text: $filter)}
-      HStack {
-        StudioActionButton("SQL Oluştur", icon:"doc.badge.gearshape", tint:.accentColor) {
-          do {
-            preview = try Scripts.index(
-              table: table, name: name, keys: columns.filter { keys.contains($0.name) }.map(\.name),
-              included: columns.filter { includes.contains($0.name) }.map(\.name), unique: unique,
-              filter: filter)
-            error = ""
-          } catch let failure { error = failure.localizedDescription }
-        }
-        StudioActionButton("Sorgu Sekmesine Aktar", icon:"arrow.up.forward.square", tint:.accentColor) { open(preview) }.disabled(preview.isEmpty)
+        }.frame(minHeight:100,idealHeight:160)
+        VStack(alignment:.leading,spacing:8) {
+          StudioFormField("Filtre") {TextField("Filtre (isteğe bağlı WHERE koşulu)", text: $filter)}
+          HStack {
+            StudioActionButton("SQL Oluştur", icon:"doc.badge.gearshape", tint:.accentColor) {
+              do {
+                preview = try Scripts.index(
+                  table: table, name: name, keys: columns.filter { keys.contains($0.name) }.map(\.name),
+                  included: columns.filter { includes.contains($0.name) }.map(\.name), unique: unique,
+                  filter: filter)
+                error = ""
+              } catch let failure { error = failure.localizedDescription }
+            }
+            StudioActionButton("Sorgu Sekmesine Aktar", icon:"arrow.up.forward.square", tint:.accentColor) { open(preview) }.disabled(preview.isEmpty)
+          }
+          Text("SQL'i inceleyip sorgu sekmesinden çalıştırın.").foregroundStyle(.secondary).font(
+            .caption)
+          SQLCodeEditor(text:$preview).studioEditor().frame(minHeight:120)
+        }.frame(minHeight:220,idealHeight:300)
       }
-      Text("SQL'i inceleyip sorgu sekmesinden çalıştırın.").foregroundStyle(.secondary).font(
-        .caption)
-      TextEditor(text: $preview).font(.custom(StudioTheme.codeFont.fontName, size: 13)).studioEditor()
-      Text(error).font(.caption).foregroundStyle(.red)
-    }.padding(20).studioPanel().task {
+      StudioFeedback(message:error)
+    }.padding(StudioMetrics.gap).studioPanel().task {
       do { columns = try await load() } catch let failure {
         self.error = failure.localizedDescription
       }

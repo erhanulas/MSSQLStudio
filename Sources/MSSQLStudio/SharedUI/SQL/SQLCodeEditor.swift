@@ -2,15 +2,16 @@ import AppKit
 import SQLServerKit
 import SwiftUI
 
-struct AgentCommandEditor:NSViewRepresentable {
+/// Editable SQL for management drafts; native undo and source colors share one owner.
+struct SQLCodeEditor:NSViewRepresentable {
   @Binding var text:String
   @MainActor final class Coordinator:NSObject,NSTextViewDelegate {
-    var parent:AgentCommandEditor
+    var parent:SQLCodeEditor
     weak var editor:NSTextView?
     private var source:String?
     private var dark:Bool?
     private var painting=false
-    init(_ parent:AgentCommandEditor) {
+    init(_ parent:SQLCodeEditor) {
       self.parent=parent
       super.init()
       NotificationCenter.default.addObserver(self,selector:#selector(themeChanged),name:StudioTheme.changed,object:nil)
@@ -57,7 +58,7 @@ struct AgentCommandEditor:NSViewRepresentable {
   }
   func makeCoordinator()->Coordinator {Coordinator(self)}
   func makeNSView(context:Context)->NSScrollView {
-    let scroll=NSScrollView();scroll.hasVerticalScroller=true;scroll.hasHorizontalScroller=true
+    let scroll=NSScrollView();scroll.hasVerticalScroller=true;scroll.hasHorizontalScroller=true;scroll.autohidesScrollers=true;scroll.scrollerStyle = .overlay;scroll.borderType = .noBorder
     let view=StudioTextView(usingTextLayoutManager:true);view.isRichText=false;view.isAutomaticQuoteSubstitutionEnabled=false;view.isAutomaticDashSubstitutionEnabled=false;view.isAutomaticTextReplacementEnabled=false;view.isAutomaticSpellingCorrectionEnabled=false;view.allowsUndo=true
     view.font=StudioTheme.codeFont;view.textContainerInset=NSSize(width:10,height:10);view.isVerticallyResizable=true;view.autoresizingMask=[.width];view.delegate=context.coordinator;view.identifier = .init("agentCommandEditor");view.setAccessibilityIdentifier("agentCommandEditor")
     context.coordinator.editor=view
@@ -70,3 +71,6 @@ struct AgentCommandEditor:NSViewRepresentable {
     context.coordinator.highlight(view)
   }
 }
+
+// Preserve the existing Agent/Favorites call sites and accessibility identity.
+typealias AgentCommandEditor = SQLCodeEditor

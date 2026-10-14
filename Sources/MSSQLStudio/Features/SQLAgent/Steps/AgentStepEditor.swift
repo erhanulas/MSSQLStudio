@@ -17,6 +17,10 @@ struct AgentStepEditor:View {
   @State private var databaseError=""
   @State private var databaseGeneration=0
   private var readOnly:Bool {step.subsystem != "TSQL"}
+  init(server:ConnectedServer,step:SQLAgent.Step,steps:[SQLAgent.Step],isNew:Bool,initialPage:String="Genel",open:@escaping (SQLAgent.Step)->Void) {
+    self.server=server;_step=State(initialValue:step);self.steps=steps;self.isNew=isNew;self.open=open
+    _page=State(initialValue:initialPage)
+  }
   var body:some View {
     VStack(alignment:.leading,spacing:12) {
       StudioPanelHeading(title:isNew ? "New Job Step":"Job Step Properties",icon:"list.number",subtitle:"\(step.id) · \(step.name) · \(step.subsystem)")
@@ -70,7 +74,7 @@ struct AgentStepEditor:View {
         }
       }
       if readOnly {Text("Bu adım türü salt okunur. T-SQL adımları düzenlenebilir.").foregroundStyle(.secondary)}
-      if !error.isEmpty {Text(error).foregroundStyle(.red)}
+      if !error.isEmpty {StudioFeedback(message:error)}
       HStack {
         StudioActionButton("Vazgeç", icon:"xmark") {dismiss()}.keyboardShortcut(.cancelAction)
         Spacer()
@@ -81,7 +85,7 @@ struct AgentStepEditor:View {
           } catch {self.error=error.localizedDescription}
         }.buttonStyle(StudioPrimaryButton()).disabled(readOnly).accessibilityIdentifier("agentStepScript")
       }
-    }.padding(20).frame(width:900,height:650).studioPanel().interactiveDismissDisabled().task(id:databaseGeneration) {await loadDatabases()}
+    }.padding(StudioMetrics.gap).frame(minWidth:700,idealWidth:900,maxWidth:.infinity,minHeight:500,idealHeight:650,maxHeight:.infinity).studioPanel().interactiveDismissDisabled().task(id:databaseGeneration) {await loadDatabases()}
   }
   private var databasePicker:some View {
     VStack(alignment:.leading,spacing:5) {

@@ -16,7 +16,7 @@ struct SettingsSearchEntry:Identifiable,Equatable {
   static var entries:[SettingsSearchEntry] {
     let cards:[(SettingsSection,String,[(String,String,String)])]=[
       (.appearance,"Renk teması",[("theme","Renk teması","sistem macOS açık koyu görünüm light dark")]),
-      (.appearance,"Yazı ve okunabilirlik",[("fonts","SQL ve arayüz yazı tipi","font punto monospace Consolas okunabilirlik")]),
+      (.appearance,"Yazı ve okunabilirlik",[("fonts","SQL ve arayüz yazı tipi","font punto monospace Consolas okunabilirlik"),("explorerDensity","Explorer satır yoğunluğu","kompakt rahat satır yüksekliği sidebar ağaç density")]),
       (.editor,"Otomatik tamamlama",[
         ("completion","Yazarken önerileri göster","otomatik tamamlama intellisense tablo kolon autocomplete"),
         ("delay","Öneri gecikmesi","süre milisaniye ms hız bekleme"),

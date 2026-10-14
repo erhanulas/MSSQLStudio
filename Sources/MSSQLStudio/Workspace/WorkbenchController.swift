@@ -20,6 +20,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   let searchOperator = NSPopUpButton()
   let searchScopePicker = StudioSearchablePopUpButton()
   let searchType = NSPopUpButton()
+  let searchFilters = NSStackView()
   var searchScopes: [TreeNode] = []
   var searchDatabaseByServer: [UUID:String] = [:]
   var explorerRevealTask:Task<Void,Never>?
@@ -72,6 +73,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     explorerTree.expansionState=state.explorerTreeDefaults.dictionary(forKey:"explorerExpansionState") as? [String:Bool] ?? [:]
     explorerToggle.tracksActiveState=true
     super.init(nibName: nil, bundle: nil)
+    NotificationCenter.default.addObserver(self,selector:#selector(updateExplorerDensity),name:ExplorerDensity.changed,object:nil)
     NotificationCenter.default.addObserver(self,selector:#selector(explorerConnectionChanged(_:)),name:ConnectedServer.explorerConnectionChanged,object:nil)
     NotificationCenter.default.addObserver(self,selector:#selector(agentChanged(_:)),name:.init("studioAgentChanged"),object:nil)
     NotificationCenter.default.addObserver(self, selector: #selector(refreshShortcuts), name: GridShortcuts.changed, object: nil)
@@ -799,7 +801,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     window.title = title
     window.styleMask = [.titled, .closable, .resizable]
     window.setContentSize(NSSize(width: width, height: height))
-    window.minSize = NSSize(width: min(width, minWidth), height: min(height, minHeight))
+    // Minimums describe usable content; the title bar must not consume form space.
+    window.contentMinSize = NSSize(width: min(width, minWidth), height: min(height, minHeight))
     window.center()
     // Resolve AppKit's screen-height constraint before the hosting view's first
     // layout instead of letting orderFront change its proposal afterward.

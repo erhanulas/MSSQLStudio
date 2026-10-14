@@ -10,16 +10,15 @@ import UniformTypeIdentifiers
   let setDefinitionIndex: (String, Bool) async throws -> Void
   var body:some View {
     VStack(alignment:.leading,spacing:14) {
-      Label("Yerel indeks",systemImage:"externaldrive").font(.title3.bold())
-      Text(server.profile.name).foregroundStyle(.secondary)
+      StudioPanelHeading(title:"Yerel indeks",icon:"externaldrive",subtitle:server.profile.name)
       ScrollView {
         VStack(spacing:12) {
           ForEach(databases,id:\.self) {db in ExplorerIndexCard(server:server,database:db,setDefinitionIndex:setDefinitionIndex)}
         }
-      }.frame(maxHeight:420)
+      }.frame(maxHeight:.infinity)
       Text("Bu Mac’teki arama ve SQL önerisi önbelleği.").font(.caption).foregroundStyle(.secondary)
       StudioActionButton("Yenile",icon:"arrow.clockwise",tint:.accentColor,action:refresh).disabled(!server.online)
-    }.padding(18).frame(maxWidth:.infinity,maxHeight:.infinity).studioPanel()
+    }.padding(StudioMetrics.gap).frame(maxWidth:.infinity,maxHeight:.infinity).studioPanel()
 
   }
 }
@@ -77,7 +76,7 @@ import UniformTypeIdentifiers
       }
       if let error {Label(error,systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange).textSelection(.enabled)}
       if !server.online {Label("Bağlantı kapalı · önbellek bilgisi",systemImage:"network.slash").font(.caption).foregroundStyle(.secondary)}
-    }.padding(14).frame(maxWidth:.infinity,alignment:.leading).explorerInfoCard()
+    }.padding(StudioMetrics.gap).frame(maxWidth:.infinity,alignment:.leading).explorerInfoCard()
       .onReceive(NotificationCenter.default.publisher(for:.init("catalogIndexUpdated"))) { note in
         guard let updated = note.object as? ConnectedServer, updated === server,
           note.userInfo?["database"] as? String == database else { return }
@@ -121,14 +120,13 @@ import UniformTypeIdentifiers
   var body:some View {
     VStack(alignment:.leading,spacing:16) {
       HStack {
-        Label(database,systemImage:"cylinder.split.1x2").font(.title2.bold())
+        StudioPanelHeading(title:database,icon:"cylinder.split.1x2",subtitle:server.profile.name+" · Veritabanı bilgileri")
         Spacer()
         StudioActionButton("Yenile",icon:"arrow.clockwise",tint:.accentColor) {revision=UUID()}.disabled(loading || !server.online)
       }
-      Text(server.profile.name+" · Salt okunur veritabanı bilgileri").foregroundStyle(.secondary)
       Divider()
       if loading {ProgressView("Veritabanı bilgileri yükleniyor…")}
-      if let error {Label(error,systemImage:"exclamationmark.triangle").foregroundStyle(.orange).textSelection(.enabled)}
+      if let error {StudioFeedback(message:error,tone:.warning)}
       ScrollView {
         VStack(alignment:.leading,spacing:14) {
           ForEach(sections.indices,id:\.self) {index in
@@ -143,7 +141,7 @@ import UniformTypeIdentifiers
         }
       }
       Spacer(minLength:0)
-    }.padding(20).studioPanel().task(id:revision) {await load()}
+    }.padding(StudioMetrics.gap).studioPanel().task(id:revision) {await load()}
   }
   private func load() async {
     guard server.online else {error="Sunucu bağlantısı kapalı. Bilgileri yüklemek için yeniden bağlanın.";return}

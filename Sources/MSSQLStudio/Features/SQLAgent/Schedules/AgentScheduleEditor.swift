@@ -47,11 +47,11 @@ struct AgentScheduleEditor:View {
           Text("Saat ve tarihler SQL Server'ın yerel saatine göredir.").font(.caption).foregroundStyle(.secondary)
         }.padding(4)
       }
-      if !error.isEmpty {Text(error).foregroundStyle(.red)}
+      if !error.isEmpty {StudioFeedback(message:error)}
       HStack {StudioActionButton("Vazgeç", icon:"xmark") {if let cancel {cancel()} else {dismiss()}}.keyboardShortcut(.cancelAction);Spacer();StudioActionButton("Değişiklik SQL’ini Aç", icon:"doc.badge.gearshape") {
         do {_=try SQLAgent.scheduleScript(schedule,jobID:isNew ? UUID().uuidString:nil);open(schedule)} catch {self.error=error.localizedDescription}
       }.buttonStyle(StudioPrimaryButton()).accessibilityIdentifier("agentScheduleScript")}
-    }.padding(20).frame(width:760,height:670).studioPanel().interactiveDismissDisabled()
+    }.padding(StudioMetrics.gap).frame(minWidth:620,idealWidth:760,maxWidth:.infinity,minHeight:480,idealHeight:670,maxHeight:.infinity).studioPanel().interactiveDismissDisabled()
       .onChange(of:schedule.frequency) {_,newValue in
         if newValue == "1" {schedule.subdayType=1}
         if newValue == "32" && !(1...10).contains(schedule.interval) {schedule.interval=1}

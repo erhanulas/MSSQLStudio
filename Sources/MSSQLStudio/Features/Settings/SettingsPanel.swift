@@ -31,6 +31,7 @@ struct SettingsPanel: View {
   let state: StudioState
   @StateObject private var definitionStorage:DefinitionIndexStorageModel
   @State private var theme = UserDefaults.standard.string(forKey: "ssmsTheme") ?? "light"
+  @State private var explorerDensity = ExplorerDensity.current()
   @State private var completion = UserDefaults.standard.object(forKey:"sqlAutomaticCompletion") as? Bool ?? true
   @State private var completionDelay = Double(SQLEditorPreferences.completionDelay())
   @State private var completionSchema = SQLEditorPreferences.includeSchema()
@@ -61,15 +62,7 @@ struct SettingsPanel: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
       HStack(spacing: 12) {
-        Image(systemName: "slider.horizontal.3").font(.system(size: 19, weight: .medium))
-          .foregroundStyle(Color(nsColor: StudioTheme.accent))
-          .frame(width: 40, height: 40)
-          .background(Color(nsColor: StudioTheme.selection), in: RoundedRectangle(cornerRadius: 10))
-          .accessibilityHidden(true)
-        VStack(alignment: .leading, spacing: 3) {
-          Text("Ayarlar").font(.system(size: 21, weight: .semibold))
-          Text("MSSQL Studio’yu çalışma biçiminize göre düzenleyin.").font(.callout).foregroundStyle(.secondary)
-        }
+        StudioPanelHeading(title:"Ayarlar",icon:"slider.horizontal.3",subtitle:"Çalışma ortamı ve uygulama tercihleri")
         Spacer()
         Button {selectedTab = .workspace;expandedCards.insert("Nesne tanım indeksi")} label: {
           VStack(alignment:.trailing,spacing:3) {
@@ -126,7 +119,13 @@ struct SettingsPanel: View {
               fontDetail("SQL editörü", value: "\(StudioTheme.codeFont.familyName ?? "Monospace") · 13 pt", icon: "curlybraces")
               fontDetail("Arayüz", value: "Sistem · 12 pt", icon: "textformat.size")
             }
-            settingsNote("Açık ve koyu temalarda SSMS sözdizimi renk kategorileri korunur.", icon: "checkmark.circle")
+            StudioFormField("Explorer satırları") {
+              Picker("Explorer satır yoğunluğu",selection:$explorerDensity) {
+                ForEach(ExplorerDensity.allCases,id:\.self) {Text($0.title).tag($0)}
+              }.labelsHidden().pickerStyle(.segmented).frame(maxWidth:240).id("explorerDensity")
+                .accessibilityIdentifier("settingsExplorerDensity")
+            }
+            settingsNote("Satır yoğunluğu Uygula ile değişir; ağaç seçimi ve açık dallar korunur.", icon: "list.bullet")
           }
         }
         settingsPage(.editor, subtitle: "Tamamlama, doğrulama ve yazım yardımcıları.") {
@@ -432,6 +431,8 @@ struct SettingsPanel: View {
           guard await definitionStorage.apply() else {message=definitionStorage.error;return}
           if source.isEmpty {UserDefaults.standard.removeObject(forKey:"githubUpdateRepository")}
           else {UserDefaults.standard.set(updateRepository,forKey:"githubUpdateRepository")}
+          UserDefaults.standard.set(explorerDensity.rawValue,forKey:ExplorerDensity.key)
+          NotificationCenter.default.post(name:ExplorerDensity.changed,object:nil)
           StudioTheme.apply(theme)
           UserDefaults.standard.set(completion,forKey:"sqlAutomaticCompletion")
           UserDefaults.standard.set(Int(completionDelay),forKey:SQLEditorPreferences.completionDelayKey)

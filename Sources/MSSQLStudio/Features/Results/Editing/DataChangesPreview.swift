@@ -21,8 +21,8 @@ struct DataChangesPreview: View {
       }.padding(.horizontal,4)
       SQLReadOnlyPreview(sql: sql)
         .clipShape(RoundedRectangle(cornerRadius:8))
-        .overlay(RoundedRectangle(cornerRadius:8).stroke(Color(nsColor:StudioTheme.border),lineWidth:1))
-      if !message.isEmpty { Text(message).foregroundStyle(completed ? Color.green : Color.red).textSelection(.enabled) }
+        .overlay(RoundedRectangle(cornerRadius:8).stroke(Color(nsColor:StudioTheme.border),lineWidth:1).allowsHitTesting(false))
+      StudioFeedback(message:message,tone:completed ? .success:.error)
       HStack {
         if sending { ProgressView().controlSize(.small) }
         Spacer()
@@ -35,7 +35,7 @@ struct DataChangesPreview: View {
           }
         }.buttonStyle(StudioPrimaryButton()).disabled(sending || completed || !message.isEmpty)
       }
-    }.padding(24).studioPanel()
+    }.padding(StudioMetrics.gap).studioPanel()
   }
 }
 

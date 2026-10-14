@@ -158,6 +158,7 @@ import SwiftUI
     submitModuleButton.setAccessibilityIdentifier("submitModule")
     submitModuleButton.isHidden=document.moduleOriginal == nil
     submitModuleButton.isEnabled=document.canSubmitModule
+    favoriteButton.flat=true
     favoriteButton.tracksActiveState=true;editDataButton.tracksActiveState=true;autoRefreshButton.tracksActiveState=true
     favoriteButton.target=self;favoriteButton.action=#selector(addQueryFavorite)
     favoriteButton.setAccessibilityIdentifier("queryFavorite")
@@ -212,6 +213,7 @@ import SwiftUI
     let messageScroll = NSScrollView()
     messageScroll.documentView = messages
     messageScroll.hasVerticalScroller = true
+    messageScroll.autohidesScrollers=true;messageScroll.scrollerStyle = .overlay;messageScroll.borderType = .noBorder
     messages.frame = NSRect(x: 0, y: 0, width: 600, height: 300)
     messages.autoresizingMask = [.width]
     messages.isVerticallyResizable = true
@@ -268,6 +270,7 @@ import SwiftUI
     }
     dataActionsBar.setViews([addRowButton, cloneRowButton, deleteRowButton, undoRowButton, nullDataButton], in: .leading)
     dataActionsBar.spacing = 3
+    for button in [refreshButton,autoRefreshButton,columnSearchButton,copyHeadersButton,editDataButton,addRowButton,cloneRowButton,deleteRowButton,undoRowButton,nullDataButton,cancelExport] {button.flat=true}
     dataActionsBar.setAccessibilityIdentifier("gridDataActions")
     addRowButton.toolTip = "Yeni satır ekle · Değer girilmeyen alanlar DEFAULT kullanır"
     cloneRowButton.toolTip = "Seçili satırı çoğalt · Anahtar ve üretilen alanlar kopyalanmaz"
@@ -301,7 +304,7 @@ import SwiftUI
     resultStrip.setAccessibilityIdentifier("resultTabStrip")
     StudioTheme.resultSurface(stripScroll)
     stripScroll.documentView = resultStrip
-    stripScroll.hasHorizontalScroller = true; stripScroll.autohidesScrollers = true
+    stripScroll.hasHorizontalScroller = true; stripScroll.autohidesScrollers = true; stripScroll.scrollerStyle = .overlay
     resultStrip.translatesAutoresizingMaskIntoConstraints = false
     resultPane.addSubview(stripScroll)
     stripScroll.translatesAutoresizingMaskIntoConstraints = false

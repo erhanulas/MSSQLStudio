@@ -23,7 +23,7 @@ extension WorkbenchController {
           state.newQuery(
             server: server, database: record.database, text: record.text,
             title: "History · \(record.time.formatted())")
-        },insert:{[weak self,weak document] record in guard let self else {return};try insertSavedSQL(record.text,into:document)}), title: "History — Sorgu ve Sekme Geçmişi", width: 1120, height: 760, minWidth: 1000, minHeight: 650, identity: "studio.timeline")
+        },insert:{[weak self,weak document] record in guard let self else {return};try insertSavedSQL(record.text,into:document)}), title: "History — Sorgu ve Sekme Geçmişi", width: 1120, height: 760, minWidth: 820, minHeight: 560, identity: "studio.timeline")
   }
   func showAIWindow() {
     present(
@@ -32,7 +32,7 @@ extension WorkbenchController {
         open: { [weak self] sql in
           guard let self, let server = selectedServer else { return }
           state.newQuery(server: server, database: selectedDatabase, text: sql, title: "AI Önerisi")
-        }), title: "SQL Assistant", width: 820, height: 720)
+        }), title: "SQL Assistant", width: 820, height: 720, minWidth:620, minHeight:600)
   }
   func showExtensionsWindow() {
     present(
@@ -56,7 +56,7 @@ extension WorkbenchController {
           self?.state.newQuery(
             server: node.server, database: node.database, text: sql,
             title: "Create Index · \(item.name)")
-        }), title: "Index Designer — \(item.qualified)", width: 760, height: 620)
+        }), title: "Index Designer — \(item.qualified)", width: 760, height: 620, minWidth:620, minHeight:560)
   }
   func showJobWindow(node: TreeNode?) {
     guard let node else { return }
@@ -66,6 +66,6 @@ extension WorkbenchController {
         open: { [weak self] sql in
           self?.state.newQuery(
             server: node.server, database: "msdb", text: sql, title: "New SQL Agent Job")
-        }), title: "SQL Server Agent — New Job", width: 760, height: 620)
+        }), title: "SQL Server Agent — New Job", width: 760, height: 620, minWidth:620, minHeight:560)
   }
 }

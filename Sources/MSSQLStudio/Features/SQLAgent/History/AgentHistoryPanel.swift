@@ -39,7 +39,7 @@ struct AgentHistoryPanel:View {
       TextField("Yüklenen çalışmalarda iş, adım veya mesaj ara",text:$search).textFieldStyle(.roundedBorder).accessibilityIdentifier("agentHistorySearch")
       Text("Filtre: \(days) gün · \(status < 0 ? "Tüm sonuçlar":"Seçili iş sonucu") · \(tree.count) çalışma. Durum filtresi iş sonucuna uygulanır; alt adımlar kendi sonuçlarıyla gösterilir.").font(.caption).foregroundStyle(.secondary)
       if loading {HStack {ProgressView().controlSize(.small);Text("Geçmiş yükleniyor… Önceki sonuçlar yükleme bitene kadar korunur.").font(.caption)}}
-      if !error.isEmpty {Text(error).foregroundStyle(.red).textSelection(.enabled)}
+      if !error.isEmpty {StudioFeedback(message:error)}
       VSplitView {
         Table(tree,children:\.children,selection:$selected) {
           TableColumn("Çalışma / Adım") {row in
@@ -47,7 +47,7 @@ struct AgentHistoryPanel:View {
           }.width(min:180,ideal:290)
           TableColumn("Durum") {AgentStatus(status:$0.status)}.width(110)
           TableColumn("Başlangıç",value:\.started).width(165)
-          TableColumn("Süre",value:\.duration).width(85)
+          TableColumn("Süre") {Text($0.duration).monospacedDigit().frame(maxWidth:.infinity,alignment:.trailing)}.width(85)
           TableColumn("Tekrar") {Text("\($0.retries)")}.width(55)
           TableColumn("Mesaj",value:\.message).width(min:180,ideal:320)
         }.frame(minHeight:180,idealHeight:350).accessibilityIdentifier("agentHistoryTable")
@@ -64,12 +64,12 @@ struct AgentHistoryPanel:View {
               }.textSelection(.enabled).padding(12)
             }
           } else {
-            ScrollView {Text(rows.isEmpty && !loading ? "Bu filtreye uygun geçmiş kaydı yok.":(steps ? "İşin yanındaki oku açarak adımları görün; mesajın tamamını okumak için bir kayıt seçin.":"Bir çalışma seçerek mesajı okuyun; adımlar için Adım ayrıntıları seçeneğini açın.")).foregroundStyle(.secondary).frame(maxWidth:.infinity,minHeight:196,alignment:.center)}
+            ScrollView {Text(rows.isEmpty && !loading ? "Bu filtreye uygun geçmiş kaydı yok.":(steps ? "İşin yanındaki oku açarak adımları görün; mesajın tamamını okumak için bir kayıt seçin.":"Bir çalışma seçerek mesajı okuyun; adımlar için Adım ayrıntıları seçeneğini açın.")).foregroundStyle(.secondary).frame(maxWidth:.infinity,minHeight:116,alignment:.center)}
           }
-        }.frame(minHeight:220,idealHeight:220,maxHeight:400).background(Color(nsColor:StudioTheme.canvas))
+        }.frame(minHeight:140,idealHeight:220).background(Color(nsColor:StudioTheme.canvas))
       }
       Text(rows.count >= 5001 ? "5.000 kayıt sınırına ulaşıldı; en eski çalışmanın adımları eksik olabilir. Tarih filtresini daraltın.":"En yeni 500 tamamlanmış çalışma · Sunucunun yerel saati. Devam eden işleri Job Activity Monitor’den izleyin; geçmiş, adımlar tamamlandıkça oluşur.").font(.caption).foregroundStyle(.secondary)
-    }.padding(20).studioPanel().task(id:"\(generation)|\(status)|\(days)|\(steps)") {
+    }.padding(StudioMetrics.gap).studioPanel().task(id:"\(generation)|\(status)|\(days)|\(steps)") {
       let token=UUID();requestID=token;loading=true;error=""
       defer {if requestID == token {loading=false}}
       do {

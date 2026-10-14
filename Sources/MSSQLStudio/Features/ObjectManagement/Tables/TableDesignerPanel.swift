@@ -23,7 +23,7 @@ struct TableDesignerPanel: View {
   var body:some View {
     VStack(alignment:.leading,spacing:12) {
       StudioPanelHeading(title:load == nil ? "New Table" : "Table Designer",icon:"tablecells",subtitle:server+" · "+database)
-      VStack(alignment:.leading,spacing:10) { StudioFormField("Şema") {TextField("Şema",text:$schema).disabled(load != nil)}; StudioFormField("Tablo adı") {TextField("Tablo adı",text:$name).disabled(load != nil)}; Text("\(columns.count) kolon").foregroundStyle(.secondary) }
+      VStack(alignment:.leading,spacing:10) { StudioFormField("Şema") {TextField("Şema",text:$schema).disabled(load != nil)}; StudioFormField("Tablo adı") {TextField("Tablo adı",text:$name).disabled(load != nil)}; Text("\(columns.count) kolon").font(.caption).foregroundStyle(.secondary) }.studioCard()
       if !ready { ProgressView("Metadata yükleniyor…") }
       TabView(selection:$tab) {
         columnEditor.tag("columns").tabItem { Label("Columns",systemImage:"tablecells") }
@@ -31,15 +31,15 @@ struct TableDesignerPanel: View {
           StructureObjectsPanel(table:original,initialKind:initialKind,open:open).tag("management").tabItem { Label("Keys / Indexes / Relationships",systemImage:"link") }
         }
       }
-      if !error.isEmpty { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+      if !error.isEmpty { StudioFeedback(message:error) }
       HStack {
         StudioActionButton("Değişiklik Scripti Oluştur", icon:"doc.badge.gearshape", tint:.accentColor) { generate() }.disabled(!ready)
         StudioActionButton("SQL Editöründe İncele", icon:"doc.text.magnifyingglass", tint:.accentColor) { generate(); if !preview.isEmpty { open(preview) } }.disabled(!ready)
         Spacer()
         Text("Bağımlı nesneler varsa SQL Server değişikliği reddedebilir; otomatik tablo rebuild yapılmaz.").font(.caption).foregroundStyle(.secondary)
       }
-      if !preview.isEmpty { ScrollView { Text(preview).font(.custom(StudioTheme.codeFont.fontName,size:12)).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading) }.frame(height:130) }
-    }.padding(18).studioPanel().task {
+      if !preview.isEmpty { SQLReadOnlyPreview(sql:preview).frame(minHeight:90,idealHeight:130,maxHeight:180) }
+    }.padding(StudioMetrics.gap).studioPanel().task {
       do {
         if let load { let table=try await load(); original=table; schema=table.schema; name=table.name; columns=table.columns; primary=Set(table.columns.filter { table.primaryKey.contains($0.name) }.map(\.id)) }
         if !initialKind.isEmpty { tab="management" }

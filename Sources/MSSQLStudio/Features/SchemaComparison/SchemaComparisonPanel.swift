@@ -464,7 +464,7 @@ struct SchemaComparisonPanel: View {
         details.frame(minHeight:370,idealHeight:500)
       }
       footer
-    }.padding(14).studioPanel().controlSize(.small)
+    }.padding(StudioMetrics.gap).studioPanel().controlSize(.small)
       .task(id:model.focused) {await model.loadDetail()}
   }
   private var controls:some View {

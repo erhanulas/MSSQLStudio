@@ -140,22 +140,24 @@ struct DatabaseFilesPanel:View {
           .font(.system(size:11)).foregroundStyle(Color(nsColor:model.error.isEmpty ? StudioTheme.warning:StudioTheme.danger))
           .lineLimit(2).studioHelp(notices.joined(separator:"\n")).textSelection(.enabled)
       }
-      Table(model.filtered,selection:Binding(get:{model.selectedID},set:{model.select($0)})) {
-        TableColumn("Veritabanı") {Text($0.database ?? "Kimlik \($0.databaseID)").lineLimit(1)}.width(min:100,ideal:135,max:180)
-        TableColumn("Dosya") {file in Label(file.name,systemImage:file.type == "LOG" ? "doc.text":"internaldrive").lineLimit(1).studioHelp(file.name)}.width(min:120,ideal:180,max:320)
-        TableColumn("Tür") {file in Text(DatabaseFileFormat.type(file.type)).foregroundStyle(file.id == model.selectedID ? .primary:.secondary)}.width(76)
-        TableColumn("Boyut") {Text(DatabaseFileFormat.pages($0.sizePages)).monospacedDigit()}.width(96)
-        TableColumn("Otomatik büyüme") {Text(DatabaseFileFormat.growth($0)).monospacedDigit()}.width(125)
-        TableColumn("Durum") {file in Text(file.state ?? "—").foregroundStyle(file.id == model.selectedID ? Color.primary:Color(nsColor:file.state == "ONLINE" ? StudioTheme.success:StudioTheme.warning))}.width(100)
-      }.frame(minHeight:150,maxHeight:.infinity).accessibilityIdentifier("filesTable")
-      detail
+      VSplitView {
+        Table(model.filtered,selection:Binding(get:{model.selectedID},set:{model.select($0)})) {
+          TableColumn("Veritabanı") {Text($0.database ?? "Kimlik \($0.databaseID)").lineLimit(1)}.width(min:100,ideal:135,max:180)
+          TableColumn("Dosya") {file in Label(file.name,systemImage:file.type == "LOG" ? "doc.text":"internaldrive").lineLimit(1).studioHelp(file.name)}.width(min:120,ideal:180,max:320)
+          TableColumn("Tür") {file in Text(DatabaseFileFormat.type(file.type)).foregroundStyle(file.id == model.selectedID ? .primary:.secondary)}.width(76)
+          TableColumn("Boyut") {Text(DatabaseFileFormat.pages($0.sizePages)).monospacedDigit()}.width(96)
+          TableColumn("Otomatik büyüme") {Text(DatabaseFileFormat.growth($0)).monospacedDigit()}.width(125)
+          TableColumn("Durum") {file in Text(file.state ?? "—").foregroundStyle(file.id == model.selectedID ? Color.primary:Color(nsColor:file.state == "ONLINE" ? StudioTheme.success:StudioTheme.warning))}.width(100)
+        }.frame(minHeight:150,maxHeight:.infinity).accessibilityIdentifier("filesTable")
+        detail.frame(minHeight:110,idealHeight:150)
+      }
       HStack {
         Image(systemName:"info.circle").foregroundStyle(.secondary)
         Text("Boyutlar mantıksal tahsistir; disk boş alanını göstermez. Kullanım yalnız seçili veritabanından okunur.").lineLimit(1).studioHelp("tempdb ve FILESTREAM boyutları envanterde bilinmiyor olarak gösterilir; seçildiğinde sys.database_files üzerinden güncel değer okunur. Snapshot boyutu azami mantıksal tahsistir.")
         Spacer(minLength:0)
         if let time=model.sampledAt {Text(time,style:.time).monospacedDigit().studioHelp("Envanterin son başarılı yenilenme zamanı")}
       }.font(.system(size:10)).foregroundStyle(.secondary)
-    }.padding(18).studioPanel()
+    }.padding(StudioMetrics.gap).studioPanel()
       .background(MonitorVisibilityProbe {visible=$0;model.setVisible($0)})
       .onChange(of:model.databaseFilter) {_,_ in model.filterChanged()}
       .onChange(of:model.search) {_,_ in model.filterChanged()}
@@ -185,8 +187,8 @@ struct DatabaseFilesPanel:View {
       }
       Spacer(minLength:0)
     }.padding(12).frame(maxWidth:.infinity,alignment:.leading)
-      .background(Color(nsColor:StudioTheme.canvas),in:RoundedRectangle(cornerRadius:10))
-      .overlay(RoundedRectangle(cornerRadius:10).stroke(Color(nsColor:StudioTheme.border)))
+      .background(Color(nsColor:StudioTheme.canvas),in:RoundedRectangle(cornerRadius:StudioMetrics.cardRadius))
+      .overlay(RoundedRectangle(cornerRadius:StudioMetrics.cardRadius).stroke(Color(nsColor:StudioTheme.border)).allowsHitTesting(false))
   }
   @ViewBuilder private var detail:some View {
     if let file=model.selected {
@@ -216,11 +218,11 @@ struct DatabaseFilesPanel:View {
             .font(.system(size:10)).foregroundStyle(.secondary).lineLimit(1)
         }
         Text(file.path ?? "Fiziksel yol bilgisi okunamadı.").font(.system(size:10,design:.monospaced)).lineLimit(2).textSelection(.enabled).studioHelp(file.path ?? "Fiziksel yol bilinmiyor")
-      }.padding(12).background(Color(nsColor:StudioTheme.canvas),in:RoundedRectangle(cornerRadius:10))
-        .overlay(RoundedRectangle(cornerRadius:10).stroke(Color(nsColor:StudioTheme.border))).accessibilityIdentifier("filesDetail")
+      }.padding(12).background(Color(nsColor:StudioTheme.canvas),in:RoundedRectangle(cornerRadius:StudioMetrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius:StudioMetrics.cardRadius).stroke(Color(nsColor:StudioTheme.border)).allowsHitTesting(false)).accessibilityIdentifier("filesDetail")
     } else {
       HStack {Image(systemName:"cursorarrow.click").foregroundStyle(.secondary);Text(model.loading ? "Dosya envanteri okunuyor…":"Ayrıntısını görmek için bir dosya seçin.").foregroundStyle(.secondary);Spacer()}
-        .padding(16).frame(height:118).background(Color(nsColor:StudioTheme.canvas),in:RoundedRectangle(cornerRadius:10))
+        .padding(12).frame(maxHeight:.infinity).background(Color(nsColor:StudioTheme.canvas),in:RoundedRectangle(cornerRadius:StudioMetrics.cardRadius))
     }
   }
   private func detailMetric(_ title:String,_ value:String) -> some View {

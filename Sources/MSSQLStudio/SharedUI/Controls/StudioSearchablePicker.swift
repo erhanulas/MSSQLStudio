@@ -4,17 +4,41 @@ import SwiftUI
 /// Retains NSPopUpButton selection/target-action API; searching never changes selection.
 @MainActor final class StudioSearchablePopUpButton:NSPopUpButton {
   private let popup=NSPopover()
+  private var hoverArea:NSTrackingArea?
+  private var hovered=false
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    if let hoverArea {removeTrackingArea(hoverArea)}
+    let area=NSTrackingArea(rect:.zero,options:[.mouseEnteredAndExited,.activeInKeyWindow,.inVisibleRect],owner:self)
+    addTrackingArea(area);hoverArea=area
+  }
+  override func mouseEntered(with event:NSEvent) {hovered=true;needsDisplay=true;StudioHoverHelp.shared.schedule(for:self)}
+  override func mouseExited(with event:NSEvent) {hovered=false;needsDisplay=true;StudioHoverHelp.shared.hide(for:self)}
   var leadingSymbol:String? {didSet {needsDisplay=true}}
-  override init(frame:NSRect = .zero,pullsDown:Bool = false) {super.init(frame:frame,pullsDown:pullsDown);font = .systemFont(ofSize:13);isBordered=false}
+  override init(frame:NSRect = .zero,pullsDown:Bool = false) {super.init(frame:frame,pullsDown:pullsDown);font = .systemFont(ofSize:StudioMetrics.bodyFont);isBordered=false;setContentHuggingPriority(.required,for:.vertical);setContentCompressionResistancePriority(.required,for:.vertical)}
   required init?(coder:NSCoder) {super.init(coder:coder)}
+  override var intrinsicContentSize:NSSize {
+    let text=(titleOfSelectedItem ?? "") as NSString
+    let width=text.size(withAttributes:[.font:NSFont.systemFont(ofSize:StudioMetrics.bodyFont)]).width
+    return NSSize(width:min(280,max(120,width+(leadingSymbol == nil ? 36:56))),height:StudioMetrics.controlHeight)
+  }
+  static func choicesSize(_ values:[String],searching:Bool=false)->NSSize {
+    let font=NSFont.systemFont(ofSize:StudioMetrics.bodyFont)
+    let width=values.reduce(CGFloat(0)) {max($0,($1 as NSString).size(withAttributes:[.font:font]).width)}
+    return NSSize(width:min(360,max(160,width+36)),height:min(360,max(44,CGFloat(values.count)*StudioMetrics.choiceRowHeight+12)+(searching ? 28:0)))
+  }
   override func draw(_ dirtyRect:NSRect) {
+    if isEnabled && hovered {
+      StudioTheme.accent.withAlphaComponent(0.06).setFill()
+      NSBezierPath(roundedRect:bounds.insetBy(dx:1,dy:1),xRadius:StudioMetrics.controlRadius,yRadius:StudioMetrics.controlRadius).fill()
+    }
     let color=isEnabled ? StudioTheme.text:StudioTheme.muted.withAlphaComponent(0.5)
     let paragraph=NSMutableParagraphStyle();paragraph.lineBreakMode = .byTruncatingMiddle
     let left:CGFloat=leadingSymbol == nil ? 8:28
     if let leadingSymbol,let image=NSImage(systemSymbolName:leadingSymbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(paletteColors:[StudioTheme.accent])) {
       image.draw(in:NSRect(x:7,y:(bounds.height-16)/2,width:16,height:16))
     }
-    NSAttributedString(string:titleOfSelectedItem ?? "",attributes:[.font:NSFont.systemFont(ofSize:13),.foregroundColor:color,.paragraphStyle:paragraph])
+    NSAttributedString(string:titleOfSelectedItem ?? "",attributes:[.font:NSFont.systemFont(ofSize:StudioMetrics.bodyFont),.foregroundColor:color,.paragraphStyle:paragraph])
       .draw(in:NSRect(x:left,y:(bounds.height-17)/2,width:max(0,bounds.width-left-24),height:17))
     NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:9,weight:.medium))?
       .withSymbolConfiguration(.init(paletteColors:[StudioTheme.muted]))?.draw(in:NSRect(x:bounds.width-18,y:(bounds.height-10)/2,width:10,height:10))
@@ -29,7 +53,7 @@ import SwiftUI
     if itemTitles != titles {invalidateChoices();removeAllItems();addItems(withTitles:titles)}
     if titleOfSelectedItem != selected {invalidateChoices();selectItem(withTitle:selected ?? "")}
     if isEnabled && !enabled {invalidateChoices()}
-    isEnabled=enabled;needsDisplay=true
+    isEnabled=enabled;invalidateIntrinsicContentSize();needsDisplay=true
   }
   func invalidateChoices() {choicesRevision=UUID();popup.close()}
   private(set) var choices:StudioSearchableChoices?
@@ -50,10 +74,13 @@ import SwiftUI
       if let action {_ = sendAction(action,to:target)}
     }
     controller.dismiss={ [weak self] in self?.popup.close() }
-    controller.searchActivated={ [weak self] in guard let self,popup.isShown else {return};popup.contentSize.height=min(420,popup.contentSize.height+30) }
+    controller.searchActivated={ [weak self] in guard let self,popup.isShown else {return};popup.contentSize=Self.choicesSize(values,searching:true) }
     choices=controller;popup.behavior = .transient;popup.animates=false
-    popup.contentViewController=controller;popup.contentSize=NSSize(width:max(260,min(420,bounds.width)),height:min(420,max(80,CGFloat(values.count)*32+16)))
+    popup.contentViewController=controller;popup.contentSize=Self.choicesSize(values)
+    (window as? StudioPanelWindow)?.activePopover=popup
     popup.show(relativeTo:bounds,of:self,preferredEdge:.maxY)
+    controller.view.layoutSubtreeIfNeeded()
+    controller.table.scrollRowToVisible(controller.table.selectedRow)
     popup.contentViewController?.view.window?.makeKey()
     popup.contentViewController?.view.window?.makeFirstResponder(controller.table)
   }
@@ -95,24 +122,25 @@ import SwiftUI
     view.layer?.backgroundColor=StudioTheme.canvas.cgColor
     search.placeholderString="Ara…";search.delegate=self;search.setAccessibilityLabel("Seçeneklerde ara")
     search.translatesAutoresizingMaskIntoConstraints=false;search.isHidden=true
-    table.addTableColumn(NSTableColumn(identifier:.init("choice")));table.headerView=nil;table.rowHeight=30
-    table.intercellSpacing=NSSize(width:0,height:2);table.selectionHighlightStyle = .regular
+    table.style = .plain
+    table.addTableColumn(NSTableColumn(identifier:.init("choice")));table.headerView=nil;table.rowHeight=StudioMetrics.choiceRowHeight
+    table.intercellSpacing=NSSize(width:0,height:0);table.selectionHighlightStyle = .regular
     table.frame=NSRect(x:0,y:0,width:280,height:0);table.autoresizingMask=[.width];table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
-    table.dataSource=self;table.delegate=self;table.target=self;table.action=#selector(commit)
+    table.dataSource=self;table.delegate=self;table.target=self;table.action=#selector(clickedChoice)
     table.backgroundColor=StudioTheme.canvas;table.setAccessibilityLabel("Seçenekler")
     table.handleKey={ [weak self] event in self?.handle(event) ?? false }
     let scroll=NSScrollView();scroll.documentView=table;scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true;scroll.scrollerStyle = .overlay;scroll.borderType = .noBorder;scroll.translatesAutoresizingMaskIntoConstraints=false
-    scroll.drawsBackground=false
+    scroll.drawsBackground=false;scroll.automaticallyAdjustsContentInsets=false;scroll.contentInsets = .init(top:0,left:0,bottom:0,right:0);scroll.scrollerInsets = .init(top:0,left:0,bottom:0,right:0)
     view.addSubview(search);view.addSubview(scroll)
     emptyLabel.textColor=StudioTheme.muted;emptyLabel.font = .systemFont(ofSize:12);emptyLabel.isHidden = !values.isEmpty
     emptyLabel.translatesAutoresizingMaskIntoConstraints=false;view.addSubview(emptyLabel)
     NSLayoutConstraint.activate([emptyLabel.centerXAnchor.constraint(equalTo:scroll.centerXAnchor),emptyLabel.centerYAnchor.constraint(equalTo:scroll.centerYAnchor)])
     searchHeight=search.heightAnchor.constraint(equalToConstant:0)
-    NSLayoutConstraint.activate([search.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:10),search.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-10),search.topAnchor.constraint(equalTo:view.topAnchor,constant:6),searchHeight!,scroll.topAnchor.constraint(equalTo:search.bottomAnchor,constant:2),scroll.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:5),scroll.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-5),scroll.bottomAnchor.constraint(equalTo:view.bottomAnchor,constant:-6)])
+    NSLayoutConstraint.activate([search.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:10),search.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-10),search.topAnchor.constraint(equalTo:view.topAnchor,constant:6),searchHeight!,scroll.topAnchor.constraint(equalTo:search.bottomAnchor,constant:0),scroll.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:5),scroll.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-5),scroll.bottomAnchor.constraint(equalTo:view.bottomAnchor,constant:-6)])
   }
   func beginSearch(_ seed:String) {
     let first=search.isHidden
-    search.isHidden=false;searchHeight?.constant=26
+    search.isHidden=false;searchHeight?.constant=28
     if first {searchActivated?()}
     view.layoutSubtreeIfNeeded();search.stringValue=seed;filter(seed)
     view.window?.makeFirstResponder(search)
@@ -134,7 +162,7 @@ import SwiftUI
     filtered=values.filter {query.isEmpty || $0.localizedStandardContains(query)}
     emptyLabel.isHidden = !filtered.isEmpty
     table.reloadData();table.deselectAll(nil)
-    if !filtered.isEmpty {table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)}
+    if !filtered.isEmpty {table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false);table.scrollRowToVisible(0)}
   }
   func controlTextDidChange(_ obj:Notification) {filter(search.stringValue)}
   func move(_ delta:Int) {
@@ -149,13 +177,14 @@ import SwiftUI
     if selector == #selector(NSResponder.moveUp(_:)) {move(-1);return true}
     return false
   }
+  @objc private func clickedChoice() {guard table.clickedRow>=0 else {return};commit()}
   @objc func commit() {guard filtered.indices.contains(table.selectedRow) else {return};let value=filtered[table.selectedRow];dismiss?();accept(value)}
   func numberOfRows(in tableView:NSTableView)->Int {filtered.count}
   func tableView(_ tableView:NSTableView,rowViewForRow row:Int)->NSTableRowView? {StudioChoiceRow()}
   func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int)->NSView? {
-    let cell=NSTextField(labelWithString:filtered[row]);cell.font = .systemFont(ofSize:14);cell.textColor=StudioTheme.text;cell.lineBreakMode = .byTruncatingMiddle
+    let cell=NSTextField(labelWithString:filtered[row]);cell.font = .systemFont(ofSize:StudioMetrics.bodyFont);cell.textColor=StudioTheme.text;cell.lineBreakMode = .byTruncatingMiddle
     let host=NSView();host.addSubview(cell);cell.translatesAutoresizingMaskIntoConstraints=false
-    NSLayoutConstraint.activate([cell.leadingAnchor.constraint(equalTo:host.leadingAnchor,constant:12),cell.trailingAnchor.constraint(equalTo:host.trailingAnchor,constant:-12),cell.centerYAnchor.constraint(equalTo:host.centerYAnchor)])
+    NSLayoutConstraint.activate([cell.leadingAnchor.constraint(equalTo:host.leadingAnchor,constant:10),cell.trailingAnchor.constraint(equalTo:host.trailingAnchor,constant:-10),cell.centerYAnchor.constraint(equalTo:host.centerYAnchor)])
     return host
   }
 }
@@ -165,7 +194,7 @@ struct StudioSearchablePicker:NSViewRepresentable {
   let values:[String]
   var emptyTitle="Veritabanı seçin"
   @Binding var selection:String
-  final class Coordinator:NSObject {
+  @MainActor final class Coordinator:NSObject {
     var parent:StudioSearchablePicker
     init(_ parent:StudioSearchablePicker) {self.parent=parent}
     @objc func changed(_ sender:NSPopUpButton) {if let value=sender.titleOfSelectedItem {parent.selection=sender.selectedItem?.representedObject as? String ?? value}}
@@ -174,6 +203,11 @@ struct StudioSearchablePicker:NSViewRepresentable {
   func makeCoordinator()->Coordinator {Coordinator(self)}
   func makeNSView(context:Context)->StudioSearchablePopUpButton {
     let button=StudioSearchablePopUpButton();button.target=context.coordinator;button.action=#selector(Coordinator.changed(_:));return button
+  }
+  // An unconstrained NSViewRepresentable otherwise accepts the entire available
+  // height, turning whitespace into an invisible popup button (notably History).
+  func sizeThatFits(_ proposal:ProposedViewSize,nsView:StudioSearchablePopUpButton,context:Context)->CGSize? {
+    CGSize(width:min(280,max(100,proposal.width ?? nsView.intrinsicContentSize.width)),height:StudioMetrics.controlHeight)
   }
   func updateNSView(_ button:StudioSearchablePopUpButton,context:Context) {
     context.coordinator.parent=self

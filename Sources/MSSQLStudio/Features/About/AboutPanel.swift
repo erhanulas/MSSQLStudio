@@ -36,17 +36,17 @@ struct AboutPanel: View {
   }
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      HStack(spacing: 16) {
-        Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 68, height: 68)
+      HStack(spacing: StudioMetrics.gap) {
+        Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 44, height: 44)
         VStack(alignment: .leading, spacing: 5) {
-          Text("MSSQL Studio").font(.system(size: 24, weight: .semibold))
+          Text("MSSQL Studio").font(.system(size: 20, weight: .semibold))
           Text("SQL Server için native macOS çalışma alanı").foregroundStyle(.secondary)
           Text("Sürüm \(identity.version) · Derleme \(identity.build)")
             .font(.system(size: 13, weight: .medium, design: .monospaced))
             .textSelection(.enabled).accessibilityIdentifier("aboutVersion")
         }
         Spacer()
-      }.padding(24)
+      }.padding(StudioMetrics.inset)
       Divider()
       HStack(alignment: .top, spacing: 0) {
         VStack(alignment: .leading, spacing: 10) {
@@ -62,10 +62,10 @@ struct AboutPanel: View {
         }.padding(16).frame(width: 158).background(Color(nsColor: StudioTheme.panel))
         Divider()
         ScrollView {
-          VStack(alignment: .leading, spacing: 16) {
+          VStack(alignment: .leading, spacing: StudioMetrics.gap) {
             if let note = history.first(where: { $0.version == selection }) {
               VStack(alignment: .leading, spacing: 6) {
-                Text(note.title).font(.system(size: 19, weight: .semibold))
+                Text(note.title).font(.system(size: StudioMetrics.headingFont, weight: .semibold))
                 Text("\(note.version) · \(note.date)").foregroundStyle(.secondary)
               }
               ForEach(Array(note.changes.enumerated()), id: \.offset) { _, change in
@@ -78,7 +78,7 @@ struct AboutPanel: View {
               Text("Bu sürümün değişiklik notları bulunamadı.").font(.headline)
               Text(loadError ?? "Tam sürüm geçmişini GitHub yayınlarından inceleyebilirsiniz.").foregroundStyle(.secondary)
             }
-          }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
+          }.padding(StudioMetrics.inset).frame(maxWidth: .infinity, alignment: .leading)
         }.accessibilityIdentifier("aboutReleaseNotes")
       }.frame(maxWidth: .infinity, maxHeight: .infinity)
       Divider()
@@ -86,9 +86,9 @@ struct AboutPanel: View {
         Link("GitHub Yayınları ↗", destination: repositoryURL).studioHelp("Tüm yayımlanmış sürümleri GitHub'da aç")
         Spacer()
         StudioActionButton("Güncellemeleri Kontrol Et", icon:"arrow.down.circle", tint:.accentColor, action: checkUpdates)
-      }.padding(.horizontal, 24).padding(.vertical, 16)
+      }.padding(.horizontal, StudioMetrics.inset).padding(.vertical, StudioMetrics.small)
       Text("Değişiklik notları uygulamayla birlikte gelir; çevrimdışı okunabilir.")
-        .font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 24).padding(.bottom, 16)
+        .font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, StudioMetrics.inset).padding(.bottom, StudioMetrics.small)
     }.studioPanel()
   }
   private func versionButton(_ version: String, current: Bool) -> some View {

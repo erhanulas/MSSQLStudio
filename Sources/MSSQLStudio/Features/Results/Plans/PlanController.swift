@@ -28,10 +28,11 @@ final class PlanController: NSViewController, NSOutlineViewDataSource, NSOutline
     view = NSView()
     tree.dataSource = self
     tree.delegate = self
-    tree.rowHeight = 28
+    tree.style = .plain
+    tree.rowHeight = 24
     tree.backgroundColor = StudioTheme.canvas
-    tree.gridColor = StudioTheme.border
     tree.gridStyleMask = [.solidHorizontalGridLineMask]
+    tree.gridColor = StudioTheme.resultBorder
     tree.usesAlternatingRowBackgroundColors = false
     for (id, title, width) in [
       ("operation", "Operator", 330.0), ("estimated", "Estimated Rows", 140.0),
@@ -51,14 +52,16 @@ final class PlanController: NSViewController, NSOutlineViewDataSource, NSOutline
     scroll.documentView = tree
     scroll.hasVerticalScroller = true
     scroll.hasHorizontalScroller = true
+    scroll.autohidesScrollers = true; scroll.scrollerStyle = .overlay; scroll.borderType = .noBorder
     let label = NSTextField(
       labelWithString: plan.operations.isEmpty
         ? "SQL Server Execution Plan — Bu sorgu için operatör yok" : "SQL Server Execution Plan")
     label.font = .systemFont(ofSize: 12, weight: .semibold)
-    let button = NSButton(title: "Save .sqlplan…", target: self, action: #selector(save))
+    let button = StudioToolbarButton(symbol:"square.and.arrow.down",label:"Planı .sqlplan dosyasına kaydet",title:"Planı Kaydet",width:110)
+    button.flat=true;button.target=self;button.action=#selector(save)
     let header = NSStackView(views: [label, NSView(), button])
     StudioTheme.surface(header)
-    header.edgeInsets = NSEdgeInsets(top: 7, left: 10, bottom: 7, right: 10)
+    header.edgeInsets = NSEdgeInsets(top: 3, left: 8, bottom: 3, right: 8)
     let stack = NSStackView(views: [header, scroll])
     stack.orientation = .vertical
     stack.distribution = .fill
@@ -96,6 +99,9 @@ final class PlanController: NSViewController, NSOutlineViewDataSource, NSOutline
     }
     let text = NSTextField(labelWithString: value)
     text.font = StudioTheme.uiFont
+    text.textColor = StudioTheme.text
+    text.lineBreakMode = .byTruncatingTail
+    if column?.identifier.rawValue != "operation" {text.alignment = .right}
     text.toolTip = ([node.operation.logical] + node.operation.warnings).joined(separator: "\n")
     return text
   }

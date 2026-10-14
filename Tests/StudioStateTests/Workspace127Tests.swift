@@ -174,7 +174,7 @@ import Testing
     button.addItems(withTitles:["Demo","Archive"]);button.selectItem(withTitle:"Demo");root.addSubview(button);window.orderFront(nil)
     #expect(button.accessibilityPerformPress())
     let choices=try #require(button.choices)
-    #expect(choices.search.window != nil && choices.table.frame.width>=240)
+    #expect(choices.search.window != nil && choices.table.frame.width>=140 && choices.table.frame.width<=360)
     choices.filter("archive");#expect(button.titleOfSelectedItem=="Demo")
     button.contextID=UUID()
     #expect(choices.search.window?.isVisible != true)

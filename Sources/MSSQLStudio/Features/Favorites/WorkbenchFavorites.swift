@@ -123,7 +123,7 @@ extension WorkbenchController {
     let identity="favorite-editor|\(favorite?.id ?? UUID())"
     let target=FavoriteEditorWindowTarget()
     target.window=present(FavoriteQueryEditor(model:state.favorites,servers:state.servers,contextServerID:serverID,database:database,favorite:favorite,sql:sql,name:name,close:target.close),
-      title:favorite == nil ? "Favorilere Ekle":"Favoriyi Düzenle",width:720,height:660,minWidth:720,minHeight:660,identity:identity)
+      title:favorite == nil ? "Favorilere Ekle":"Favoriyi Düzenle",width:720,height:660,minWidth:620,minHeight:540,identity:identity)
     return target
   }
 }
