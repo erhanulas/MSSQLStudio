@@ -77,6 +77,16 @@ def prepare(repository, tag, output):
         package_info=plistlib.loads((payload/'Contents/Info.plist').read_bytes())
         if package_info != info:
             raise ValueError('PKG and ZIP application metadata do not match')
+        if tuple(map(int, version.split('.'))) >= (0, 2, 136):
+            if info.get('CFBundleIconName') != 'StudioS' or info.get('CFBundleIconFile') != 'StudioS':
+                raise ValueError('Icon Composer app icon metadata is missing')
+            for name in ('Assets.car', 'StudioS.icns'):
+                icon = Path(temp)/'MSSQLStudio.app/Contents/Resources'/name
+                package_icon = payload/'Contents/Resources'/name
+                if not icon.is_file() or not icon.stat().st_size or not package_icon.is_file() or icon.read_bytes() != package_icon.read_bytes():
+                    raise ValueError('PKG and ZIP compiled app icons are missing or differ')
+            if (payload/'Contents/Resources/MSSQLStudio.icns').exists():
+                raise ValueError('Legacy app icon must not be packaged')
         binary=Path(temp)/'MSSQLStudio.app/Contents/MacOS/MSSQLStudio'
         if binary.read_bytes() != (payload/'Contents/MacOS/MSSQLStudio').read_bytes():
             raise ValueError('PKG and ZIP application binaries do not match')

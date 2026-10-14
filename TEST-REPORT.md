@@ -1,3 +1,10 @@
+## 15 Ekim 2026 — v0.2.136 / build 137 Icon Composer düzeltmesi
+
+- Kaynak StudioS.icon kullanıcı ZIP’inden değiştirilmeden Resources altına alındı; Xcode Resources hedef üyeliği ve iki konfigürasyonda ASSETCATALOG_COMPILER_APPICON_NAME=StudioS eklendi. Eski elle ICNS ve kaynak Info.plist CFBundleIconFile kaldırıldı. [Apple Icon Composer entegrasyonu](https://developer.apple.com/documentation/xcode/creating-your-app-icon-using-icon-composer) izlendi.
+- Release 0.2.136/build137 başarılı (`/tmp/mssql136-release-final.log`); actool --app-icon StudioS derlemesi, CFBundleIconName/CFBundleIconFile=StudioS, Assets.car ve StudioS.icns varlığı doğrulandı. assetutil çıktısında StudioS IconImageStack için Aqua/DarkAqua/Tintable varyantları var (`/tmp/mssql136-assets.json`). Legacy MSSQLStudio.icns paketlenmiyor. Mimari/kaynak eşliği, Python derleme ve diff denetimi geçti.
+- İzole `/tmp/MSSQLStudio-Icon-QA.app`, local.mssqlstudio.uitest/--ui-smoke ile açıldı; CUA Hakkında ekranında yeni Studio S simgesi ve 0.2.136/build137 görüldü, ardından test uygulamasından çıkıldı. Dock doğrudan CUA erişimi -10005 timeout verdi; canlı Dock/Etkinlik Monitörü görsel sonucu doğrulanmış sayılmaz. Kurulu kullanıcı uygulaması/verisi değiştirilmedi. Swift ürün/test kaynakları önceki doğrulanmış 814 testten beri değişmedi; tam paket testi yayın CI’ında çalışacaktır. Gerçek Installer denenmedi.
+- Yayın denetimi yeni simge metadata’sını, derlenen Assets.car/StudioS.icns varlığını ve ZIP/PKG byte eşliğini zorunlu kılar.
+
 ## 15 Ekim 2026 — v0.2.135 / build 136 public yayın doğrulandı
 
 - [Public/latest v0.2.135](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.135), kaynak `d35620122bea1cac407f507197fc02e89bd8e109`; [Actions 38643534872](https://github.com/erhanulas/MSSQLStudio/actions/runs/38643534872) bütün adımlarıyla başarılı. CI gerçek yayın paketleriyle **439 app +367 core +8 text =814 test; 786 geçti /28 dış koşullu atlandı, 0 issue**; tamamlanmış özetler 241.900 /17.148 /0.005 sn (`/tmp/mssql135-ci.log`).

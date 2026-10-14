@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.136",
+    "date": "2026-10-15",
+    "title": "Icon Composer uygulama simgesi entegrasyonu",
+    "changes": [
+      "StudioS.icon doğrudan MSSQLStudio hedefine eklendi; Debug ve Release App Icon ayarı StudioS olarak değiştirildi. Xcode artık katmanlı simgeyi derleyerek macOS görünüm varyantları ve simge metadata’sını oluşturur.",
+      "Eski elle paketlenen ICNS kaynağı ve sabit CFBundleIconFile ayarı kaldırıldı. Yayın denetimi StudioS simge metadata’sını, Assets.car ve StudioS.icns varlığını ve ZIP/PKG eşliğini kontrol eder."
+    ]
+  },
+  {
     "version": "0.2.135",
     "date": "2026-10-15",
     "title": "SELECT alias doğrulaması ve Studio S uygulama simgesi",
