@@ -1,3 +1,20 @@
+## 14 Ekim 2026 — v0.2.127 / build 128 public yayın doğrulandı
+
+- [Public/latest v0.2.127](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.127), kaynak `98d10f43c1f5f4f12b12f3f5cf257e1354f59cbe`; [Actions 38595367168](https://github.com/erhanulas/MSSQLStudio/actions/runs/38595367168) bütün adımlarıyla başarılı. Uygula kontrastı, bağlantı ilk yerleşimi, ortak ikonlu/kısayollu native menüler, 103 eylemlik kısayol kataloğu, sorgu hizalı Çalıştır/İptal, aramalı seçiciler/ortak yardım, SQL seçim renkleri ve sistem SQL tamamlaması yayımlandı. Ortak bileşen sözleşmeleri AGENTS.md içindedir.
+- CI gerçek yayın paketleriyle **414 app +354 core +8 text =776 test; 749 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 114.336 /13.256 /0.005 sn (`/tmp/MSSQLStudio-127-ci-tests.log`). Son menü kopyalama snapshot/metadata assertion’ları da CI tam turunda geçti. Sabit kimlik/izole Keychain denetimi ve geçici kimlik temizliği başarılı.
+- Dört public asset bağımsız indirildi: GitHub digest/SHA-256, ZIP/PKG URL/hash manifest eşliği, exact 0.2.127/build128 metadata/binary/notlar ve kaynak ReleaseNotes byte eşliği doğrulandı. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği geçti; helper yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu `Foundation updater feed verified: 0.2.127` verdi. Kanıt `/tmp/MSSQLStudio-127-public-verification/verification.json` içindedir.
+- İzole CUA/native kanıtları aşağıdaki yerel bölümde ayrıdır. Canlı SQL Server/gerçek Installer ve bütün yönetim panellerinin fiziksel fare turu denenmedi. Gerçek kullanıcı uygulaması/SQL/Keychain/history/favoriler ve `.vscode/` korunur; uygulama kurulmadı/yeniden başlatılmadı.
+
+Public asset SHA-256 değerleri:
+
+| Dosya | SHA-256 |
+|---|---|
+| MSSQLStudio-0.2.127.pkg | `4fd651db05e870bab5d979e763ded47baad09a7c8d9b0e03b00bf7fc1664149a` |
+| MSSQLStudio-0.2.127.zip | `00a97640d06b9cbb0748fbe03bfb6e2dcefda9fb3663ad998d0fe3793a8163d3` |
+| MSSQLStudio-CredentialAgent-v1.zip | `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713` |
+| update.json | `dd0c4e8064c27f1d27b10e385d2e3372615f45117a8060bf6f284923f2d87057` |
+
 ## 14 Ekim 2026 — v0.2.127 / build 128 yerel geliştirme doğrulaması
 
 - Uygula için açık/koyu kontrastı kontrollü native StudioPrimaryActionButton; 1080×700 ilk açılan ve ekran kısıtı/layout’ı gösterim öncesi tamamlanan Bağlantılar; Explorer sınırını izleyen Çalıştır/İptal grubu; ortak StudioMenu/StudioTextView, aramalı DB/kapsam seçicisi ve SwiftUI/native hover yardım bileşeni tamamlandı. 103 genel/editör/Explorer/grid eylemi kısayol kataloğunda; boş atama, kaldırma, sıfırlama, çakışma ve odak/bağlam denetimi korunur. Normal SQL yazımında komut menüsü hazırlanmaz.
