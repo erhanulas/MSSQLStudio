@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.116 / build 117 public yayın doğrulandı
+
+- [Public/latest v0.2.116](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.116), kaynak `e47567d5c61626d60e564d85eb4277df1ebe5449`; [Actions 38543913500](https://github.com/erhanulas/MSSQLStudio/actions/runs/38543913500) bütün adımlarıyla başarılı. ⌘Enter ifade/batch/tüm SQL seçimi ve SELECT/DECLARE grubu sonrası ayarlanabilir boş satır yayımlandı. v0.2.115 public olmadı; iptal kanıtı aşağıdadır.
+- CI gerçek yayın paketleriyle **362 app +333 core +8 text =703 test; 676 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 82.756 /9.887 /0.003 sn; `/tmp/MSSQLStudio-116-ci-tests.log`. Sabit kimlik/izole Keychain denetimi ve geçici imza kimliği temizliği geçti. CI feed/log archive aynı 116 önekiyle /tmp’dedir.
+- Dört public asset indirildi; SHA-256/GitHub digest, ZIP/PKG URL/hash manifest eşliği, exact 0.2.116/build117 metadata/binary/notlar, kaynak ReleaseNotes byte eşliği ve GitHub yayın metni doğrulandı. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği geçti. Helper v1 yeniden derlenmedi/imzalanmadı; PKG kapsayıcısında Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu `Foundation updater feed verified: 0.2.116` verdi. Kanıt `/tmp/MSSQLStudio-116-public-verification/verification.json` içindedir.
+- Yerel/native/önceki CUA kanıtı ve son ek CRLF CUA araç engeli aşağıdadır; public test başarısı bu eksik fare kontrolü yerine geçmez. Canlı SQL Server ve Installer denenmedi. Gerçek kullanıcı uygulaması/DB/Keychain/geçmiş/favoriler ve `.vscode/` korunur; kurulum/yeniden başlatma yapılmadı. Önceki geçmiş kurtarma belirsizliği tarihsel kayıtta kalır.
+
+Public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.116.pkg`: `aebdacdaad1e8691ab88e7c452f102f5ddfbe213f552a819c8d80686dc0ac0fa`.
+- `MSSQLStudio-0.2.116.zip`: `f4ac4b2ee31805a38fd26ee60a85f6d25792dab5e1bdac26dabc3e42d29007c2`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `803248d1fbe986edcb82297bfa32bb4a955b135fec2cb9c8f6141d133eca8cd2`.
+
 ## 14 Ekim 2026 — v0.2.116 / build 117 yayın hazırlığı; v0.2.115 public olmadan iptal
 
 - v0.2.115 kaynak etiketi `e45dee3f1e21fd52d0ff17462437f38103598850` korunur. [Actions 38542980073](https://github.com/erhanulas/MSSQLStudio/actions/runs/38542980073) public yayın öncesinde iptal edildi: build cancelled, validate/test/publish/feed skipped; geçici imza kimliği temizliği success. GitHub release v0.2.115 lookup 404’tür; eski tag/asset force değiştirilmedi. Son kontrolde yeni menünün `Character == "\n"` sayımının CRLF’yi saymadığı gerçek Swift probe’da görüldü; SQL aralıkları doğruydu, yalnız satır başlığı yanlıştı.
