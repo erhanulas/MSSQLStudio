@@ -1,3 +1,20 @@
+## 14 Ekim 2026 — v0.2.130 / build 131 public yayın doğrulandı
+
+- [Public/latest v0.2.130](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.130), kaynak `6c740b70fe8620d465163fe047f2c9270d7bfe46`; [Actions 38620047474](https://github.com/erhanulas/MSSQLStudio/actions/runs/38620047474) bütün adımlarıyla başarılı. Proje genelinde kompakt ortak bileşenler, esnek yönetim panelleri, Explorer yoğunluğu, History/bağlantı seçicileri ve uzun hata ayrıntısı yenilemesi yayımlandı.
+- CI gerçek yayın paketleriyle **431 app +354 core +8 text =793 test; 766 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 225.298 /16.362 /0.012 sn (`/tmp/MSSQLStudio-130-ci-tests.log`). Sabit kimlik/izole Keychain denetimi ve geçici kimlik temizliği başarılı.
+- Dört public asset bağımsız indirildi: GitHub digest/SHA-256, ZIP/PKG URL/hash manifest eşliği, exact 0.2.130/build131 metadata, kaynak/paket sürüm notları ve GitHub yayın metni eşliği doğrulandı. ZIP/PKG app/helper strict/deep sabit imza/DR, uygulama binary/not/metadata eşliği ve frozen helper byte/hash eşliği geçti; helper yeniden derlenmedi/imzalanmadı. PKG için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu `Foundation updater feed verified: 0.2.130` verdi. Kanıt `/tmp/MSSQLStudio-130-public-verification/verification.json` içindedir.
+- 58 ekran/232 tema-boyut görünümü ve gerçek CUA kanıtı aşağıdaki yerel bölümde ayrıdır. Canlı SQL Server/Agent, çoklu monitör ve gerçek Installer güncellemesi denenmedi. Kullanıcı uygulaması/SQL/Keychain/history/favoriler ve `.vscode/` korunur; uygulama kurulmadı/yeniden başlatılmadı.
+
+Public asset SHA-256 değerleri:
+
+| Dosya | SHA-256 |
+|---|---|
+| MSSQLStudio-0.2.130.pkg | `08736616033080a75f359ab7c2bb9ab3bcef736ce5c36b34c6435c414441a89e` |
+| MSSQLStudio-0.2.130.zip | `275d3cee99762f420df705a3a31fcc39fa22811a311671b073b18f36c639e181` |
+| MSSQLStudio-CredentialAgent-v1.zip | `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713` |
+| update.json | `c1246a3ebbb64a74111defc371eebde09a3d88579038c9382fcb683aa64ab20a` |
+
 ## 14 Ekim 2026 — v0.2.130 / build 131 yayın hazırlığı
 
 - Kullanıcının açık yayın isteğiyle proje genelindeki UI/UX modernizasyonu 0.2.130/build131 olarak hazırlandı. Debug/Release metadata ve tek kaynak ReleaseNotes.json eşitlendi.
