@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.120 / build 121 public yayın doğrulandı
+
+- [Public/latest v0.2.120](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.120), kaynak `b6990e415dc4258a2ca756c862910b90ff82544e`; [Actions 38557216961](https://github.com/erhanulas/MSSQLStudio/actions/runs/38557216961) bütün adımlarıyla başarılı. Editör imleç/odak koruması, sade Explorer Yenile yolu, kapatılan sekme History ve ayarlanabilir kısayollar, sabit readonly/fark sayaçları ve Explorer’da Git yayımlandı. v0.2.119 public olmadı; etiketi ve başarısız test kanıtı aşağıda korunur.
+- CI gerçek yayın paketleriyle **379 app +335 core +8 text =722 test; 695 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 90.049 /14.237 /0.005 sn (`/tmp/MSSQLStudio-120-ci-tests.log`). İlk fark geçişi ve sıfır panel/nonzero clip regresyonu geçti. Sabit kimlik/izole Keychain ve geçici kimlik temizliği başarılı.
+- Dört public asset indirildi: GitHub digest/SHA-256, ZIP/PKG URL/hash manifest eşliği, exact 0.2.120/build121 metadata/binary/notlar ve kaynak ReleaseNotes byte eşliği doğrulandı. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği geçti; helper yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu `Foundation updater feed verified: 0.2.120` verdi. Kanıt `/tmp/MSSQLStudio-120-public-verification/verification.json` içindedir.
+- CUA native pipe hatası nedeniyle gerçek fare/menü turu yapılamadı; native responder/caret/geometry/bitmap testleri bu kontrolün yerine sayılmaz. Canlı SQL Server/Installer ve gerçek kullanıcı geçmişinin geri yüklenmesi denenmedi. Kullanıcı uygulaması/SQL/Keychain/history/favoriler ve `.vscode/` korunur; kurulum veya yeniden başlatma yapılmadı.
+
+Public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.120.pkg`: `c928096b5a567df2088a773d7d926eeb491718d25e80b095ede03887377c1fe7`.
+- `MSSQLStudio-0.2.120.zip`: `4923aa05ad6692c6218285cf26b54c878a65acb381f1e6732f8064e746447ee4`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `a87156b47a4c74203fbf5c8e9a37db6067e42ad805e261ff0657e39fca2113c6`.
+
 ## 14 Ekim 2026 — v0.2.120 / build 121 hazırlığı; v0.2.119 public olmadı
 
 - v0.2.119 kaynak etiketi `7fa975827d99448d4dafb3e2a3f489633195a222` korunur. [Actions 38555346393](https://github.com/erhanulas/MSSQLStudio/actions/runs/38555346393) signed build/manifest adımlarını geçti, paket testlerinde SQLDiffPreviewTests ilk değişikliğe kaydırma assertion’ı `minY=0` ile başarısız oldu. 378 app testinde tek issue; 335 core ve 8 text geçti (109.320 /13.640 /0.006 sn). Publish/feed skipped, geçici kimlik cleanup success; release lookup HTTP 404. Public/latest v0.2.118 kaldı. Log `/tmp/MSSQLStudio-119-ci-tests.log`.
