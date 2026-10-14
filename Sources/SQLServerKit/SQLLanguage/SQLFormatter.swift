@@ -9,8 +9,11 @@ public struct SQLFormattingOptions: Codable, Equatable, Sendable {
   public var multilineLists: Bool
   public var lineWidth: Int?
   public var breakConditions: Bool
+  public var blankLineAfterSelect: Bool?
+  public var blankLineAfterDeclare: Bool?
   public init(indentWidth: Int = 4, keywordCase: KeywordCase = .upper,
-              commaStyle: CommaStyle = .trailing, multilineLists: Bool = true, breakConditions: Bool = true, lineWidth: Int = 120) {
+              commaStyle: CommaStyle = .trailing, multilineLists: Bool = true, breakConditions: Bool = true, lineWidth: Int = 120, blankLineAfterSelect: Bool = true, blankLineAfterDeclare: Bool = true) {
+    self.blankLineAfterSelect=blankLineAfterSelect;self.blankLineAfterDeclare=blankLineAfterDeclare
     self.indentWidth = max(2, min(8, indentWidth)); self.keywordCase = keywordCase
     self.lineWidth = lineWidth == 0 ? 0 : max(60,min(240,lineWidth))
     self.commaStyle = commaStyle; self.multilineLists = multilineLists; self.breakConditions = breakConditions
@@ -37,6 +40,13 @@ public enum SQLFormatter {
     let tokens = TSQL.lex(source).filter { $0.kind != .space }
     guard !tokens.isEmpty, tokens.count <= 30000 else { return source }
     let ns = source as NSString
+    let statements=SQLExecutionScopes(source,protectControlFlow:false).statements
+    var blankBefore=Set<Int>()
+    for pair in zip(statements,statements.dropFirst()) {
+      if pair.0.kind == "SELECT" && (options.blankLineAfterSelect ?? true) || pair.0.kind == "DECLARE" && pair.1.kind != "DECLARE" && (options.blankLineAfterDeclare ?? true) {
+        blankBefore.insert(pair.1.range.location)
+      }
+    }
     var frames = [Frame(query: true)], blockIndent = 0, caseIndent = 0
     var caseBases: [Int] = []
     var lines: [String] = [], current = "", pendingIndent = 0, between = false
@@ -69,6 +79,10 @@ public enum SQLFormatter {
     }
     for i in tokens.indices {
       let token = tokens[i], upper = token.text.uppercased()
+      if blankBefore.contains(token.range.location) {
+        newline()
+        if !lines.isEmpty,lines.last != "" {lines.append("")}
+      }
       let previous = i > 0 ? tokens[i-1].text.uppercased() : ""
       let next = i+1 < tokens.count ? tokens[i+1].text.uppercased() : ""
       let qualified = previous == "." || next == "."

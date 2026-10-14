@@ -39,6 +39,7 @@ import SQLServerKit
   }
   func didReplaceCharacters() {didChangeText()}
   override func validateUserInterfaceItem(_ item:any NSValidatedUserInterfaceItem)->Bool {
+    if item.action == #selector(runSQLStatement(_:)) {return isEditable && !hasMarkedText() && canRunStatement?() == true}
     if item.action == #selector(formatSQLText(_:)) {return isEditable && !hasMarkedText() && requestFormat != nil}
     if item.action == #selector(toggleSQLComment(_:)) || item.action == #selector(uncommentSQL(_:)) {return isEditable && !hasMarkedText() && selectedRanges.count == 1}
     if item.action == #selector(undoSQL(_:)) || item.action == #selector(undoFromMenu(_:)) {return isEditable && undoManager?.canUndo == true}
@@ -255,6 +256,7 @@ import SQLServerKit
     return true
   }
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    if window?.firstResponder === self,event.keyCode == 36,event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {runStatement?();return true}
     if window?.firstResponder === self,handleHistoryKey(event) {return true}
     if window?.firstResponder === self,handleCommentKey(event) {return true}
     if window?.firstResponder === self, GridShortcuts.matches(.format,event) {formatSQLText(nil);return true}
@@ -396,6 +398,9 @@ import SQLServerKit
     NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string)
   }
   var run: (() -> Void)?
+  var runStatement:(()->Void)?
+  var canRunStatement:(()->Bool)?
+  @objc func runSQLStatement(_ sender:Any?) {runStatement?()}
   override var rangeForUserCompletion: NSRange {
     let selection = selectedRange()
     let units = Array(string.utf16)
@@ -458,7 +463,8 @@ import SQLServerKit
     if event.keyCode == 49 && event.modifierFlags.contains(.control), let requestSuggestions { requestSuggestions(); return }
     if event.modifierFlags.contains([.command,.option]), event.keyCode == 33 { toggleOutline?(); return }
     if event.modifierFlags.contains([.command,.option]), event.keyCode == 30 { expandOutline?(); return }
-    if event.keyCode == 96 || event.keyCode == 36 && event.modifierFlags.contains(.command) {
+    if event.keyCode == 36,event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {runStatement?();return}
+    if event.keyCode == 96 {
       run?()
     } else if event.keyCode == 53 || event.keyCode == 49 && event.modifierFlags.contains(.control) {
       dismissSuggestions?()

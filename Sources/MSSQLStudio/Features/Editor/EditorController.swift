@@ -11,7 +11,7 @@ import SQLServerKit
   let commentHint=StudioToolbarButton(symbol:"text.bubble",label:"Seçili satırları yorum yap / kaldır",title:"",width:28)
   private let ruler: LineNumbers
   private var rulerWidth:NSLayoutConstraint?
-  private let document: QueryDocument
+  let document: QueryDocument
   var edited: (() -> Void)?
   var position: ((Int, Int) -> Void)?
   private var occurrenceTask: Task<Void,Never>?
@@ -42,6 +42,9 @@ import SQLServerKit
   private var changingPresentation = false
   private var formattingTask: Task<Void,Never>?
   private var textRevision = UUID()
+  var executionRequest=UUID()
+  var executionChoiceFixture: (([NSRange]) -> Int?)?
+  func closeExecutionAssistance() {completion.close();parameterPopover.close();insertPresentation.hidePreview()}
   private var lineStarts = [0]
   private func updateOutline(refreshRegions: Bool = true) {
     if refreshRegions { regions = SQLFolding.regions(document.sql) }
@@ -112,6 +115,8 @@ import SQLServerKit
       toggleFold(marker.region);return true
     }
     editor.run = { [weak document] in document?.execute() }
+    editor.runStatement = { [weak self] in self?.requestStatementExecution() }
+    editor.canRunStatement = { [weak document] in document?.canExecute == true }
     editor.setAccessibilityIdentifier("sqlEditor")
     scroll.documentView = editor
     insertPresentation.didResolve = { [weak self] in self?.updateOccurrences() }
@@ -384,7 +389,7 @@ import SQLServerKit
     scheduleIntelligence()
   }
   func textDidChange(_ notification: Notification) {
-    textRevision = UUID()
+    textRevision = UUID();executionRequest=UUID()
     guard !changingPresentation else { return }
     clearOccurrences()
     document.sql = editor.string

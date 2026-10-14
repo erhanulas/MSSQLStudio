@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.115",
+    "date": "2026-10-14",
+    "title": "⌘Enter SQL seçicisi ve SELECT / DECLARE boş satırları",
+    "changes": [
+      "Editörde ⌘Enter, birden fazla SQL ifadesi varsa satır ve SQL özetiyle çalıştırılacak ifadeyi seçtirir. İmleçteki ifade öne çıkar; batch ve tüm SQL seçenekleri korunur. Seçili metin doğrudan çalıştırılır; Escape sorgu göndermez. F5 ve araç çubuğu mevcut davranışını korur.",
+      "CTE, alt sorgu, UNION ve INSERT SELECT birlikte tutulur. Kontrol akışı, transaction ve CREATE/ALTER içeren belirsiz batch’ler ihtiyatlı olarak bütün kalır. GO tekrarları batch/tüm SQL seçiminde korunur; kaynak veya bağlantı hedefi değişmişse eski seçim çalıştırılmaz.",
+      "Formatla, tamamlanan SELECT ifadeleri ve ardışık DECLARE grupları sonrasında boş satır bırakır. İki tercih Ayarlar → SQL Editörü → SQL biçimlendirme altında ayrı kapatılabilir ve ayar aramasında bulunur. Önceki harf/girinti/virgül tercihleri korunur.",
+      "GO tekrar sayısı ve satır yorumu içeren CRLF batch ayırıcılarının ortak lexical tanınması düzeltildi. Biçimlendirme SQL token’larını, yorumları, satır sonu tarzını ve tek adımda geri almayı korur."
+    ]
+  },
+  {
     "version": "0.2.114",
     "date": "2026-10-14",
     "title": "Anında sorgu sekmeleri ve aynı sekmede çevrimdışı tanım",

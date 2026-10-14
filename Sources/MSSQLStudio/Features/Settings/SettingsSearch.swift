@@ -28,7 +28,9 @@ struct SettingsSearchEntry:Identifiable,Equatable {
         ("formatIndent","Girinti boşluk sayısı","formatter format indentation tab boşluk"),
         ("formatComma","Virgül yerleşimi","formatter format comma leading trailing"),
         ("formatLists","Kolon listelerini satırlara ayır","formatter select insert cte liste satır kırma"),
-        ("formatConditions","Koşulları satırlara ayır","formatter where on having and or koşul")]),
+        ("formatConditions","Koşulları satırlara ayır","formatter where on having and or koşul"),
+        ("formatSelectGap","SELECT sonrasında boş satır","formatter select blok enter boşluk satır"),
+        ("formatDeclareGap","DECLARE grubu sonrasında boş satır","formatter declare toplu grup enter boşluk satır")]),
       (.editor,"Kod yardımcıları",[
         ("validation","Eksik tablo ve kolonları vurgula","doğrulama kırmızı hata referans validation"),
         ("undeclared","Tanımsız parametre vurgusu","declare edilmemiş değişken kırmızı @ parametre undefined undeclared"),

@@ -10,8 +10,8 @@ enum SQLRoutineDefinition {
   }
   static func isBatchSeparator(_ token:Lexeme,source:NSString)->Bool {
     guard token.kind == .keyword,token.text.uppercased() == "GO" else {return false}
-    let line=source.substring(with:source.lineRange(for:token.range))
-    return line.range(of:#"^\s*GO(?:[ \t]+[0-9]+)?[ \t]*(?:--[^\r\n]*)?[\r\n]*$"#,
+    let line=source.substring(with:source.lineRange(for:token.range)).trimmingCharacters(in:.whitespacesAndNewlines)
+    return line.range(of:#"^GO(?:[ \t]+[0-9]+)?[ \t]*(?:--[^\r\n]*)?$"#,
                       options:[.regularExpression,.caseInsensitive]) != nil
   }
   static func headers(in tokens:[Lexeme],source:String)->[Header] {

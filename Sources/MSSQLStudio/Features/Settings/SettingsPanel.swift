@@ -210,6 +210,8 @@ struct SettingsPanel: View {
             }.id("formatComma")
             settingsToggle("Kolon listelerini satırlara ayır", detail: "SELECT, SET, INSERT ve CTE listelerinde okunabilir satır kırma.", value: $formatting.multilineLists)
             settingsToggle("Koşulları satırlara ayır", detail: "WHERE / ON / HAVING içinde AND / OR ifadelerini hizalar.", value: $formatting.breakConditions)
+            settingsToggle("SELECT sonrasında boş satır", detail:"Tamamlanan SELECT ifadesini sonraki SQL’den ayırır; alt sorgu ve UNION parçalanmaz.", value:Binding(get:{formatting.blankLineAfterSelect ?? true},set:{formatting.blankLineAfterSelect=$0})).id("formatSelectGap")
+            settingsToggle("DECLARE grubu sonrasında boş satır", detail:"Ardışık DECLARE ifadelerini birlikte tutar ve sonraki SQL’den ayırır.", value:Binding(get:{formatting.blankLineAfterDeclare ?? true},set:{formatting.blankLineAfterDeclare=$0})).id("formatDeclareGap")
             settingsNote("Formatla seçili SQL’i, seçim yoksa tüm editörü biçimlendirir. Identifier, alias, literal ve yorum metni korunur; işlem tek adımda geri alınır.", icon: "arrow.uturn.backward")
           }
           settingsCard("Kod yardımcıları", icon: "checkmark.seal") {

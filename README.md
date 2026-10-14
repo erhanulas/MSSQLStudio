@@ -14,6 +14,8 @@ Microsoft ODBC Driver 18, unixODBC ve OpenSSL 3 ayrı kurulur; sürücüler app 
 4. Ctrl+Space önerileri açar; Tab/Enter kabul eder. Ctrl+F / ⌘F seçili metinle bulmayı, ⌘⇧F seçili SQL’i veya seçim yoksa tüm editörü biçimlendirmeyi açar. Girinti, harf biçimi, virgül, satır kırma ve satır genişliği tercihleri Ayarlar → SQL Editörü içindedir.
 5. Nesne/Agent tasarım ekranları değişiklikleri önce SQL olarak incelemeye açar. Nesne önizlemesindeki **Veritabanına Gönder** ve Agent komut penceresinin açık onayı ayrıca yürütme yapar.
 
+Editörde **⌘Enter**, seçili SQL’i çalıştırır; seçim yokken birden fazla ifade varsa ifade/batch/tüm SQL seçimini açar (Escape iptal). **Formatla**, SELECT ve ardışık DECLARE grupları sonrasında boş satır bırakır; iki seçenek **Ayarlar → SQL Editörü → SQL biçimlendirme** altında kapatılabilir.
+
 Yeni sorgu sekmesi hemen açılır; bağlantı **Çalıştır** ile denenir. Bağlantı yönetimi ayrı pencerede çalışır, işlem ve hata alt durum çubuğunda görünür. History/Favorilerde çift tıklama mevcut editörde imlece SQL ekler; yeni sekmede açma ayrı eylemdir.
 
 Bağlantılar ekranındaki seçiciden yeni veya mevcut Explorer profilini açabilirsiniz. Genel/Gelişmiş seçenekleri korunur; test/liste yükleme tek eylemdir, mevcut profil çevrimdışı kaydedilebilir. Explorer’da **Nesneleri Yenile** sunucudaki yüklenmiş nesne listelerini yeniden okur; **Yerel İndeksi Yenile** arama/tamamlama önbelleğini yeniler. İndeks ayrıntıları veritabanı adının yanındaki düğmeden açılır.
