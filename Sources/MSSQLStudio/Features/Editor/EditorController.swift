@@ -227,7 +227,7 @@ import SQLServerKit
     editor.textColor = StudioTheme.editorText
     editor.insertionPointColor = StudioTheme.editorText
     editor.selectedTextAttributes = [
-      .backgroundColor: StudioTheme.selection, .foregroundColor: StudioTheme.editorText,
+      .backgroundColor: StudioTheme.editorSelection,
     ]
     editor.typingAttributes[.font] = StudioTheme.codeFont
     editor.typingAttributes[.foregroundColor] = StudioTheme.editorText

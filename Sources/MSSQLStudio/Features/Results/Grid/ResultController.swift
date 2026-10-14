@@ -337,6 +337,14 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     scroll.backgroundColor = StudioTheme.resultCanvas
     scroll.horizontalScrollElasticity = .none; scroll.verticalScrollElasticity = .none
     target.rowActions = { [weak self] in self?.editingMenu() ?? [] }
+    target.columnShortcutItems={ [weak self] in
+      guard let self else {return []}
+      let ordinal=table.cellColumns.count == 1 ? table.cellColumns.first.flatMap {table.tableColumns.indices.contains($0) ? Int(table.tableColumns[$0].identifier.rawValue):nil}:nil
+      let menu=columnMenu(ordinal:ordinal)
+      let items=menu.items.filter {!$0.isSeparatorItem && $0.submenu == nil}
+      for item in items {menu.removeItem(item)}
+      return items
+    }
     target.editCell = { [weak self, weak target] row,position in
       guard let self, let canonical=target?.canonicalPosition(position) else {return}
       inspectCell(row:row,position:canonical)
@@ -900,7 +908,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     let alert = StudioAlert()
     alert.messageText = result.fields[i].name
     alert.informativeText = readOnlyReason(column: i) ?? "Bu hücre salt okunur."
-    let text = NSTextView()
+    let text = StudioTextView()
     text.string = values[i] ?? "NULL"
     text.isEditable = false
     text.font = StudioTheme.codeFont

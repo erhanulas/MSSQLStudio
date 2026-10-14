@@ -172,8 +172,22 @@ public enum TSQL {
     "TRY_CAST", "TRY_CONVERT", "ROW_NUMBER", "RANK", "DENSE_RANK", "GETDATE", "SYSDATETIME",
     "SYSUTCDATETIME", "DATEADD", "DATEDIFF", "DATETRUNC", "STRING_AGG", "STRING_SPLIT",
     "JSON_VALUE", "JSON_QUERY", "OPENJSON", "DB_NAME", "OBJECT_ID", "SUSER_SNAME", "NEWID", "LEN",
-    "DATALENGTH", "CONCAT", "TRIM", "SUBSTRING", "REPLACE",
+    "DATALENGTH", "CONCAT", "CONCAT_WS", "TRIM", "LTRIM", "RTRIM", "SUBSTRING", "REPLACE",
+    "ABS", "ROUND", "CEILING", "FLOOR", "POWER", "SQRT", "UPPER", "LOWER", "CHARINDEX", "PATINDEX",
+    "LEFT", "RIGHT", "REPLICATE", "REVERSE", "STUFF", "CHAR", "NCHAR", "UNICODE", "ASCII",
+    "YEAR", "MONTH", "DAY", "DATEPART", "DATENAME", "EOMONTH", "ISDATE", "ISNUMERIC", "IIF",
+    "TRY_PARSE", "FORMAT", "QUOTENAME", "SCHEMA_NAME", "OBJECT_NAME", "HOST_NAME", "APP_NAME",
+    "SESSION_CONTEXT", "ISJSON", "JSON_MODIFY", "LEAD", "LAG", "NTILE", "FIRST_VALUE", "LAST_VALUE",
+    "CURRENT_TIMESTAMP", "CURRENT_USER", "SESSION_USER", "SYSTEM_USER",
   ]
+  /// These SQL expressions have no call parentheses in T-SQL.
+  public static let tableFunctions:Set<String>=["OPENJSON","STRING_SPLIT"]
+  public static let bareFunctions:Set<String>=["CURRENT_TIMESTAMP","CURRENT_USER","SESSION_USER","SYSTEM_USER"]
+  public static let systemProcedures:Set<String>=["SP_HELP","SP_HELPTEXT","SP_HELPDB","SP_HELPINDEX","SP_HELPCONSTRAINT","SP_HELPTRIGGER","SP_HELPFILE","SP_HELPFILEGROUP","SP_HELPSERVER","SP_WHO","SP_WHO2","SP_SPACEUSED","SP_RECOMPILE","SP_REFRESHVIEW","SP_REFRESHSQLMODULE","SP_EXECUTESQL","SP_RENAME","SP_COLUMNS","SP_TABLES","SP_STORED_PROCEDURES","SP_PKEYS","SP_FKEYS","SP_STATISTICS","SP_DESCRIBE_FIRST_RESULT_SET","SP_DESCRIBE_UNDECLARED_PARAMETERS","SP_SERVER_INFO","SP_CONFIGURE","SP_LOCK"]
+  public static func isSystemProcedure(_ parts:[String])->Bool {
+    guard let name=parts.last?.uppercased(),systemProcedures.contains(name) else {return false}
+    return parts.count == 1 || parts.count == 2 && ["SYS","DBO"].contains(parts[0].uppercased())
+  }
   public static func lex(_ sql: String) -> [Lexeme] {
     let units = Array(sql.utf16)
     var index = 0
@@ -489,6 +503,7 @@ extension TSQL {
     case .symbol: return .operatorSymbol
     case .word:
       let word = token.text.uppercased()
+      if tableFunctions.contains(word) {return .systemObject}
       if functions.contains(word) { return .function }
       if ["SYS", "INFORMATION_SCHEMA"].contains(word) { return .systemObject }
       if word.hasPrefix("SP_") || word.hasPrefix("XP_") { return .procedure }

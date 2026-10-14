@@ -80,7 +80,7 @@ struct ConnectionAppearanceFields: View {
               }
             })
         )
-        .frame(width: 80).help("Altı haneli RGB renk kodu; örneğin D92D20.")
+        .frame(width: 80).studioHelp("Altı haneli RGB renk kodu; örneğin D92D20.")
         StudioActionButton("Varsayılan", icon:"arrow.counterclockwise", tint:.accentColor) { appearance.colorHex = nil }
       }
       if appearance.environment == .custom {

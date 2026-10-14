@@ -83,7 +83,7 @@ struct AboutPanel: View {
       }.frame(maxWidth: .infinity, maxHeight: .infinity)
       Divider()
       HStack {
-        Link("GitHub Yayınları ↗", destination: repositoryURL).help("Tüm yayımlanmış sürümleri GitHub'da aç")
+        Link("GitHub Yayınları ↗", destination: repositoryURL).studioHelp("Tüm yayımlanmış sürümleri GitHub'da aç")
         Spacer()
         StudioActionButton("Güncellemeleri Kontrol Et", icon:"arrow.down.circle", tint:.accentColor, action: checkUpdates)
       }.padding(.horizontal, 24).padding(.vertical, 16)

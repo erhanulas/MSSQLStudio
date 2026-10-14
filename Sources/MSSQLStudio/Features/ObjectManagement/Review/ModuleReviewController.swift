@@ -105,7 +105,7 @@ import SwiftUI
     NSLayoutConstraint.activate([child.leadingAnchor.constraint(equalTo:parent.leadingAnchor),child.trailingAnchor.constraint(equalTo:parent.trailingAnchor),child.topAnchor.constraint(equalTo:parent.topAnchor),child.bottomAnchor.constraint(equalTo:parent.bottomAnchor)])
   }
   private func configure(_ scroll:NSScrollView,text:String) {
-    let view=NSTextView(usingTextLayoutManager:true);view.identifier = .init("sqlSourcePreview");view.isEditable=false;view.isSelectable=true;view.font=StudioTheme.codeFont
+    let view=StudioTextView(usingTextLayoutManager:true);view.identifier = .init("sqlSourcePreview");view.isEditable=false;view.isSelectable=true;view.font=StudioTheme.codeFont
     view.backgroundColor=StudioTheme.editorCanvas;view.textColor=StudioTheme.editorText;view.textContentStorage?.textStorage?.setAttributedString(SQLSourceHighlighting.attributed(text));view.textContainerInset=NSSize(width:12,height:8)
     view.isVerticallyResizable=true;view.isHorizontallyResizable=true;view.autoresizingMask=[]
     view.textContainer?.widthTracksTextView=false;view.textContainer?.containerSize=NSSize(width:100_000,height:CGFloat.greatestFiniteMagnitude)

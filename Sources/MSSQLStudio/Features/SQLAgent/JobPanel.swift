@@ -17,9 +17,7 @@ struct JobPanel: View {
     VStack(alignment: .leading, spacing: 12) {
       StudioPanelHeading(title: "SQL Server Agent", icon: "clock.badge.checkmark", subtitle: "Yeni iş ve zamanlama SQL’i hazırla")
       StudioFormField("Job adı") {TextField("Job adı", text: $name)}
-      StudioFormField("Veritabanı") {Picker("Veritabanı", selection: $database) {
-        ForEach(databases, id: \.self) { Text($0).tag($0) }
-      }.labelsHidden()}
+      StudioFormField("Veritabanı") {StudioSearchablePicker(title:"Veritabanı",values:databases,selection:$database)}
       Text("T-SQL Step").font(.headline)
       TextEditor(text: $command).font(.custom(StudioTheme.codeFont.fontName, size: 13)).studioEditor().frame(
         height: 120)

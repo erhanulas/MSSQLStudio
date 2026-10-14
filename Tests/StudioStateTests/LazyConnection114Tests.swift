@@ -123,6 +123,7 @@ import Testing
     window.isReleasedWhenClosed=false;window.contentViewController=workbench;window.orderFront(nil);defer {window.close()}
     let controller=try #require(workbench.queryController(for:doc))
     let editor=try #require(descendants(controller.view).compactMap {$0 as? SQLTextView}.first)
+    #expect(window.makeFirstResponder(editor))
     editor.setSelectedRange(NSRange(location:22,length:0))
     let event=try #require(NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:.command,timestamp:0,windowNumber:0,context:nil,characters:"b",charactersIgnoringModifiers:"b",isARepeat:false,keyCode:11))
     #expect(editor.performKeyEquivalent(with:event))

@@ -138,7 +138,7 @@ import SwiftUI
     let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
     addTrackingArea(area); hoverArea = area
   }
-  override func mouseEntered(with event: NSEvent) { hovered = true; refreshStyle(); StudioHoverHelp.shared.schedule(for: self) }
+  override func mouseEntered(with event: NSEvent) { hovered = true; refreshStyle(); StudioHoverHelp.shared.schedule(for: self,title:toolTip) }
   override func mouseExited(with event: NSEvent) { hovered = false; refreshStyle(); StudioHoverHelp.shared.hide(for: self) }
   override func viewWillMove(toWindow newWindow: NSWindow?) {
     StudioHoverHelp.shared.hide(for: self); super.viewWillMove(toWindow: newWindow)

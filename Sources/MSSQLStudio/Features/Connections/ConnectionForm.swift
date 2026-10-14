@@ -42,7 +42,7 @@ private struct DatabaseChoices: View {
           } label: {
             Image(systemName: "xmark.circle.fill").frame(width: 24, height: 24).contentShape(Rectangle())
           }
-          .buttonStyle(.plain).help("Aramayı temizle").accessibilityLabel("Aramayı temizle")
+          .buttonStyle(.plain).studioHelp("Aramayı temizle").accessibilityLabel("Aramayı temizle")
         }
       }
       HStack {
@@ -74,12 +74,12 @@ private struct DatabaseChoices: View {
                     if value { chosen.insert(item.name) } else { chosen.remove(item.name) }
                   })
               ) {
-                Text(item.name).lineLimit(1).truncationMode(.middle).help(item.name)
+                Text(item.name).lineLimit(1).truncationMode(.middle).studioHelp(item.name)
               }.toggleStyle(.checkbox).frame(maxWidth: .infinity, alignment: .leading)
               Toggle("İçerik", isOn: Binding(get: { profile.indexesDefinitions(in: item.name) }, set: {
                 profile.setDefinitionIndex($0, database: item.name, known: items.map(\.name))
               })).toggleStyle(.checkbox).disabled(!chosen.contains(item.name))
-                .help("Nesne kodlarını bu Mac’te indeksle: " + item.name)
+                .studioHelp("Nesne kodlarını bu Mac’te indeksle: " + item.name)
                 .accessibilityLabel("Nesne içeriği indeksi: " + item.name)
               if (1...4).contains(item.id) {
                 Text("Sistem").font(.caption).foregroundStyle(.secondary)
@@ -91,7 +91,7 @@ private struct DatabaseChoices: View {
                 Image(systemName: defaultDatabase == item.name ? "star.fill" : "star")
                   .foregroundStyle(defaultDatabase == item.name ? Color.orange : Color.secondary)
               }.buttonStyle(.borderless)
-                .help("Yeni sorgular için varsayılan yap: \(item.name)")
+                .studioHelp("Yeni sorgular için varsayılan yap: \(item.name)")
                 .accessibilityLabel("Varsayılan yap: \(item.name)")
             }.padding(.horizontal, 10).padding(.vertical, 7)
             Divider().padding(.leading, 30)
@@ -121,7 +121,7 @@ private struct DatabaseChoices: View {
           defaultDatabase.isEmpty
             ? "Varsayılan için bir satırdaki yıldıza basın." : "Yeni sorgular: \(defaultDatabase)"
         )
-        .lineLimit(1).truncationMode(.middle).help(defaultDatabase)
+        .lineLimit(1).truncationMode(.middle).studioHelp(defaultDatabase)
         Spacer(minLength: 0)
       }.font(.caption)
       Text("Soldaki seçim Explorer görünümünü belirler. İçerik seçeneği nesne kodlarını bu Mac’te saklar; kapatınca o veritabanının tanım indeksi silinir. Sunucu izinleri değişmez.")
@@ -221,7 +221,7 @@ struct ConnectionForm: View {
             GridRow {
               Text("Test veritabanı").frame(width:150,alignment:.leading).foregroundStyle(.secondary)
               TextField("master", text: $profile.database)
-                .help(
+                .studioHelp(
                   "Bağlantı testi ve listeleme için kullanılır. Yeni sorguların veritabanını sağdaki yıldızla seçin."
                 )
             }
@@ -236,7 +236,7 @@ struct ConnectionForm: View {
           Text("Güvenlik").font(.headline)
           Label("Bağlantı şifrelemesi zorunlu",systemImage:"lock.shield").font(.caption).foregroundStyle(.secondary)
           Toggle("Trust server certificate", isOn: $profile.trustCertificate).toggleStyle(.checkbox)
-            .help("Şifreleme açık kalır; sunucu sertifikası doğrulanmaz.")
+            .studioHelp("Şifreleme açık kalır; sunucu sertifikası doğrulanmaz.")
           if profile.trustCertificate {
             Text("Şifreleme açık; sertifika doğrulanmayacak.").font(.caption).foregroundStyle(
               .orange)

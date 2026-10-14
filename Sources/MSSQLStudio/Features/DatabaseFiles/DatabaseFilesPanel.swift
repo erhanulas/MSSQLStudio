@@ -124,29 +124,25 @@ struct DatabaseFilesPanel:View {
         StudioPanelHeading(title:"Database Files",icon:"internaldrive",subtitle:model.server.profile.name+" · Dosya envanteri ve alan kullanımı").lineLimit(1)
         Spacer(minLength:8)
         if model.loading || model.loadingDetails {ProgressView().controlSize(.small)}
-        StudioActionButton("Sorguda Aç",icon:"curlybraces") {openQuery()}.help("Dosya envanterinin salt okunur SQL sorgusunu yeni sekmede aç")
+        StudioActionButton("Sorguda Aç",icon:"curlybraces") {openQuery()}.studioHelp("Dosya envanterinin salt okunur SQL sorgusunu yeni sekmede aç")
         StudioActionButton("Yenile",icon:"arrow.clockwise") {Task {await model.refresh()}}
-          .disabled(model.loading || !visible).help("Dosya envanterini ve seçili veritabanının alan kullanımını yenile").accessibilityIdentifier("filesRefresh")
+          .disabled(model.loading || !visible).studioHelp("Dosya envanterini ve seçili veritabanının alan kullanımını yenile").accessibilityIdentifier("filesRefresh")
       }
       HStack(spacing:12) {
-        Picker("Veritabanı",selection:$model.databaseFilter) {
-          Text("Tüm veritabanları").tag("")
-          ForEach(model.databases,id:\.self) {Text($0).tag($0)}
-          if !model.databaseFilter.isEmpty,!model.databases.contains(model.databaseFilter) {Text(model.databaseFilter).tag(model.databaseFilter)}
-        }.frame(width:245).help("Dosya listesini veritabanına göre daralt").accessibilityIdentifier("filesDatabase")
+        StudioSearchablePicker(title:"Veritabanı",values:[""]+model.databases,emptyTitle:"Tüm veritabanları",selection:$model.databaseFilter).frame(width:245).studioHelp("Dosya listesini veritabanına göre daralt").accessibilityIdentifier("filesDatabase")
         TextField("Dosya, veritabanı veya yol ara",text:$model.search).textFieldStyle(.roundedBorder)
-          .help("Görünür dosyaları ad, veritabanı ve fiziksel yola göre ara").accessibilityIdentifier("filesSearch")
+          .studioHelp("Görünür dosyaları ad, veritabanı ve fiziksel yola göre ara").accessibilityIdentifier("filesSearch")
         Text("\(model.filtered.count) dosya").foregroundStyle(.secondary).monospacedDigit().fixedSize()
       }
       summary
       if !notices.isEmpty {
         Label(notices.joined(separator:" · "),systemImage:"exclamationmark.triangle.fill")
           .font(.system(size:11)).foregroundStyle(Color(nsColor:model.error.isEmpty ? StudioTheme.warning:StudioTheme.danger))
-          .lineLimit(2).help(notices.joined(separator:"\n")).textSelection(.enabled)
+          .lineLimit(2).studioHelp(notices.joined(separator:"\n")).textSelection(.enabled)
       }
       Table(model.filtered,selection:Binding(get:{model.selectedID},set:{model.select($0)})) {
         TableColumn("Veritabanı") {Text($0.database ?? "Kimlik \($0.databaseID)").lineLimit(1)}.width(min:100,ideal:135,max:180)
-        TableColumn("Dosya") {file in Label(file.name,systemImage:file.type == "LOG" ? "doc.text":"internaldrive").lineLimit(1).help(file.name)}.width(min:120,ideal:180,max:320)
+        TableColumn("Dosya") {file in Label(file.name,systemImage:file.type == "LOG" ? "doc.text":"internaldrive").lineLimit(1).studioHelp(file.name)}.width(min:120,ideal:180,max:320)
         TableColumn("Tür") {file in Text(DatabaseFileFormat.type(file.type)).foregroundStyle(file.id == model.selectedID ? .primary:.secondary)}.width(76)
         TableColumn("Boyut") {Text(DatabaseFileFormat.pages($0.sizePages)).monospacedDigit()}.width(96)
         TableColumn("Otomatik büyüme") {Text(DatabaseFileFormat.growth($0)).monospacedDigit()}.width(125)
@@ -155,9 +151,9 @@ struct DatabaseFilesPanel:View {
       detail
       HStack {
         Image(systemName:"info.circle").foregroundStyle(.secondary)
-        Text("Boyutlar mantıksal tahsistir; disk boş alanını göstermez. Kullanım yalnız seçili veritabanından okunur.").lineLimit(1).help("tempdb ve FILESTREAM boyutları envanterde bilinmiyor olarak gösterilir; seçildiğinde sys.database_files üzerinden güncel değer okunur. Snapshot boyutu azami mantıksal tahsistir.")
+        Text("Boyutlar mantıksal tahsistir; disk boş alanını göstermez. Kullanım yalnız seçili veritabanından okunur.").lineLimit(1).studioHelp("tempdb ve FILESTREAM boyutları envanterde bilinmiyor olarak gösterilir; seçildiğinde sys.database_files üzerinden güncel değer okunur. Snapshot boyutu azami mantıksal tahsistir.")
         Spacer(minLength:0)
-        if let time=model.sampledAt {Text(time,style:.time).monospacedDigit().help("Envanterin son başarılı yenilenme zamanı")}
+        if let time=model.sampledAt {Text(time,style:.time).monospacedDigit().studioHelp("Envanterin son başarılı yenilenme zamanı")}
       }.font(.system(size:10)).foregroundStyle(.secondary)
     }.padding(18).studioPanel()
       .background(MonitorVisibilityProbe {visible=$0;model.setVisible($0)})
@@ -196,13 +192,13 @@ struct DatabaseFilesPanel:View {
     if let file=model.selected {
       VStack(alignment:.leading,spacing:9) {
         HStack {
-          Label(file.name,systemImage:file.type == "LOG" ? "doc.text":"internaldrive").font(.system(size:13,weight:.semibold)).lineLimit(1).help(file.name)
+          Label(file.name,systemImage:file.type == "LOG" ? "doc.text":"internaldrive").font(.system(size:13,weight:.semibold)).lineLimit(1).studioHelp(file.name)
           Text("\(file.database ?? "—") · \(DatabaseFileFormat.type(file.type))").font(.system(size:11)).foregroundStyle(.secondary).lineLimit(1)
           Spacer(minLength:8)
           if file.readOnly == true {Label("Salt okunur",systemImage:"lock.fill").font(.system(size:10)).foregroundStyle(.secondary)}
           StudioActionButton("Yolu Kopyala",icon:"doc.on.doc") {
             if let path=file.path {NSPasteboard.general.clearContents();NSPasteboard.general.setString(path,forType:.string)}
-          }.disabled(file.path == nil).help("Seçili dosyanın fiziksel yolunu kopyala")
+          }.disabled(file.path == nil).studioHelp("Seçili dosyanın fiziksel yolunu kopyala")
         }
         HStack(spacing:22) {
           detailMetric(file.sparse == true ? "Azami mantıksal boyut":"Dosya boyutu",DatabaseFileFormat.pages(file.sizePages))
@@ -214,12 +210,12 @@ struct DatabaseFilesPanel:View {
         }
         if let fraction=file.usedFraction {
           ProgressView(value:fraction).tint(Color(nsColor:fraction>=0.9 ? StudioTheme.warning:StudioTheme.accent))
-            .help("Dosya içindeki ayrılmış sayfaların oranı: %"+String(format:"%.1f",fraction*100))
+            .studioHelp("Dosya içindeki ayrılmış sayfaların oranı: %"+String(format:"%.1f",fraction*100))
         } else {
           Text(file.type == "LOG" ? "Log kullanımı dosya başına güvenilir biçimde ölçülmez; kullanılan ve boş alan gösterilmez.":file.sparse == true ? "Snapshot dosyasının fiziksel disk kullanımı bu ölçümün kapsamında değil.":model.loadingDetails ? "Alan kullanımı seçili veritabanından okunuyor…":"Kullanım bilgisi henüz okunamadı veya bu dosya türünde sağlanmıyor.")
             .font(.system(size:10)).foregroundStyle(.secondary).lineLimit(1)
         }
-        Text(file.path ?? "Fiziksel yol bilgisi okunamadı.").font(.system(size:10,design:.monospaced)).lineLimit(2).textSelection(.enabled).help(file.path ?? "Fiziksel yol bilinmiyor")
+        Text(file.path ?? "Fiziksel yol bilgisi okunamadı.").font(.system(size:10,design:.monospaced)).lineLimit(2).textSelection(.enabled).studioHelp(file.path ?? "Fiziksel yol bilinmiyor")
       }.padding(12).background(Color(nsColor:StudioTheme.canvas),in:RoundedRectangle(cornerRadius:10))
         .overlay(RoundedRectangle(cornerRadius:10).stroke(Color(nsColor:StudioTheme.border))).accessibilityIdentifier("filesDetail")
     } else {

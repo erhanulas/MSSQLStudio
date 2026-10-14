@@ -13,8 +13,8 @@ struct SettingsApplyButton:NSViewRepresentable {
     @objc func submit() {apply()}
   }
   func makeCoordinator()->Coordinator {Coordinator(apply)}
-  func makeNSView(context:Context)->StudioDialogButton {
-    let button=StudioDialogButton(title:"Uygula",target:context.coordinator,action:#selector(Coordinator.submit))
+  func makeNSView(context:Context)->StudioPrimaryActionButton {
+    let button=StudioPrimaryActionButton(title:"Uygula",target:context.coordinator,action:#selector(Coordinator.submit))
     button.bezelStyle = .rounded;button.controlSize = .regular
     button.image=NSImage(systemSymbolName:"checkmark",accessibilityDescription:nil)
     button.imagePosition = .imageLeading
@@ -23,9 +23,8 @@ struct SettingsApplyButton:NSViewRepresentable {
     button.toolTip="Tercihleri uygula"
     return button
   }
-  func updateNSView(_ button:StudioDialogButton,context:Context) {
+  func updateNSView(_ button:StudioPrimaryActionButton,context:Context) {
     context.coordinator.apply=apply;button.isEnabled=enabled
-    button.bezelColor=StudioTheme.accent
-    button.contentTintColor=scheme == .dark ? StudioTheme.canvas:.white
+    button.refreshStyle()
   }
 }

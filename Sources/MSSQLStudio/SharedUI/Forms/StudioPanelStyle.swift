@@ -21,7 +21,7 @@ struct StudioActionButton: View {
         if let tint, !primary { Image(systemName: icon).foregroundStyle(enabled ? tint : Color.secondary) }
         else { Image(systemName: icon) }
       }
-    }.accessibilityLabel(title).help(title)
+    }.accessibilityLabel(title).studioHelp(title)
   }
 }
 private struct StudioPrimaryActionKey: EnvironmentKey {
@@ -107,7 +107,7 @@ struct StudioNavigationItem: View {
         .overlay(alignment: .leading) {
           if selected { Capsule().fill(Color(nsColor: StudioTheme.accent)).frame(width: 3, height: 16) }
         }.contentShape(Rectangle())
-    }.buttonStyle(.plain).help(title).accessibilityLabel(title)
+    }.buttonStyle(.plain).studioHelp(title).accessibilityLabel(title)
       .accessibilityAddTraits(selected ? .isSelected : [])
   }
 }

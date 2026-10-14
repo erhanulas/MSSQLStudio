@@ -32,7 +32,7 @@ struct AgentHistoryPanel:View {
       HStack {
         Picker("Durum",selection:$status) {Text("Tümü").tag(-1);Text("Succeeded").tag(1);Text("Failed").tag(0);Text("Retry").tag(2);Text("Canceled").tag(3);Text("In Progress").tag(4)}.frame(width:210).accessibilityIdentifier("agentHistoryStatus")
         Picker("Son",selection:$days) {Text("1 gün").tag(1);Text("7 gün").tag(7);Text("30 gün").tag(30);Text("365 gün").tag(365);Text("10 yıl").tag(3650)}.frame(width:150)
-        Toggle("Adım ayrıntıları",isOn:$steps).help("İlk açılışta çalışma sonuçları alınır. Adım ve yeniden deneme ayrıntıları için açın.")
+        Toggle("Adım ayrıntıları",isOn:$steps).studioHelp("İlk açılışta çalışma sonuçları alınır. Adım ve yeniden deneme ayrıntıları için açın.")
         Spacer()
         Button {generation+=1} label:{Label("Yenile",systemImage:"arrow.clockwise")}.disabled(loading).accessibilityIdentifier("agentHistoryRefresh")
       }

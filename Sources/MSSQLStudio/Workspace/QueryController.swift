@@ -50,7 +50,7 @@ import SwiftUI
   private let resultPane = NSView()
   private(set) var resultsHidden = false
   private var savedEditorFraction: CGFloat = 0.60
-  private let messages = NSTextView()
+  private let messages = StudioTextView()
   private let connectionBadge = NSTextField(labelWithString: "")
   private var editorHeader: NSStackView?
   private let editorHeaderSlot=NSView()

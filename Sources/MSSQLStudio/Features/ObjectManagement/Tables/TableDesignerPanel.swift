@@ -67,14 +67,14 @@ struct TableDesignerPanel: View {
           HStack {Color.clear.frame(width:28,height:1);Text("Kolon adı").frame(width:150);Text("Veri tipi").frame(width:150);Text("NULL").frame(width:45);Text("PK").frame(width:40);Text("Identity").frame(width:70);Text("Default / computed").frame(width:240,alignment:.leading)}.font(.caption).foregroundStyle(.secondary)
           ForEach($columns) { $column in
             HStack {
-              Button {selectedColumn=column.id;focusedColumn=ColumnFocus(id:column.id,field:0)} label:{Image(systemName:selectedColumn == column.id ? "arrowtriangle.right.fill" : "circle").foregroundStyle(selectedColumn == column.id ? Color.accentColor : Color.secondary).frame(width:28,height:24).contentShape(Rectangle())}.buttonStyle(.plain).accessibilityLabel(column.name+" kolonunu seç").accessibilityIdentifier("selectDesignerColumn_\(column.id)").help("Bu kolonu seç; üstteki − düğmesi seçili kolonu kaldırır.")
+              Button {selectedColumn=column.id;focusedColumn=ColumnFocus(id:column.id,field:0)} label:{Image(systemName:selectedColumn == column.id ? "arrowtriangle.right.fill" : "circle").foregroundStyle(selectedColumn == column.id ? Color.accentColor : Color.secondary).frame(width:28,height:24).contentShape(Rectangle())}.buttonStyle(.plain).accessibilityLabel(column.name+" kolonunu seç").accessibilityIdentifier("selectDesignerColumn_\(column.id)").studioHelp("Bu kolonu seç; üstteki − düğmesi seçili kolonu kaldırır.")
               TextField("Kolon",text:$column.name).frame(width:150).focused($focusedColumn,equals:ColumnFocus(id:column.id,field:0))
               TextField("int / nvarchar(100)",text:$column.type).frame(width:150).disabled(original?.columns.first(where:{$0.id==column.id})?.generated == true).focused($focusedColumn,equals:ColumnFocus(id:column.id,field:1))
               Toggle("",isOn:$column.nullable).labelsHidden().frame(width:45).disabled(column.identity || !column.computed.isEmpty)
               Toggle("",isOn:Binding(get:{primary.contains(column.id)},set:{if $0 {primary.insert(column.id);if let i=columns.firstIndex(where:{$0.id==column.id}) {columns[i].nullable=false}} else {primary.remove(column.id)}})).labelsHidden().frame(width:40)
               Toggle("",isOn:Binding(get:{column.identity},set:{column.identity=$0;if $0 {column.nullable=false}})).labelsHidden().frame(width:70).disabled(original?.columns.contains(where:{$0.id==column.id}) == true)
               if column.computed.isEmpty {TextField("DEFAULT SQL",text:$column.defaultSQL).frame(width:240).focused($focusedColumn,equals:ColumnFocus(id:column.id,field:2))}
-              else {Text("AS "+column.computed).lineLimit(1).frame(width:240,alignment:.leading).help(column.computed)}
+              else {Text("AS "+column.computed).lineLimit(1).frame(width:240,alignment:.leading).studioHelp(column.computed)}
             }.padding(.vertical,3).background(selectedColumn == column.id ? Color.accentColor.opacity(0.13) : Color.clear).overlay(alignment:.leading) {if selectedColumn == column.id {Rectangle().fill(Color.accentColor).frame(width:2)}}.contentShape(Rectangle()).simultaneousGesture(TapGesture().onEnded {selectedColumn=column.id}).id(column.id)
           }
         }.padding(.vertical,8)

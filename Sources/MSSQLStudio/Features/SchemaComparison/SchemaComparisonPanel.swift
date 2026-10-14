@@ -485,14 +485,14 @@ struct SchemaComparisonPanel: View {
   }
   private var objects:some View {
     Table(model.visible,selection:$model.focused) {
-      TableColumn("Nesne") {row in Label(row.key.qualified,systemImage:symbol(row)).lineLimit(1).help(row.key.qualified)}.width(min:200,ideal:440)
+      TableColumn("Nesne") {row in Label(row.key.qualified,systemImage:symbol(row)).lineLimit(1).studioHelp(row.key.qualified)}.width(min:200,ideal:440)
       TableColumn("Tür") {Text(($0.source ?? $0.target)?.kind ?? "")}.width(90)
       TableColumn("Durum") {row in
         Group {
           if let notice=model.migrationNotice(for:row) {Label(notice.title,systemImage:"exclamationmark.triangle").foregroundStyle(Color(nsColor:StudioTheme.danger))}
           else if model.focused==row.key {Label(row.status.rawValue,systemImage:statusSymbol(row.status))}
           else {Label(row.status.rawValue,systemImage:statusSymbol(row.status)).foregroundStyle(Color(nsColor:tone(row.status)))}
-        }.help(model.migrationNotice(for:row).map {$0.detail+(model.unverifiedKeys.contains(row.key) ? "\nGüncel fark için seçili nesneyi yenileyin.":"\nGüncel fark yeniden doğrulandı; yeniden taşımak için yeni önizleme açın.")} ?? row.migrationIssue)
+        }.studioHelp(model.migrationNotice(for:row).map {$0.detail+(model.unverifiedKeys.contains(row.key) ? "\nGüncel fark için seçili nesneyi yenileyin.":"\nGüncel fark yeniden doğrulandı; yeniden taşımak için yeni önizleme açın.")} ?? row.migrationIssue)
       }.width(min:160,ideal:190)
     }.disabled(model.applying).accessibilityIdentifier("schemaDifferences")
       .overlay {if model.visible.isEmpty && !model.busy {
@@ -503,7 +503,7 @@ struct SchemaComparisonPanel: View {
     VStack(alignment:.leading,spacing:8) {
       HStack(spacing:10) {
         if model.detailLoading {ProgressView().controlSize(.small)}
-        Text(model.detailSummary).font(.system(size:12,weight:.semibold)).lineLimit(1).help(model.detailSummary)
+        Text(model.detailSummary).font(.system(size:12,weight:.semibold)).lineLimit(1).studioHelp(model.detailSummary)
         Spacer(minLength:8)
         if model.hasColumns {
           Picker("Karşılaştırma görünümü",selection:$model.detailMode) {
@@ -512,14 +512,14 @@ struct SchemaComparisonPanel: View {
         }
         if model.effectiveDetailMode == .code,let comparison=model.detailComparison {
           Text("−\(comparison.removed)  +\(comparison.added)").monospacedDigit().font(.caption).foregroundStyle(.secondary)
-            .help((model.currentDifference?.source ?? model.currentDifference?.target)?.usesSQLCodeComparison==true ? "Gereksiz boşluk ve satır sonları yok sayılır; özgün SQL korunur.":"Değişen SQL satırları")
+            .studioHelp((model.currentDifference?.source ?? model.currentDifference?.target)?.usesSQLCodeComparison==true ? "Gereksiz boşluk ve satır sonları yok sayılır; özgün SQL korunur.":"Değişen SQL satırları")
           Text(model.changedGroups.isEmpty ? "Kod aynı":"\(model.changeIndex+1)/\(model.changedGroups.count)").font(.caption).foregroundStyle(.secondary)
           StudioActionButton("Önceki kod farkı",icon:"chevron.up") {model.moveChange(-1)}.labelStyle(.iconOnly).disabled(model.changedGroups.isEmpty).accessibilityIdentifier("schemaPreviousDifference")
           StudioActionButton("Sonraki kod farkı",icon:"chevron.down") {model.moveChange(1)}.labelStyle(.iconOnly).disabled(model.changedGroups.isEmpty).accessibilityIdentifier("schemaNextDifference")
         }
       }.frame(minHeight:28)
       if !model.detailNotice.isEmpty {
-        Label(model.detailNotice,systemImage:"info.circle").font(.caption).foregroundStyle(.secondary).lineLimit(2).textSelection(.enabled).help(model.detailNotice)
+        Label(model.detailNotice,systemImage:"info.circle").font(.caption).foregroundStyle(.secondary).lineLimit(2).textSelection(.enabled).studioHelp(model.detailNotice)
       }
       if model.effectiveDetailMode == .columns {
         columns
@@ -546,10 +546,10 @@ struct SchemaComparisonPanel: View {
         Toggle("Yalnız farklı kolonlar",isOn:$model.columnOnlyDifferences).toggleStyle(.checkbox).disabled(!model.columnsReady)
       }
       Table(model.visibleColumns) {
-        TableColumn("Kolon") {row in Text(row.name).fontWeight(row.isEqual ? .regular:.medium).lineLimit(1).help(row.name)}.width(min:130,ideal:180)
+        TableColumn("Kolon") {row in Text(row.name).fontWeight(row.isEqual ? .regular:.medium).lineLimit(1).studioHelp(row.name)}.width(min:130,ideal:180)
         TableColumn("Kaynak · \(model.source?.database ?? "")") {row in columnValue(row.source,changed:!row.isEqual,source:true)}.width(min:180,ideal:270)
         TableColumn("Hedef · \(model.target?.database ?? "")") {row in columnValue(row.target,changed:!row.isEqual,source:false)}.width(min:180,ideal:270)
-        TableColumn("Fark") {row in Text(row.summary).font(.caption).foregroundStyle(Color(nsColor:row.isEqual ? StudioTheme.muted:StudioTheme.warning)).lineLimit(2).help(row.summary)}.width(min:110,ideal:190)
+        TableColumn("Fark") {row in Text(row.summary).font(.caption).foregroundStyle(Color(nsColor:row.isEqual ? StudioTheme.muted:StudioTheme.warning)).lineLimit(2).studioHelp(row.summary)}.width(min:110,ideal:190)
       }.accessibilityIdentifier("schemaColumns")
         .overlay {if model.columnsReady && model.visibleColumns.isEmpty {Text("Kolon özellikleri aynı").foregroundStyle(.secondary)}}
     }
@@ -557,18 +557,18 @@ struct SchemaComparisonPanel: View {
   private var footer:some View {
     HStack(spacing:10) {
       VStack(alignment:.leading,spacing:3) {
-        Text(model.message).font(.caption).lineLimit(1).help(model.message)
-        Text("Taşıma için bir nesne seçin").font(.caption2).foregroundStyle(.secondary).lineLimit(1).help("Tablo: kolonlar · SQL modülü: kod. Yalnız doğrulanmış farklar listelenir. Taşıma yalnız şemayı değiştirir; veri, izin ve sahiplik taşınmaz.")
+        Text(model.message).font(.caption).lineLimit(1).studioHelp(model.message)
+        Text("Taşıma için bir nesne seçin").font(.caption2).foregroundStyle(.secondary).lineLimit(1).studioHelp("Tablo: kolonlar · SQL modülü: kod. Yalnız doğrulanmış farklar listelenir. Taşıma yalnız şemayı değiştirir; veri, izin ve sahiplik taşınmaz.")
       }.frame(minWidth:0,maxWidth:.infinity,alignment:.leading).layoutPriority(-1)
       if !model.differences.isEmpty {
         metric("Farklı",count:model.differentCount,color:StudioTheme.warning)
         metric("Aynı",count:model.sameCount,color:StudioTheme.success)
-        if model.unavailableCount>0 {metric("Okunamadı",count:model.unavailableCount,color:StudioTheme.danger).help("Tanımı şifreli veya okunamayan nesneler listelenmez.")}
+        if model.unavailableCount>0 {metric("Okunamadı",count:model.unavailableCount,color:StudioTheme.danger).studioHelp("Tanımı şifreli veya okunamayan nesneler listelenmez.")}
       }
       if model.applying {ProgressView().controlSize(.small)}
       if model.focused.map({model.unverifiedKeys.contains($0)})==true {
         StudioActionButton("Seçili nesneyi yenile",icon:"arrow.clockwise") {Task {await model.refreshFocusedDifference()}}.labelStyle(.iconOnly)
-          .disabled(!model.canRefreshFocused).help("Yalnız seçili nesnenin kaynak ve hedef bilgilerini yenile; taşıma tekrar gönderilmez.").accessibilityIdentifier("schemaRefreshSelected")
+          .disabled(!model.canRefreshFocused).studioHelp("Yalnız seçili nesnenin kaynak ve hedef bilgilerini yenile; taşıma tekrar gönderilmez.").accessibilityIdentifier("schemaRefreshSelected")
       }
       StudioActionButton("Kaynak SQL’i hedef sekmede aç",icon:"doc.text") {openSQL(model.sourceSQL)}.labelStyle(.iconOnly)
         .disabled(model.detailComparison == nil || model.currentDifference?.source == nil || model.sourceSQL.isEmpty || model.applying).accessibilityIdentifier("schemaOpenSQL")
@@ -579,7 +579,7 @@ struct SchemaComparisonPanel: View {
   private func endpoint(_ title:String,icon:String,selection:Binding<String>,options:[SchemaEndpoint])->some View {
     HStack(spacing:7) {
       Label(title,systemImage:icon).font(.caption).foregroundStyle(.secondary)
-      Picker(title,selection:selection) {Text("Veritabanı seçin").tag("");ForEach(options,id:\.id) {Text($0.title).tag($0.id)}}.labelsHidden().frame(minWidth:105,maxWidth:.infinity).accessibilityLabel(title+" veritabanı").accessibilityIdentifier(title=="Kaynak" ? "schemaSource":"schemaTarget").help(selection.wrappedValue.isEmpty ? title+" veritabanını seçin":model.endpoints.first {$0.id==selection.wrappedValue}?.title ?? title)
+      Picker(title,selection:selection) {Text("Veritabanı seçin").tag("");ForEach(options,id:\.id) {Text($0.title).tag($0.id)}}.labelsHidden().frame(minWidth:105,maxWidth:.infinity).accessibilityLabel(title+" veritabanı").accessibilityIdentifier(title=="Kaynak" ? "schemaSource":"schemaTarget").studioHelp(selection.wrappedValue.isEmpty ? title+" veritabanını seçin":model.endpoints.first {$0.id==selection.wrappedValue}?.title ?? title)
     }.frame(minWidth:170,idealWidth:220,maxWidth:330).disabled(model.busy || model.applying)
   }
   private func metric(_ title:String,count:Int,color:NSColor)->some View {
@@ -587,7 +587,7 @@ struct SchemaComparisonPanel: View {
       .padding(.horizontal,8).padding(.vertical,4).background(Color(nsColor:color).opacity(0.08),in:Capsule())
   }
   private func sideTitle(_ title:String,name:String,color:NSColor)->some View {
-    HStack(spacing:6) {Circle().fill(Color(nsColor:color)).frame(width:5,height:5);Text(title).fontWeight(.semibold);Text(name).foregroundStyle(.secondary).lineLimit(1).help(name)}
+    HStack(spacing:6) {Circle().fill(Color(nsColor:color)).frame(width:5,height:5);Text(title).fontWeight(.semibold);Text(name).foregroundStyle(.secondary).lineLimit(1).studioHelp(name)}
       .font(.caption).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,8)
   }
   private func columnValue(_ column:SchemaColumn?,changed:Bool,source:Bool)->some View {
@@ -598,7 +598,7 @@ struct SchemaComparisonPanel: View {
       } else {Text("—").foregroundStyle(.secondary)}
     }.frame(minHeight:40,alignment:.leading).padding(.horizontal,4)
       .background(changed ? Color(nsColor:source ? StudioTheme.success:StudioTheme.danger).opacity(0.07):.clear,in:RoundedRectangle(cornerRadius:4))
-      .help(column.map {$0.dataType+"\n"+columnDetails($0)} ?? "Bu veritabanında kolon yok")
+      .studioHelp(column.map {$0.dataType+"\n"+columnDetails($0)} ?? "Bu veritabanında kolon yok")
   }
   private func columnDetails(_ column:SchemaColumn)->String {
     ([column.nullable ? "NULL":"NOT NULL","Sıra \(column.ordinal)",column.userDefined ? column.baseDataType:"",column.collation,column.attributes].filter {!$0.isEmpty}).joined(separator:" · ")

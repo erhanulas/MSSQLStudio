@@ -50,7 +50,7 @@ struct ColumnFilterPanel: View {
               .toggleStyle(.checkbox).font(.system(size: 12)).lineLimit(1)
               .padding(.horizontal, 10).padding(.vertical, 6)
               .frame(maxWidth: .infinity, alignment: .leading)
-              .help(String(value.title.prefix(4000)))
+              .studioHelp(String(value.title.prefix(4000)))
           }
           if values.isEmpty && !loading { Text("Eşleşen değer yok").foregroundStyle(.secondary).padding(12) }
         }.frame(maxWidth: .infinity, alignment: .leading)

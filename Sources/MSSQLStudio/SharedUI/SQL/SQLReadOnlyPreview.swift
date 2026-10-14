@@ -3,25 +3,29 @@ import CoreText
 import SQLServerKit
 import SwiftUI
 
-@MainActor private final class DefinitionPreviewTextView: NSTextView {
+@MainActor private final class DefinitionPreviewTextView: StudioTextView {
   var navigateDefinition: (([String]) -> Void)?
   var revealInExplorer: (([String]) -> Void)?
-  @objc private func reveal(_ item:NSMenuItem) {if let parts=item.representedObject as? [String] {revealInExplorer?(parts)}}
+  @objc private func revealExplorerObject(_ item:NSMenuItem) {if let parts=item.representedObject as? [String] {revealInExplorer?(parts)}}
   override func validateUserInterfaceItem(_ item:any NSValidatedUserInterfaceItem)->Bool {
-    if item.action == #selector(reveal(_:)) {return revealInExplorer != nil && (item as? NSMenuItem)?.representedObject is [String]}
+    if item.action == #selector(revealExplorerObject(_:)) {return revealInExplorer != nil && (item as? NSMenuItem)?.representedObject is [String]}
     return super.validateUserInterfaceItem(item)
   }
   override func menu(for event:NSEvent)->NSMenu? {
     let menu=super.menu(for:event) ?? StudioMenu()
     if revealInExplorer != nil {
-      let item=NSMenuItem(title:"Explorer’da Git",action:#selector(reveal(_:)),keyEquivalent:"")
+      let item=NSMenuItem(title:"Explorer’da Git",action:#selector(revealExplorerObject(_:)),keyEquivalent:"")
       item.target=self;item.representedObject=DefinitionReference.parts(in:string,at:characterIndexForInsertion(at:convert(event.locationInWindow,from:nil)),maxParts:3)
       item.isEnabled=item.representedObject != nil;menu.addItem(.separator());menu.addItem(item)
     }
     return menu
   }
+  @objc private func goToDefinition(_ sender:Any?) {
+    if let parts=DefinitionReference.parts(in:string,at:selectedRange().location) {navigateDefinition?(parts)}
+  }
   override func keyDown(with event: NSEvent) {
-    if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, event.charactersIgnoringModifiers?.lowercased() == "b", let navigateDefinition {
+    if GridShortcuts.matches(.revealExplorer,event),let parts=DefinitionReference.parts(in:string,at:selectedRange().location,maxParts:3) {revealInExplorer?(parts);return}
+    if GridShortcuts.matches(.definition,event), let navigateDefinition {
       if let parts=DefinitionReference.parts(in:string,at:selectedRange().location) {navigateDefinition(parts)}
       return
     }

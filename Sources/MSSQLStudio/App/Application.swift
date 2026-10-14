@@ -255,7 +255,7 @@ import SwiftUI
     NSApp.mainMenu = bar
     func menu(_ title: String) -> NSMenu {
       let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-      let submenu = NSMenu(title: title)
+      let submenu = StudioMenu(title: title)
       item.submenu = submenu
       bar.addItem(item)
       return submenu
@@ -279,6 +279,7 @@ import SwiftUI
       withTitle: "MSSQL Studio'dan Çık", action: #selector(NSApplication.terminate(_:)),
       keyEquivalent: "q")
     let file = menu("Dosya")
+    command(file,"Bağlantıları Yönet…",#selector(WorkbenchController.showConnect))
     command(file, "Yeni Sorgu", #selector(WorkbenchController.newQuery), "n")
     command(file,"Explorer’ı Dışa Aktar…",#selector(WorkbenchController.exportExplorer))
     command(file,"Explorer’ı İçe Aktar…",#selector(WorkbenchController.importExplorer))
@@ -312,6 +313,10 @@ import SwiftUI
       let binding=GridShortcuts.binding(shortcut)
       let item=edit.addItem(withTitle:title,action:action,keyEquivalent:binding.key);item.keyEquivalentModifierMask=binding.flags
     }
+    for (title,selector) in [("Nesne Tanımına Git",Selector(("goToDefinition:"))),("Explorer’da Git",Selector(("revealExplorerObject:"))),("Eşleşen Ayırıcıya Git",Selector(("goToMatchingPair:"))),("Parametre Bilgisi",Selector(("showParameterInfo:"))),("Bloğu Daralt / Aç",Selector(("toggleCodeOutline:"))),("Tüm Blokları Aç",Selector(("expandCodeOutline:")))] {
+      edit.addItem(withTitle:title,action:selector,keyEquivalent:"")
+    }
+    edit.addItem(withTitle:"Tamamlamayı Göster",action:#selector(SQLTextView.showSQLCompletion(_:)),keyEquivalent:"")
     let query = menu("Sorgu")
     command(query, "Favori Sorgular…", #selector(WorkbenchController.showFavorites))
     command(query, "Favori Sorguları Yönet…", #selector(WorkbenchController.manageFavorites))
@@ -341,6 +346,12 @@ import SwiftUI
     command(view, "Sorguyu Ayrı Pencereye Taşı", #selector(WorkbenchController.detachQuery))
     command(
       view, "Tüm Sorguları Çalışma Alanına Yerleştir", #selector(WorkbenchController.redockQueries))
+    view.addItem(.separator())
+    command(view,"Sekmeyi Sabitle / Kaldır",#selector(WorkbenchController.pinActiveTab))
+    command(view,"Soldaki Sekmeleri Kapat",#selector(WorkbenchController.closeLeftTabs))
+    command(view,"Sağdaki Sekmeleri Kapat",#selector(WorkbenchController.closeRightTabs))
+    command(view,"Diğer Sekmeleri Kapat",#selector(WorkbenchController.closeOtherTabs))
+    command(view,"Tüm Sekmeleri Kapat",#selector(WorkbenchController.closeAllTabs))
     let windowMenu = menu("Pencere")
     NSApp.windowsMenu = windowMenu
     windowMenu.addItem(

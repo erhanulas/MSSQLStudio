@@ -108,7 +108,7 @@ struct ResultColumnSearch: View {
         StudioPanelHeading(title:"Kolona Git",icon:"text.magnifyingglass",subtitle:"Başlıkta ara ve hedefi vurgula")
         Spacer()
         Button(action:dismiss) {Image(systemName:"xmark").frame(width:24,height:24).contentShape(Rectangle())}
-          .buttonStyle(.plain).help("Kapat (Esc)").accessibilityLabel("Kolon aramasını kapat")
+          .buttonStyle(.plain).studioHelp("Kapat (Esc)").accessibilityLabel("Kolon aramasını kapat")
       }
       TextField("Kolon adı ara…",text:$search).textFieldStyle(.roundedBorder).focused($focused)
         .accessibilityIdentifier("columnNavigationSearch").onSubmit(openSelected)
@@ -159,6 +159,6 @@ private struct ResultColumnSearchRow:View {
         Image(systemName:"arrow.turn.down.left").foregroundStyle(.secondary).opacity(selected ? 1:0)
       }.padding(10).frame(maxWidth:.infinity,alignment:.leading)
         .background(background,in:RoundedRectangle(cornerRadius:7)).contentShape(Rectangle())
-    }.buttonStyle(.plain).help(column.name+" · "+column.type).accessibilityLabel(column.name+" · "+detail)
+    }.buttonStyle(.plain).studioHelp(column.name+" · "+column.type).accessibilityLabel(column.name+" · "+detail)
   }
 }

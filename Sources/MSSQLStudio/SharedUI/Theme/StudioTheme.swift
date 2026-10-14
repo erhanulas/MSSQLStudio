@@ -36,6 +36,7 @@ import SwiftUI
   static var panel: NSColor { color(0xF4F6FA, 0x222833) }
   static var text: NSColor { color(0x263247, 0xE1E7F0) }
   static var border: NSColor { color(0xE1E6EF, 0x333C4A) }
+  static var editorSelection:NSColor {dark ? NSColor(srgbRed:0.23,green:0.34,blue:0.50,alpha:1):NSColor(srgbRed:0.72,green:0.81,blue:0.97,alpha:1)}
   static var selection: NSColor { color(0xE8EFFF, 0x2C4062) }
   static var lineNumber: NSColor { color(0x008080, 0x4EC9B0) }
   static var editorCanvas: NSColor { color(0xFFFFFF,0x1E1E1E) }

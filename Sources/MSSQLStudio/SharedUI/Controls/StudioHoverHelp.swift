@@ -24,16 +24,21 @@ import SwiftUI
     pending = Task { [weak self, weak view] in
       do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
       guard let self, let view, let window = view.window, window.isVisible,
-        !view.isHiddenOrHasHiddenAncestor, let name = title ?? view.accessibilityLabel(), !name.isEmpty else { return }
-      let label = NSTextField(labelWithString: name)
-      label.font = .systemFont(ofSize: 11, weight: .medium)
+        !view.isHiddenOrHasHiddenAncestor, let name = title ?? view.accessibilityLabel() ?? view.toolTip, !name.isEmpty else { return }
+      let label = NSTextField(wrappingLabelWithString:String(name.prefix(1500)))
+      label.font = .systemFont(ofSize: 12, weight: .medium)
       label.textColor = StudioTheme.text
-      label.alignment = .center
+      label.alignment = .left;label.lineBreakMode = .byTruncatingTail;label.maximumNumberOfLines=4
       label.sizeToFit()
-      var size = NSSize(width: label.frame.width + 16, height: 26)
-      var content: NSView = label
       let anchor = window.convertToScreen(view.convert(rect ?? view.bounds, to: nil))
       let screen = window.screen?.visibleFrame ?? anchor
+      let width=min(480,max(80,min(label.frame.width+24,screen.width-16)))
+      let height=min(68,max(16,ceil(label.attributedStringValue.boundingRect(with:NSSize(width:width-24,height:1000),options:[.usesLineFragmentOrigin,.usesFontLeading]).height)))
+      var size=NSSize(width:width,height:height+20)
+      let standard=NSView(frame:NSRect(origin:.zero,size:size))
+      label.frame=NSRect(x:12,y:10,width:width-24,height:height)
+      standard.addSubview(label)
+      var content:NSView=standard
       if let sqlSource {
         let width = min(560, max(240, screen.width-24))
         let code = NSTextField(wrappingLabelWithString: sqlSource.preview)
@@ -63,19 +68,26 @@ import SwiftUI
         heading.frame=NSRect(x:10,y:size.height-25,width:width-20,height:16);text.frame=NSRect(x:10,y:8,width:width-20,height:height)
         box.addSubview(heading);box.addSubview(text);content=box
       }
-      let below = anchor.minY-size.height-5
-      let y = below >= screen.minY ? below : min(screen.maxY-size.height, anchor.maxY+5)
-      let rect = NSRect(x: min(max(screen.minX, anchor.midX-size.width/2), screen.maxX-size.width),
-        y: max(screen.minY, y), width: size.width, height: size.height)
+      content.wantsLayer=true;content.layer?.cornerRadius=9;content.layer?.masksToBounds=true
+      content.layer?.borderWidth=1;content.layer?.borderColor=StudioTheme.border.cgColor
+      content.layer?.backgroundColor=(sqlSource == nil ? StudioTheme.panel:StudioTheme.editorCanvas).cgColor
+      let rect=Self.placement(anchor:anchor,size:size,screen:screen)
       let panel = NSPanel(contentRect: rect, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
       panel.isReleasedWhenClosed = false; panel.level = .popUpMenu
       panel.ignoresMouseEvents = true; panel.hasShadow = true;panel.hidesOnDeactivate=true
-      panel.backgroundColor = StudioTheme.panel
+      panel.isOpaque=false;panel.backgroundColor = .clear
       panel.contentView = content
       window.addChildWindow(panel, ordered: .above)
       panel.orderFront(nil); self.panel = panel
       visibleTitle = name; visibleDetail = detail ?? sqlSource?.preview
     }
+  }
+  static func placement(anchor:NSRect,size:NSSize,screen:NSRect)->NSRect {
+    let area=screen.insetBy(dx:8,dy:8)
+    let size=NSSize(width:min(size.width,area.width),height:min(size.height,area.height))
+    let below=anchor.minY-size.height-8
+    let y=below>=area.minY ? below:min(area.maxY-size.height,anchor.maxY+8)
+    return NSRect(x:min(max(area.minX,anchor.midX-size.width/2),area.maxX-size.width),y:max(area.minY,y),width:size.width,height:size.height)
   }
   func hide(for view: NSView? = nil) {
     if let view, source !== view { return }

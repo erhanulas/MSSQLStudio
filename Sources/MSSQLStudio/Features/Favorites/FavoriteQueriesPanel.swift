@@ -430,17 +430,14 @@ struct FavoriteDatabasePicker:View {
     VStack(alignment:.leading,spacing:5) {
       HStack {
         StudioFormField("Veritabanı") {
-          Picker("Veritabanı",selection:$selection) {
-            if !choices.names.contains(selection) {Text(selection.isEmpty ? "Veritabanı seçin":selection+" · mevcut").tag(selection)}
-            ForEach(choices.names,id:\.self) {Text($0).tag($0)}
-          }.labelsHidden().accessibilityIdentifier("favoriteDatabase")
+          StudioSearchablePicker(title:"Veritabanı",values:choices.names,selection:$selection).accessibilityIdentifier("favoriteDatabase")
         }.disabled(server == nil || choices.loading)
         if choices.loading {ProgressView().controlSize(.small).accessibilityLabel("Veritabanları yükleniyor")}
         Button {revision+=1} label:{Image(systemName:"arrow.clockwise")}
           .disabled(choices.loading || server == nil || !(server?.online == true || server?.catalogFixture != nil))
-          .help("Veritabanlarını yenile").accessibilityLabel("Veritabanlarını yenile")
+          .studioHelp("Veritabanlarını yenile").accessibilityLabel("Veritabanlarını yenile")
       }
-      if !choices.message.isEmpty {Text(choices.message).font(.caption).foregroundStyle(.secondary).lineLimit(2).help(choices.message)}
+      if !choices.message.isEmpty {Text(choices.message).font(.caption).foregroundStyle(.secondary).lineLimit(2).studioHelp(choices.message)}
     }.task(id:"\(serverID?.uuidString ?? "none")|\(server?.generation.uuidString ?? "")|\(revision)") {await choices.load(server:server)}
   }
 }

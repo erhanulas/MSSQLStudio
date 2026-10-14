@@ -171,12 +171,12 @@ struct ActivityMonitorPanel:View {
   private var controls:some View {
     HStack(spacing:10) {
       Picker("Görünüm",selection:$mode) {Text("Grafikler").tag(0);Text("Örnek tablosu").tag(1);Text("DBA").tag(2)}
-        .pickerStyle(.segmented).labelsHidden().frame(width:340).help("Performans grafikleri, geçmiş örnekler veya DBA tanıları").accessibilityIdentifier("activityMode")
+        .pickerStyle(.segmented).labelsHidden().frame(width:340).studioHelp("Performans grafikleri, geçmiş örnekler veya DBA tanıları").accessibilityIdentifier("activityMode")
       Spacer(minLength:8)
       Picker("Aralık",selection:$range) {Text("Son 5 dakika").tag(5);Text("Son 15 dakika").tag(15)}
-        .labelsHidden().frame(width:140).help("Grafik ve örnek tablosunun zaman aralığı").accessibilityLabel("Zaman aralığı")
+        .labelsHidden().frame(width:140).studioHelp("Grafik ve örnek tablosunun zaman aralığı").accessibilityLabel("Zaman aralığı")
       Picker("Yenileme",selection:$interval) {ForEach([5,10,30,60],id:\.self) {Text("\($0) sn").tag($0)}}
-        .labelsHidden().frame(width:78).help("Otomatik yenileme sıklığı").accessibilityLabel("Yenileme sıklığı")
+        .labelsHidden().frame(width:78).studioHelp("Otomatik yenileme sıklığı").accessibilityLabel("Yenileme sıklığı")
       StudioActionButton(paused ? "Sürdür":"Duraklat",icon:paused ? "play.fill":"pause.fill",tint:Color(nsColor:StudioTheme.warning)) {paused.toggle()}
         .accessibilityIdentifier("activityPause")
       StudioActionButton("Yenile",icon:"arrow.clockwise") {Task {await model.load(includeDiagnostics:mode == 2)}}
@@ -191,7 +191,7 @@ struct ActivityMonitorPanel:View {
     }.padding(.horizontal,10).padding(.vertical,6)
       .background(Color(nsColor:StudioTheme.canvas),in:Capsule())
       .overlay(Capsule().stroke(Color(nsColor:StudioTheme.border)))
-      .help("Pencere gizli veya örtülüyken otomatik örnekleme durur.")
+      .studioHelp("Pencere gizli veya örtülüyken otomatik örnekleme durur.")
   }
   private var healthCards:some View {
     HStack(spacing:10) {
@@ -214,7 +214,7 @@ struct ActivityMonitorPanel:View {
   }
   private func stripMetric(_ title:String,_ value:String,icon:String,help:String) -> some View {
     HStack(spacing:5) {Image(systemName:icon).foregroundStyle(Color(nsColor:StudioTheme.muted));Text(title).foregroundStyle(.secondary);Text(value).fontWeight(.medium).monospacedDigit()}
-      .help(help).accessibilityElement(children:.combine)
+      .studioHelp(help).accessibilityElement(children:.combine)
   }
   private var charts:some View {
     ScrollView {
@@ -250,7 +250,7 @@ struct ActivityMonitorPanel:View {
           Text("Uzun süren · \(model.diagnostics.longRunning.count)").tag(1)
           Text("Yedekleme · \(model.diagnostics.backups.count)").tag(2)
         }.pickerStyle(.segmented).labelsHidden().frame(maxWidth:570)
-          .help("Her grupta ilk 30 istek: bloklanan istekler, 30 saniyeyi aşan istekler veya devam eden yedeklemeler. Bloklayan zincirinde en çok 8 üst seviye / 60 oturum okunur.").accessibilityIdentifier("activityDiagnosticKind")
+          .studioHelp("Her grupta ilk 30 istek: bloklanan istekler, 30 saniyeyi aşan istekler veya devam eden yedeklemeler. Bloklayan zincirinde en çok 8 üst seviye / 60 oturum okunur.").accessibilityIdentifier("activityDiagnosticKind")
         Spacer(minLength:0)
         Text(model.diagnosticsTime.map {$0.formatted(date:.omitted,time:.standard)} ?? "Henüz okunmadı").font(.caption).foregroundStyle(.secondary)
       }
@@ -266,7 +266,7 @@ struct ActivityMonitorPanel:View {
           TableColumn("Bloklayan") {Text($0.blocker.map(String.init) ?? "—")}.width(min:60,ideal:70,max:85)
           TableColumn(diagnosticKind == 2 ? "İlerleme":"Bekleme") {request in
             if diagnosticKind == 2 {Text(ActivityFormat.number(request.percentComplete)+" %").monospacedDigit()}
-            else {Text(request.wait.isEmpty ? "—":request.wait).lineLimit(1).help(request.wait)}
+            else {Text(request.wait.isEmpty ? "—":request.wait).lineLimit(1).studioHelp(request.wait)}
           }
         }.frame(minHeight:120).accessibilityIdentifier("activityRequests")
         requestDetail
@@ -287,7 +287,7 @@ struct ActivityMonitorPanel:View {
         }.font(.system(size:11))
         if let percent=selected.percentComplete {
           HStack {ProgressView(value:min(100,max(0,percent)),total:100);Text(ActivityFormat.number(percent)+" %").monospacedDigit()}
-            .help("SQL Server’ın bildirdiği tahmini ilerleme; bitiş zamanı garantisi değildir.")
+            .studioHelp("SQL Server’ın bildirdiği tahmini ilerleme; bitiş zamanı garantisi değildir.")
         }
         Text("SQL · İlk 2.000 karakter").font(.system(size:10)).foregroundStyle(.secondary)
         SQLReadOnlyPreview(sql:selected.sql.isEmpty ? "-- SQL metni sağlanmadı veya görüntüleme yetkisi yok.":String(selected.sql.prefix(2000)))
@@ -312,11 +312,11 @@ struct ActivityMonitorPanel:View {
         Label("Bloklanma zinciri",systemImage:"point.3.connected.trianglepath.dotted").font(.system(size:11,weight:.semibold))
         Text("Üst oturum → bekleyen · anlık örnek").font(.system(size:10)).foregroundStyle(.secondary)
         Spacer(minLength:0)
-      }.help("DMV’ler farklı anlarda okunabilir. Zincir anlık bağlamdır; görünen SQL’in kilidi alan ifade olduğunu kanıtlamaz.")
+      }.studioHelp("DMV’ler farklı anlarda okunabilir. Zincir anlık bağlamdır; görünen SQL’in kilidi alan ifade olduğunu kanıtlamaz.")
       ScrollView(.horizontal) {
         HStack(spacing:6) {
           ForEach(Array(chain.sessionIDs.enumerated()),id:\.offset) {index,id in
-            if index>0 {Image(systemName:"arrow.right").font(.system(size:10,weight:.semibold)).foregroundStyle(.secondary).help("Soldaki oturum sağdaki oturumu blokluyor")}
+            if index>0 {Image(systemName:"arrow.right").font(.system(size:10,weight:.semibold)).foregroundStyle(.secondary).studioHelp("Soldaki oturum sağdaki oturumu blokluyor")}
             let leaf=id == request.sessionID
             let node=contexts.first {$0.sessionID == id}
             Button {
@@ -335,12 +335,12 @@ struct ActivityMonitorPanel:View {
                 .overlay(RoundedRectangle(cornerRadius:7).stroke(Color(nsColor:session == id ? StudioTheme.danger:StudioTheme.border).opacity(0.5)))
                 .contentShape(Rectangle())
             }.buttonStyle(.plain).disabled(leaf || node == nil)
-              .help(leaf ? "Seçili bloklanan sorgu solda gösterilir":"Bu oturumun sorgu ve bağlantı ayrıntılarını göster")
+              .studioHelp(leaf ? "Seçili bloklanan sorgu solda gösterilir":"Bu oturumun sorgu ve bağlantı ayrıntılarını göster")
               .accessibilityIdentifier("activityChainSession\(id)")
           }
         }.padding(1)
       }.fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("activityBlockingChain")
-      if let notice=chain.notice {Text(notice).font(.system(size:10)).foregroundStyle(Color(nsColor:StudioTheme.warning)).lineLimit(2).help(notice)}
+      if let notice=chain.notice {Text(notice).font(.system(size:10)).foregroundStyle(Color(nsColor:StudioTheme.warning)).lineLimit(2).studioHelp(notice)}
       HStack(alignment:.top,spacing:10) {
         blockingSQLPane(title:"Bekleyen · Oturum \(request.sessionID)",subtitle:"\(request.database) · \(request.wait) · Tx \(ActivityFormat.count(request.openTransactions))",sql:request.sql,help:"Bloklanan isteğin o anda çalıştırdığı ifade; ilk 2.000 karakter.")
         VStack(alignment:.leading,spacing:5) {
@@ -353,17 +353,17 @@ struct ActivityMonitorPanel:View {
                   Button("İstek \(choice.requestID.map(String.init) ?? "—") · \(choice.command) · \(choice.wait.isEmpty ? choice.status:choice.wait)") {selectedBlockingContext=choice.id}
                 }
               } label: {Label(context?.requestID.map {"İstek \($0)"} ?? "İstek seçin",systemImage:"list.bullet")}
-                .font(.system(size:10)).help("Aynı oturumdaki etkin istekler; SQL metnini açıkça seçin")
+                .font(.system(size:10)).studioHelp("Aynı oturumdaki etkin istekler; SQL metnini açıkça seçin")
                 .accessibilityIdentifier("activityBlockingRequestChoice")
             }
             copySQLButton(context?.sql ?? "")
           }
           Text(context.map {"\($0.login) · \($0.host) · \($0.program) · Tx \(ActivityFormat.count($0.openTransactions))"} ?? (choices.count>1 ? "Birden fazla etkin istek var; sorguyu seçin.":"Oturum ayrıntısı okunamadı veya sonlandı."))
             .font(.system(size:10)).foregroundStyle(.secondary).lineLimit(1)
-            .help(context.map {"\($0.database) · \($0.status)\n\($0.login) · \($0.host) · \($0.program)\nBekleme: \($0.wait) · \(ActivityFormat.duration($0.waitMS))\nKaynak: \($0.waitResource)"} ?? "")
+            .studioHelp(context.map {"\($0.database) · \($0.status)\n\($0.login) · \($0.host) · \($0.program)\nBekleme: \($0.wait) · \(ActivityFormat.duration($0.waitMS))\nKaynak: \($0.waitResource)"} ?? "")
           Text(context?.sqlSource == .recent ? "Bağlantının son batch’i · kilidi alan ifade olduğu kesin değil":context?.sqlSource == .current ? "O anda çalışan ifade · ilk 2.000 karakter":"SQL bağlamı okunamadı")
             .font(.system(size:9)).foregroundStyle(context?.sqlSource == .recent ? Color(nsColor:StudioTheme.warning):.secondary)
-            .lineLimit(1).help("Açık transaction içindeki önceki bir ifade kilidi tutuyor olabilir. SQL metni salt okunur bağlamdır.")
+            .lineLimit(1).studioHelp("Açık transaction içindeki önceki bir ifade kilidi tutuyor olabilir. SQL metni salt okunur bağlamdır.")
           SQLReadOnlyPreview(sql:context?.sql.isEmpty == false ? context!.sql:"-- Gösterilecek SQL yok; oturum/istek bağlamını kontrol edin.")
             .frame(minHeight:100,idealHeight:115,maxHeight:150).accessibilityIdentifier("activityBlockerSQL")
         }.frame(maxWidth:.infinity,alignment:.leading)
@@ -373,15 +373,15 @@ struct ActivityMonitorPanel:View {
   private func blockingSQLPane(title:String,subtitle:String,sql:String,help:String) -> some View {
     VStack(alignment:.leading,spacing:5) {
       HStack {Text(title).font(.system(size:11,weight:.semibold));Spacer(minLength:0);copySQLButton(sql)}
-      Text(subtitle).font(.system(size:10)).foregroundStyle(.secondary).lineLimit(1).help(subtitle)
+      Text(subtitle).font(.system(size:10)).foregroundStyle(.secondary).lineLimit(1).studioHelp(subtitle)
       Text("O anda çalışan ifade · ilk 2.000 karakter").font(.system(size:9)).foregroundStyle(.secondary)
       SQLReadOnlyPreview(sql:sql.isEmpty ? "-- SQL metni sağlanmadı veya görüntüleme yetkisi yok.":sql)
         .frame(minHeight:100,idealHeight:115,maxHeight:150).accessibilityIdentifier("activityBlockedSQL")
-    }.frame(maxWidth:.infinity,alignment:.leading).help(help)
+    }.frame(maxWidth:.infinity,alignment:.leading).studioHelp(help)
   }
   private func copySQLButton(_ sql:String) -> some View {
     Button {NSPasteboard.general.clearContents();NSPasteboard.general.setString(sql,forType:.string)} label: {Image(systemName:"doc.on.doc")}
-      .buttonStyle(.borderless).disabled(sql.isEmpty).help("SQL’i kopyala").accessibilityLabel("SQL’i kopyala")
+      .buttonStyle(.borderless).disabled(sql.isEmpty).studioHelp("SQL’i kopyala").accessibilityLabel("SQL’i kopyala")
   }
   private var footer:some View {
     VStack(alignment:.leading,spacing:7) {
@@ -390,14 +390,14 @@ struct ActivityMonitorPanel:View {
         Spacer(minLength:10)
         Text(latest.map {"Son örnek "+$0.time.formatted(date:.omitted,time:.standard)} ?? "Örnek bekleniyor…").font(.caption).foregroundStyle(.secondary)
         Text("\(model.samples.count) örnek").font(.caption).foregroundStyle(.secondary)
-          .help("Son 15 dakika, en çok 181 örnek. Eksik ölçüm — ile gösterilir; ilk örnekte ve kesinti sonrası hızlar hesaplanmaz.")
+          .studioHelp("Son 15 dakika, en çok 181 örnek. Eksik ölçüm — ile gösterilir; ilk örnekte ve kesinti sonrası hızlar hesaplanmaz.")
       }
     }
   }
   private func issueBanner(_ text:String,critical:Bool=true) -> some View {
     let color=Color(nsColor:critical ? StudioTheme.danger:StudioTheme.warning)
     return Label(text,systemImage:"exclamationmark.triangle.fill").font(.system(size:11)).foregroundStyle(color)
-      .lineLimit(2).help(text).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)
+      .lineLimit(2).studioHelp(text).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)
       .padding(9).background(color.opacity(0.07),in:RoundedRectangle(cornerRadius:8))
   }
 }
@@ -414,7 +414,7 @@ private struct ActivityHealthCard:View {
     Group {
       if let action {Button(action:action) {cardContent}.buttonStyle(.plain).accessibilityLabel(title+" ayrıntılarını aç")}
       else {cardContent}
-    }.help(help)
+    }.studioHelp(help)
   }
   private var cardContent:some View {
     VStack(alignment:.leading,spacing:7) {
@@ -446,7 +446,7 @@ private struct ActivityMetricChart:View {
   var body:some View {
     VStack(alignment:.leading,spacing:7) {
       HStack {
-        Label(title,systemImage:icon).font(.system(size:12,weight:.semibold)).help(help)
+        Label(title,systemImage:icon).font(.system(size:12,weight:.semibold)).studioHelp(help)
         Spacer(minLength:0)
         Text(unit).font(.system(size:10)).foregroundStyle(.secondary)
       }

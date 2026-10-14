@@ -80,7 +80,7 @@ extension WorkbenchController {
     if let node = selected ?? roots.first { refreshExplorerScope(node) }
   }
   @objc func reconnectQuery() {
-    guard let doc = state.active, !doc.busy else { return }
+    guard let doc = commandDocument, !doc.busy else { return }
     Task { [weak self] in
       guard let self else { return }
       do {

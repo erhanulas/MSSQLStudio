@@ -373,7 +373,9 @@ public enum SQLIntelligence {
     if verified, catalog?.fresh == true, !suppressValidation {
       for (i,parts,range) in references {
         let key = parts.joined(separator:".").lowercased()
-        let special = parts.count > 2 || parts.first?.lowercased() == "sys" || parts.first?.lowercased() == "information_schema" || parts.last?.hasPrefix("#") == true || parts.last?.hasPrefix("@") == true
+        let systemRoutine = ["EXEC","EXECUTE"].contains(tokens[i].text.uppercased()) && TSQL.isSystemProcedure(parts)
+        let systemRelation = ["FROM","JOIN","APPLY"].contains(tokens[i].text.uppercased()) && parts.count == 1 && TSQL.tableFunctions.contains(parts[0].uppercased()) && tokens.first(where:{$0.range.location>=NSMaxRange(range)})?.text == "("
+        let special = systemRoutine || systemRelation || parts.count > 2 || parts.first?.lowercased() == "sys" || parts.first?.lowercased() == "information_schema" || parts.last?.hasPrefix("#") == true || parts.last?.hasPrefix("@") == true
         let updateAlias = ["UPDATE","FROM","DELETE"].contains(tokens[i].text.uppercased()) && activeBindings(range.location).contains { $0.alias.lowercased() == key && $0.parts.map { $0.lowercased() }.joined(separator:".") != key }
         if !special && local[key] == nil && catalog?.resolve(parts) == nil && catalog?.isAmbiguous(parts) != true && !updateAlias && !isEditing(range) {
           diagnostics.append(Diagnostic(range:range,message:"Nesne güncel DDL indeksinde bulunamadı: \(parts.joined(separator:"."))"))
@@ -539,6 +541,17 @@ public enum SQLIntelligence {
           }
           suggestions.append(Suggestion(text:text,label:base.label,kind:base.kind,detail:text,caretOffset:base.caretOffset))
         }
+        if readPosition,qualifier == nil {
+          suggestions += TSQL.tableFunctions.sorted().filter {$0.lowercased().contains(needle)}.prefix(max(0,100-suggestions.count)).map {word in
+            let call=nextToken?.text != "("
+            let text=word+(call ? "()":"")
+            return Suggestion(text:text,label:word,kind:.function,detail:"SQL Server tablo değerli fonksiyonu",caretOffset:call ? text.utf16.count-1:nil)
+          }
+        }
+        if execution,qualifier == nil || ["sys","dbo"].contains(qualifier?.lowercased() ?? "") {
+          let existing=Set(suggestions.map {$0.label.uppercased()})
+          suggestions += TSQL.systemProcedures.sorted().filter {$0.lowercased().contains(needle) && !existing.contains($0)}.prefix(max(0,100-suggestions.count)).map {Suggestion(text:$0,label:$0,kind:.procedure,detail:"SQL Server sistem yordamı")}
+        }
       } else if let qualifier {
         if let binding = visible.first(where: { $0.alias.lowercased() == qualifier.lowercased() }) {
           try appendColumns(from:[binding],alreadyQualified:true)
@@ -557,11 +570,16 @@ public enum SQLIntelligence {
           case "SELECT": preferred = ["DISTINCT", "TOP", "FROM", "AS"]
           default: preferred = []
           }
-          let words = preferred + Array(TSQL.keywords).sorted() + (scalarPosition || clause.isEmpty ? TSQL.functions : [])
+          let words = preferred + Array(TSQL.keywords).sorted() + (scalarPosition || clause.isEmpty ? TSQL.functions.filter {!TSQL.tableFunctions.contains($0)} : [])
           var seenWords = Set<String>()
           let matching = words.filter {seenWords.insert($0).inserted && (needle.isEmpty || $0.lowercased().contains(needle))}
           suggestions += (matching.filter { $0.lowercased().hasPrefix(needle) } + matching.filter { !$0.lowercased().hasPrefix(needle) })
-            .prefix(100-suggestions.count).map { Suggestion(text:$0,label:$0,kind:TSQL.functions.contains($0) ? .function : .keyword) }
+            .prefix(100-suggestions.count).map { word in
+              let function=(scalarPosition || clause.isEmpty) && TSQL.functions.contains(word)
+              let insertCall=function && !TSQL.bareFunctions.contains(word) && nextToken?.text != "("
+              let text=word+(insertCall ? "()":"")
+              return Suggestion(text:text,label:word,kind:function ? .function:.keyword,caretOffset:insertCall ? text.utf16.count-1:nil)
+            }
         }
       }
     }

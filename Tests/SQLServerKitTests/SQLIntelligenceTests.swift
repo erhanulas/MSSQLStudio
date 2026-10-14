@@ -33,7 +33,7 @@ struct SQLIntelligenceTests {
   @Test func aliasesDoNotHideExpressionContextAndOperandsDoNotSuggestColumns() throws {
     let sql="SELECT Name AS DisplayName, COA FROM dbo.Customers AS c"
     let result=try analyze(sql,caret:(sql as NSString).range(of:"COA").location+3)
-    #expect(result.suggestions.contains {$0.text == "COALESCE"})
+    #expect(result.suggestions.contains {$0.text == "COALESCE()" && $0.caretOffset == 9})
     for sql in ["SELECT Name AS Na FROM dbo.Customers c", "SELECT Name FR FROM dbo.Customers c"] {
       let marker=sql.contains(" AS ") ? "Na FROM":"FR FROM"
       let caret=(sql as NSString).range(of:marker).location+2
@@ -52,7 +52,7 @@ struct SQLIntelligenceTests {
     let column=try #require(analyze(source,caret:NSMaxRange((source as NSString).range(of:"c.Na"))).suggestions.first)
     #expect(column.kind == .column && column.text == "[Name]" && column.detail == "dbo.Customers")
     #expect(try analyze("SEL").suggestions.first {$0.text == "SELECT"}?.kind == .keyword)
-    #expect(try analyze("COU").suggestions.first {$0.text == "COUNT"}?.kind == .function)
+    #expect(try analyze("COU").suggestions.first {$0.text == "COUNT()" && $0.caretOffset == 6}?.kind == .function)
   }
   @Test func missingObjectsAndColumns() throws {
     #expect(try marked("SELECT c.Name, c.NotAColumn FROM dbo.Customers AS c; ") == ["NotAColumn"])

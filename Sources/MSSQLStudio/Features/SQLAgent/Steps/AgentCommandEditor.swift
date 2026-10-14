@@ -58,7 +58,7 @@ struct AgentCommandEditor:NSViewRepresentable {
   func makeCoordinator()->Coordinator {Coordinator(self)}
   func makeNSView(context:Context)->NSScrollView {
     let scroll=NSScrollView();scroll.hasVerticalScroller=true;scroll.hasHorizontalScroller=true
-    let view=NSTextView(usingTextLayoutManager:true);view.isRichText=false;view.isAutomaticQuoteSubstitutionEnabled=false;view.isAutomaticDashSubstitutionEnabled=false;view.isAutomaticTextReplacementEnabled=false;view.isAutomaticSpellingCorrectionEnabled=false;view.allowsUndo=true
+    let view=StudioTextView(usingTextLayoutManager:true);view.isRichText=false;view.isAutomaticQuoteSubstitutionEnabled=false;view.isAutomaticDashSubstitutionEnabled=false;view.isAutomaticTextReplacementEnabled=false;view.isAutomaticSpellingCorrectionEnabled=false;view.allowsUndo=true
     view.font=StudioTheme.codeFont;view.textContainerInset=NSSize(width:10,height:10);view.isVerticallyResizable=true;view.autoresizingMask=[.width];view.delegate=context.coordinator;view.identifier = .init("agentCommandEditor");view.setAccessibilityIdentifier("agentCommandEditor")
     context.coordinator.editor=view
     scroll.documentView=view;return scroll

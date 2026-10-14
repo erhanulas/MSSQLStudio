@@ -63,7 +63,7 @@ import SwiftUI
   override func cancelOperation(_ sender:Any?) {if let cancelAction {cancelAction()} else {performClose(sender)}}
 }
 
-@MainActor final class StudioDialogButton:NSButton {
+@MainActor class StudioDialogButton:NSButton {
   override var acceptsFirstResponder:Bool {true}
   override func performClick(_ sender:Any?) {
     guard isEnabled,let action else {return}
@@ -180,7 +180,7 @@ import SwiftUI
     super.init(window:window);window.delegate=self
     let body=NSView();StudioTheme.surface(body,card:true);window.contentView=body
     let heading=NSTextField(labelWithString:"İşlem tamamlanamadı");heading.font = .systemFont(ofSize:16,weight:.semibold);heading.textColor=StudioTheme.text
-    let messageView=NSTextView();messageView.isEditable=false;messageView.isSelectable=true;messageView.string=String(message.prefix(16_000));messageView.font = .systemFont(ofSize:12);messageView.textColor=StudioTheme.text;messageView.backgroundColor=StudioTheme.canvas;messageView.textContainerInset=NSSize(width:8,height:8);messageView.isVerticallyResizable=true;messageView.autoresizingMask=[.width];messageView.textContainer?.widthTracksTextView=true
+    let messageView=StudioTextView();messageView.isEditable=false;messageView.isSelectable=true;messageView.string=String(message.prefix(16_000));messageView.font = .systemFont(ofSize:12);messageView.textColor=StudioTheme.text;messageView.backgroundColor=StudioTheme.canvas;messageView.textContainerInset=NSSize(width:8,height:8);messageView.isVerticallyResizable=true;messageView.autoresizingMask=[.width];messageView.textContainer?.widthTracksTextView=true
     let scroll=NSScrollView();scroll.documentView=messageView;scroll.hasVerticalScroller=true
     let done=StudioDialogButton(title:"Tamam",target:self,action:#selector(closeNotice));done.bezelStyle = .rounded;done.keyEquivalent="\r"
     let stack=NSStackView(views:[heading,scroll,done]);stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=14

@@ -70,8 +70,6 @@ extension WorkbenchController {
       let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
       item.target = self
       item.isEnabled = !busy
-      let symbol = title.contains("Favori") ? "star" : title.contains("Yenile") ? "arrow.clockwise" : title.contains("Sorgu") ? "plus.square" : title.contains("İndeks") ? "externaldrive" : title.contains("Özellikler") ? "slider.horizontal.3" : title.contains("Kopyala") ? "doc.on.doc" : "gearshape"
-      item.image=NSImage(systemSymbolName:symbol,accessibilityDescription:nil)
       menu.addItem(item)
     }
     func scriptMenu(_ title:String,modes:[String]) {

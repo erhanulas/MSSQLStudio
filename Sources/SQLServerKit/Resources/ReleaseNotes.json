@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.2.127",
+    "date": "2026-10-14",
+    "title": "Ortak menüler, aramalı seçimler ve editör etkileşimleri",
+    "changes": [
+      "Ayarlar Uygula düğmesi açık/koyu temada kontrollü zemin ve okunur metinle çizilir. Bağlantılar penceresi daha geniş açılır; ilk hosting yerleşimi kullanılabilir ekrana göre tamamlanır.",
+      "Explorer, editör, sonuçlar ve uygulama menüleri ortak native menü görünümünü, hizalı simgeleri ve güncel kısayolları kullanır. Kısayol kataloğu genel, editör, Explorer ve sonuç eylemleriyle genişletildi; atanmamış eyleme tuş verilebilir, atama kaldırılabilir ve sıfırlanabilir.",
+      "Çalıştır ve İptal yan yana, Explorer genişliğini izleyen ayırıcıdan sonra sorgu alanında konumlanır. Üst araç çubuğundaki Bağlan kaldırıldı; bağlantı yönetimine Explorer/Dosya menüsünden ve atanabilir kısayoldan erişilir.",
+      "Editör veritabanı seçimi ve uygun diğer veritabanı/kapsam seçicileri aranabilir ortak kontrol kullanır. Arama seçimi değiştirmez; yalnız kabul edilen mevcut seçenek uygulanır. Tooltip’ler ortak kompakt yüzey, ekran içinde yerleşim ve tıklamayı engellemeyen hover davranışı kullanır.",
+      "Editörde seçim zemini belirginleştirildi; sözdizimi metin renkleri korunur. Yerleşik fonksiyon önerileri gerekli parantezleri ekleyip imleci içine yerleştirir; mevcut parantezler yinelenmez, parantezsiz SQL ifadeleri ve tablo değerli fonksiyon bağlamı ayrılır.",
+      "SP_HELP gibi bilinen sistem yordamları geçerli EXEC çağrısında yanlış tanımsız nesne uyarısı üretmez. Bilinmeyen sp_ adları ve yanlış şemalar doğrulanmaya devam eder; sistem fonksiyonu/yordamı renkleri ortak SQL paletini izler."
+    ]
+  },
+  {
     "version": "0.2.126",
     "date": "2026-10-14",
     "title": "Kolon tipleri, ortak durum çubuğu ve sonuç seçimi",

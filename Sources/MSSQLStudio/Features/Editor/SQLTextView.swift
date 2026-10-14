@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import SQLServerKit
 
-@MainActor final class SQLTextView: NSTextView, @preconcurrency NSTextFinderClient {
+@MainActor final class SQLTextView: StudioTextView, @preconcurrency NSTextFinderClient {
   lazy var sqlFinder:NSTextFinder = {
     let finder=NSTextFinder();finder.client=self
     finder.isIncrementalSearchingEnabled=true;finder.incrementalSearchingShouldDimContentView=false
@@ -49,7 +49,13 @@ import SQLServerKit
   }
   func didReplaceCharacters() {didChangeText()}
   override func validateUserInterfaceItem(_ item:any NSValidatedUserInterfaceItem)->Bool {
-    if item.action == #selector(revealExplorerObject(_:)) {return revealInExplorer != nil && (item as? NSMenuItem)?.representedObject is [String]}
+    if item.action == #selector(revealExplorerObject(_:)) {return revealInExplorer != nil && ((item as? NSMenuItem)?.representedObject is [String] || DefinitionReference.parts(in:string,at:selectedRange().location,maxParts:3) != nil)}
+    if item.action == #selector(showSQLCompletion(_:)) {return isEditable && !hasMarkedText() && requestSuggestions != nil}
+    if item.action == #selector(goToDefinition(_:)) {return navigateDefinition != nil}
+    if item.action == #selector(goToMatchingPair(_:)) {return jumpToMatchingPair != nil}
+    if item.action == #selector(showParameterInfo(_:)) {return requestParameterInfo != nil}
+    if item.action == #selector(toggleCodeOutline(_:)) {return toggleOutline != nil}
+    if item.action == #selector(expandCodeOutline(_:)) {return expandOutline != nil}
     if item.action == #selector(runSQLStatement(_:)) {return isEditable && !hasMarkedText() && canRunStatement?() == true}
     if item.action == #selector(formatSQLText(_:)) {return isEditable && !hasMarkedText() && requestFormat != nil}
     if item.action == #selector(toggleSQLComment(_:)) || item.action == #selector(uncommentSQL(_:)) {return isEditable && !hasMarkedText() && selectedRanges.count == 1}
@@ -267,13 +273,13 @@ import SQLServerKit
     return true
   }
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
-    if window?.firstResponder === self,event.keyCode == 36,event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {runStatement?();return true}
+    if window?.firstResponder === self,GridShortcuts.matches(.runStatement,event) {runStatement?();return true}
     if window?.firstResponder === self,handleHistoryKey(event) {return true}
     if window?.firstResponder === self,handleCommentKey(event) {return true}
     if window?.firstResponder === self, GridShortcuts.matches(.format,event) {formatSQLText(nil);return true}
     if GridShortcuts.matches(.matchingPair,event) {jumpToMatchingPair?();return true}
     if GridShortcuts.matches(.parameterInfo,event) {requestParameterInfo?();return true}
-    if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, event.charactersIgnoringModifiers?.lowercased() == "b" { navigateDefinition?(); return true }
+    if window?.firstResponder === self,StudioCommandCatalog.dispatch(event,to:self,allowForwardedTarget:false,menu:{makeSQLMenu(at:selectedRange().location)}) {return true}
     if isFindShortcut(event) {showSelectionFind();return true}
     return super.performKeyEquivalent(with:event)
   }
@@ -359,10 +365,14 @@ import SQLServerKit
   @objc private func goToMatchingPair(_ sender:Any?) {jumpToMatchingPair?()}
   @objc private func showParameterInfo(_ sender:Any?) {requestParameterInfo?()}
   var revealInExplorer: (([String]) -> Void)?
-  @objc private func revealExplorerObject(_ item:NSMenuItem) {if let parts=item.representedObject as? [String] {revealInExplorer?(parts)}}
+  @objc private func revealExplorerObject(_ item:NSMenuItem) {
+    if let parts=item.representedObject as? [String] {revealInExplorer?(parts)}
+    else if let item=makeSQLMenu(at:selectedRange().location).items.first(where:{$0.action == #selector(revealExplorerObject(_:))}),let parts=item.representedObject as? [String] {revealInExplorer?(parts)}
+  }
   var navigateDefinition: (() -> Void)?
   var unfoldSelection: ((NSRange) -> Bool)?
   @objc private func goToDefinition(_ sender: Any?) { navigateDefinition?() }
+  @objc func showSQLCompletion(_ sender:Any?) {guard isEditable,!hasMarkedText() else {return};requestSuggestions?()}
   var requestSuggestions: (() -> Void)?
   var suggestionKey: ((NSEvent) -> Bool)?
   var dismissSuggestions: (() -> Void)?
@@ -392,11 +402,16 @@ import SQLServerKit
     return false
   }
   override func menu(for event: NSEvent) -> NSMenu? {
-    let menu = super.menu(for:event) ?? StudioMenu()
+    let caret=characterIndexForInsertion(at:convert(event.locationInWindow,from:nil))
+    return makeSQLMenu(at:caret,native:super.menu(for:event))
+  }
+  func makeSQLMenu(at caret:Int,native:NSMenu?=nil)->NSMenu {
+    let menu=StudioMenu.adopting(native)
     menu.addItem(.separator())
-    for (title,action) in [("Geri Al ("+GridShortcuts.binding(.undo).label+")",#selector(undoSQL(_:))),("İleri Al ("+GridShortcuts.binding(.redo).label+")",#selector(redoSQL(_:)))] {
+    for (title,action) in [("Geri Al",#selector(undoSQL(_:))),("İleri Al",#selector(redoSQL(_:)))] {
       let item=NSMenuItem(title:title,action:action,keyEquivalent:"");item.target=self;menu.addItem(item)
     }
+    menu.addItem(withTitle:"Tamamlamayı Göster",action:#selector(showSQLCompletion(_:)),keyEquivalent:"").target=self
     menu.addItem(.separator())
     let formatBinding = GridShortcuts.binding(.format)
     let formatItem = NSMenuItem(title: "SQL Formatla", action: #selector(formatSQLText(_:)), keyEquivalent: formatBinding.key)
@@ -406,19 +421,17 @@ import SQLServerKit
       let item=NSMenuItem(title:title,action:action,keyEquivalent:binding.key);item.target=self;item.keyEquivalentModifierMask=binding.flags;menu.addItem(item)
     }
     menu.addItem(.separator())
-    for (title,action) in [("Eşleşen Ayırıcıya Git ("+GridShortcuts.binding(.matchingPair).label+")",#selector(goToMatchingPair(_:))),("Parametre Bilgisi ("+GridShortcuts.binding(.parameterInfo).label+")",#selector(showParameterInfo(_:)))] {
+    for (title,action) in [("Eşleşen Ayırıcıya Git",#selector(goToMatchingPair(_:))),("Parametre Bilgisi",#selector(showParameterInfo(_:)))] {
       let item=NSMenuItem(title:title,action:action,keyEquivalent:"");item.target=self;menu.addItem(item)
     }
-    let point=convert(event.locationInWindow,from:nil)
-    let caret=characterIndexForInsertion(at:point)
     var parts=DefinitionReference.parts(in:string,at:caret,maxParts:3)
     if let reference=parts,reference.count<=2,let alias=reference.first,
       let resolved=(try? SQLIntelligence.analyze(source:string,caret:caret,catalog:nil,verified:false))?.referenceBindings[alias.lowercased()] {parts=resolved}
     let reveal=NSMenuItem(title:"Explorer’da Git",action:#selector(revealExplorerObject(_:)),keyEquivalent:"")
     reveal.target=self;reveal.representedObject=parts;reveal.isEnabled=parts != nil && revealInExplorer != nil
     menu.addItem(reveal)
-    let definition = NSMenuItem(title:"Nesne Tanımına Git (⌘B / ⌘tık)",action:#selector(goToDefinition(_:)),keyEquivalent:""); definition.target = self; menu.addItem(definition)
-    for (title, action) in [("Bloğu Daralt / Aç (⌥⌘[)", #selector(toggleCodeOutline(_:))), ("Tüm Blokları Aç (⌥⌘])", #selector(expandCodeOutline(_:)))] {
+    let definition = NSMenuItem(title:"Nesne Tanımına Git",action:#selector(goToDefinition(_:)),keyEquivalent:""); definition.target = self; menu.addItem(definition)
+    for (title, action) in [("Bloğu Daralt / Aç", #selector(toggleCodeOutline(_:))), ("Tüm Blokları Aç", #selector(expandCodeOutline(_:)))] {
       let item = NSMenuItem(title:title,action:action,keyEquivalent:""); item.target = self; menu.addItem(item)
     }
     return menu
@@ -489,13 +502,12 @@ import SQLServerKit
     if GridShortcuts.matches(.matchingPair,event) {jumpToMatchingPair?();return}
     if GridShortcuts.matches(.parameterInfo,event) {requestParameterInfo?();return}
     if isFindShortcut(event) {showSelectionFind();return}
+    if StudioCommandCatalog.dispatch(event,to:self,allowForwardedTarget:false,menu:{makeSQLMenu(at:selectedRange().location)}) {return}
     if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control, event.charactersIgnoringModifiers?.lowercased() == "a" { selectAll(nil); return }
     if handleSQLNavigationKey(event) {return}
     if suggestionKey?(event) == true { return }
-    if event.keyCode == 49 && event.modifierFlags.contains(.control), let requestSuggestions { requestSuggestions(); return }
-    if event.modifierFlags.contains([.command,.option]), event.keyCode == 33 { toggleOutline?(); return }
-    if event.modifierFlags.contains([.command,.option]), event.keyCode == 30 { expandOutline?(); return }
-    if event.keyCode == 36,event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {runStatement?();return}
+    if GridShortcuts.matches(.completion,event),let requestSuggestions {requestSuggestions();return}
+    if GridShortcuts.matches(.runStatement,event) {runStatement?();return}
     if event.keyCode == 96 {
       run?()
     } else if event.keyCode == 53 || event.keyCode == 49 && event.modifierFlags.contains(.control) {

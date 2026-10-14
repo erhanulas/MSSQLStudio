@@ -86,15 +86,10 @@ struct AgentStepEditor:View {
   private var databasePicker:some View {
     VStack(alignment:.leading,spacing:5) {
       HStack {
-        StudioFormField("Veritabanı") {Picker("Veritabanı",selection:$step.database) {
-          if !databases.contains(step.database) {
-            Text(step.database.isEmpty ? "Veritabanı seçin":step.database + (loadedDatabases ? " · mevcut, listede yok":" · mevcut")).tag(step.database)
-          }
-          ForEach(databases,id:\.self) {Text($0).tag($0)}
-        }.labelsHidden()}.disabled(readOnly || loadingDatabases).accessibilityIdentifier("agentStepDatabase")
+        StudioFormField("Veritabanı") {StudioSearchablePicker(title:"Veritabanı",values:databases,selection:$step.database)}.disabled(readOnly || loadingDatabases).accessibilityIdentifier("agentStepDatabase")
         if loadingDatabases && !readOnly {ProgressView().controlSize(.small).accessibilityLabel("Veritabanları yükleniyor")}
         Button {databaseGeneration+=1} label:{Image(systemName:"arrow.clockwise")}
-          .disabled(readOnly || loadingDatabases).help("Veritabanlarını yenile").accessibilityLabel("Veritabanlarını yenile").accessibilityIdentifier("agentStepDatabaseRefresh")
+          .disabled(readOnly || loadingDatabases).studioHelp("Veritabanlarını yenile").accessibilityLabel("Veritabanlarını yenile").accessibilityIdentifier("agentStepDatabaseRefresh")
       }
       if !databaseError.isEmpty {Text(databaseError).font(.caption).foregroundStyle(.red).textSelection(.enabled).accessibilityIdentifier("agentStepDatabaseError")}
       else if loadedDatabases && !databases.contains(step.database) {

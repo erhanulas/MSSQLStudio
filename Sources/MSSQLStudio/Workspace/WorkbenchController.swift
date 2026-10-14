@@ -15,10 +15,10 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   let split = NSSplitViewController()
   let explorer = NSViewController()
   let center = NSViewController()
-  let outline = NSOutlineView()
+  let outline = StudioCommandOutlineView()
   let explorerSearch = NSSearchField()
   let searchOperator = NSPopUpButton()
-  let searchScopePicker = NSPopUpButton()
+  let searchScopePicker = StudioSearchablePopUpButton()
   let searchType = NSPopUpButton()
   var searchScopes: [TreeNode] = []
   var searchDatabaseByServer: [UUID:String] = [:]
@@ -42,7 +42,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   let explorerToggle = StudioToolbarButton(symbol: "sidebar.left", label: "Object Explorer’ı Göster / Gizle", tone: .neutral)
   let tabs = QueryTabStrip()
   let content = NSView()
-  let database = NSPopUpButton()
+  let database = StudioSearchablePopUpButton()
   let executionDate = NSTextField(labelWithString:"Son çalıştırma: —")
   let statusStrip = NSStackView()
   let resultSelectionStatus=NSTextField(labelWithString:"")
@@ -256,6 +256,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   @objc func refreshShortcuts() {
     func update(_ menu: NSMenu) {
       for item in menu.items {
+        StudioCommandCatalog.decorate(item)
         if item.action == #selector(SQLTextView.toggleSQLComment(_:)) || item.action == #selector(SQLTextView.uncommentSQL(_:)) {
           let binding=GridShortcuts.binding(item.action == #selector(SQLTextView.toggleSQLComment(_:)) ? .comment:.uncomment)
           item.keyEquivalent=binding.key;item.keyEquivalentModifierMask=binding.flags
@@ -281,9 +282,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     if let menu = NSApp.mainMenu { update(menu) }
     if isViewLoaded {
-      for item in view.window?.toolbar?.items ?? [] where ["favorites","format"].contains(item.itemIdentifier.rawValue) {
-        let action: GridShortcuts.Action = item.itemIdentifier.rawValue == "format" ? .format : .favorites
-        item.toolTip=(action == .format ? "Formatla" : "Favori Sorgular")+" ("+GridShortcuts.binding(action).label+")"
+      for item in view.window?.toolbar?.items ?? [] {
+        item.toolTip=StudioCommandCatalog.help(item.label,selector:item.action)
         (item.view as? NSButton)?.toolTip=item.toolTip
       }
       renderTabs()
@@ -467,7 +467,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     executionDate.stringValue="Son çalıştırma: " + (doc?.lastExecutionDate?.formatted(date:.numeric,time:.standard) ?? "—")
     for controller in controllers.values { controller.updateConnectionAppearance() }
     for owner in detached.values { owner.updateConnectionAppearance() }
-    database.removeAllItems()
+    database.contextID=state.active?.id
+    database.invalidateChoices();database.removeAllItems()
     if let doc {
       let names = doc.server.databases.map(\.name)
       database.addItems(withTitles: names.contains(doc.database) ? names : [doc.database] + names)
@@ -545,6 +546,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       if shortcut == .reopenTab {item.representedObject=document;item.isEnabled=state.lastClosedTab(for:document) != nil}
       menu.addItem(item)
     }
+    for item in menu.items {StudioCommandCatalog.decorate(item)}
     return menu
   }
   @objc private func tabMenuAction(_ item: NSMenuItem) {
@@ -698,7 +700,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
   }
   @objc func toggleResults() {
-    guard let doc = state.active else { return }
+    guard let doc = commandDocument else { return }
     (controllers[doc.id] ?? detached[doc.id]?.query)?.toggleResults()
   }
   @objc func showConnect() { presentConnection() }
@@ -739,11 +741,15 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     sheet.cancelAction={ [weak self] in guard let self,!connectionSheetBusy else {return};finishSheet() }
     sheet.title = "Bağlantılar"
     sheet.styleMask = [.titled,.closable,.resizable]
-    sheet.setContentSize(NSSize(width:1020,height:660));sheet.minSize=sheet.frameRect(forContentRect:NSRect(x:0,y:0,width:1020,height:640)).size
+    controller.sizingOptions=[]
+    sheet.setContentSize(NSSize(width:1080,height:700));sheet.minSize=sheet.frameRect(forContentRect:NSRect(x:0,y:0,width:1020,height:640)).size
     sheet.isReleasedWhenClosed=false;sheet.center()
     self.sheet = sheet
+    sheet.setFrame(sheet.constrainFrameRect(sheet.frame,to:sheet.screen),display:false)
     sheet.associate(with:view.window)
+    controller.view.layoutSubtreeIfNeeded()
     sheet.makeKeyAndOrderFront(nil)
+    controller.view.layoutSubtreeIfNeeded()
   }
   private func finishSheet() {
     if let sheet {
@@ -818,7 +824,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
     if item.action == #selector(closeFocusedWindow) {return NSApp.modalWindow is NSSavePanel || NSApp.modalWindow == nil && focusedWindowProvider() != nil}
-    if commandDocument == nil,[#selector(execute),#selector(cancel),#selector(estimatedPlan),#selector(toggleActualPlan),#selector(formatSQL),#selector(beginTransaction),#selector(commitTransaction),#selector(rollbackTransaction),#selector(saveSQL),#selector(saveAsSQL),#selector(closeTab),#selector(detachQuery)].contains(item.action) {return false}
+    if commandDocument == nil,[#selector(execute),#selector(cancel),#selector(estimatedPlan),#selector(toggleActualPlan),#selector(formatSQL),#selector(beginTransaction),#selector(commitTransaction),#selector(rollbackTransaction),#selector(saveSQL),#selector(saveAsSQL),#selector(closeTab),#selector(detachQuery),#selector(closeAllTabs),#selector(closeOtherTabs),#selector(closeLeftTabs),#selector(closeRightTabs),#selector(pinActiveTab),#selector(toggleResults),#selector(reconnectQuery)].contains(item.action) {return false}
     if item.action == #selector(installUpdate) {return !updateInProgress}
     if let menuItem=item as? NSMenuItem,let node=menuItem.representedObject as? TreeNode,
        item.action == #selector(agentMenuAction(_:)) {
@@ -853,7 +859,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
     [
-      .init("connect"), .init("query"), .init("save"), .space, .init("run"), .init("cancel"),
+      .init("query"), .init("save"), .init("explorerBoundary"), .init("run"), .init("cancel"),
       .init("plan"), .space, .init("format"), .flexibleSpace, .init("activity"), .init("favorites"), .init("history"),
       .init("ai"),
     ]
@@ -862,6 +868,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     _ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier,
     willBeInsertedIntoToolbar: Bool
   ) -> NSToolbarItem? {
+    if id == .init("explorerBoundary") {return NSTrackingSeparatorToolbarItem(identifier:id,splitView:split.splitView,dividerIndex:0)}
     let definitions: [String: (String, String, Selector)] = [
       "connect": ("Bağlan", "network", #selector(showConnect)),
       "query": ("Yeni Sorgu", "doc.badge.plus", #selector(newQuery)),
@@ -878,7 +885,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     guard let definition = definitions[id.rawValue] else { return nil }
     let item = NSToolbarItem(itemIdentifier: id)
     item.label = definition.0
-    item.toolTip = ["favorites","format"].contains(id.rawValue) ? definition.0+" ("+GridShortcuts.binding(id.rawValue == "format" ? .format:.favorites).label+")":definition.0
+    item.toolTip = StudioCommandCatalog.help(definition.0,selector:definition.2)
     item.image = NSImage(systemSymbolName: definition.1, accessibilityDescription: definition.0)
     item.target = self
     item.action = definition.2
@@ -887,7 +894,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       title: id.rawValue == "run" ? "Çalıştır" : "", width: id.rawValue == "run" ? 88 : 30,
       prominent: id.rawValue == "run")
     button.target = self; button.action = definition.2
-    button.toolTip = id.rawValue == "run" ? "Çalıştır (⌘↩ / F5)" : item.toolTip
+    button.toolTip=item.toolTip
     item.view = button
     return item
   }

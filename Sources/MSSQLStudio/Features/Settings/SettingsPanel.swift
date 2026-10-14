@@ -9,12 +9,17 @@ import SwiftUI
   private var monitor: Any?
   var recording = false
   override var acceptsFirstResponder: Bool { true }
-  override func mouseDown(with event: NSEvent) {
+  override func mouseDown(with event:NSEvent) {beginRecording()}
+  override func performClick(_ sender:Any?) {beginRecording()}
+  override func accessibilityPerformPress()->Bool {guard isEnabled else {return false};beginRecording();return true}
+  @objc func beginRecording() {
+    guard isEnabled else {return}
     stop(); recording = true; title = "Tuşlara basın… (Esc: iptal)"
     window?.makeFirstResponder(self)
     monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
       let handled = MainActor.assumeIsolated {
         guard let self, self.recording else { return false }
+        guard event.window === self.window,self.window?.isVisible == true,self.window?.firstResponder === self else {self.stop();return false}
         if event.keyCode == 53 { self.stop(); return true }
         if let message = GridShortcuts.save(event,action: self.shortcutAction) { self.report?(message) }
         else { self.report?("Kısayol kaydedildi."); self.stop() }
@@ -34,7 +39,7 @@ private struct ShortcutCapture: NSViewRepresentable {
   let action: GridShortcuts.Action
   var report: (String) -> Void
   func makeNSView(context: Context) -> ShortcutCaptureButton {
-    let button = ShortcutCaptureButton(); button.bezelStyle = .rounded; button.shortcutAction = action; button.report = report; button.stop()
+    let button = ShortcutCaptureButton(); button.bezelStyle = .rounded; button.shortcutAction = action; button.report = report; button.target=button;button.action=#selector(ShortcutCaptureButton.beginRecording);button.stop()
     button.setAccessibilityLabel(GridShortcuts.title(action)+" kısayolunu değiştir")
     button.toolTip = GridShortcuts.title(action)+" kısayolunu değiştir"
     return button
@@ -127,7 +132,7 @@ struct SettingsPanel: View {
           .onSubmit {if let result=SettingsSearch.results(search).first {openSearchResult(result)}}
         if !search.isEmpty {
           Button {search=""} label: {Image(systemName:"xmark.circle.fill")}
-            .buttonStyle(.plain).help("Aramayı temizle").accessibilityLabel("Aramayı temizle")
+            .buttonStyle(.plain).studioHelp("Aramayı temizle").accessibilityLabel("Aramayı temizle")
         }
       }
       HStack(alignment:.top,spacing:0) {
@@ -238,11 +243,12 @@ struct SettingsPanel: View {
               HStack(spacing: 12) {
                 Text(GridShortcuts.title(action)).frame(maxWidth: .infinity, alignment: .leading)
                 ShortcutCapture(action: action) { message = $0; shortcutRevision += 1 }.frame(width: 220, height: 28)
+                StudioActionButton("Kaldır", icon:"xmark",tint:.secondary) {GridShortcuts.clear(action);shortcutRevision += 1}.controlSize(.small)
                 StudioActionButton("Sıfırla", icon: "arrow.counterclockwise", tint: .accentColor) { GridShortcuts.reset(action); shortcutRevision += 1 }.controlSize(.small)
               }.id(shortcutRevision).id("shortcut."+action.rawValue)
             }
           }
-          settingsNote("Değiştir’e basıp ⌘ veya ⌃ ile bir harf / rakam veya / kullanın. Çakışan ve ayrılmış kısayollar reddedilir; Escape iptal eder. Değişiklikler hemen kaydedilir.", icon: "bolt.circle")
+          settingsNote("Değiştir’e basıp ⌘ veya ⌃ ile harf, rakam, / , . [ ], Space veya Enter kullanın. Çakışan ve ayrılmış kısayollar reddedilir; Escape iptal eder. Değişiklikler hemen kaydedilir.", icon: "bolt.circle")
           settingsNote("Editörde ⌘Z / ⌘⇧Z ve ⌃Z / ⌃Y / ⌃⇧Z geri al / ileri al için kullanılabilir.", icon: "arrow.uturn.backward")
           settingsNote("SQL editöründe ⌥← / ⌥→ değişken, kelime ve operatör sınırlarında ilerler. @ / @@ önekleri değişkenle birlikte kalır.", icon: "arrow.left.and.right")
           settingsNote("⌘← / ⌘→ önce kodun başına / sonuna, ikinci basışta girinti / sondaki boşluk sınırına gider. ⇧ ekleyerek aynı hareketlerle seçim yapabilirsiniz.", icon: "selection.pin.in.out")

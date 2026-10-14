@@ -56,7 +56,7 @@ struct DriverSetupView: View {
             Button("Kur…") { confirmation = true }.accessibilityIdentifier("installODBCDriver")
           }
           Button { Task { await model.refresh() } } label: { Image(systemName: "arrow.clockwise") }
-            .help("Sürücüyü yeniden kontrol et").accessibilityLabel("Sürücüyü yeniden kontrol et")
+            .studioHelp("Sürücüyü yeniden kontrol et").accessibilityLabel("Sürücüyü yeniden kontrol et")
         }
       }
       Text(model.busy ? model.phase : model.status?.detail ?? model.phase)

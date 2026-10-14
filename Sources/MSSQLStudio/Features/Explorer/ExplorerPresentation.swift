@@ -62,6 +62,10 @@ extension WorkbenchController {
     let menu = StudioMenu()
     menu.delegate = self
     outline.menu = menu
+    outline.shortcutMenu={ [weak self] in
+      guard let self else {return nil}
+      let menu=StudioMenu();populateExplorerMenu(menu,for:outline.item(atRow:outline.selectedRow) as? TreeNode);return menu
+    }
     let scroll = ExplorerScrollView()
     scroll.documentView = outline
     scroll.hasVerticalScroller = true

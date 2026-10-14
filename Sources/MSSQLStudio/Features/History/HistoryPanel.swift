@@ -46,7 +46,7 @@ struct HistoryPanel: View {
       TextField("SQL, sunucu veya veritabanında ara", text: $search)
       HStack {
         Picker("Sunucu", selection: $server) { Text("Tümü").tag(""); ForEach(Array(Set(records.map(\.server))).sorted(), id: \.self) { Text($0).tag($0) } }
-        Picker("Veritabanı", selection: $database) { Text("Tümü").tag(""); ForEach(Array(Set(records.map(\.database))).sorted(), id: \.self) { Text($0).tag($0) } }
+        StudioSearchablePicker(title:"Veritabanı",values:[""]+Array(Set(records.map(\.database))).sorted(),emptyTitle:"Tümü",selection:$database)
         Picker("Durum", selection: $status) { Text("Tümü").tag(""); ForEach(tab==1 ? ["Kapatılan Sekme"]:["Başarılı", "Hata", "Kısmi"], id: \.self) { Text($0).tag($0) } }
         Picker("Tarih", selection: $period) { Text("Tümü").tag(0); Text("24 saat").tag(1); Text("7 gün").tag(7); Text("30 gün").tag(30) }
         Toggle("En yavaş önce", isOn: $slowest)
