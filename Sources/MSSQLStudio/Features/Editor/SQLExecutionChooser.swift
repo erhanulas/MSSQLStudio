@@ -42,7 +42,7 @@ extension EditorController {
       let nearest=scopes.statements.last(where:{$0.range.location <= caret}) ?? scopes.statements.first
       var preferred:NSMenuItem?
       for (index,statement) in scopes.statements.enumerated() {
-        let start=text.substring(to:statement.range.location).filter {$0 == "\n"}.count+1
+        let start=statement.line
         let snippet=text.substring(with:statement.range).split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
         let item=add(statement.range,title:"\(index+1). Satır \(start) · "+String(snippet.prefix(120)))
         if statement == nearest {preferred=item;item.state = .on}

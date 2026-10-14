@@ -7,6 +7,7 @@ public struct SQLExecutionScopes: Sendable {
     public let range: NSRange
     public let kind: String
     public let batch: NSRange
+    public let line: Int
   }
   public let statements: [Statement]
   public init(_ source: String, protectControlFlow: Bool = true) {
@@ -22,6 +23,15 @@ public struct SQLExecutionScopes: Sendable {
       } else if token.range.location >= start {body.append(token)}
     }
     if start < ns.length {batches.append((NSRange(location:start,length:ns.length-start),body))}
+    // Compute line starts once on the analysis worker; menu construction does
+    // not rescan a large prefix for every statement. CRLF is one Character.
+    var lineStarts=[0],offset=0
+    for character in source {offset += character.utf16.count;if character.isNewline {lineStarts.append(offset)}}
+    func line(at offset:Int)->Int {
+      var low=0,high=lineStarts.count
+      while low < high {let mid=(low+high)/2;if lineStarts[mid] <= offset {low=mid+1} else {high=mid}}
+      return max(1,low)
+    }
     var result:[Statement]=[]
     for (batch,items) in batches where !items.isEmpty {
       func word(_ i:Int)->String {
@@ -31,7 +41,7 @@ public struct SQLExecutionScopes: Sendable {
       }
       let conservative=Set(["IF","WHILE","TRAN","TRANSACTION","COMMIT","ROLLBACK","GOTO","CREATE","ALTER","MERGE","CURSOR","TRY","CATCH"])
       if protectControlFlow && items.indices.contains(where:{conservative.contains(word($0))}) {
-        result.append(.init(range:batch,kind:word(0),batch:batch));continue
+        result.append(.init(range:batch,kind:word(0),batch:batch,line:line(at:batch.location)));continue
       }
       var segmentStart=0,depth=0,cases=0,blocks=0,kind="",hasSelect=false
       var ranges:[Statement]=[]
@@ -42,7 +52,7 @@ public struct SQLExecutionScopes: Sendable {
       func append(_ end:Int) {
         guard end >= segmentStart,items[segmentStart...end].contains(where:{$0.text != ";"}) else {return}
         let first=items[segmentStart],last=items[end]
-        ranges.append(.init(range:NSRange(location:first.range.location,length:NSMaxRange(last.range)-first.range.location),kind:kind,batch:batch))
+        ranges.append(.init(range:NSRange(location:first.range.location,length:NSMaxRange(last.range)-first.range.location),kind:kind,batch:batch,line:line(at:first.range.location)))
       }
       for i in items.indices {
         let upper=word(i),text=items[i].text,previous=i > 0 ? word(i-1):""
@@ -70,7 +80,7 @@ public struct SQLExecutionScopes: Sendable {
       }
       if segmentStart < items.count {append(items.count-1)}
       if depth != 0 || cases != 0 || blocks != 0 || protectControlFlow && ranges.count > 200 {
-        result.append(.init(range:batch,kind:word(0),batch:batch))
+        result.append(.init(range:batch,kind:word(0),batch:batch,line:line(at:batch.location)))
       } else {result += ranges}
     }
     statements = !protectControlFlow || result.count <= 200 ? result:[]

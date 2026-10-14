@@ -31,6 +31,15 @@ import Testing
     #expect(units("SELECT 'one\nGO\ntwo'; SELECT 2;").count == 2)
     #expect(units("/* outer /* GO */ SELECT */ SELECT 1; SELECT 2;").count == 2)
   }
+  @Test func menuLineNumbersCountLFCRLFCRAndUnicodeWithoutChangingRanges() {
+    for separator in ["\n","\r\n","\r"] {
+      let sql="SELECT N'İzmir 😀';"+separator+separator+"SELECT 2;"
+      let values=SQLExecutionScopes(sql).statements
+      #expect(values.count == 2)
+      #expect(values[1].line == 3)
+      #expect((sql as NSString).substring(with:values[1].range) == "SELECT 2;")
+    }
+  }
   @Test func unfinishedAndBudgetedInputIsConservative() {
     #expect(units("SELECT (1; SELECT 2;").count == 1)
     #expect(SQLExecutionScopes(String(repeating:"SELECT 1;",count:30000)).statements.isEmpty)
