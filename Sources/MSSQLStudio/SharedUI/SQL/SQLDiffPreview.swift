@@ -203,7 +203,9 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
       lastChangeIndex=changeIndex
       let requested=changeIndex >= 0 && changeRows.indices.contains(changeIndex) ? changeIndex : 0
       if changeRows.indices.contains(requested) { pendingChangeRow=changeRows[requested] }
-      needsLayout=true; revealPendingChange()
+      // New content must wait for pane sizing and native scroll tiling. A clip
+      // can already have nonzero bounds while its parent is still unlaid out.
+      needsLayout=true
     } else if lastChangeIndex != changeIndex {
       lastChangeIndex=changeIndex
       if changeIndex >= 0, changeRows.indices.contains(changeIndex) {
@@ -235,6 +237,7 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
       }
       syncing=previouslySyncing
     }
+    left.layoutSubtreeIfNeeded();right.layoutSubtreeIfNeeded()
     revealPendingChange()
   }
   override func draw(_ dirtyRect: NSRect) {
@@ -249,7 +252,10 @@ struct SQLInlineDiffPreview: NSViewRepresentable {
     leftRuler.needsDisplay=true;rightRuler.needsDisplay=true
   }
   private func revealPendingChange() {
-    guard let row=pendingChangeRow, left.contentView.bounds.height > 0, right.contentView.bounds.height > 0 else { return }
+    guard let row=pendingChangeRow, bounds.width > 0, bounds.height > 0,
+      left.frame.width > 0, right.frame.width > 0,
+      left.frame.height > 0, right.frame.height > 0,
+      left.contentView.bounds.height > 0, right.contentView.bounds.height > 0 else { return }
     pendingChangeRow=nil; syncing=true; defer { syncing=false }
     let desired=max(0, CGFloat(row)*Self.lineHeight+8-40)
     for scroll in [left, right] {

@@ -326,7 +326,7 @@ Numara alanı genişliği kaynak/snapshot değişince hesaplanır; scroll çizim
 ### Metin, undo, find ve folding
 
 - Yürütmede yalnız gerçek sonuç field editor düzenlemesi commit edilir; SQL firstResponder koşulsuz boşaltılmaz. Manuel ana/detached Çalıştır editörü odaklar. İlk setText document.selectedRange alanını UTF-16 sınırında kurar; focusEditor caret görünürlüğü ve blink sağlar. Boş viewport tıklaması SQL/satır/undo yaratmaz.
-- SQLPreviewView, LineNumbers bileşenini sabit sibling sütunda kullanır; SQLInlineDiffView ghost/source numaralarını kendi sabit sibling gutter’ında tutar. Native NSRulerView kaydırma/inset davranışına bağlı değildir. TextKit 2, SSMS renkleri, viewport render, tema/seçim/kaydırma/kopya ve fark yönü korunur.
+- SQLPreviewView, LineNumbers bileşenini sabit sibling sütunda kullanır; SQLInlineDiffView ghost/source numaralarını kendi sabit sibling gutter’ında tutar. Native NSRulerView kaydırma/inset davranışına bağlı değildir. Yeni fark içeriğinin ilk değişikliğine geçiş, panel ölçüleri ve scroll tiling tamamlandıktan sonra yapılır; sıfır boyutlu panelde bekleyen hedef tüketilmez. TextKit 2, SSMS renkleri, viewport render, tema/seçim/kaydırma/kopya ve fark yönü korunur.
 - Explorer’da Git tıklanan identifier snapshot’ını kullanır. En çok üç parçalı ad hedef DB’ye bağlanır; dört parçalı sunucu tahmin edilmez. Katalog veya sınırlı metadata, offline yalnız yerel tanım indeksi okunur. Belge/SQL/seçim/server generation/request kimliği eski cevabın odak almasını engeller; tüm nesne ağacı taranmaz. SQL ve query oturumu değişmez.
 
 

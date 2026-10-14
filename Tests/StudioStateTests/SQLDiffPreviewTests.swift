@@ -215,6 +215,27 @@ import Testing
       #expect(hex(target.attribute(.backgroundColor,at:new,effectiveRange:nil) as? NSColor)==(theme=="light" ? 0xACE0C4 : 0x3B7154))
     }
   }
+  @Test func firstChangeWaitsForPaneLayoutEvenWhenNativeClipsAlreadyHaveBounds() {
+    _=NSApplication.shared
+    let view=SQLInlineDiffView(frame:.zero)
+    // AppKit can retain nonzero clip geometry before the containing panel is sized.
+    for scroll in [view.left,view.right] {
+      scroll.frame=NSRect(x:0,y:0,width:400,height:240)
+      scroll.tile()
+    }
+    let lines=(0..<250).map {"SELECT \($0);"}
+    var changed=lines;changed[180]="SELECT -1;"
+    let original=lines.joined(separator:"\n"),edited=changed.joined(separator:"\n")
+    view.display(comparison:SQLTextDiff.compare(original,edited),original:original,edited:edited,changeIndex:-1)
+    view.layoutSubtreeIfNeeded()
+    view.setFrameSize(NSSize(width:900,height:240))
+    view.needsLayout=true;view.layoutSubtreeIfNeeded()
+    #expect(view.left.contentView.bounds.minY>3500)
+    #expect(abs(view.left.contentView.bounds.minY-view.right.contentView.bounds.minY)<1)
+    let origin=view.left.contentView.bounds.origin
+    view.needsLayout=true;view.layoutSubtreeIfNeeded()
+    #expect(view.left.contentView.bounds.origin==origin)
+  }
   @Test func nativeScrollSyncNavigationAndThemeKeepIndependentHorizontalViewportAndSelection() throws {
     let previous=UserDefaults.standard.string(forKey:"ssmsTheme")
     defer {StudioTheme.apply(previous ?? "light")}
