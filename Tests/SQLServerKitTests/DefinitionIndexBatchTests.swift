@@ -27,13 +27,22 @@ struct DefinitionIndexBatchTests {
       [Rows(values: [["1", name, "int", "0", "0", nil, nil, nil, "0", nil, nil, nil, "0", "0", "0"]]),
        Rows(), Rows(), Rows(), Rows(), Rows(), Rows(values: [["0", "PRIMARY"]])]
     }
-    result.results = table("A") + table("B") + [Rows(values: [["[other].[dbo].[Target]"]])]
+    let a = table("A"), b = table("B")
+    result.results = (0..<7).map { index in
+      Rows(values: a[index].values.map { ["1"] + $0 } + b[index].values.map { ["2"] + $0 })
+    } + [Rows(values: [["3", "[other].[dbo].[Target]"]])]
     let entries = try [entry(1, type: "U"), entry(2, type: "U"), entry(3, type: "SN")]
+    try DefinitionIndexBatch.query(entries).write(toFile: "/tmp/MSSQLStudio-112-table-batch.sql", atomically: true, encoding: .utf8)
+    try ObjectMetadata.table(1).write(toFile: "/tmp/MSSQLStudio-112-table-single.sql", atomically: true, encoding: .utf8)
     let decoded = try DefinitionIndexBatch.decode(result, entries: entries, fetched: Date())
     #expect(decoded.values.count == 3 && decoded.unavailable.isEmpty)
     #expect(decoded.values[0].sql.contains("[A]") && !decoded.values[0].sql.contains("[B]"))
     #expect(decoded.values[1].sql.contains("[B]"))
     #expect(decoded.values[2].sql.contains("SYNONYM"))
+    var wrongID = result
+    wrongID.results[0] = Rows(values: [["999", "1", "A"]])
+    #expect(throws: SQLFailure.self) { try DefinitionIndexBatch.decode(wrongID, entries: entries, fetched: Date()) }
+    #expect(throws: SQLFailure.self) { try ObjectMetadata.tableBatch([1, 1]) }
     result.results.removeLast()
     #expect(throws: SQLFailure.self) { try DefinitionIndexBatch.decode(result, entries: entries, fetched: Date()) }
   }
@@ -92,5 +101,20 @@ struct DefinitionIndexBatchTests {
     await #expect(throws: CancellationError.self) {
       try await disk.saveDefinitions([small], owner: owner, lease: lease, scope: scope, generation: generation)
     }
+  }
+}
+
+struct DatabaseDefinitionProfileTests {
+  @Test func legacyOptInMigrationPreservesKnownDatabasesAndNewDatabasesDefaultOff() throws {
+    var profile = ServerProfile(indexObjectDefinitions: true)
+    #expect(profile.indexesDefinitions(in: "A"))
+    profile.setDefinitionIndex(false, database: "A", known: ["A", "B"])
+    #expect(!profile.indexesDefinitions(in: "A") && profile.indexesDefinitions(in: "B"))
+    #expect(!profile.indexesDefinitions(in: "new") && profile.hasDefinitionIndexes)
+    let restored = try JSONDecoder().decode(ServerProfile.self, from: JSONEncoder().encode(profile))
+    #expect(restored.definitionIndexDatabases == profile.definitionIndexDatabases && restored.indexObjectDefinitions == nil)
+    profile.setDefinitionIndex(false, database: "B", known: ["A", "B"])
+    #expect(!profile.hasDefinitionIndexes)
+    #expect(!ServerProfile().indexesDefinitions(in: "A"))
   }
 }

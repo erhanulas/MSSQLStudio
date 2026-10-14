@@ -7,6 +7,7 @@ private struct DatabaseChoices: View {
   let items: [CatalogItem]
   @Binding var chosen: Set<String>
   @Binding var defaultDatabase: String
+  @Binding var profile: ServerProfile
   @State private var search = ""
   @State private var scope = DatabaseListScope.all
   @State private var selectedOnly = false
@@ -75,6 +76,11 @@ private struct DatabaseChoices: View {
               ) {
                 Text(item.name).lineLimit(1).truncationMode(.middle).help(item.name)
               }.toggleStyle(.checkbox).frame(maxWidth: .infinity, alignment: .leading)
+              Toggle("İçerik", isOn: Binding(get: { profile.indexesDefinitions(in: item.name) }, set: {
+                profile.setDefinitionIndex($0, database: item.name, known: items.map(\.name))
+              })).toggleStyle(.checkbox).disabled(!chosen.contains(item.name))
+                .help("Nesne kodlarını bu Mac’te indeksle: " + item.name)
+                .accessibilityLabel("Nesne içeriği indeksi: " + item.name)
               if (1...4).contains(item.id) {
                 Text("Sistem").font(.caption).foregroundStyle(.secondary)
               }
@@ -118,7 +124,7 @@ private struct DatabaseChoices: View {
         .lineLimit(1).truncationMode(.middle).help(defaultDatabase)
         Spacer(minLength: 0)
       }.font(.caption)
-      Text("Seçim yalnızca Object Explorer görünümünü belirler; sunucu izinlerini değiştirmez.")
+      Text("Soldaki seçim Explorer görünümünü belirler. İçerik seçeneği nesne kodlarını bu Mac’te saklar; kapatınca o veritabanının tanım indeksi silinir. Sunucu izinleri değişmez.")
         .font(.caption).foregroundStyle(.secondary)
     }.onChange(of: chosen) { _, names in
       defaultDatabase = DatabaseSelection.defaultName(defaultDatabase, items: items, chosen: names)
@@ -237,8 +243,7 @@ struct ConnectionForm: View {
           }
           Divider()
           Text("Nesne tanım indeksi").font(.headline)
-          Toggle("CREATE / ALTER tanımlarını indeksle",isOn:Binding(get:{profile.indexObjectDefinitions == true},set:{profile.indexObjectDefinitions=$0})).toggleStyle(.checkbox).accessibilityIdentifier("indexObjectDefinitions")
-          Text("Seçili veritabanlarının nesne kodlarını bu Mac’te saklar. Bağlıyken tanım her zaman sunucudan okunur; çevrimdışıyken son indeks salt okunur gösterilir. Kapatınca tanım indeksi silinir.").font(.caption).foregroundStyle(.secondary)
+          Text("Sağdaki veritabanı listesindeki İçerik seçeneğiyle her veritabanını ayrı ayarlayın. Explorer’daki veritabanı indeks düğmesinden de değiştirilebilir. Nesne kodları bu Mac’te saklanır; kapatınca yalnız ilgili veritabanının tanım indeksi silinir.").font(.caption).foregroundStyle(.secondary)
           Divider()
           Text("Ortam ve renk").font(.headline)
           ConnectionAppearanceFields(appearance: appearance)
@@ -254,7 +259,7 @@ struct ConnectionForm: View {
             StudioActionButton(listed ? "Test Et / Yenile" : "Test Et ve Yükle",icon:"arrow.clockwise",tint:.accentColor,action:test).disabled(loading || driver.busy)
           }
           if listed {
-            DatabaseChoices(items: items, chosen: $chosen, defaultDatabase: $defaultDatabase)
+            DatabaseChoices(items: items, chosen: $chosen, defaultDatabase: $defaultDatabase, profile: $profile)
               .disabled(loading)
           } else {
             VStack(spacing: 12) {
@@ -299,6 +304,8 @@ struct ConnectionForm: View {
         var previous = old
         previous.name = new.name
         previous.appearance = new.appearance
+        previous.indexObjectDefinitions = new.indexObjectDefinitions
+        previous.definitionIndexDatabases = new.definitionIndexDatabases
         draftChanged()
         if previous != new { invalidate() }
       }

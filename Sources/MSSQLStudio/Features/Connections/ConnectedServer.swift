@@ -70,7 +70,11 @@ import UniformTypeIdentifiers
   private let diskIndex:CatalogDiskIndex
   private let objectIndexService:CatalogIndexService
   private let completionIndexService:SQLCatalogService
+  func allowsDefinitionIndex(_ database: String) -> Bool { allowsCatalogIndex(database) && profile.indexesDefinitions(in: database) }
   func allowsCatalogIndex(_ database:String) -> Bool {profile.visibleDatabases?.contains(database) != false}
+  func catalogIndexStatus(database: String) async throws -> CatalogIndexStatus? {
+    try await diskIndex.status(scope: CatalogDiskIndex.scope(profile: profile, database: database))
+  }
   func cachedCompletionCatalog(database:String) async throws -> SQLIntelligence.Catalog? {
     if let application=visibilityApplication {await application.task.value}
     return try await completionIndexService.cached(profile:profile,database:database)
@@ -85,7 +89,7 @@ import UniformTypeIdentifiers
     indexPreparation?.cancel();indexPreparationID=UUID();catalogIndexRevision=UUID()
     let profile=profile,revision=catalogIndexRevision
     let purgeDefinitions=previousProfile.map { !$0.hasSameConnectionSettings(as:profile) } ?? false
-    let known=Set(available.map(\.name)).union(previousDatabases.map(\.name)).union(previousProfile?.visibleDatabases ?? [])
+    let known=Set(available.map(\.name)).union(previousDatabases.map(\.name)).union(previousProfile?.visibleDatabases ?? []).union(profile.definitionIndexDatabases?.keys.map { $0 } ?? []).union(previousProfile?.definitionIndexDatabases?.keys.map { $0 } ?? [])
     let previous=visibilityApplication?.task
     // MainActor isolation does not order calls across service/index actor hops.
     // Finish every prior eviction before allowing the next snapshot to reinclude
@@ -100,7 +104,8 @@ import UniformTypeIdentifiers
     if visibilityApplication?.revision==revision {visibilityApplication=nil}
   }
   private func applyCatalogVisibility(profile:ServerProfile,known:Set<String>,revision:UUID,purgeDefinitions:Bool) async {
-    await definitionIndex.configure(purge:purgeDefinitions,enabled:profile.indexObjectDefinitions == true)
+    await definitionIndex.configure(purge:purgeDefinitions,enabled:profile.hasDefinitionIndexes,
+      disabledScopes: known.filter { !profile.indexesDefinitions(in: $0) }.map { CatalogDiskIndex.scope(profile: profile, database: $0) })
     let excluded=known.filter {profile.visibleDatabases?.contains($0) == false}
     for database in excluded.sorted() {
       if catalogIndexRevision==revision {indexingDatabases.remove(database);indexErrors[database]=nil}

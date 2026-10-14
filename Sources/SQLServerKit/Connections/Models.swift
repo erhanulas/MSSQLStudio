@@ -13,12 +13,28 @@ public struct ServerProfile: Codable, Equatable, Identifiable, Sendable {
   public var visibleDatabases: [String]?
   /// Explicit opt-in; absent legacy values remain disabled.
   public var indexObjectDefinitions: Bool?
+  /// Explicit per-database choices. Nil preserves an existing legacy opt-in.
+  public var definitionIndexDatabases: [String: Bool]?
+  public func indexesDefinitions(in database: String) -> Bool {
+    definitionIndexDatabases.map { $0[database] == true } ?? (indexObjectDefinitions == true)
+  }
+  public var hasDefinitionIndexes: Bool {
+    definitionIndexDatabases.map { $0.values.contains(true) } ?? (indexObjectDefinitions == true)
+  }
+  public mutating func setDefinitionIndex(_ enabled: Bool, database: String, known: [String]) {
+    if definitionIndexDatabases == nil {
+      definitionIndexDatabases = Dictionary(uniqueKeysWithValues: Set(known + [database]).map { ($0, indexObjectDefinitions == true) })
+    }
+    definitionIndexDatabases?[database] = enabled
+    indexObjectDefinitions = nil
+  }
   public var appearance: ServerAppearance?
   public init(
     id: UUID = UUID(), name: String = "Local SQL Server", host: String = "localhost",
     port: Int = 1433, database: String = "master", login: String = "sa", kerberos: Bool = false,
     trustCertificate: Bool = false, visibleDatabases: [String]? = nil,
-    appearance: ServerAppearance? = nil, indexObjectDefinitions: Bool? = nil
+    appearance: ServerAppearance? = nil, indexObjectDefinitions: Bool? = nil,
+    definitionIndexDatabases: [String: Bool]? = nil
   ) {
     self.id = id
     self.name = name
@@ -31,6 +47,7 @@ public struct ServerProfile: Codable, Equatable, Identifiable, Sendable {
     self.visibleDatabases = visibleDatabases
     self.appearance = appearance
     self.indexObjectDefinitions = indexObjectDefinitions
+    self.definitionIndexDatabases = definitionIndexDatabases
   }
   /// UI-only fields and the default database do not change existing SQL sessions.
   public func hasSameConnectionSettings(as other: ServerProfile, includeDatabase: Bool = false)

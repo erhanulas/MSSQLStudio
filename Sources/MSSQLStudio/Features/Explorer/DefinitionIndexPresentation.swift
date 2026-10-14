@@ -8,6 +8,7 @@ struct DefinitionIndexActivity {
   var processed = 0
   var total: Int?
   var error: String?
+  var stage: String?
 }
 struct DefinitionIndexPresentation {
   let enabled: Bool
@@ -34,9 +35,10 @@ struct DefinitionIndexPresentation {
     return stored.incomplete ? "Kısmi indeks" : "Hazır"
   }
   var detail: String {
-    guard enabled else { return "Bağlantı → Gelişmiş bölümünden etkinleştirin." }
+    guard enabled else { return "Bu veritabanı için Nesne içeriklerini indeksle seçeneğini açın." }
     var lines = [title + " · \(stored?.count ?? 0) kayıtlı tanım"]
     if building, let activity {
+      if let stage = activity.stage { lines.append(stage) }
       lines.append(
         activity.total.map { "\(activity.processed) / \($0) nesne kontrol edildi" }
           ?? "Nesne listesi okunuyor…")

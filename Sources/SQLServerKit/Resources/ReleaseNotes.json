@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.112",
+    "date": "2026-10-14",
+    "title": "Veritabanı bazında içerik indeksi ve hızlı tablo eşitleme",
+    "changes": [
+      "Nesne içeriği indeksi her veritabanı için ayrı açılıp kapatılabilir. Bağlantı formunda veritabanlarının İçerik seçeneği, Explorer indeks panelinde Nesne içeriklerini indeksle kontrolü bulunur. Kapatılan veritabanının yalnız içerik indeksi temizlenir; diğer indeksler, bağlantılar ve açık sorgular korunur.",
+      "Önceden açık olan bağlantı tercihi korunur. İlk veritabanı ayarında bilinen tercihler ayrı ayrı saklanır; sonraki yeni veritabanları kendiliğinden açılmaz. Çevrimiçi tanımlar her zaman canlı okunur; çevrimdışı erişim yalnız seçili veritabanlarının indeksini kullanır.",
+      "Tablo metadata’sı nesne başına yedi sonuç kümesi yerine grup başına yedi ortak sonuç kümesinden okunur ve nesne kimliğine göre ayrılır. Ayrı indekslenen trigger kodları tablo metadata’sıyla tekrar indirilmez; synonym tanımları da toplu okunur.",
+      "Okuma grupları yanıt büyüklüğü ve süreye göre uyarlanır: modüllerde en fazla 200, tablolarda 64 nesne. Kısmi yanıtlar daha küçük gruplara bölünür; sonraki okumalar da küçülen boyutu kullanır. Disk yazımları aynı hazırlanmış SQL ifadesini tekrar kullanır.",
+      "İlerleme bilgisi SQL modülleri ile tablo/synonym aşamalarını gösterir. Veritabanından başlatılan indeks yenilemesi içerik için yalnız o veritabanını tarar."
+    ]
+  },
+  {
     "version": "0.2.111",
     "date": "2026-10-14",
     "title": "Hızlı nesne içeriği eşitleme ve kontrollü kota artışı",

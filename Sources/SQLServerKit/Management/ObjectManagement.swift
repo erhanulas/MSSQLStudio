@@ -143,9 +143,16 @@ public enum ObjectMetadata {
     compatible.results = [result.results[1], result.results[2], Rows(), Rows(), Rows(), Rows(), result.results[3]]
     return (objectID, try decode(compatible, schema: schema, name: name))
   }
-  private static func tableSQL(_ id:String, includeDefinitions: Bool) -> String {
+  /// Seven shared rowsets with an object ID prefix; trigger bodies are indexed separately.
+  public static func tableBatch(_ ids: [Int]) throws -> String {
+    guard !ids.isEmpty, ids.count <= 64, ids.allSatisfy({ $0 > 0 }), Set(ids).count == ids.count
+    else { throw SQLFailure("Geçersiz tablo metadata grubu.") }
+    return tableSQL(ids.map(String.init).joined(separator: ","), includeDefinitions: true, grouped: true)
+  }
+  private static func tableSQL(_ id:String, includeDefinitions: Bool, grouped: Bool = false) -> String {
+    let filter = grouped ? " IN (\(id))" : "=\(id)"
     let columns = """
-    SELECT c.column_id,c.name,
+    SELECT \(grouped ? "c.object_id," : "")c.column_id,c.name,
       CASE WHEN t.is_user_defined=1 THEN (QUOTENAME(SCHEMA_NAME(t.schema_id)) COLLATE DATABASE_DEFAULT)+'.'+(QUOTENAME(t.name) COLLATE DATABASE_DEFAULT) ELSE t.name END+
       CASE WHEN t.is_user_defined=1 THEN '' WHEN t.name IN ('varchar','char','binary','varbinary') THEN '('+CASE WHEN c.max_length=-1 THEN 'max' ELSE CONVERT(varchar(10),c.max_length) END+')'
       WHEN t.name IN ('nvarchar','nchar') THEN '('+CASE WHEN c.max_length=-1 THEN 'max' ELSE CONVERT(varchar(10),c.max_length/2) END+')'
@@ -162,11 +169,11 @@ public enum ObjectMetadata {
     LEFT JOIN sys.types st ON st.user_type_id=t.system_type_id AND st.user_type_id=st.system_type_id
     LEFT JOIN sys.identity_columns ic ON ic.object_id=c.object_id AND ic.column_id=c.column_id
     LEFT JOIN sys.computed_columns cc ON cc.object_id=c.object_id AND cc.column_id=c.column_id
-    LEFT JOIN sys.default_constraints dc ON dc.object_id=c.default_object_id WHERE c.object_id=\(id) ORDER BY c.column_id;
-    SELECT c.name,k.name FROM sys.key_constraints k JOIN sys.index_columns ic ON ic.object_id=k.parent_object_id AND ic.index_id=k.unique_index_id JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE k.parent_object_id=\(id) AND k.type='PK' ORDER BY ic.key_ordinal;
+    LEFT JOIN sys.default_constraints dc ON dc.object_id=c.default_object_id WHERE c.object_id\(filter) ORDER BY c.column_id;
+    SELECT \(grouped ? "c.object_id," : "")c.name,k.name FROM sys.key_constraints k JOIN sys.index_columns ic ON ic.object_id=k.parent_object_id AND ic.index_id=k.unique_index_id JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE k.parent_object_id\(filter) AND k.type='PK' ORDER BY ic.key_ordinal;
     """
     let definitions = """
-    SELECT i.name,CASE WHEN i.is_primary_key=1 THEN 'PK' WHEN i.is_unique_constraint=1 THEN 'UQ' ELSE 'INDEX' END,
+    SELECT \(grouped ? "i.object_id," : "")i.name,CASE WHEN i.is_primary_key=1 THEN 'PK' WHEN i.is_unique_constraint=1 THEN 'UQ' ELSE 'INDEX' END,
       CASE WHEN i.is_primary_key=1 OR i.is_unique_constraint=1 THEN N'ALTER TABLE '+(QUOTENAME(OBJECT_SCHEMA_NAME(i.object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(i.object_id)) COLLATE DATABASE_DEFAULT)+N' ADD CONSTRAINT '+(QUOTENAME(i.name) COLLATE DATABASE_DEFAULT)+CASE WHEN i.is_primary_key=1 THEN N' PRIMARY KEY ' ELSE N' UNIQUE ' END
       ELSE N'CREATE '+CASE WHEN i.is_unique=1 THEN N'UNIQUE ' ELSE N'' END END+
       CASE WHEN i.type=1 THEN N'CLUSTERED' ELSE N'NONCLUSTERED' END+
@@ -177,19 +184,19 @@ public enum ObjectMetadata {
     FROM sys.indexes i LEFT JOIN sys.data_spaces ds ON ds.data_space_id=i.data_space_id
     OUTER APPLY (SELECT STRING_AGG(CONVERT(nvarchar(max),(QUOTENAME(c.name) COLLATE DATABASE_DEFAULT)+CASE WHEN ic.is_descending_key=1 THEN N' DESC' ELSE N' ASC' END),N', ') WITHIN GROUP (ORDER BY ic.key_ordinal) AS keys FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0) k
     OUTER APPLY (SELECT STRING_AGG(CONVERT(nvarchar(max),(QUOTENAME(c.name) COLLATE DATABASE_DEFAULT)),N', ') WITHIN GROUP (ORDER BY ic.index_column_id) AS cols FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.is_included_column=1) inc
-    WHERE i.object_id=\(id) AND i.index_id>0 AND i.type IN (1,2) ORDER BY i.is_primary_key DESC,i.is_unique_constraint DESC,i.index_id;
-    SELECT fk.name,'FK',N'ALTER TABLE '+(QUOTENAME(OBJECT_SCHEMA_NAME(fk.parent_object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(fk.parent_object_id)) COLLATE DATABASE_DEFAULT)+CASE WHEN fk.is_not_trusted=1 THEN N' WITH NOCHECK' ELSE N' WITH CHECK' END+N' ADD CONSTRAINT '+(QUOTENAME(fk.name) COLLATE DATABASE_DEFAULT)+N' FOREIGN KEY ('+a.cols+N') REFERENCES '+(QUOTENAME(OBJECT_SCHEMA_NAME(fk.referenced_object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(fk.referenced_object_id)) COLLATE DATABASE_DEFAULT)+N' ('+b.cols+N') ON DELETE '+REPLACE(fk.delete_referential_action_desc COLLATE DATABASE_DEFAULT,'_',' ')+N' ON UPDATE '+REPLACE(fk.update_referential_action_desc COLLATE DATABASE_DEFAULT,'_',' ')+CASE WHEN fk.is_not_for_replication=1 THEN N' NOT FOR REPLICATION' ELSE N'' END+N';'+CASE WHEN fk.is_disabled=1 THEN N' ALTER TABLE '+(QUOTENAME(OBJECT_SCHEMA_NAME(fk.parent_object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(fk.parent_object_id)) COLLATE DATABASE_DEFAULT)+N' NOCHECK CONSTRAINT '+(QUOTENAME(fk.name) COLLATE DATABASE_DEFAULT)+N';' ELSE N'' END
+    WHERE i.object_id\(filter) AND i.index_id>0 AND i.type IN (1,2) ORDER BY i.is_primary_key DESC,i.is_unique_constraint DESC,i.index_id;
+    SELECT \(grouped ? "fk.parent_object_id," : "")fk.name,'FK',N'ALTER TABLE '+(QUOTENAME(OBJECT_SCHEMA_NAME(fk.parent_object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(fk.parent_object_id)) COLLATE DATABASE_DEFAULT)+CASE WHEN fk.is_not_trusted=1 THEN N' WITH NOCHECK' ELSE N' WITH CHECK' END+N' ADD CONSTRAINT '+(QUOTENAME(fk.name) COLLATE DATABASE_DEFAULT)+N' FOREIGN KEY ('+a.cols+N') REFERENCES '+(QUOTENAME(OBJECT_SCHEMA_NAME(fk.referenced_object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(fk.referenced_object_id)) COLLATE DATABASE_DEFAULT)+N' ('+b.cols+N') ON DELETE '+REPLACE(fk.delete_referential_action_desc COLLATE DATABASE_DEFAULT,'_',' ')+N' ON UPDATE '+REPLACE(fk.update_referential_action_desc COLLATE DATABASE_DEFAULT,'_',' ')+CASE WHEN fk.is_not_for_replication=1 THEN N' NOT FOR REPLICATION' ELSE N'' END+N';'+CASE WHEN fk.is_disabled=1 THEN N' ALTER TABLE '+(QUOTENAME(OBJECT_SCHEMA_NAME(fk.parent_object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(fk.parent_object_id)) COLLATE DATABASE_DEFAULT)+N' NOCHECK CONSTRAINT '+(QUOTENAME(fk.name) COLLATE DATABASE_DEFAULT)+N';' ELSE N'' END
     FROM sys.foreign_keys fk
     CROSS APPLY (SELECT STRING_AGG(CONVERT(nvarchar(max),(QUOTENAME(pc.name) COLLATE DATABASE_DEFAULT)),N', ') WITHIN GROUP (ORDER BY c.constraint_column_id) AS cols FROM sys.foreign_key_columns c JOIN sys.columns pc ON pc.object_id=c.parent_object_id AND pc.column_id=c.parent_column_id WHERE c.constraint_object_id=fk.object_id) a
-    CROSS APPLY (SELECT STRING_AGG(CONVERT(nvarchar(max),(QUOTENAME(rc.name) COLLATE DATABASE_DEFAULT)),N', ') WITHIN GROUP (ORDER BY c.constraint_column_id) AS cols FROM sys.foreign_key_columns c JOIN sys.columns rc ON rc.object_id=c.referenced_object_id AND rc.column_id=c.referenced_column_id WHERE c.constraint_object_id=fk.object_id) b WHERE fk.parent_object_id=\(id);
-    SELECT c.name,'CHECK',N'ALTER TABLE '+(QUOTENAME(OBJECT_SCHEMA_NAME(c.parent_object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(c.parent_object_id)) COLLATE DATABASE_DEFAULT)+CASE WHEN c.is_not_trusted=1 THEN N' WITH NOCHECK' ELSE N' WITH CHECK' END+N' ADD CONSTRAINT '+(QUOTENAME(c.name) COLLATE DATABASE_DEFAULT)+N' CHECK '+CASE WHEN c.is_not_for_replication=1 THEN N'NOT FOR REPLICATION ' ELSE N'' END+(c.definition COLLATE DATABASE_DEFAULT)+N';'+CASE WHEN c.is_disabled=1 THEN N' ALTER TABLE '+(QUOTENAME(OBJECT_SCHEMA_NAME(c.parent_object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(c.parent_object_id)) COLLATE DATABASE_DEFAULT)+N' NOCHECK CONSTRAINT '+(QUOTENAME(c.name) COLLATE DATABASE_DEFAULT)+N';' ELSE N'' END FROM sys.check_constraints c WHERE c.parent_object_id=\(id);
-    SELECT t.name,'TRIGGER',(OBJECT_DEFINITION(t.object_id) COLLATE DATABASE_DEFAULT)+CASE WHEN t.is_disabled=1 THEN CHAR(10)+N'GO'+CHAR(10)+N'DISABLE TRIGGER '+(QUOTENAME(OBJECT_SCHEMA_NAME(t.object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(t.name) COLLATE DATABASE_DEFAULT)+N' ON '+(QUOTENAME(OBJECT_SCHEMA_NAME(t.parent_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(t.parent_id)) COLLATE DATABASE_DEFAULT)+N';' ELSE N'' END FROM sys.triggers t WHERE t.parent_id=\(id);
+    CROSS APPLY (SELECT STRING_AGG(CONVERT(nvarchar(max),(QUOTENAME(rc.name) COLLATE DATABASE_DEFAULT)),N', ') WITHIN GROUP (ORDER BY c.constraint_column_id) AS cols FROM sys.foreign_key_columns c JOIN sys.columns rc ON rc.object_id=c.referenced_object_id AND rc.column_id=c.referenced_column_id WHERE c.constraint_object_id=fk.object_id) b WHERE fk.parent_object_id\(filter);
+    SELECT \(grouped ? "c.parent_object_id," : "")c.name,'CHECK',N'ALTER TABLE '+(QUOTENAME(OBJECT_SCHEMA_NAME(c.parent_object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(c.parent_object_id)) COLLATE DATABASE_DEFAULT)+CASE WHEN c.is_not_trusted=1 THEN N' WITH NOCHECK' ELSE N' WITH CHECK' END+N' ADD CONSTRAINT '+(QUOTENAME(c.name) COLLATE DATABASE_DEFAULT)+N' CHECK '+CASE WHEN c.is_not_for_replication=1 THEN N'NOT FOR REPLICATION ' ELSE N'' END+(c.definition COLLATE DATABASE_DEFAULT)+N';'+CASE WHEN c.is_disabled=1 THEN N' ALTER TABLE '+(QUOTENAME(OBJECT_SCHEMA_NAME(c.parent_object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(c.parent_object_id)) COLLATE DATABASE_DEFAULT)+N' NOCHECK CONSTRAINT '+(QUOTENAME(c.name) COLLATE DATABASE_DEFAULT)+N';' ELSE N'' END FROM sys.check_constraints c WHERE c.parent_object_id\(filter);
+    SELECT \(grouped ? "t.parent_id," : "")t.name,'TRIGGER',(OBJECT_DEFINITION(t.object_id) COLLATE DATABASE_DEFAULT)+CASE WHEN t.is_disabled=1 THEN CHAR(10)+N'GO'+CHAR(10)+N'DISABLE TRIGGER '+(QUOTENAME(OBJECT_SCHEMA_NAME(t.object_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(t.name) COLLATE DATABASE_DEFAULT)+N' ON '+(QUOTENAME(OBJECT_SCHEMA_NAME(t.parent_id)) COLLATE DATABASE_DEFAULT)+N'.'+(QUOTENAME(OBJECT_NAME(t.parent_id)) COLLATE DATABASE_DEFAULT)+N';' ELSE N'' END FROM sys.triggers t WHERE t.parent_id\(filter)\(grouped ? " AND 1=0" : "");
     """
     let flags = """
-    SELECT CASE WHEN t.temporal_type<>0 OR t.is_memory_optimized=1 OR t.is_filetable=1 OR t.is_node=1 OR t.is_edge=1
+    SELECT \(grouped ? "t.object_id," : "")CASE WHEN t.temporal_type<>0 OR t.is_memory_optimized=1 OR t.is_filetable=1 OR t.is_node=1 OR t.is_edge=1
       OR EXISTS(SELECT 1 FROM sys.indexes i LEFT JOIN sys.data_spaces d ON d.data_space_id=i.data_space_id WHERE i.object_id=t.object_id AND (i.type>2 OR d.type='PS'))
       OR EXISTS(SELECT 1 FROM sys.partitions p WHERE p.object_id=t.object_id AND p.data_compression<>0)
-      THEN 1 ELSE 0 END,ds.name FROM sys.tables t LEFT JOIN sys.indexes i ON i.object_id=t.object_id AND i.index_id=0 LEFT JOIN sys.data_spaces ds ON ds.data_space_id=i.data_space_id WHERE t.object_id=\(id);
+      THEN 1 ELSE 0 END,ds.name FROM sys.tables t LEFT JOIN sys.indexes i ON i.object_id=t.object_id AND i.index_id=0 LEFT JOIN sys.data_spaces ds ON ds.data_space_id=i.data_space_id WHERE t.object_id\(filter);
     """
     return columns + "\n" + (includeDefinitions ? definitions + "\n" : "") + flags
   }

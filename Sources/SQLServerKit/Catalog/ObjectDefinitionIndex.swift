@@ -113,12 +113,18 @@ extension CatalogDiskIndex {
   }
 
   /// Revocation precedes deletion, so late network completions cannot recreate removed data.
-  public func configureDefinitions(owner: UUID, enabled: Bool, purge: Bool = false) throws -> UUID?
+  public func configureDefinitions(owner: UUID, enabled: Bool, purge: Bool = false, disabledScopes: [String] = []) throws -> UUID?
   {
     sourceLeases[owner] = nil
     if purge || !enabled, FileManager.default.fileExists(atPath: urlForDefinitions.path) {
       try write("DELETE FROM source_sync WHERE scope IN (SELECT scope FROM catalog_owners WHERE owner=?)",[owner.uuidString])
       try write("DELETE FROM source_definitions WHERE owner=?", [owner.uuidString])
+    }
+    if FileManager.default.fileExists(atPath: urlForDefinitions.path) {
+      for scope in disabledScopes {
+        try write("DELETE FROM source_sync WHERE scope=? AND scope IN (SELECT scope FROM catalog_owners WHERE owner=?)", [scope, owner.uuidString])
+        try write("DELETE FROM source_definitions WHERE owner=? AND scope=?", [owner.uuidString, scope])
+      }
     }
     guard enabled else { return nil }
     let lease = UUID()
@@ -190,7 +196,12 @@ extension CatalogDiskIndex {
     try registerCatalogOwner(owner, scope: scope)
     try execute("SAVEPOINT definition_page")
     do {
-      for value in values { try Task.checkCancellation(); try writeDefinition(value, owner: owner, scope: scope) }
+      let insert = try statement("INSERT INTO source_definitions(owner,scope,id,payload,fetched,schema_name,name,kind,parent_id,modified,digest) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(scope,id) DO UPDATE SET payload=excluded.payload,fetched=excluded.fetched,schema_name=excluded.schema_name,name=excluded.name,kind=excluded.kind,parent_id=excluded.parent_id,modified=excluded.modified,digest=excluded.digest WHERE excluded.fetched>=source_definitions.fetched")
+      defer { sqlite3_finalize(insert) }
+      for value in values {
+        try Task.checkCancellation()
+        try writeDefinition(value, owner: owner, scope: scope, insert: insert)
+      }
       try trimDefinitions()
       try execute("RELEASE definition_page")
     } catch {
@@ -198,19 +209,19 @@ extension CatalogDiskIndex {
       cachedDefinitionQuota = nil; throw error
     }
   }
-  private func writeDefinition(_ value: IndexedObjectDefinition, owner: UUID, scope: String) throws {
+  private func writeDefinition(_ value: IndexedObjectDefinition, owner: UUID, scope: String, insert: OpaquePointer) throws {
     let payload = String(decoding: try JSONEncoder().encode(value), as: UTF8.self)
-    guard payload.utf8.count <= 4_194_304 else {
-      throw SQLFailure("Nesne tanımı 4 MB indeks sınırını aşıyor.")
+    guard payload.utf8.count <= 4_194_304 else { throw SQLFailure("Nesne tanımı 4 MB indeks sınırını aşıyor.") }
+    let args = [owner.uuidString, scope, String(value.id), payload,
+      String(value.fetchedAt.timeIntervalSince1970), value.schema, value.name, value.type,
+      String(value.parentID ?? 0), value.modified, value.digest]
+    sqlite3_reset(insert); sqlite3_clear_bindings(insert)
+    let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+    for (index, arg) in args.enumerated() {
+      let code = arg.withCString { sqlite3_bind_text(insert, Int32(index + 1), $0, -1, transient) }
+      guard code == SQLITE_OK else { throw SQLFailure("Tanım indeks parametresi bağlanamadı.") }
     }
-    // A slower background request cannot overwrite a newer interactive fetch.
-    try write(
-      "INSERT INTO source_definitions(owner,scope,id,payload,fetched,schema_name,name,kind,parent_id,modified,digest) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(scope,id) DO UPDATE SET payload=excluded.payload,fetched=excluded.fetched,schema_name=excluded.schema_name,name=excluded.name,kind=excluded.kind,parent_id=excluded.parent_id,modified=excluded.modified,digest=excluded.digest WHERE excluded.fetched>=source_definitions.fetched",
-      [
-        owner.uuidString, scope, String(value.id), payload,
-        String(value.fetchedAt.timeIntervalSince1970), value.schema, value.name, value.type,
-        String(value.parentID ?? 0), value.modified, value.digest,
-      ])
+    guard sqlite3_step(insert) == SQLITE_DONE else { throw SQLFailure("Tanım indeksi yazılamadı.") }
   }
 
   public func removeDefinition(

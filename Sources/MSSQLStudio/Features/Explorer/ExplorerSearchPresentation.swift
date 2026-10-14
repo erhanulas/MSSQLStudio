@@ -17,10 +17,13 @@ extension WorkbenchController {
   private func showIndexDetails(_ scope:TreeNode?,relativeTo button:NSButton) {
     guard let scope else {return}
     let popover=NSPopover();popover.animates = false;popover.behavior = .transient
-    let panel=ExplorerIndexPanel(server:scope.server,databases:searchDatabases(scope)) { [weak self] in
+    let panel=ExplorerIndexPanel(server:scope.server,databases:searchDatabases(scope), refresh: { [weak self] in
       if case .server = scope.kind {scope.server.prepareCatalogIndexes(force:true)}
       else {self?.refreshIndexInBackground(server:scope.server,database:scope.database,force:true)}
-    }
+    }, setDefinitionIndex: { [weak self] database, enabled in
+      guard let self else { throw CancellationError() }
+      try await state.setDefinitionIndex(scope.server, database: database, enabled: enabled)
+    })
     indexPopover?.close();indexPopover=popover
     StudioPopover.show(popover,content:panel,from:button,size:NSSize(width:420,height:500))
   }

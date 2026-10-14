@@ -157,20 +157,51 @@ import Testing
       reads += 1
       let list = sql.components(separatedBy: "IN (").last!.components(separatedBy: ")").first!
       let ids = list.split(separator: ",").map(String.init)
-      #expect(ids.count <= 64)
+      #expect(ids.count <= 200)
       return output(ids.map { [$0, "CREATE PROCEDURE dbo.P" + $0 + " AS SELECT 1;", "1", "1", "0", nil] })
     }
     let began = Date()
     await server.definitionIndex.configure(); server.definitionIndex.refresh()
     for _ in 0..<6000 where server.definitionIndex.isRefreshing { try await Task.sleep(for: .milliseconds(5)) }
     #expect(!server.definitionIndex.isRefreshing)
-    #expect(reads == 110)
+    #expect(reads == 37)
     let scope = CatalogDiskIndex.scope(profile: profile, database: "master")
     #expect(try await disk.definitionStatus(scope: scope).count == 7000)
     print("Definition7000: \(Date().timeIntervalSince(began)) seconds, \(reads) detail queries")
     await server.definitionIndex.configure(); server.definitionIndex.refresh()
     try await wait(server.definitionIndex)
-    #expect(reads == 110)
+    #expect(reads == 37)
+  }
+  @Test func sevenThousandTablesUseSharedMetadataRowsetsInsteadOfSevenPerObject() async throws {
+    let url = URL(fileURLWithPath: "/tmp/DefinitionTables7000-" + UUID().uuidString).appendingPathComponent("index.sqlite")
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    let disk = CatalogDiskIndex(url: url)
+    let server = ConnectedServer(profile: .init(definitionIndexDatabases: ["master": true]), password: "", diskIndex: disk)
+    server.databases = [.init(id: 1, name: "master")]
+    var reads = 0, rowsets = 0
+    server.catalogFixture = { sql in
+      if sql.contains("Inventory") {
+        return output((1...7000).map { [String($0), "dbo", "T" + String($0), "U", "1", "0"] })
+      }
+      reads += 1
+      #expect(sql.components(separatedBy: "SELECT c.object_id,c.column_id").count == 2)
+      let list = sql.components(separatedBy: "c.object_id IN (").last!.components(separatedBy: ")").first!
+      let ids = list.split(separator: ",").map(String.init)
+      #expect(ids.count <= 64)
+      var result = Execution()
+      result.results = [Rows(values: ids.map { [$0, "1", "A", "int", "0", "0", nil, nil, nil, "0", nil, nil, nil, "0", "0", "0"] }),
+        Rows(), Rows(), Rows(), Rows(), Rows(), Rows(values: ids.map { [$0, "0", "PRIMARY"] })]
+      rowsets += result.results.count
+      return result
+    }
+    let began = Date()
+    await server.definitionIndex.configure(); server.definitionIndex.refresh()
+    for _ in 0..<6000 where server.definitionIndex.isRefreshing { try await Task.sleep(for: .milliseconds(5)) }
+    #expect(!server.definitionIndex.isRefreshing && reads == 110 && rowsets == 770)
+    let scope = CatalogDiskIndex.scope(profile: server.profile, database: "master")
+    #expect(try await disk.definitionStatus(scope: scope).count == 7000)
+    #expect(try await disk.definition(scope: scope, id: 7000)?.sql.contains("[T7000]") == true)
+    print("DefinitionTables7000: \(Date().timeIntervalSince(began)) seconds, \(reads) detail queries, \(rowsets) rowsets")
   }
   @Test func offlinePreviewUsesReadOnlyNativeSQLAndFitsLightAndDark() async throws {
     _ = NSApplication.shared

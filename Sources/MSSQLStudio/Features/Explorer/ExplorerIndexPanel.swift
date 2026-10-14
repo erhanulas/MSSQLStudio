@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
   let server:ConnectedServer
   let databases:[String]
   let refresh:()->Void
+  let setDefinitionIndex: (String, Bool) async throws -> Void
   @State private var revision=UUID()
   @State private var definitionRevisions:[String:UUID]=[:]
   var body:some View {
@@ -15,7 +16,7 @@ import UniformTypeIdentifiers
       Text(server.profile.name).foregroundStyle(.secondary)
       ScrollView {
         VStack(spacing:12) {
-          ForEach(databases,id:\.self) {db in ExplorerIndexCard(server:server,database:db).id(revision.uuidString+(definitionRevisions[db]?.uuidString ?? "")+db)}
+          ForEach(databases,id:\.self) {db in ExplorerIndexCard(server:server,database:db,setDefinitionIndex:setDefinitionIndex).id(revision.uuidString+(definitionRevisions[db]?.uuidString ?? "")+db)}
         }
       }.frame(maxHeight:420)
       Text("Bu Mac’teki arama ve SQL önerisi önbelleği.").font(.caption).foregroundStyle(.secondary)
@@ -33,6 +34,9 @@ import UniformTypeIdentifiers
 @MainActor private struct ExplorerIndexCard:View {
   let server:ConnectedServer
   let database:String
+  let setDefinitionIndex: (String, Bool) async throws -> Void
+  @State private var savingDefinition = false
+  @State private var definitionError: String?
   @State private var count:Int?
   @State private var objectDate:Date?
   @State private var columnDate:Date?
@@ -59,6 +63,17 @@ import UniformTypeIdentifiers
         metric("Nesneler",value:count.map(String.init) ?? "—",icon:"square.stack.3d.up",date:objectDate)
         metric("SQL kolonları",value:columnDate == nil ? "Hazır değil" : fresh ? "Güncel" : "Yenileme gerekli",icon:"tablecells",date:columnDate)
       }
+      Toggle("Nesne içeriklerini indeksle", isOn: Binding(get: { server.profile.indexesDefinitions(in: database) }, set: { enabled in
+        savingDefinition = true; definitionError = nil
+        Task {
+          defer { savingDefinition = false }
+          do { try await setDefinitionIndex(database, enabled) }
+          catch { definitionError = error.localizedDescription }
+        }
+      })).toggleStyle(.checkbox).disabled(savingDefinition || server.updatingProfile)
+        .accessibilityLabel(database + " nesne içeriği indeksi")
+      Text("Kodları bu Mac’te saklar. Kapatınca yalnız bu veritabanının içerik indeksi silinir.").font(.caption2).foregroundStyle(.secondary)
+      if let definitionError { Label(definitionError, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange) }
       if let definition {DefinitionIndexMetric(value:definition)}
       if let error {Label(error,systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange).textSelection(.enabled)}
       if !server.online {Label("Bağlantı kapalı · önbellek bilgisi",systemImage:"network.slash").font(.caption).foregroundStyle(.secondary)}
@@ -66,8 +81,8 @@ import UniformTypeIdentifiers
       .task {
         do {
           definition=try await server.definitionIndex.presentation(database:database)
-          let objects=try await CatalogDiskIndex.shared.status(scope:CatalogDiskIndex.scope(profile:server.profile,database:database))
-          let columns=try await SQLCatalogService.shared.cached(profile:server.profile,database:database)
+          let objects=try await server.catalogIndexStatus(database:database)
+          let columns=try await server.cachedCompletionCatalog(database:database)
           count=objects?.count;objectDate=objects?.synchronizedAt;columnDate=columns?.snapshot.synchronizedAt;fresh=columns?.fresh == true
           error=server.indexErrors[database]
         } catch {self.error=error.localizedDescription}

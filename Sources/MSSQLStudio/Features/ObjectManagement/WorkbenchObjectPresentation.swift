@@ -19,7 +19,7 @@ extension WorkbenchController {
     guard let item=node.item else { throw SQLFailure("Tablo seçin.") }
     let fetched=Date(),generation=node.server.generation
     let table=try ObjectMetadata.decode(await node.server.catalog(ObjectMetadata.table(item.id),database:node.database),schema:item.schema,name:item.name)
-    if node.server.profile.indexObjectDefinitions == true {
+    if node.server.allowsDefinitionIndex(node.database) {
       let indexed=try? await Task.detached(priority:.utility) {
         IndexedObjectDefinition(id:item.id,schema:item.schema,name:item.name,type:"U",sql:try table.createScript(),fetchedAt:fetched)
       }.value
@@ -44,7 +44,7 @@ extension WorkbenchController {
       guard !execution.partial, let source=execution.results.first?.values.first?.first, let source else { throw SQLFailure("View tanımı alınamadı; VIEW DEFINITION izni / şifreleme durumunu kontrol edin.") }
       let settings=try await node.server.catalog("SELECT uses_ansi_nulls,uses_quoted_identifier FROM sys.sql_modules WHERE object_id=\(item.id);",database:node.database)
       guard !settings.partial, let row=settings.results.first?.values.first, row.count == 2 else { throw SQLFailure("View session ayarları okunamadı.") }
-      if node.server.profile.indexObjectDefinitions == true {
+      if node.server.allowsDefinitionIndex(node.database) {
         let preview=try ExplorerScripts.module(source,verb:"CREATE",qualified:item.qualified,ansi:row[0]=="1",quoted:row[1]=="1")
         await node.server.definitionIndex.record(.init(id:item.id,schema:item.schema,name:item.name,type:"V",sql:preview,original:source,fetchedAt:fetched),database:node.database,generation:generation)
       }
@@ -110,7 +110,7 @@ extension WorkbenchController {
       let trigger=try TriggerDefinition.decode(await node.server.catalog(TriggerDefinition.metadata(item.id),database:node.database))
       script += "\nGO\n"+(try trigger.stateScript(enabled:!trigger.disabled))
     }
-    if node.server.profile.indexObjectDefinitions == true {
+    if node.server.allowsDefinitionIndex(node.database) {
       let preview=try ExplorerScripts.module(source,verb:"CREATE",qualified:item.qualified,ansi:row[0]=="1",quoted:row[1]=="1")
       let type:String
       switch node.objectFolder {case .views:type="V";case .procedures:type="P";case .functions:type=item.detail.contains("INLINE") ? "IF":item.detail.contains("TABLE") ? "TF":"FN";default:type=item.schema.isEmpty ? "TRD":"TR"}
@@ -137,7 +137,7 @@ extension WorkbenchController {
             let r=try await node.server.catalog("SELECT base_object_name FROM sys.synonyms WHERE object_id=\(item.id);",database:node.database)
             guard !r.partial,let target=r.results.first?.values.first?.first,let target else {throw SQLFailure("Synonym hedefi alınamadı.")}
             script=try ExplorerScripts.synonym(qualified:item.qualified,target:target)
-            if node.server.profile.indexObjectDefinitions == true {
+            if node.server.allowsDefinitionIndex(node.database) {
               await node.server.definitionIndex.record(.init(id:item.id,schema:item.schema,name:item.name,type:"SN",sql:script,fetchedAt:fetched),database:node.database,generation:generation)
             }
           } else if [.indexes,.keys,.constraints].contains(folder) {script=try await structureScript(node,drop:false)}
@@ -200,7 +200,7 @@ extension WorkbenchController {
       let fetched=Date(),generation=node.server.generation
       let r=try await node.server.catalog("SELECT base_object_name FROM sys.synonyms WHERE object_id=\(item.id);",database:node.database)
       guard !r.partial,let target=r.results.first?.values.first?.first,let target else {throw SQLFailure("Synonym hedefi alınamadı.")}
-      if node.server.profile.indexObjectDefinitions == true,let sql=try? ExplorerScripts.synonym(qualified:item.qualified,target:target) {
+      if node.server.allowsDefinitionIndex(node.database),let sql=try? ExplorerScripts.synonym(qualified:item.qualified,target:target) {
         await node.server.definitionIndex.record(.init(id:item.id,schema:item.schema,name:item.name,type:"SN",sql:sql,fetchedAt:fetched),database:node.database,generation:generation)
       }
       return target

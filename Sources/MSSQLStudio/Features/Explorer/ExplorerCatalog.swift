@@ -270,7 +270,7 @@ extension WorkbenchController {
   func refreshIndexInBackground(server: ConnectedServer, database: String, force: Bool = false) {
     guard server.online,server.allowsCatalogIndex(database), !server.indexingDatabases.contains(database) else {return}
     let revision=server.catalogIndexRevision
-    server.definitionIndex.refresh(force:force)
+    server.definitionIndex.refresh(force:force,database:database)
     server.indexingDatabases.insert(database)
     NotificationCenter.default.post(name:.init("catalogIndexUpdated"),object:server,userInfo:["database":database])
     lastIndexStatusCheck = .distantPast; updateIndexStatus()

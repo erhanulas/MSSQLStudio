@@ -20,7 +20,7 @@ public struct DefinitionIndexEntry: Sendable {
 
 public enum DefinitionIndexBatch {
   public static func query(_ entries: [DefinitionIndexEntry]) throws -> String {
-    guard !entries.isEmpty, entries.count <= 64,
+    guard !entries.isEmpty, entries.count <= (entries[0].isModule ? 200 : 64),
       Set(entries.map { $0.object.objectID }).count == entries.count,
       entries.allSatisfy({ $0.isModule == entries[0].isModule })
     else { throw SQLFailure("Geçersiz tanım okuma grubu.") }
@@ -32,7 +32,11 @@ public enum DefinitionIndexBatch {
         WHERE m.object_id IN (\(entries.map { String($0.object.objectID) }.joined(separator: ",")));
         """
     }
-    return "-- StudioDefinitionStructureBatch\n" + entries.map { SchemaComparison.contentQuery($0.object) }.joined(separator: "\n")
+    let tables = entries.filter { $0.object.type == "U" }.map { $0.object.objectID }
+    let synonyms = entries.filter { $0.object.type == "SN" }.map { String($0.object.objectID) }
+    let tableSQL = tables.isEmpty ? "" : try ObjectMetadata.tableBatch(tables)
+    let synonymSQL = synonyms.isEmpty ? "" : "SELECT object_id,base_object_name FROM sys.synonyms WHERE object_id IN (" + synonyms.joined(separator: ",") + ");"
+    return "-- StudioDefinitionStructureBatch\n" + tableSQL + "\n" + synonymSQL
   }
   public static func decode(_ output: Execution, entries: [DefinitionIndexEntry], fetched: Date) throws
     -> (values: [IndexedObjectDefinition], unavailable: [Int])
@@ -50,13 +54,34 @@ public enum DefinitionIndexBatch {
         inputs[id] = result
       }
     } else {
-      let expected = entries.reduce(0) { $0 + ($1.object.type == "U" ? 7 : 1) }
+      let tables = entries.filter { $0.object.type == "U" }
+      let synonyms = entries.filter { $0.object.type == "SN" }
+      let expected = (tables.isEmpty ? 0 : 7) + (synonyms.isEmpty ? 0 : 1)
       guard output.results.count == expected else { throw SQLFailure("Tablo tanım grubu eksik.") }
-      var offset = 0
-      for entry in entries {
-        let count = entry.object.type == "U" ? 7 : 1
-        var result = Execution(); result.results = Array(output.results[offset..<(offset + count)])
-        inputs[entry.object.objectID] = result; offset += count
+      let tableIDs = Set(tables.map { $0.object.objectID })
+      for entry in tables {
+        var result = Execution(); result.results = Array(repeating: Rows(), count: 7)
+        inputs[entry.object.objectID] = result
+      }
+      if !tables.isEmpty {
+        for index in 0..<7 {
+          var grouped: [Int: [[String?]]] = [:]
+          for row in output.results[index].values {
+            guard let id = row.first.flatMap({ $0 }).flatMap(Int.init), tableIDs.contains(id)
+            else { throw SQLFailure("Tablo metadata kimliği doğrulanamadı.") }
+            grouped[id, default: []].append(Array(row.dropFirst()))
+          }
+          for (id, values) in grouped { inputs[id]?.results[index] = Rows(values: values) }
+        }
+      }
+      if !synonyms.isEmpty {
+        let ids = Set(synonyms.map { $0.object.objectID })
+        for row in output.results.last!.values {
+          guard row.count == 2, let id = row[0].flatMap(Int.init), ids.contains(id), inputs[id] == nil
+          else { throw SQLFailure("Synonym kimliği doğrulanamadı.") }
+          var result = Execution(); result.results = [Rows(values: [Array(row.dropFirst())])]
+          inputs[id] = result
+        }
       }
     }
     var values: [IndexedObjectDefinition] = [], unavailable: [Int] = []

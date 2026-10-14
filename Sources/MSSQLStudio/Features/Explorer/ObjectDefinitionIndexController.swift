@@ -8,6 +8,7 @@ import SQLServerKit
   private var lease: UUID?
   private var task: Task<Void, Never>?
   private var revision = UUID()
+  private var acceptingSince = Date.distantPast
   private(set) var activities: [String: DefinitionIndexActivity] = [:]
   private var lastProgress = Date.distantPast
   private var synchronizedAt: [String: Date] = [:]
@@ -26,10 +27,16 @@ import SQLServerKit
       notify(db)
     }
   }
-  func configure(purge: Bool = false, enabled: Bool? = nil) async {
-    let enabled = enabled ?? (server?.profile.indexObjectDefinitions == true)
+  func configure(purge: Bool = false, enabled: Bool? = nil, disabledScopes: [String]? = nil) async {
+    let enabled = enabled ?? (server?.profile.hasDefinitionIndexes == true)
+    let disabledScopes = disabledScopes ?? server.map { server in
+      Set(server.databases.map(\.name) + (server.profile.definitionIndexDatabases?.keys.map { $0 } ?? []))
+        .filter { !server.profile.indexesDefinitions(in: $0) }
+        .map { CatalogDiskIndex.scope(profile: server.profile, database: $0) }
+    } ?? []
     pause()
     revision = UUID()
+    acceptingSince = Date()
     lease = nil
     synchronizedAt = [:]
     activities = [:]
@@ -41,7 +48,7 @@ import SQLServerKit
       guard let self, let server else { return }
       do {
         let value = try await disk.configureDefinitions(
-          owner: server.id, enabled: enabled, purge: purge)
+          owner: server.id, enabled: enabled, purge: purge, disabledScopes: disabledScopes)
         guard token == revision else { return }
         lease = value
         status = enabled ? "Hazır / eşitleme bekleniyor" : "Kapalı"
@@ -62,12 +69,14 @@ import SQLServerKit
       server.startupError = status
     }
   }
-  func refresh(force: Bool = false) {
-    guard task == nil, let server, server.online, server.profile.indexObjectDefinitions == true,
+  func refresh(force: Bool = false, database: String? = nil) {
+    guard task == nil, let server, server.online, server.profile.hasDefinitionIndexes,
       lease != nil
     else { return }
+    let targets = server.databases.map(\.name).filter { server.allowsDefinitionIndex($0) && (database == nil || database == $0) }
+    guard !targets.isEmpty else { return }
     let token = revision
-    for db in server.databases.map(\.name) where server.allowsCatalogIndex(db) {
+    for db in targets {
       if force || Date().timeIntervalSince(synchronizedAt[db] ?? .distantPast) >= 300 {
         activities[db] = .init(phase: .waiting)
       }
@@ -80,7 +89,7 @@ import SQLServerKit
         task = nil
         NotificationCenter.default.post(name: .init("catalogIndexUpdated"), object: server)
       }
-      for db in server.databases.map(\.name) where server.allowsCatalogIndex(db) {
+      for db in targets {
         if !force, Date().timeIntervalSince(synchronizedAt[db] ?? .distantPast) < 300 { continue }
         do {
           activities[db] = .init(phase: .building)
@@ -171,12 +180,18 @@ import SQLServerKit
     // while retaining the existing seven-result decoder and its safety checks.
     for module in [true, false] {
       let subset = changed.filter { $0.isModule == module }
-      let size = module ? 64 : 8
-      for start in stride(from: 0, to: subset.count, by: size) {
+      var size = module ? 64 : 32
+      var start = 0
+      activities[db]?.stage = module ? "SQL modülleri" : "Tablo ve synonym metadata’sı"
+      notify(db, progress: true)
+      while start < subset.count {
         try check(token)
         let page = Array(subset[start..<min(start + size, subset.count)])
-        unavailable += try await fetchPage(page, database: db, scope: scope,
+        let fetched = try await fetchPage(page, database: db, scope: scope,
           generation: generation, token: token, read: read)
+        unavailable += fetched.unavailable
+        size = min(module ? 200 : 64, fetched.nextSize)
+        start += page.count
         processed += page.count
         activities[db]?.processed = processed
         if Date().timeIntervalSince(lastProgress) >= 1 {
@@ -205,7 +220,7 @@ import SQLServerKit
   private func fetchPage(
     _ entries: [DefinitionIndexEntry], database: String, scope: String, generation: UUID, token: UUID,
     read: @MainActor (String, Limits) async throws -> Execution
-  ) async throws -> Int {
+  ) async throws -> (unavailable: Int, nextSize: Int) {
     try check(token)
     let fetched = Date()
     var limits = Limits(); limits.timeout = 30; limits.totalBytes = 8_388_608
@@ -217,14 +232,15 @@ import SQLServerKit
       let middle = entries.count / 2
       let first = try await fetchPage(Array(entries[..<middle]), database: database, scope: scope,
         generation: generation, token: token, read: read)
-      return first + (try await fetchPage(Array(entries[middle...]), database: database, scope: scope,
-        generation: generation, token: token, read: read))
+      let second = try await fetchPage(Array(entries[middle...]), database: database, scope: scope,
+        generation: generation, token: token, read: read)
+      return (first.unavailable + second.unavailable, max(1, min(middle, first.nextSize, second.nextSize)))
     }
     let decoded = try await Task.detached(priority: .utility) {
       try DefinitionIndexBatch.decode(output, entries: entries, fetched: fetched)
     }.value
     try check(token)
-    guard let server, let lease, server.allowsCatalogIndex(database) else { throw CancellationError() }
+    guard let server, let lease, server.allowsDefinitionIndex(database) else { throw CancellationError() }
     try await disk.saveDefinitions(decoded.values, owner: server.id, lease: lease,
       scope: scope, generation: generation)
     for id in decoded.unavailable {
@@ -232,7 +248,9 @@ import SQLServerKit
       try await disk.removeDefinition(scope: scope, id: id, owner: server.id, lease: lease,
         generation: generation, before: fetched)
     }
-    return decoded.unavailable.count
+    let heavy = output.bytesRead >= 6_291_456 || Date().timeIntervalSince(fetched) > 2
+    let nextSize = heavy ? max(1, entries.count / 2) : output.bytesRead < 2_097_152 ? entries.count * 2 : entries.count
+    return (decoded.unavailable.count, nextSize)
   }
   private func notify(_ database: String, progress: Bool = false) {
     guard let server else { return }
@@ -244,7 +262,7 @@ import SQLServerKit
     guard let server else { throw CancellationError() }
     let profile = server.profile
     let token = revision
-    let enabled = profile.indexObjectDefinitions == true && server.allowsCatalogIndex(database)
+    let enabled = server.allowsDefinitionIndex(database)
     let stored =
       enabled
       ? try await disk.definitionStatus(
@@ -256,12 +274,12 @@ import SQLServerKit
   var isRefreshing: Bool { task != nil }
   private func check(_ token: UUID) throws {
     guard !Task.isCancelled, revision == token, let server, server.online,
-      server.profile.indexObjectDefinitions == true
+      server.profile.hasDefinitionIndexes
     else { throw CancellationError() }
   }
   private func save(_ value: IndexedObjectDefinition, database: String, token: UUID) async throws {
     try check(token)
-    guard let server, let lease, server.allowsCatalogIndex(database) else { return }
+    guard let server, let lease, server.allowsDefinitionIndex(database) else { return }
     let scope = CatalogDiskIndex.scope(profile: server.profile, database: database)
     let generation = try await disk.generation(scope: scope)
     try check(token)
@@ -269,7 +287,7 @@ import SQLServerKit
       value, owner: server.id, lease: lease, scope: scope, generation: generation)
   }
   func record(_ value: IndexedObjectDefinition, database: String, generation: UUID) async {
-    guard server?.generation == generation, lease != nil else { return }
+    guard server?.generation == generation, lease != nil, value.fetchedAt >= acceptingSince else { return }
     do {try await save(value, database: database, token: revision);notify(database)} catch {
       if !(error is CancellationError) {
         status = "Tanım indeksi güncellenemedi: " + error.localizedDescription
@@ -279,8 +297,8 @@ import SQLServerKit
     }
   }
   func cached(database: String, id: Int) async throws -> IndexedObjectDefinition {
-    guard let server, !server.online, server.profile.indexObjectDefinitions == true,
-      server.allowsCatalogIndex(database)
+    guard let server, !server.online, server.profile.hasDefinitionIndexes,
+      server.allowsDefinitionIndex(database)
     else { throw SQLFailure("Çevrimdışı tanım indeksi etkin değil.") }
     let profile = server.profile
     guard
@@ -291,8 +309,8 @@ import SQLServerKit
     return value
   }
   func items(database: String, folder: Folder, parentID: Int? = nil) async throws -> [CatalogItem] {
-    guard let server, !server.online, server.profile.indexObjectDefinitions == true,
-      server.allowsCatalogIndex(database)
+    guard let server, !server.online, server.profile.hasDefinitionIndexes,
+      server.allowsDefinitionIndex(database)
     else { return [] }
     let types: [String]
     switch folder {

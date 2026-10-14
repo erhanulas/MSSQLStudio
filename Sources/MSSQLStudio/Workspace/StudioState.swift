@@ -64,11 +64,21 @@ import UniformTypeIdentifiers
     if reset || oldProfile.visibleDatabases != profile.visibleDatabases {
       await server.synchronizeCatalogVisibility(available:server.databases,previousProfile:oldProfile)
       if server.online {server.prepareCatalogIndexes()}
-    } else if oldProfile.indexObjectDefinitions != profile.indexObjectDefinitions {
+    } else if oldProfile.indexObjectDefinitions != profile.indexObjectDefinitions || oldProfile.definitionIndexDatabases != profile.definitionIndexDatabases {
       await server.definitionIndex.configure()
       server.definitionIndex.refresh()
     }
     scheduleSnapshot()
+  }
+  func setDefinitionIndex(_ server: ConnectedServer, database: String, enabled: Bool) async throws {
+    guard server.databases.contains(where: { $0.name == database }), server.allowsCatalogIndex(database) else {
+      throw SQLFailure("Veritabanı Explorer kapsamında değil.")
+    }
+    var profile = server.profile
+    profile.setDefinitionIndex(enabled, database: database, known: server.databases.map(\.name))
+    try await saveConnectionProfile(server, profile: profile, password: server.password, remember: false)
+    NotificationCenter.default.post(name: .init("catalogIndexUpdated"), object: server,
+      userInfo: ["database": database, "definitionsOnly": true])
   }
   func deleteConnectionProfile(_ server:ConnectedServer) async throws {
     guard !server.reconnecting,!server.updatingProfile else {throw SQLFailure("Bağlantı işlemi sürüyor.")}

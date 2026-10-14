@@ -14,7 +14,7 @@ extension WorkbenchController {
     }
     if case .folder(.files)=node.kind {showDatabaseFiles(node.server);return}
     guard node.server.online else {
-      if node.supportsIndexedDefinition,node.server.profile.indexObjectDefinitions == true {
+      if node.supportsIndexedDefinition,node.server.allowsDefinitionIndex(node.database) {
         showOfflineObjectDefinition(node);return
       }
       if node.expandable {
@@ -120,7 +120,7 @@ extension WorkbenchController {
     if case .database = node.kind {command("Favori Sorgular…",#selector(showFavoritesAtNode))}
 
     if !node.server.online || node.server.reconnecting {
-      if node.supportsIndexedDefinition,node.server.profile.indexObjectDefinitions == true {
+      if node.supportsIndexedDefinition,node.server.allowsDefinitionIndex(node.database) {
         command("İndekslenmiş Tanımı Gör…",#selector(showOfflineDefinitionAtContext))
       }
       command(node.server.reconnecting ? "Bağlanıyor…" : "Yeniden Bağlan", #selector(reconnectServer))

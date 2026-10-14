@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 extension WorkbenchController {
   func serverTree(_ server:ConnectedServer) -> TreeNode {explorerTree.serverTree(server)}
   func load(_ node: TreeNode) {
-    guard !node.loading, !node.loaded, node.server.online || node.server.catalogFixture != nil || node.server.profile.indexObjectDefinitions == true else { return }
+    guard !node.loading, !node.loaded, node.server.online || node.server.catalogFixture != nil || node.server.allowsDefinitionIndex(node.database) else { return }
     if node.linked != nil || node.objectFolder == .linkedServers {loadLinked(node);return}
     if case .object(let kind) = node.kind {
       node.loaded = true
