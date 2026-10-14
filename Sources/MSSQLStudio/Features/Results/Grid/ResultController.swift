@@ -545,7 +545,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     let label = (visibleCount == 0 ? "0 / 0" : "\(pageStart + 1)–\(pageStart + basePageCount) / \(visibleCount.formatted())\(partial ? "+" : "")") + (newRowOrder.isEmpty ? "" : " + \(newRowOrder.count) yeni")
     if rangeLabel.stringValue != label { rangeLabel.stringValue = label }
     rangeLabel.toolTip = "Geçerli sayfa / sınır içindeki satırlar. \(visibleCount.formatted()) filtrelenen · \(result.values.count.formatted()) sınır içinde · \(loadedRowCount.formatted()) önbellekte."
-    for button in navigation { button.isEnabled = pageSize > 0 && visibleCount > 0 && (button.tag < 2 ? pageStart > 0 : pageStart + basePageCount < visibleCount) }
+    for button in navigation { button.isHidden = pageSize == 0; button.isEnabled = pageSize > 0 && visibleCount > 0 && (button.tag < 2 ? pageStart > 0 : pageStart + basePageCount < visibleCount) }
   }
   func update(_ rows: Rows, generation: Int = 0) {
     _ = view

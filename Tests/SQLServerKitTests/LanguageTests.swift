@@ -297,7 +297,7 @@ struct UnusedDeclarationTests {
     }
     let budgets = await trace.recorded()
     #expect(budgets.map(\.rows) == [2, 2, 2])
-    #expect(budgets.map(\.resultSets) == [5, 3, 2])
+    #expect(budgets.map(\.resultSets) == [5, 4, 3])
     #expect(budgets.map(\.totalBytes) == [2048, 1948, 1848])
     #expect(events.recorded() == [1, 2, 3])
     #expect(result.results.count == 4 && result.partial && !result.stoppedEarly)

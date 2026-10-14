@@ -44,7 +44,7 @@ import Testing
     #expect(status.stringValue.contains("20 gösterilen") && status.stringValue.contains("\(1900.formatted()) yüklenen"))
     try choose(500,controller:controller)
     #expect(grids.map {$0.result.values.count} == [500,500] && doc.task == nil)
-    controller.applyLoadingPreferences(rows:2000,page:0,refresh:0,save:false)
+    controller.applyLoadingPreferences(rows:2000,refresh:0,save:false)
     #expect(grids.map {$0.result.values.count} == [1200,700] && grids.allSatisfy {!$0.isReadLimited})
     #expect(grids[0].result.values[1199][0] == "1199" && doc.resultGeneration == generation)
     #expect(tabs.tabViewItems.filter {$0.label.hasPrefix("Results")}.allSatisfy {!$0.label.contains("SINIRLI")})
@@ -84,7 +84,7 @@ import Testing
     grid.editingAllowed={true};grid.setEditValue("kept",row:99,column:1)
     controller.update()
     #expect(!grid.applyReadLimit(10) && grid.result.values.count == 100 && grid.pendingEdits[99]?.values[1] == "kept")
-    controller.applyLoadingPreferences(rows:10,page:0,refresh:0,save:false)
+    controller.applyLoadingPreferences(rows:10,refresh:0,save:false)
     #expect(doc.limits.rows == 100 && grid.pendingEdits[99]?.values[1] == "kept")
     let popup=try #require(descendants(controller.view).compactMap {$0 as? NSPopUpButton}.first {$0.accessibilityIdentifier() == "gridRowOptions"})
     #expect(popup.itemArray.first {$0.identifier?.rawValue == "gridReadChoices"}?.isEnabled == false)
@@ -122,7 +122,7 @@ import Testing
     #expect(NSApp.sendAction(try #require(refresh.action),to:refresh.target,from:refresh))
     await doc.task?.value;controller.update()
     #expect(calls == [100,10] && doc.results.first?.values.count == 10 && grid.loadedRowCount == 10)
-    controller.applyLoadingPreferences(rows:1000,page:0,refresh:0,save:false)
+    controller.applyLoadingPreferences(rows:1000,refresh:0,save:false)
     #expect(grid.result.values.count == 10 && !grid.isReadLimited && calls == [100,10])
   }
 }

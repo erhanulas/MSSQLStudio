@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.133",
+    "date": "2026-10-14",
+    "title": "Güvenli DML yürütmesi ve tek sonuç satır sınırı",
+    "changes": [
+      "INSERT/UPDATE/DELETE ve trigger’lardan gelen satır-etki bildirimleri artık gerçek sonuç kümesi kotasını tüketmez. Çok sayıda bildirim nedeniyle komutun sonuç kümesi sınırında iptal edilmesi düzeltildi.",
+      "Seçilen satır sınırı yalnız bütün batch’leri doğrulanmış SELECT sorgularına uygulanır. INSERT … SELECT, EXEC ve karma yazma sorgularında driver/fetch/yerel gösterim satır sınırı devre dışıdır. Görüntüleme bütçesi dolarsa kalan çıktılar saklanmadan komut akışı tüketilir; bu nedenle sonraki yazma batch’i atlanmaz.",
+      "Sonuç araç çubuğundaki ayrı sayfa boyutu ve okuma sınırı tek Satır sınırı değerinde birleştirildi. Hazır/özel/varsayılan seçenekleri aynı değeri yönetir; sayfa okları kaldırıldı. Mevcut SELECT önbelleğine anında uygulanır; sınırı artırmak kendiliğinden SQL çalıştırmaz.",
+      "CSV/JSON dışa aktarma, görünen satırlar ve mevcut filtre/sıralama üzerinden sadeleştirildi. Açık iptal, gerçek hata/timeout, işlem durumu ve metadata bütçeleri korunur."
+    ]
+  },
+  {
     "version": "0.2.132",
     "date": "2026-10-14",
     "title": "Fonksiyon tamamlaması ve biçimlendirme düzeltmeleri",

@@ -175,6 +175,8 @@ public struct Execution: Sendable {
 }
 public struct Limits: Sendable {
   public var diskResults = false
+  /// User result limits apply only to verified read-only queries.
+  public var readOnlyRowLimit = false
   /// Maximum retained rows per result set; byte and result-count budgets remain shared.
   public var rows = 50_000
   public var cellBytes = 2_097_152

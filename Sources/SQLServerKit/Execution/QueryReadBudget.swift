@@ -4,7 +4,7 @@ import Foundation
 /// containing writes, EXEC or session-changing SQL: it could limit a mutation.
 enum ServerReadLimit {
   static func configure(sql:String,rows:Int,write:(Int)throws->Void,read:()throws->Int)throws->Bool {
-    guard TSQL.canRepeatRead(sql) else {return false}
+    guard rows < Int.max, TSQL.canRepeatRead(sql) else {return false}
     let maximum=max(1,rows)
     try write(maximum)
     guard try read() == maximum else {throw SQLFailure("ODBC sürücüsü istenen satır okuma sınırını kabul etmedi.")}
@@ -24,5 +24,27 @@ struct ResultFetchBudget {
     guard try fetch() else {return false}
     count+=1
     return true
+  }
+}
+
+/// SQLRowCount notifications are not rowsets and must never consume their budget.
+enum ResultStreamBudget {
+  static func rowsetCount(_ results:[Rows])->Int {results.reduce(0) {$0+($1.fields.isEmpty ? 0:1)}}
+  static func append(_ rows:Rows,to results:inout [Rows]) {
+    if rows.fields.isEmpty && rows.affected<0 {return}
+    if rows.fields.isEmpty,let last=results.last,last.fields.isEmpty,last.affected>=0,rows.affected>=0 {
+      let (total,overflow)=last.affected.addingReportingOverflow(rows.affected)
+      if !overflow {results[results.count-1].affected=total;return}
+    }
+    results.append(rows)
+  }
+}
+
+extension TSQL {
+  /// Every GO batch must be a verified read; a SELECT inside INSERT/EXEC
+  /// never makes the whole execution safe to limit.
+  public static func usesResultRowLimit(_ sql:String)->Bool {
+    guard let groups=try? batches(sql),!groups.isEmpty else {return false}
+    return groups.allSatisfy {canRepeatRead($0.text)}
   }
 }

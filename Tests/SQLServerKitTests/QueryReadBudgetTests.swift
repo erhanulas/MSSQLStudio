@@ -24,6 +24,36 @@ struct QueryReadBudgetTests {
     #expect(throws:CancellationError.self) {try budget.next {throw CancellationError()}}
     #expect(budget.count == 0 && !budget.reached)
   }
+  @Test func affectedRowNotificationsDoNotConsumeRealResultSetBudget() {
+    var results:[Rows]=[]
+    for _ in 0..<7000 {ResultStreamBudget.append(Rows(affected:1),to:&results)}
+    #expect(results.count==1 && results[0].affected==7000 && ResultStreamBudget.rowsetCount(results)==0)
+    ResultStreamBudget.append(Rows(fields:[Field("Value")],values:[["1"]]),to:&results)
+    ResultStreamBudget.append(Rows(affected:5),to:&results)
+    #expect(ResultStreamBudget.rowsetCount(results)==1 && results.count==3 && results[2].affected==5)
+  }
+  actor Calls {
+    var budgets:[Limits]=[]
+    func add(_ limits:Limits) {budgets.append(limits)}
+  }
+  @Test func mixedWriteBatchContinuesAfterDisplayBudgetsAndRemovesChosenRowLimit() async throws {
+    #expect(TSQL.usesResultRowLimit("SELECT 1;\nGO\nSELECT 2;"))
+    #expect(!TSQL.usesResultRowLimit("INSERT dbo.Target SELECT 1;"))
+    #expect(!TSQL.usesResultRowLimit("EXEC dbo.p;"))
+    let calls=Calls()
+    var limits=Limits();limits.rows=1;limits.resultSets=1;limits.totalBytes=1;limits.readOnlyRowLimit=true
+    let sql="SELECT 1;\nGO\nINSERT dbo.Target SELECT 1;"
+    let result=try await TSQL.run(sql,limits:limits) {_,budget,_ in
+      await calls.add(budget)
+      var result=Execution();result.results=[Rows(fields:[Field("Value")],values:[["1"]])];result.bytesRead=2;return result
+    }
+    let budgets=await calls.budgets
+    #expect(budgets.count==2 && budgets.allSatisfy {$0.rows==Int.max})
+    #expect(!result.stoppedEarly)
+    var wrote=false
+    #expect(try !ServerReadLimit.configure(sql:"SELECT 1",rows:Int.max,write:{_ in wrote=true},read:{1}))
+    #expect(!wrote)
+  }
   @Test func driverLimitIsRequiredAndVerifiedForReadOnlySQL() throws {
     for sql in ["SELECT * FROM TBLSTSABIT AS T WITH(NOLOCK)","SELECT 1; SELECT 2;", ";WITH q AS (SELECT 1 AS ID) SELECT * FROM q;"] {
       var applied=0

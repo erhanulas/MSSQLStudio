@@ -119,7 +119,7 @@ import SwiftUI
     case .settingsAppearance,.settingsEditor,.settingsShortcuts,.settingsWorkspace,.settingsUpdates,.settingsSecurity:
       let sections:[Screen:SettingsSection]=[.settingsAppearance:.appearance,.settingsEditor:.editor,.settingsShortcuts:.shortcuts,.settingsWorkspace:.workspace,.settingsUpdates:.updates,.settingsSecurity:.security]
       return show(SettingsPanel(state:state,initialTab:sections[screen]!))
-    case .resultLoading: return show(ResultLoadingPanel(rows:50000,page:500,refresh:0,apply:{_,_,_,_ in}))
+    case .resultLoading: return show(ResultLoadingPanel(rows:50000,refresh:0,apply:{_,_,_ in}))
     case .resultRefresh: return show(ResultRefreshPanel(seconds:15,apply:{_ in}))
     case .columnSearch: return show(ResultColumnSearch(columns:rows.fields.enumerated().map {ResultColumnChoice(id:$0.offset,name:$0.element.name,type:$0.element.dataType,hidden:false)},select:{_ in}))
     case .columnFilter: return show(ColumnFilterPanel(rows:rows,column:1,initial:ColumnRule(),apply:{_ in}))

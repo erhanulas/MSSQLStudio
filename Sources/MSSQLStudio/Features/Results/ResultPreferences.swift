@@ -14,31 +14,28 @@ import SwiftUI
     limits.timeout = limits.rows <= 50_000 ? 60 : 600
     return limits
   }
-  static func save(rows: Int, page: Int, refresh: Int) {
+  static func save(rows: Int, refresh: Int) {
     UserDefaults.standard.set(bounded(rows,range:1...5_000_000,fallback:50_000),forKey:"gridReadLimit")
-    UserDefaults.standard.set(bounded(page,range:0...1_000_000,fallback:500),forKey:"gridDefaultPageSize")
     UserDefaults.standard.set(bounded(refresh,range:0...3600,fallback:0),forKey:"gridRefreshSeconds")
     NotificationCenter.default.post(name:changed,object:nil)
   }
 }
 struct ResultLoadingPanel: View {
   @State var rows: Int
-  @State var page: Int
   @State var refresh: Int
   var refreshAllowed = true
   var readLimitAllowed = true
-  var apply: (Int,Int,Int,Bool) -> Void
+  var apply: (Int,Int,Bool) -> Void
   @State private var saveDefault = false
   @State private var message = ""
   var body: some View {
     VStack(alignment:.leading,spacing:14) {
-      StudioPanelHeading(title:"Sonuç Yükleme",icon:"slider.horizontal.3",subtitle:"Bu sorgu için okuma ve görüntüleme")
+      StudioPanelHeading(title:"Sonuç Yükleme",icon:"slider.horizontal.3",subtitle:"SELECT sonuçları için tek satır sınırı")
       ScrollView {
         VStack(alignment:.leading,spacing:14) {
           StudioFormField("Sonuç başına satır sınırı") {TextField("Satır",value:$rows,format:.number.grouping(.never)).textFieldStyle(.roundedBorder)}.disabled(!readLimitAllowed)
-          StudioFormField("Sayfa boyutu") {TextField("Satır",value:$page,format:.number.grouping(.never)).textFieldStyle(.roundedBorder)}
           StudioFormField("Yenileme aralığı") {HStack {TextField("Saniye",value:$refresh,format:.number.grouping(.never)).textFieldStyle(.roundedBorder);Text("sn").foregroundStyle(.secondary)}}.disabled(!refreshAllowed)
-          Text("Her sonuç için sınır: 1–5.000.000 satır · Sayfa: 0–1.000.000 (0 = sınır içindeki tüm satırlar) · Yenileme: 0–3.600 sn (0 = kapalı). Sınır mevcut önbelleğin ilk satırlarına hemen uygulanır; Çalıştır/Yenile de bu sınırla okur. Sınırı büyütmek yalnızca önceden yüklenen satırları geri gösterir.").font(.caption).foregroundStyle(.secondary)
+          Text("Satır sınırı: 1–5.000.000 · Yalnız SELECT sonuçlarına uygulanır; DML ve EXEC işlemlerini sınırlamaz. Mevcut önbelleğe anında uygulanır; daha fazla veri için SELECT’i yenileyin. Yenileme: 0–3.600 sn (0 = kapalı).").font(.caption).foregroundStyle(.secondary)
           if !readLimitAllowed {Label("Satır sınırı için düzenleme modunu ve dışa aktarmayı tamamlayın.",systemImage:"lock").font(.caption).foregroundStyle(.secondary)}
           if !refreshAllowed {Label("Düzenleme sırasında otomatik yenileme kapalıdır.",systemImage:"pause.circle").font(.caption).foregroundStyle(.secondary)}
           Toggle("Yeni sorgular için varsayılan yap",isOn:$saveDefault)
@@ -47,8 +44,8 @@ struct ResultLoadingPanel: View {
       }
       Divider()
       HStack {Spacer();StudioActionButton("Uygula",icon:"checkmark") {
-        guard (1...5_000_000).contains(rows),(0...1_000_000).contains(page),(0...3600).contains(refresh) else {message="Lütfen belirtilen aralıklarda değerler girin.";return}
-        apply(rows,page,refreshAllowed ? refresh:0,saveDefault)
+        guard (1...5_000_000).contains(rows),(0...3600).contains(refresh) else {message="Lütfen belirtilen aralıklarda değerler girin.";return}
+        apply(rows,refreshAllowed ? refresh:0,saveDefault)
       }.buttonStyle(StudioPrimaryButton())}
     }.padding(StudioMetrics.gap).frame(maxWidth:.infinity,maxHeight:.infinity).studioPanel()
   }

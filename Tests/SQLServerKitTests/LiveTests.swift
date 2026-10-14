@@ -5,6 +5,28 @@ import Testing
 
 @Suite(.serialized) struct LiveTests {
   @Test(.enabled(if: ProcessInfo.processInfo.environment["MSSQL_TEST_PASSWORD"] != nil))
+  func writeNotificationsAndExecOutputBudgetsNeverCancelRemainingWrites() async throws {
+    let c=try await connection()
+    do {
+      _=try await c.execute("CREATE TABLE #MutationBudget(ID int); CREATE TABLE #MutationSource(ID int); INSERT #MutationSource SELECT TOP(200) ROW_NUMBER() OVER(ORDER BY (SELECT NULL)) FROM sys.all_objects;")
+      var limits=Limits();limits.rows=1;limits.resultSets=1;limits.readOnlyRowLimit=true
+      let inserts=String(repeating:"INSERT #MutationBudget VALUES(1);",count:150)
+      let writes=try await TSQL.run(inserts,on:c,limits:limits)
+      #expect(!writes.stoppedEarly && !writes.partial)
+      _=try await c.execute("CREATE PROCEDURE #OutputBudget AS BEGIN SELECT ID FROM #MutationSource; SELECT 2 AS Extra; INSERT #MutationBudget SELECT ID FROM #MutationSource; END;")
+      let result=try await TSQL.run("EXEC #OutputBudget;",on:c,limits:limits)
+      #expect(result.results.first(where:{!$0.fields.isEmpty})?.values.count==200)
+      #expect(result.partial && !result.stoppedEarly)
+      let count=try await c.execute("SELECT COUNT(*) FROM #MutationBudget;")
+      #expect(count.results.first?.values.first?[0]=="350")
+      _=try await c.execute("DROP PROCEDURE #OutputBudget; DROP TABLE #MutationBudget; DROP TABLE #MutationSource;")
+      await c.disconnect()
+    } catch {
+      _=try? await c.execute("DROP PROCEDURE IF EXISTS #OutputBudget; DROP TABLE IF EXISTS #MutationBudget; DROP TABLE IF EXISTS #MutationSource;")
+      await c.disconnect();throw error
+    }
+  }
+  @Test(.enabled(if: ProcessInfo.processInfo.environment["MSSQL_TEST_PASSWORD"] != nil))
   func serverRowLimitDoesNotLeakIntoLaterWritesAndPreservesLaterResults() async throws {
     let c=try await connection()
     do {

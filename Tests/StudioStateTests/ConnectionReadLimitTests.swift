@@ -18,6 +18,21 @@ import Testing
     value.results=(0..<2).map {_ in Rows(fields:[Field("n")],values:(0..<rows).map {[String($0)]})}
     return value
   }
+  @Test func insertSelectAndExecIgnoreChosenReadLimitAndKeepTheirCompleteOutput() async throws {
+    _=NSApplication.shared
+    for sql in ["INSERT dbo.Target(Code, Total) SELECT Code, SUM(Amount) FROM dbo.Source GROUP BY Code HAVING SUM(Amount)>0;", "EXEC dbo.GenerateRows;"] {
+      let doc=readDocument();doc.sql=sql;doc.limits=ResultReadPreferences.limits(rows:2)
+      var requested:Int?
+      doc.executionFixture={_,limits in requested=limits.rows;return output(rows:20)}
+      doc.execute();await doc.task?.value
+      #expect(requested==Int.max && doc.lastExecutedReadLimit==nil && doc.rowCount==40)
+      let query=QueryController(document:doc);_=query.view
+      let grids=query.children.compactMap {$0 as? ResultController}
+      #expect(grids.count==2 && grids.allSatisfy {$0.result.values.count==20 && $0.pageSize==0 && !$0.isReadLimited})
+      query.applyLoadingPreferences(rows:1,refresh:0,save:false)
+      #expect(grids.allSatisfy {$0.result.values.count==20} && requested==Int.max)
+    }
+  }
   @Test func failedIndependentCatalogConnectionKeepsHealthyExplorerAndQuerySessionsConnected() async throws {
     let server=ConnectedServer(profile:ServerProfile(),password:"")
     let doc=QueryDocument(server:server,database:"master",title:"Independent query");doc.state = .ready
@@ -80,7 +95,7 @@ import Testing
     await doc.task?.value;controller.update()
     #expect(requests == [100,10] && doc.results.map {$0.values.count} == [10,10])
     #expect(popup.toolTip?.contains("Son okuma sınırı:") == false)
-    controller.applyLoadingPreferences(rows:5,page:100,refresh:0,save:false)
+    controller.applyLoadingPreferences(rows:5,refresh:0,save:false)
     doc.execute();await doc.task?.value;controller.update()
     #expect(requests == [100,10,5] && doc.results.map {$0.values.count} == [5,5])
     #expect(doc.rowCount == 10 && doc.lastExecutedReadLimit == 5 && doc.sql.contains("OtherNumbers"))

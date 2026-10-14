@@ -17,7 +17,7 @@ import SwiftUI
   private let panes = ResultSplitView()
   private let resultStrip = NSStackView()
   private let stripScroll = NSScrollView()
-  private var selectedPageSize = GridPaging.defaultSize
+  private var selectedPageSize = 0
   private let columnSearchButton = StudioToolbarButton(symbol: "text.magnifyingglass", label: "Kolon başlığında ara", tone: .neutral)
   private let autoRefreshButton = StudioToolbarButton(symbol:"clock.arrow.circlepath",label:"Otomatik yenileme",tone:.neutral)
   private var optionsPopover: NSPopover?
@@ -226,19 +226,18 @@ import SwiftUI
     filter.target = self
     filter.action = #selector(filterChanged)
     export.addItems(withTitles: [
-      "Dışa Aktar", "Geçerli sayfa · CSV…", "Geçerli sayfa · JSON…", "Sınır içindeki tüm satırlar · CSV…",
-      "Sınır içindeki tüm satırlar · JSON…",
+      "Dışa Aktar", "Görünen sonuç · CSV…", "Görünen sonuç · JSON…",
     ])
     export.item(at: 0)?.title = ""
     export.item(at: 0)?.image = NSImage(systemSymbolName: "arrow.down.document", accessibilityDescription: "Sonuçları dışa aktar")
-    export.toolTip = "Geçerli sayfayı veya satır sınırı içindeki tüm sonuçları CSV / JSON olarak dışa aktar"
+    export.toolTip = "Görünen sonuçları mevcut filtre ve sıralamayla CSV / JSON olarak dışa aktar"
     export.widthAnchor.constraint(equalToConstant: 38).isActive = true
     configurePageMenu()
     rowLimit.controlSize = .small
     rowLimit.isBordered = false
     rowLimit.font = .systemFont(ofSize: StudioMetrics.detailFont,weight: .medium)
     rowLimit.heightAnchor.constraint(equalToConstant: StudioMetrics.controlHeight).isActive = true
-    rowLimit.setAccessibilityLabel("Sayfa boyutu ve okuma sınırı")
+    rowLimit.setAccessibilityLabel("Satır sınırı")
     rowLimit.setAccessibilityIdentifier("gridRowOptions")
     cancelExport.title = ""
     cancelExport.image = NSImage(systemSymbolName: "stop.circle", accessibilityDescription: "Dışa aktarmayı iptal et")
@@ -764,6 +763,9 @@ import SwiftUI
     if document.results.isEmpty && !displayed.isEmpty && !(document.repeating && document.busy) {
       clearDisplayedResults()
     }
+    let fixtureSQL=document.sql.trimmingCharacters(in:.whitespacesAndNewlines)
+    let limitApplies=document.lastExecutedSQL != nil ? document.lastExecutedReadLimit != nil : fixtureSQL.isEmpty || TSQL.usesResultRowLimit(fixtureSQL)
+    let displayRowLimit=limitApplies ? document.limits.rows:Int.max
     for (index, result) in document.results.enumerated() where !result.fields.isEmpty {
       if let xml = result.values.first?.first.flatMap({ $0 }), xml.contains("<ShowPlanXML"),
         plans[index] == nil, let plan = try? ExecutionPlan.parse(xml)
@@ -818,7 +820,7 @@ import SwiftUI
           displayed.insert(index)
           if displayed.count == 1 { resultTabs.selectTabViewItem(item) }
         }
-        controller.applyReadLimit(document.limits.rows)
+        controller.applyReadLimit(displayRowLimit)
         controller.update(result, generation: document.resultGeneration)
         controller.partial = result.truncated
         controller.filter = filter.stringValue
@@ -902,9 +904,9 @@ import SwiftUI
   @objc private func showLoadingOptions() {
     optionsPopover?.close()
     let popup=NSPopover()
-    let panel=ResultLoadingPanel(rows:document.limits.rows,page:selectedPageSize,refresh:effectiveRefreshSeconds,refreshAllowed:!tables.values.contains {$0.editDefinition != nil},readLimitAllowed:canChangeReadLimit) { [weak self,weak popup] rows,page,refresh,save in
+    let panel=ResultLoadingPanel(rows:document.limits.rows,refresh:effectiveRefreshSeconds,refreshAllowed:!tables.values.contains {$0.editDefinition != nil},readLimitAllowed:canChangeReadLimit) { [weak self,weak popup] rows,refresh,save in
       guard let self,!document.busy,!submittingData else {return}
-      applyLoadingPreferences(rows:rows,page:page,refresh:refresh,save:save);popup?.close()
+      applyLoadingPreferences(rows:rows,refresh:refresh,save:save);popup?.close()
     }
     optionsPopover=popup;StudioPopover.show(popup,content:panel,from:rowLimit,size:NSSize(width:440,height:400))
   }
@@ -925,15 +927,15 @@ import SwiftUI
   }
   private func configurePageMenu() {syncPageMenu()}
   private var effectiveRefreshSeconds:Int {defaultRefreshApplied ? selectedRefreshSeconds : document.initialRefreshSeconds ?? ResultReadPreferences.refreshSeconds}
-  func applyLoadingPreferences(rows:Int,page:Int,refresh:Int,save:Bool) {
-    guard !document.busy,!submittingData,(1...5_000_000).contains(rows),(0...1_000_000).contains(page),(0...3600).contains(refresh) else {return}
+  func applyLoadingPreferences(rows:Int,refresh:Int,save:Bool) {
+    guard !document.busy,!submittingData,(1...5_000_000).contains(rows),(0...3600).contains(refresh) else {return}
     guard rows == document.limits.rows || canChangeReadLimit else {return}
     let seconds=tables.values.contains {$0.editDefinition != nil} ? 0:refresh
     document.limits=ResultReadPreferences.limits(rows:rows)
     document.initialRefreshSeconds=seconds
     defaultRefreshApplied=document.canRefresh
-    applyPageSize(page);applyRefreshSeconds(seconds)
-    if save {ResultReadPreferences.save(rows:rows,page:page,refresh:seconds)}
+    applyPageSize(0);applyRefreshSeconds(seconds)
+    if save {ResultReadPreferences.save(rows:rows,refresh:seconds)}
     syncPageMenu()
     update();changed?()
   }
@@ -962,8 +964,7 @@ import SwiftUI
     syncReadOptions()
     let menu=StudioMenu();menu.autoenablesItems=false
     func compact(_ value:Int) -> String {value>=1000 && value%1000 == 0 ? "\(value/1000)k":value.formatted()}
-    let pageTitle=selectedPageSize == 0 ? "Tümü":compact(selectedPageSize)
-    let title=NSMenuItem(title:"\(pageTitle) · \(compact(document.limits.rows))",action:nil,keyEquivalent:"")
+    let title=NSMenuItem(title:"\(compact(document.limits.rows)) satır",action:nil,keyEquivalent:"")
     title.image=NSImage(systemSymbolName:"tablecells",accessibilityDescription:nil);menu.addItem(title)
     func section(_ label:String,values:[Int],selected:Int,action:Selector,identifier:String) {
       let item=NSMenuItem(title:label,action:nil,keyEquivalent:"");item.identifier = .init(identifier)
@@ -976,18 +977,17 @@ import SwiftUI
       let custom=NSMenuItem(title:"Özel…",action:#selector(showLoadingOptions),keyEquivalent:"");custom.target=self;choices.addItem(custom)
       item.submenu=choices;menu.addItem(item)
     }
-    section("Sayfa boyutu · \(selectedPageSize == 0 ? "Sınır içindeki tümü":selectedPageSize.formatted())",values:GridPaging.choices,selected:selectedPageSize,action:#selector(changeRowLimit(_:)),identifier:"gridPageChoices")
     section("Satır sınırı · \(document.limits.rows.formatted()) / sonuç",values:[10,100,500,1000,10_000,50_000,100_000,1_000_000,5_000_000],selected:document.limits.rows,action:#selector(changeReadLimit(_:)),identifier:"gridReadChoices")
     let readChoices=menu.items.first {$0.identifier?.rawValue == "gridReadChoices"}
     readChoices?.isEnabled=canChangeReadLimit
     menu.addItem(.separator())
-    let custom=NSMenuItem(title:"Özel değerler…",action:#selector(showLoadingOptions),keyEquivalent:"");custom.target=self;custom.tag = -1;menu.addItem(custom)
+    let custom=NSMenuItem(title:"Özel satır sınırı…",action:#selector(showLoadingOptions),keyEquivalent:"");custom.target=self;custom.tag = -1;menu.addItem(custom)
     let save=NSMenuItem(title:"Varsayılan Yap",action:#selector(saveLoadingDefaults),keyEquivalent:"");save.target=self;save.tag = -2;menu.addItem(save)
     rowLimit.menu=menu;rowLimit.selectItem(at:0)
     syncReadOptionsHelp()
   }
   private func syncReadOptionsHelp() {
-    rowLimit.toolTip="Sayfa: \(selectedPageSize == 0 ? "Sınır içindeki tümü":selectedPageSize.formatted()) · Her sonuç için satır sınırı: \(document.limits.rows.formatted()) · Mevcut önbelleğin ilk satırlarına hemen uygulanır; filtre/sıralama bu sınır içinde yapılır. Çalıştır/Yenile aynı sınırla okur."
+    rowLimit.toolTip="Satır sınırı: \(document.limits.rows.formatted()) / sonuç · Yalnız doğrulanmış SELECT sorgularında uygulanır. INSERT/UPDATE/DELETE/EXEC yürütmesini veya çıktısını sınırlamaz. Mevcut SELECT önbelleğine anında uygulanır; artırmak yeni SQL çalıştırmaz."
     if let previous=document.lastExecutedReadLimit,previous != document.limits.rows,!document.results.isEmpty {
       rowLimit.toolTip! += "\nSon okuma sınırı: \(previous.formatted()). Sınırı büyütmek yalnızca önbellekteki satırları geri gösterir; ek satır okumak için Sonuçları yenile veya Çalıştır’a basın."
     }
@@ -1004,7 +1004,7 @@ import SwiftUI
   }
   @objc private func saveLoadingDefaults() {
     guard !document.busy,!submittingData else {return}
-    ResultReadPreferences.save(rows:document.limits.rows,page:selectedPageSize,refresh:effectiveRefreshSeconds)
+    ResultReadPreferences.save(rows:document.limits.rows,refresh:effectiveRefreshSeconds)
   }
   func applyPageSize(_ value: Int, makeDefault: Bool = false) {
     guard (0...1_000_000).contains(value) else { return }

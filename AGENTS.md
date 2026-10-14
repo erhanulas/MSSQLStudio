@@ -433,9 +433,9 @@ Alt durum çubuğu ortak statusCanvas açık/koyu token’ını kullanır; ayrı
 
 | Kapsam | Korunacak sınır |
 |---|---|
-| Normal yürütme | Sonuç başına 50.000 satır; toplam 100 result set, yaklaşık 2 MB/hücre, 64 MB/60 sn |
+| Normal yürütme | Doğrulanmış SELECT sonucu başına 50.000 satır; toplam 100 gerçek rowset (row-count bildirimi hariç), yaklaşık 2 MB/hücre, 64 MB/60 sn |
 | Büyük okuma | Satır sınırı en çok 5.000.000; 50.000 üstünde toplam 2 GB/600 sn |
-| Sayfa / otomatik yenileme | 0–1.000.000 satır (0 tüm yüklenenler) / özel 1–3.600 sn |
+| SELECT satır sınırı / otomatik yenileme | 1–5.000.000 satır / özel 1–3.600 sn |
 | Clipboard | 10.000 satır / 16 MB |
 | Ayrı veri editörü / değişiklik | İlk 200 satır / en çok 400 değişmiş satır |
 | Edit hazırlığı cache | 1 MB/kayıt, 128/scope, toplam 4.096 kayıt/16 MB, 24 saat |
@@ -443,7 +443,9 @@ Alt durum çubuğu ortak statusCanvas açık/koyu token’ını kullanır; ayrı
 - Grid native cell-based NSTableView'dır; görünür hücreleri reuse eder. Hücre başına SwiftUI/Auto Layout veya tüm veriyi ölçme eklemeyin. Disk ResultSpool, sınırlı cache ve ordinal kolon kimliği korunur.
 - loadedResult tam snapshot'tır. RowCollection.prefixSnapshot O(1) kaynak-sıralı ilk satır görünümüdür; sınır değiştirmek SQL çalıştırmaz, yükseltmek yalnız okunmuş veriyi geri gösterir. Filtre/sort prefix'ten sonra uygulanır.
 - Grid/frozen pane/gutter/sayfa/kopyalama/export aynı capped snapshot'ı kullanır. Sınır değişimi sayfa/seçimi sıfırlar, pin/kolon/rule'ı korur; edit mode veya export varken kapalıdır. SINIRLI yerel prefix, KISMİ gerçek truncation'dır; history/doc.rowCount gerçek okunmuş toplamdır.
-- Sayfa ve okuma sınırı tek popup'ın ayrı alt menüleridir; hazır/özel/default seçenekleri açık kapsamlıdır. Sayfa sunucudan yeni satır getirmez. Çalıştır/Yenile yürütme başındaki değişmez Limits snapshot'ını her sonuca ayrı uygular.
+- Sonuç toolbar’ı tek Satır sınırı değeri sunar; ayrı sayfa boyutu alanı/menüsü yoktur. Console grid’i pageSize=0 ile capped snapshot’ın tamamını gösterir; gereksiz sayfa okları gizlenir. Hazır/özel/default seçenekleri aynı değeri yönetir; yeni sorgu varsayılanı eski gridReadLimit değeridir, legacy gridDefaultPageSize console’da kullanılmaz. CSV/JSON görünen filtre/sıralama snapshot’ını dışa aktarır.
+- QueryDocument yürütme Limits snapshot’ında readOnlyRowLimit=true kullanır. TSQL.usesResultRowLimit bütün GO batch’lerini salt okunur olarak doğrular; SELECT içeren INSERT/UPDATE/DELETE/EXEC veya karma batch salt okuma sayılmaz. DML/EXEC seçili satır sınırını driver’a/fetch’e/yerel prefix’e uygulamaz. Metadata çağrılarının mevcut ayrı satır bütçeleri korunur.
+- ODBC SQLRowCount bildirimleri gerçek rowset kotasına dahil değildir; ardışık sayısal bildirimler toplamı korunarak birleştirilir. DML/EXEC için rowset/byte görüntüleme bütçesi dolarsa çıktı kısmi işaretlenir ve kalan çıktılar SQLMoreResults ile saklanmadan tüketilir; görüntüleme nedeniyle SQLCancelHandle çağrılmaz ve sonraki GO batch’i bütçe yüzünden atlanmaz. Gerçek hata, timeout veya açık iptal davranışı korunur; SQL iptali rollback değildir. Canlı yazma sonucunu hata/iptal sonrası otomatik yeniden denemeyin.
 - Yeni normal execution generation'ında eski grid/plan child controller'ları debounce dışında temizlenir; akışın güncel rowset'leri eklenir. Yenilemede eski snapshot/seçim/genişlik korunabilir, finalde artık olmayan sekmeler kaldırılır. Rowset yoksa Messages gösterilir.
 - Filtre/sort/export iptal ve revision korumalıdır; geç worker sonucu yayınlanmaz. Export sibling temp'ten atomik değişir, hata/iptalde hedef korunur. O(n) indeks/anahtar belleği vardır; sınırsız/sabit bellek iddiası yoktur.
 - Rows.source/SQLResultSource yalnız bellektedir; sonuç SQL'i yürütme snapshot'ından gelir, güncel editörden tahmin edilmez. Düz SELECT/CTE/UNION ordinal eşleşmesi doğrulanır; tek EXEC çıktıları çağrı metnini paylaşır. Belirsiz karma akışta statement uydurulmaz, SQL grubu gösterilir; GO/tekrar grup numarasını korur.

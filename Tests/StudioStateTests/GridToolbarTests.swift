@@ -210,7 +210,7 @@ import Testing
       #expect(rect.minX >= 0 && rect.maxX <= 831, "Toolbar control overflow: \(rect)")
     }
     #expect(controls.contains { $0.accessibilityIdentifier() == "gridRowOptions" })
-    #expect(controls.contains { ($0 as? NSPopUpButton)?.itemTitles.contains("Geçerli sayfa · CSV…") == true })
+    #expect(controls.contains { ($0 as? NSPopUpButton)?.itemTitles.contains("Görünen sonuç · CSV…") == true })
     #expect(!views.contains { $0.accessibilityLabel() == "Kolon filtresi" })
     let tabs = try #require(views.compactMap { $0 as? NSTabView }.first)
     tabs.selectTabViewItem(withIdentifier: NSNumber(value: 1))

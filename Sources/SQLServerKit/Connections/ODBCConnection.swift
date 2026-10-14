@@ -161,7 +161,9 @@ public final class ODBCConnection: @unchecked Sendable {
         }
       }
     }
-    let serverLimited=try ServerReadLimit.configure(sql:text,rows:limits.rows,write:{maximum in
+    let preserveExecution=limits.readOnlyRowLimit && (limits.rows == Int.max || !TSQL.canRepeatRead(text))
+    let fetchRows=preserveExecution ? Int.max:limits.rows
+    let serverLimited=try ServerReadLimit.configure(sql:text,rows:fetchRows,write:{maximum in
       try check(SQLSetStmtAttr(handle,SQLINTEGER(SQL_ATTR_MAX_ROWS),UnsafeMutableRawPointer(bitPattern:maximum),0),kind:SQLSMALLINT(SQL_HANDLE_STMT),handle:handle)
     },read:{
       var actual:SQLULEN=0
@@ -187,7 +189,21 @@ public final class ODBCConnection: @unchecked Sendable {
         var affected: SQLLEN = -1
         _ = SQLRowCount(handle, &affected)
         var rows = Rows(affected: Int(affected))
-        if count > 0 {
+        let rowsetCount=ResultStreamBudget.rowsetCount(output.results)
+        let skipRowset=count>0 && (rowsetCount>=max(0,limits.resultSets) || preserveExecution && totalBytes>=max(0,limits.totalBytes))
+        if skipRowset {
+          output.partial=true
+          if !preserveExecution {
+            output.stoppedEarly=true
+            output.messages.append("Sonuç kümesi sınırına ulaşıldı; kalan sonuçlar alınmadı.")
+            _ = SQLCancelHandle(SQLSMALLINT(SQL_HANDLE_STMT),handle)
+            break
+          }
+          if !output.messages.contains("Görüntüleme bütçesi doldu; kalan çıktılar saklanmadan komutun tamamlanması beklendi.") {
+            output.messages.append("Görüntüleme bütçesi doldu; kalan çıktılar saklanmadan komutun tamamlanması beklendi.")
+          }
+        }
+        if count > 0 && !skipRowset {
           for number in 1...Int(count) {
             var name = [SQLWCHAR](repeating: 0, count: 1024)
             var nameLength: SQLSMALLINT = 0
@@ -218,7 +234,7 @@ public final class ODBCConnection: @unchecked Sendable {
           let spool = limits.diskResults ? try ResultSpool() : nil
           var pending: [[String?]] = []
           var pendingBytes = 0
-          var budget=ResultFetchBudget(rows:limits.rows)
+          var budget=ResultFetchBudget(rows:fetchRows)
           var lastSnapshot = Date.distantPast
           func flush(force: Bool = false) throws {
             guard !pending.isEmpty else { return }
@@ -236,7 +252,7 @@ public final class ODBCConnection: @unchecked Sendable {
             pendingBytes = 0
           }
           do {
-            while try budget.next(fetch:{
+            fetchLoop: while try budget.next(fetch:{
               try cancelledCheck()
               let fetched=SQLFetch(handle)
               if fetched == SQL_NO_DATA {return false}
@@ -254,6 +270,11 @@ public final class ODBCConnection: @unchecked Sendable {
                 // and edit conflict predicates share the same lossless numeric text.
                 let value = field.normalizedResultValue(rawValue)
                 totalBytes += value?.utf8.count ?? 0
+                if preserveExecution && totalBytes>max(0,limits.totalBytes) {
+                  rows.truncated=true;output.partial=true
+                  output.messages.append("Sonuç boyutu görüntüleme bütçesini aştı; kalan satırlar saklanmadan komutun tamamlanması beklendi.")
+                  break fetchLoop
+                }
                 guard totalBytes <= max(1024, limits.totalBytes) else {
                   throw SQLFailure(
                     "Sonuç boyutu bütçesini aştı; sonuç kısmi. Daha küçük bir SELECT/TOP kullanın.")
@@ -278,19 +299,13 @@ public final class ODBCConnection: @unchecked Sendable {
           try flush(force: true)
           if spool != nil { events?(.snapshot(resultIndex, rows.values)) }
         }
-        output.results.append(rows)
+        if !skipRowset {ResultStreamBudget.append(rows,to:&output.results)}
         try cancelledCheck()
         let more = SQLMoreResults(handle)
         if more == SQL_NO_DATA { break }
         try check(more, kind: SQLSMALLINT(SQL_HANDLE_STMT), handle: handle)
         messages(more)
-        if output.results.count >= max(1, limits.resultSets) {
-          output.partial = true
-          output.stoppedEarly = true
-          output.messages.append("Sonuç kümesi sınırına ulaşıldı; kalan sonuçlar alınmadı.")
-          _ = SQLCancelHandle(SQLSMALLINT(SQL_HANDLE_STMT), handle)
-          break
-        }
+
       }
     } catch {
       _ = SQLCancelHandle(SQLSMALLINT(SQL_HANDLE_STMT), handle)

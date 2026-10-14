@@ -335,10 +335,10 @@ import Testing
     defer { for (key,value) in zip(keys,saved) { defaults.set(value,forKey:key) } }
     let existing=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Existing")
     let original=existing.limits.rows
-    ResultReadPreferences.save(rows:12345,page:123,refresh:17)
+    ResultReadPreferences.save(rows:12345,refresh:17)
     let new=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"New")
     #expect(new.limits.rows == 12345 && existing.limits.rows == original)
-    #expect(GridPaging.defaultSize == 123 && ResultReadPreferences.refreshSeconds == 17)
+    #expect(ResultReadPreferences.refreshSeconds == 17)
     #expect(ResultReadPreferences.limits(rows:0).rows == 50_000)
     #expect(ResultReadPreferences.limits(rows:100000).totalBytes == 2_147_483_648)
   }
@@ -348,7 +348,7 @@ import Testing
   @Test func loadingAndColumnSearchPanelsRenderAtCompactSize() async throws {
     _ = NSApplication.shared
     let panels:[(String,NSViewController)] = [
-      ("loading",NSHostingController(rootView:ResultLoadingPanel(rows:50000,page:500,refresh:0,apply:{_,_,_,_ in}))),
+      ("loading",NSHostingController(rootView:ResultLoadingPanel(rows:50000,refresh:0,apply:{_,_,_ in}))),
       ("columns",NSHostingController(rootView:ResultColumnSearch(columns:[.init(id:0,name:"CustomerCode",type:"varchar(20)",hidden:false),.init(id:1,name:"CustomerDisplayName",type:"nvarchar(100)",hidden:true)],select:{_ in})))
     ]
     for (name,controller) in panels {

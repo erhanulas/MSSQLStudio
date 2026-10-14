@@ -19,8 +19,10 @@ extension TSQL {
     let start = Date()
     var output = Execution()
     var budget = limits
+    let preserveExecution=limits.readOnlyRowLimit && !usesResultRowLimit(sql)
+    if preserveExecution {budget.rows=Int.max}
     for (batchIndex, batch) in try batches(sql).enumerated() {
-      if budget.resultSets <= 0 || budget.totalBytes <= 0 {
+      if !preserveExecution && (budget.resultSets <= 0 || budget.totalBytes <= 0) {
         output.partial = true
         output.stoppedEarly = true
         output.messages.append("Sorgu bütçesi doldu; sonraki batch'ler çalıştırılmadı.")
@@ -52,7 +54,7 @@ extension TSQL {
         output.messages += result.messages
         output.partial = output.partial || result.partial
         output.stoppedEarly = result.stoppedEarly
-        budget.resultSets -= result.results.count
+        budget.resultSets -= ResultStreamBudget.rowsetCount(result.results)
         budget.totalBytes -= result.bytesRead
         output.bytesRead += result.bytesRead
         if output.stoppedEarly { break }

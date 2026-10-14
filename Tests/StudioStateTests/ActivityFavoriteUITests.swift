@@ -89,16 +89,16 @@ import Testing
       let item=try #require(popup.itemArray.first {$0.identifier?.rawValue == section}?.submenu?.items.first {$0.tag == value && !$0.isSeparatorItem})
       #expect(NSApp.sendAction(try #require(item.action),to:item.target,from:item))
     }
-    try choose("gridPageChoices",100)
+    #expect(!popup.itemArray.contains {$0.identifier?.rawValue == "gridPageChoices"})
     let grid=try #require(controller.children.compactMap {$0 as? ResultController}.first)
-    #expect(grid.pageCount == 100 && doc.limits.rows == 1_234_567)
+    #expect(grid.pageCount == 1200 && doc.limits.rows == 1_234_567)
     try choose("gridReadChoices",10)
     #expect(doc.limits.rows == 10 && grid.pageCount == 10 && grid.result.values.count == 10 && grid.loadedRowCount == 1200)
     #expect(doc.lastExecutedSQL == nil && doc.sql == "SELECT 1")
-    controller.applyLoadingPreferences(rows:5_000_000,page:77,refresh:10,save:false)
+    controller.applyLoadingPreferences(rows:5_000_000,refresh:10,save:false)
     #expect(doc.limits.rows == 5_000_000 && doc.initialRefreshSeconds == 10 && doc.lastExecutedSQL == nil)
-    #expect(popup.itemArray.first {$0.identifier?.rawValue == "gridPageChoices"}?.submenu?.items.contains {$0.tag == 77 && $0.state == .on} == true)
-    controller.applyLoadingPreferences(rows:0,page:100,refresh:10,save:false)
+    #expect(grid.pageSize == 0 && !popup.title.contains(" · "))
+    controller.applyLoadingPreferences(rows:0,refresh:10,save:false)
     #expect(doc.limits.rows == 5_000_000)
   }
   @Test func autoRefreshHasVisiblePresetsPendingStateAndEditingGuards() throws {
