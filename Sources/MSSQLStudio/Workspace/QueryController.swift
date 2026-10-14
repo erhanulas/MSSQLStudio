@@ -18,7 +18,7 @@ import SwiftUI
   private let resultStrip = NSStackView()
   private let stripScroll = NSScrollView()
   private var selectedPageSize = GridPaging.defaultSize
-  private let columnSearchButton = StudioToolbarButton(symbol: "text.magnifyingglass", label: "Kolon başlığında ara")
+  private let columnSearchButton = StudioToolbarButton(symbol: "text.magnifyingglass", label: "Kolon başlığında ara", tone: .neutral)
   private let autoRefreshButton = StudioToolbarButton(symbol:"clock.arrow.circlepath",label:"Otomatik yenileme",tone:.neutral)
   private var optionsPopover: NSPopover?
   private var selectedRefreshSeconds = 0
@@ -30,11 +30,11 @@ import SwiftUI
   private let editor: EditorController
   private let resultTabs = NSTabView()
   private let navigationHost = NSStackView()
-  private let copyHeadersButton = StudioToolbarButton(symbol: "doc.on.doc", label: "Başlıklarla kopyala")
+  private let copyHeadersButton = StudioToolbarButton(symbol: "doc.on.doc", label: "Başlıklarla kopyala", tone: .neutral)
   private let refreshButton = StudioToolbarButton(symbol: "arrow.clockwise", label: "Sonuçları yenile", tone: .success)
   private let dataActionsBar = NSStackView()
   private let addRowButton = StudioToolbarButton(symbol: "plus", label: "Yeni satır", tone: .success)
-  private let cloneRowButton = StudioToolbarButton(symbol: "plus.square.on.square", label: "Satırı çoğalt")
+  private let cloneRowButton = StudioToolbarButton(symbol: "plus.square.on.square", label: "Satırı çoğalt", tone: .neutral)
   private let deleteRowButton = StudioToolbarButton(symbol: "trash", label: "Satırı sil", tone: .danger)
   private let undoRowButton = StudioToolbarButton(symbol: "arrow.uturn.backward", label: "Seçili düzenlemeleri geri al", tone: .warning)
   private let editDataButton = StudioToolbarButton(symbol: "square.and.pencil", label: "Satır düzenlemeyi aç")
@@ -235,6 +235,9 @@ import SwiftUI
     export.widthAnchor.constraint(equalToConstant: 38).isActive = true
     configurePageMenu()
     rowLimit.controlSize = .small
+    rowLimit.isBordered = false
+    rowLimit.font = .systemFont(ofSize: StudioMetrics.detailFont,weight: .medium)
+    rowLimit.heightAnchor.constraint(equalToConstant: StudioMetrics.controlHeight).isActive = true
     rowLimit.setAccessibilityLabel("Sayfa boyutu ve okuma sınırı")
     rowLimit.setAccessibilityIdentifier("gridRowOptions")
     cancelExport.title = ""
@@ -252,8 +255,12 @@ import SwiftUI
     editingDivider.boxType = .separator
     editingDivider.widthAnchor.constraint(equalToConstant: 1).isActive = true
     editingDivider.heightAnchor.constraint(equalToConstant: 18).isActive = true
+    let browsingDivider = NSBox()
+    browsingDivider.boxType = .separator
+    browsingDivider.widthAnchor.constraint(equalToConstant: 1).isActive = true
+    browsingDivider.heightAnchor.constraint(equalToConstant: 16).isActive = true
     let resultHeader = NSStackView(views: [
-      navigationHost, refreshButton, rowLimit, autoRefreshButton, columnSearchButton,
+      navigationHost, refreshButton, rowLimit, autoRefreshButton, browsingDivider, columnSearchButton,
       copyHeadersButton, editingDivider, editDataButton, dataActionsBar,
       previewDataButton, NSView(), filter, cancelExport, export,
     ])
@@ -270,7 +277,7 @@ import SwiftUI
     }
     dataActionsBar.setViews([addRowButton, cloneRowButton, deleteRowButton, undoRowButton, nullDataButton], in: .leading)
     dataActionsBar.spacing = 3
-    for button in [refreshButton,autoRefreshButton,columnSearchButton,copyHeadersButton,editDataButton,addRowButton,cloneRowButton,deleteRowButton,undoRowButton,nullDataButton,cancelExport] {button.flat=true}
+    for button in [refreshButton,autoRefreshButton,columnSearchButton,copyHeadersButton,editDataButton,addRowButton,cloneRowButton,deleteRowButton,undoRowButton,nullDataButton,cancelExport] {button.flat=true;button.layer?.cornerRadius=StudioMetrics.controlRadius}
     dataActionsBar.setAccessibilityIdentifier("gridDataActions")
     addRowButton.toolTip = "Yeni satır ekle · Değer girilmeyen alanlar DEFAULT kullanır"
     cloneRowButton.toolTip = "Seçili satırı çoğalt · Anahtar ve üretilen alanlar kopyalanmaz"
@@ -296,7 +303,7 @@ import SwiftUI
     filter.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     rowLimit.widthAnchor.constraint(equalToConstant: 128).isActive = true
     rowLimit.setContentCompressionResistancePriority(.required, for: .horizontal)
-    export.bezelStyle = .rounded; export.contentTintColor = StudioTheme.accent
+    export.bezelStyle = .rounded; export.isBordered = false; export.contentTintColor = StudioTheme.muted
     export.setAccessibilityLabel("Sonuçları dışa aktar")
     resultStrip.spacing = 2
     resultStrip.edgeInsets = NSEdgeInsets(top: 3,left: 6,bottom: 3,right: 6)
@@ -426,7 +433,7 @@ import SwiftUI
     previewDataButton.isHidden = !editing
     editDataButton.state = editing ? .on : .off
     editDataButton.tone = editing ? .warning : .accent
-    editDataButton.image = NSImage(systemSymbolName: preparingData ? "hourglass" : editing ? "xmark" : "square.and.pencil", accessibilityDescription: "Veri düzenleme")
+    editDataButton.image = NSImage(systemSymbolName: preparingData ? "hourglass" : editing ? "pencil.slash" : "square.and.pencil", accessibilityDescription: "Veri düzenleme")?.withSymbolConfiguration(.init(pointSize: 12,weight: .medium))
     editDataButton.setAccessibilityLabel(preparingData ? "Düzenleme hazırlanıyor" : editing ? "Vazgeç ve düzenleme modunu kapat" : "Satır düzenlemeyi aç")
     editDataButton.toolTip = editing ? "Düzenleme açık · Kapatmak için tıklayın" : "Hücreleri düzenlemek için kaynağı doğrula ve düzenleme modunu aç"
     editDataButton.isEnabled = editing ? !preparingData && !submittingData : safe && grid != nil && document.results.count == 1 && !document.partial
@@ -436,6 +443,8 @@ import SwiftUI
     autoRefreshButton.isEnabled = !document.busy && !submittingData && !tables.values.contains {$0.editDefinition != nil}
     let pending = !(grid?.pendingEdits.isEmpty ?? true) || grid?.hasDraftChanges == true
     let canChange = !preparingData && !submittingData
+    previewDataButton.flat = true
+    previewDataButton.prominent = pending
     previewDataButton.isEnabled = canChange && grid?.editingAllowed?() == true && pending && grid?.editValidationMessage == nil
     previewDataButton.toolTip = pending ? "SQL önizle ve gönder · Değişiklikler yalnız önizlemedeki onayınızla veritabanına gönderilir" : "SQL önizle ve gönder · Bir hücreyi değiştirdiğinizde etkinleşir"
     previewDataButton.setAccessibilityLabel("Bekleyen değişikliklerin SQL önizlemesi")

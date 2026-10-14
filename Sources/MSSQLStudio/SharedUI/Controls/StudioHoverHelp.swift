@@ -6,6 +6,19 @@ import SwiftUI
 @MainActor final class StudioHoverHelp {
   static let shared = StudioHoverHelp()
   private var monitor:Any?
+  private var tableExit: Task<Void,Never>?
+  var hasTablePreview: Bool {panel?.contentView is FunctionReturnPreview}
+  var isPointerInsideTable: Bool {hasTablePreview && panel?.frame.contains(NSEvent.mouseLocation) == true}
+  func keepTablePreview() {tableExit?.cancel();tableExit=nil}
+  func leaveTablePreview() {
+    guard tableExit == nil else {return}
+    tableExit = Task { [weak self] in
+      try? await Task.sleep(for: .milliseconds(180))
+      guard !Task.isCancelled, let self else {return}
+      tableExit=nil
+      if !isPointerInsideTable {hide()}
+    }
+  }
   private(set) var revision=UUID()
   private var pending: Task<Void, Never>?
   private var panel: NSPanel?
@@ -15,11 +28,14 @@ import SwiftUI
   @discardableResult func begin(for view:NSView)->UUID {
     hide();source=view
     monitor=NSEvent.addLocalMonitorForEvents(matching:[.leftMouseDown,.rightMouseDown,.otherMouseDown,.keyDown,.scrollWheel]) { [weak self] event in
-      MainActor.assumeIsolated {self?.hide()};return event
+      MainActor.assumeIsolated {
+        if event.type == .scrollWheel, self?.isPointerInsideTable == true {return}
+        self?.hide()
+      };return event
     }
     return revision
   }
-  func schedule(for view: NSView, sqlSource: SQLResultSource? = nil,title:String?=nil,detail:String?=nil,rect:NSRect?=nil) {
+  func schedule(for view: NSView, sqlSource: SQLResultSource? = nil,title:String?=nil,detail:String?=nil,rect:NSRect?=nil,columns:[SQLObjectHover.Column]=[]) {
     begin(for:view)
     pending = Task { [weak self, weak view] in
       do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
@@ -68,13 +84,17 @@ import SwiftUI
         heading.frame=NSRect(x:10,y:size.height-25,width:width-20,height:16);text.frame=NSRect(x:10,y:8,width:width-20,height:height)
         box.addSubview(heading);box.addSubview(text);content=box
       }
+      if !columns.isEmpty {
+        content=FunctionReturnPreview(title:name,columns:columns,screen:screen.size)
+        size=content.frame.size
+      }
       content.wantsLayer=true;content.layer?.cornerRadius=9;content.layer?.masksToBounds=true
       content.layer?.borderWidth=1;content.layer?.borderColor=StudioTheme.border.cgColor
       content.layer?.backgroundColor=(sqlSource == nil ? StudioTheme.panel:StudioTheme.editorCanvas).cgColor
       let rect=Self.placement(anchor:anchor,size:size,screen:screen)
       let panel = NSPanel(contentRect: rect, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
       panel.isReleasedWhenClosed = false; panel.level = .popUpMenu
-      panel.ignoresMouseEvents = true; panel.hasShadow = true;panel.hidesOnDeactivate=true
+      panel.ignoresMouseEvents = columns.isEmpty; panel.hasShadow = true;panel.hidesOnDeactivate=true
       panel.isOpaque=false;panel.backgroundColor = .clear
       panel.contentView = content
       window.addChildWindow(panel, ordered: .above)
@@ -91,6 +111,7 @@ import SwiftUI
   }
   func hide(for view: NSView? = nil) {
     if let view, source !== view { return }
+    tableExit?.cancel();tableExit=nil
     revision=UUID()
     if let monitor {NSEvent.removeMonitor(monitor)};monitor=nil
     pending?.cancel(); pending = nil

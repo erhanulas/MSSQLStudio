@@ -12,6 +12,12 @@ import SQLServerKit
   deinit {task?.cancel()}
   func hide() {task?.cancel();task=nil;activeRange=nil;if let editor {StudioHoverHelp.shared.hide(for:editor)}}
   func move(_ point:NSPoint?) {
+    if source != editor?.string {hide()}
+    if StudioHoverHelp.shared.isPointerInsideTable {StudioHoverHelp.shared.keepTablePreview();return}
+    if StudioHoverHelp.shared.hasTablePreview {
+      if let point,let editor,let activeRange,NSLocationInRange(editor.characterIndexForInsertion(at:point),activeRange) {StudioHoverHelp.shared.keepTablePreview();return}
+      StudioHoverHelp.shared.leaveTablePreview();return
+    }
     guard let point,let editor,let document,editor.window?.isVisible == true,
       editor.string==document.sql,editor.string.utf16.count<=100_000,!editor.hasMarkedText(),!editor.trackingMouseSelection else {hide();return}
     let offset=editor.characterIndexForInsertion(at:point)
@@ -48,7 +54,7 @@ import SQLServerKit
           let info else {return}
         let rects=editor.rects(forCharacterRange:token.range)?.map(\.rectValue) ?? []
         guard let anchor=rects.first(where:{$0.intersects(editor.visibleRect)}) else {return}
-        StudioHoverHelp.shared.schedule(for:editor,title:info.title,detail:info.detail,rect:anchor)
+        StudioHoverHelp.shared.schedule(for:editor,title:info.title,detail:info.detail,rect:anchor,columns:info.columns)
       } catch { /* Hover is optional; unavailable metadata never blocks typing or opens alerts. */ }
     }
   }

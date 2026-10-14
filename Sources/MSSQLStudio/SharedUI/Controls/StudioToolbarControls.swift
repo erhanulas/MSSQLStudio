@@ -4,6 +4,11 @@ import SQLServerKit
 import SwiftUI
 
 @MainActor final class StudioToolbarPopUpButton: NSPopUpButton {
+  // Borderless native popup cells still report bezel alignment insets.
+  // Their complete hit surface must match the toolbar layout rectangle.
+  override var alignmentRectInsets:NSEdgeInsets {
+    isBordered ? super.alignmentRectInsets : .init(top:0,left:0,bottom:0,right:0)
+  }
   private var hoverArea: NSTrackingArea?
   override func updateTrackingAreas() {
     super.updateTrackingAreas()

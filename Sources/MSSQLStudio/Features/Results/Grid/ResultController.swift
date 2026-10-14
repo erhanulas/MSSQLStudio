@@ -426,13 +426,14 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     }
     let clear = StudioToolbarButton(symbol: "line.3.horizontal.decrease.circle", label: "Filtreleri temizle", tone: .warning)
     clear.target = self; clear.action = #selector(clearFilters)
-    clear.controlSize = .small
+    clear.controlSize = .small; clear.flat = true
     info.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
     info.textColor = StudioTheme.muted
     info.lineBreakMode = .byTruncatingMiddle
     info.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     navigation = ["backward.end", "chevron.left", "chevron.right", "forward.end"].enumerated().map { index, symbol in
       let button = StudioToolbarButton(symbol: symbol, label: ["İlk sayfa", "Önceki sayfa", "Sonraki sayfa", "Son sayfa"][index], tone: .neutral, width: 24)
+      button.flat = true
       button.tag = index; button.target = self; button.action = #selector(navigate(_:))
       return button
     }

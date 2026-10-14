@@ -42,6 +42,16 @@ struct SchemaComparisonTests {
       try SchemaComparison.columnsQuery(object("T",type:"U")).write(toFile:path+".columns.sql",atomically:true,encoding:.utf8)
     }
   }
+  @Test func inventoryVersionGuardAvoidsCompatibilityDependentConversions() {
+    // SQL Server 2017+ can host databases at compatibility 100, where
+    // TRY_CONVERT fails during binding before the inventory can run.
+    for keys: [SchemaObjectKey]? in [nil,[],[.init(schema:"dbo",name:"Customers")]] {
+      let sql=SchemaComparison.inventory(keys:keys)
+      #expect(!sql.contains("TRY_CONVERT") && !sql.contains("TRY_CAST"))
+      #expect(sql.contains("IF ISNULL(CONVERT(int,SERVERPROPERTY('ProductMajorVersion')),0)<14 THROW"))
+      #expect(!sql.contains("ALTER DATABASE") && sql.contains("SQL Server 2017"))
+    }
+  }
   @Test func scopedInventoryKeepsDirectDependencyOwnersAndDatabaseTriggerIdentity() throws {
     let normal=SchemaObjectKey(schema:"odd']",name:"same'name")
     let trigger=SchemaObjectKey(schema:"",name:"same'name",databaseTrigger:true)

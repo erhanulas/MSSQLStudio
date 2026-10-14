@@ -45,6 +45,22 @@ struct ExplorerTransferHoverTests {
     #expect(Catalog.children(.parameters,object:7).contains("bt.user_type_id=p.system_type_id"))
     #expect(Catalog.children(.columns,object:7).contains("precision"))
   }
+  @Test func tableHoverPreservesEveryReturnColumnInOrdinalOrderAndRejectsPartialMetadata() throws {
+    var execution=Execution()
+    execution.results=[Rows(values:(1...80).reversed().map { ordinal in
+      ["43","dbo","Projection","SQL_TABLE_VALUED_FUNCTION","Column_\(81-ordinal)","AliasType (decimal(28,8)) NOT NULL",String(ordinal)]
+    })]
+    let info=try #require(SQLObjectHover.decode(execution))
+    #expect(info.columns.count==80 && info.columns.map(\.ordinal)==Array(1...80))
+    #expect(info.columns.first?.name=="Column_80" && info.columns.last?.name=="Column_1")
+    #expect(info.detail.contains("Column_1 · AliasType (decimal(28,8)) NOT NULL") && !info.detail.contains("…"))
+    let query=try SQLObjectHover.query(targets:[["dbo","Projection"]])
+    #expect(query.contains("c.column_id") && query.contains("ORDER BY 1,7") && !query.contains("TOP(17)"))
+    execution.results[0].truncated=true
+    #expect(SQLObjectHover.decode(execution)==nil)
+    execution.results[0].truncated=false;execution.partial=true
+    #expect(SQLObjectHover.decode(execution)==nil)
+  }
   @Test func unavailableDefinitionsDoNotWarnButMissingReadableDefinitionsStillDo() throws {
     let finished=DefinitionIndexStatus(count:7,lastFetched:Date(),synchronizedAt:Date(),expected:10,unavailable:3)
     let evicted=DefinitionIndexStatus(count:6,lastFetched:Date(),synchronizedAt:Date(),expected:10,unavailable:3)

@@ -84,7 +84,7 @@ import Testing
     #expect(popup.isDescendant(of:toolbar) && popup.title.contains(1_234_567.formatted()))
     #expect(!descendants(controller.view).contains {$0.accessibilityIdentifier() == "gridReadOptions"})
     let rect=controller.view.convert(popup.bounds,from:popup)
-    #expect(rect.width == 128 && rect.maxX<=830 && rect.minX>=0)
+    #expect(rect.width == 128 && rect.maxX<=830 && rect.minX>=0, "Pagination control frame: \(rect); alignment insets: \(popup.alignmentRectInsets)")
     func choose(_ section:String,_ value:Int) throws {
       let item=try #require(popup.itemArray.first {$0.identifier?.rawValue == section}?.submenu?.items.first {$0.tag == value && !$0.isSeparatorItem})
       #expect(NSApp.sendAction(try #require(item.action),to:item.target,from:item))

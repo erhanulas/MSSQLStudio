@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.131",
+    "date": "2026-10-14",
+    "title": "DDL uyumluluk düzeltmesi ve hizalı fonksiyon önizlemesi",
+    "changes": [
+      "DDL Karşılaştırma açılışındaki TRY_CONVERT hatası giderildi. Sunucu sürümü normal CONVERT ile denetlenir; eski veritabanı uyumluluk düzeylerinde karşılaştırma başlayabilir. SQL Server 2017 ve üzeri gereksinimi korunur; veritabanı ayarları değiştirilmez.",
+      "Tablo değerli fonksiyon önizlemesi kolonları gerçek dönüş sırasıyla, sıra numarası / kolon / veri tipi olarak hizalı gösterir. İlk 8 kolon ve üç nokta sınırı kaldırıldı; tüm kolonlara ve uzun veri tiplerine kaydırarak erişilir. Önizleme içinde kaydırma editör odağını değiştirmez.",
+      "Sonuç araç çubuğunda gezinme, okuma/yenileme, kolon ve veri düzenleme işlemleri daha sade gruplandı. İkincil ikonlar, açılır kontroller ve düzenleme durumu tutarlı hale getirildi; SQL önizle ve gönder düğmesi bekleyen değişiklik olduğunda belirginleşir."
+    ]
+  },
+  {
     "version": "0.2.130",
     "date": "2026-10-14",
     "title": "Uygulama genelinde kompakt ve tutarlı arayüz",

@@ -27,6 +27,59 @@ import Testing
     buttons[1].performClick(nil)
     #expect(doc.results[1].values[0][0]==nil && doc.sql=="DELETE FROM NeverExecute;")
   }
+  @Test func functionReturnPreviewFitsSingleRowAndKeepsLongNamesHorizontallyReachable() throws {
+    _=NSApplication.shared
+    var execution=Execution()
+    let longName=String(repeating:"LongColumn",count:12)
+    execution.results=[Rows(values:[["43","dbo","Projection","SQL_TABLE_VALUED_FUNCTION",longName,"nvarchar(4000) NULL","1"]])]
+    let info=try #require(SQLObjectHover.decode(execution))
+    let preview=FunctionReturnPreview(title:info.title,columns:info.columns,screen:NSSize(width:800,height:600))
+    let window=NSWindow(contentRect:preview.bounds,styleMask:[.borderless],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=preview;window.orderFront(nil)
+    defer {window.close()}
+    preview.layoutSubtreeIfNeeded();preview.displayIfNeeded()
+    #expect(preview.table.visibleRect.height>=24)
+    #expect(preview.table.tableColumns[1].width>preview.scroll.bounds.width)
+    let cell=try #require(preview.tableView(preview.table,viewFor:preview.table.tableColumns[1],row:0) as? NSTextField)
+    #expect(cell.stringValue==longName)
+    preview.table.scrollColumnToVisible(2)
+    #expect(preview.table.visibleRect.maxX>=preview.table.rect(ofColumn:2).maxX-1)
+  }
+  @Test func functionReturnPreviewShowsAllColumnsAndScrollsWithoutMovingEditorFocus() async throws {
+    _=NSApplication.shared
+    let previous=UserDefaults.standard.string(forKey:"ssmsTheme")
+    let window=NSWindow(contentRect:NSRect(x:100,y:100,width:830,height:600),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false
+    let editor=NSTextView(frame:NSRect(x:20,y:350,width:700,height:200))
+    editor.string="SELECT * FROM dbo.Projection()"
+    window.contentView?.addSubview(editor);window.makeKeyAndOrderFront(nil);window.makeFirstResponder(editor)
+    var execution=Execution()
+    execution.results=[Rows(values:(1...80).map {["43","dbo","Projection","SQL_TABLE_VALUED_FUNCTION","Column_\($0)","CustomAmount (decimal(28,8)) NOT NULL",String($0)]})]
+    let info=try #require(SQLObjectHover.decode(execution))
+    let help=StudioHoverHelp.shared
+    defer {help.hide();window.close();StudioTheme.apply(previous ?? "light")}
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      help.schedule(for:editor,title:info.title,detail:info.detail,rect:NSRect(x:0,y:20,width:200,height:20),columns:info.columns)
+      let deadline=ContinuousClock.now.advanced(by:.seconds(2))
+      while help.visibleTitle==nil && ContinuousClock.now<deadline {try await Task.sleep(for:.milliseconds(10))}
+      let panel=try #require(window.childWindows?.first {$0.contentView is FunctionReturnPreview})
+      let preview=try #require(panel.contentView as? FunctionReturnPreview)
+      #expect(preview.table.numberOfRows==80 && !panel.ignoresMouseEvents)
+      #expect(preview.frame.height<=440 && window.firstResponder === editor)
+      #expect(preview.table.tableColumns[1].width>=120)
+      preview.layoutSubtreeIfNeeded();preview.displayIfNeeded()
+      if let bitmap=preview.bitmapImageRepForCachingDisplay(in:preview.bounds) {
+        preview.cacheDisplay(in:preview.bounds,to:bitmap)
+        try bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-function-return-\(theme).png"))
+      }
+      preview.table.scrollRowToVisible(79)
+      #expect(preview.table.rows(in:preview.table.visibleRect).contains(79))
+      let last=try #require(preview.tableView(preview.table,viewFor:preview.table.tableColumns[2],row:79) as? NSTextField)
+      #expect(last.stringValue=="CustomAmount (decimal(28,8)) NOT NULL")
+      help.hide();#expect(editor.string=="SELECT * FROM dbo.Projection()" && window.firstResponder === editor)
+    }
+  }
   @Test func sqlHoverShowsPromptlyWithThemeColorsAndCancelsOnExitAndSourceReplacement() async throws {
     _ = NSApplication.shared
     let previous=UserDefaults.standard.string(forKey:"ssmsTheme")

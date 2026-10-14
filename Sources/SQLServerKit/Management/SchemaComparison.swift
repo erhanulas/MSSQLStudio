@@ -261,7 +261,7 @@ public enum SchemaComparison {
     """
     return """
     -- StudioSchemaInventory v2
-    IF TRY_CONVERT(int,SERVERPROPERTY('ProductMajorVersion'))<14 THROW 51000,N'DDL karşılaştırma SQL Server 2017 veya üstünü gerektirir.',1;
+    IF ISNULL(CONVERT(int,SERVERPROPERTY('ProductMajorVersion')),0)<14 THROW 51000,N'DDL karşılaştırma SQL Server 2017 veya üstünü gerektirir.',1;
     SELECT HAS_PERMS_BY_NAME(DB_NAME(),N'DATABASE',N'VIEW DEFINITION'),DB_NAME();
     SELECT o.object_id,s.name,o.name,RTRIM(o.type),
       CONVERT(varchar(64),HASHBYTES('SHA2_256',CONVERT(varbinary(max),payload.value)),2),

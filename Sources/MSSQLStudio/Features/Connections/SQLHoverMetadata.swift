@@ -21,7 +21,7 @@ import SQLServerKit
     let work=Task { [weak self,weak server] () throws->SQLObjectHover.Info? in
       defer {self?.running=nil}
       guard let server else {return nil}
-      var limits=Limits();limits.rows=18;limits.timeout=5;limits.totalBytes=32_000
+      var limits=Limits();limits.rows=8193;limits.timeout=5;limits.totalBytes=8_000_000
       let info=SQLObjectHover.decode(try await server.catalog(sql,database:database,limits:limits),column:column)
       guard server.generation==generation else {return nil}
       if let self {if cache.count>=64 {cache.removeAll()};cache[key]=(Date(),info)}
