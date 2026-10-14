@@ -164,8 +164,8 @@ public enum SQLIntelligence {
     public func matches(_ prefix: String, schema: String? = nil, limit: Int = 100) -> [CatalogSymbol] {
       matchingPrefix(prefix,schema:schema,limit:limit,in:sorted)
     }
-    fileprivate func matchingRelations(_ prefix:String,schema:String?,read:Bool)->[CatalogSymbol] {
-      matchingPrefix(prefix,schema:schema,limit:100,in:read ? readRelations:writeRelations)
+    fileprivate func matchingRelations(_ prefix:String,schema:String?,read:Bool) throws ->[CatalogSymbol] {
+      try containing(prefix,schema:schema,limit:100,in:read ? readRelations:writeRelations)
     }
     private func matchingPrefix(_ prefix:String,schema:String?,limit:Int,in entries:[(String,CatalogSymbol)])->[CatalogSymbol] {
       let prefix = prefix.lowercased()
@@ -296,6 +296,7 @@ public enum SQLIntelligence {
     var bindings: [Binding] = [], ignored = Set<Int>(), diagnostics: [Diagnostic] = []
     var references: [(Int,[String],NSRange)] = []
     var targets:[(index:Int,verb:String)]=[]
+    var insertLists: [(open: Int, binding: Int)] = []
     for i in tokens.indices where ["FROM","JOIN","UPDATE","DELETE","INSERT","INTO","APPLY","EXEC","EXECUTE"].contains(tokens[i].text.uppercased()) {
       try Task.checkCancellation()
       var j = i+1, parts: [String] = [], indices: [Int] = []
@@ -322,12 +323,19 @@ public enum SQLIntelligence {
       guard !parts.isEmpty else { continue }
       ignored.formUnion(indices)
       let name = parts.joined(separator:".").lowercased(), resolved = catalog?.resolve(parts)
+      let head = selects.last { $0 <= i && parents[$0] == parents[i] && tokens[$0].range.location >= starts[i] }
+      let insertTarget = verb == "INSERT" || verb == "INTO" && head.map { tokens[$0].text.uppercased() == "INSERT" } == true
+      var columnStart = j
+      if insertTarget, columnStart < tokens.count, tokens[columnStart].text.uppercased() == "WITH",
+        columnStart + 1 < tokens.count, tokens[columnStart + 1].text == "(", let close = closes[columnStart + 1] { columnStart = close + 1 }
+      let insertOpen = insertTarget && columnStart < tokens.count && tokens[columnStart].text == "(" ? columnStart : nil
       var alias = parts.last!, explicitAlias = false
       if j < tokens.count && tokens[j].text == "(", let close = closes[j] { j = close+1 }
       if j < tokens.count && tokens[j].text.uppercased() == "AS" { ignored.insert(j); j += 1 }
       if j < tokens.count && tokens[j].kind == .word { alias = raw(tokens[j].text); explicitAlias = true; ignored.insert(j) }
       let columns = local[name] ?? (resolved?.kind == "SYNONYM" ? nil : resolved?.columns)
       bindings.append(Binding(alias:alias,explicitAlias:explicitAlias,parts:parts,columns:columns,scope:scope(i)))
+      if let insertOpen { insertLists.append((insertOpen, bindings.count - 1)) }
       if ["UPDATE","DELETE","INSERT","INTO"].contains(verb) {targets.append((bindings.count-1,verb))}
       if verb == "FROM",let head=tokens.indices.last(where:{$0<i && parents[$0]==parents[i] && tokens[$0].range.location>=starts[i] && ["SELECT","UPDATE","DELETE","INSERT"].contains(tokens[$0].text.uppercased())}),tokens[head].text.uppercased() == "DELETE",!targets.contains(where:{$0.verb == "DELETE" && bindings[$0.index].scope == scope(i)}) {targets.append((bindings.count-1,"DELETE"))}
       references.append((i,parts,NSRange(location:tokens[indices[0]].range.location,length:NSMaxRange(tokens[indices.last!].range)-tokens[indices[0]].range.location)))
@@ -417,6 +425,21 @@ public enum SQLIntelligence {
     let before = tokens.filter { NSMaxRange($0.range) <= replacement.location }
     let qualifier = before.last?.text == "." && before.count >= 2 ? raw(before[before.count-2].text) : nil
     let visible = activeBindings(caret)
+    let insertList = insertLists.last { list in
+      let open = tokens[list.open]
+      let end = closes[list.open].map { tokens[$0].range.location } ?? original.length
+      guard replacement.location >= NSMaxRange(open.range), caret <= end else { return false }
+      let between = tokens[(list.open + 1)...].prefix { $0.range.location < replacement.location }
+      guard !between.contains(where: { $0.text == ";" || SQLRoutineDefinition.isBatchSeparator($0, source: original) || $0.kind == .keyword && ["VALUES","SELECT","OUTPUT","INSERT","UPDATE","DELETE","MERGE"].contains($0.text.uppercased()) }) else { return false }
+      return before.last?.text == "(" || before.last?.text == ","
+    }
+    let insertBinding = insertList.map { list -> Binding in
+      let binding = bindings[list.binding]
+      let end = closes[list.open] ?? tokens.count
+      let used = Set(tokens.indices.filter { $0 > list.open && $0 < end && parents[$0] == list.open && tokens[$0].range != replacement && [.word,.keyword].contains(tokens[$0].kind) }.map { raw(tokens[$0].text).lowercased() })
+      return Binding(alias: binding.alias, explicitAlias: false, parts: binding.parts,
+        columns: binding.columns?.filter { !used.contains($0.lowercased()) }, scope: binding.scope)
+    }
     func identifier(_ name: String) -> String { completionIdentifier(name, alwaysQuote: quoteIdentifiers) }
     let needle = prefix.lowercased()
     func appendColumns(from bindings: [Binding], alreadyQualified: Bool) throws {
@@ -498,11 +521,14 @@ public enum SQLIntelligence {
         let end=separators.first(where:{$0.range.location >= caret})?.range.location ?? original.length
         let batch=tokens.filter {$0.range.location>=start && $0.range.location<end}
         let declarations=TSQL.declaredVariables(in:batch,source:source).filter {NSMaxRange($0.range)<caret}
-        suggestions=declarations.filter {$0.text.lowercased().hasPrefix(needle)}.map {Suggestion(text:$0.text,label:$0.text,kind:.variable,detail:"Bu SQL grubunda tanımlı değişken")}
+        let matching = declarations.filter { needle.count == 1 || $0.text.dropFirst().lowercased().contains(String(needle.dropFirst())) }
+        suggestions=(matching.filter { $0.text.lowercased().hasPrefix(needle) } + matching.filter { !$0.text.lowercased().hasPrefix(needle) }).map {Suggestion(text:$0.text,label:$0.text,kind:.variable,detail:"Bu SQL grubunda tanımlı değişken")}
+      } else if let insertBinding {
+        try appendColumns(from: [insertBinding], alreadyQualified: true)
       } else if objectPosition {
         let alreadyAliased = nextToken?.text.uppercased() == "AS" || nextToken?.kind == .word
         let occupied = Set(visible.map { $0.alias.lowercased() })
-        let candidates = execution ? try catalog?.matchingRoutines(prefix,schema:qualifier) ?? [] : catalog?.matchingRelations(prefix,schema:qualifier,read:readPosition) ?? []
+        let candidates = execution ? try catalog?.matchingRoutines(prefix,schema:qualifier) ?? [] : try catalog?.matchingRelations(prefix,schema:qualifier,read:readPosition) ?? []
         for item in candidates {
           let isRelation = ["USER_TABLE","VIEW"].contains(item.kind)
           let base=objectSuggestion(item,call:!execution && item.kind.contains("FUNCTION"))
@@ -532,7 +558,8 @@ public enum SQLIntelligence {
           }
           let words = preferred + Array(TSQL.keywords).sorted() + (scalarPosition || clause.isEmpty ? TSQL.functions : [])
           var seenWords = Set<String>()
-          suggestions += words.filter {seenWords.insert($0).inserted && $0.lowercased().hasPrefix(needle)}
+          let matching = words.filter {seenWords.insert($0).inserted && (needle.isEmpty || $0.lowercased().contains(needle))}
+          suggestions += (matching.filter { $0.lowercased().hasPrefix(needle) } + matching.filter { !$0.lowercased().hasPrefix(needle) })
             .prefix(100-suggestions.count).map { Suggestion(text:$0,label:$0,kind:TSQL.functions.contains($0) ? .function : .keyword) }
         }
       }
@@ -540,6 +567,6 @@ public enum SQLIntelligence {
     try Task.checkCancellation()
     var seen = Set<String>()
     suggestions = suggestions.filter { seen.insert($0.text).inserted }.prefix(100).map { $0 }
-    return Analysis(tokens:all,diagnostics:Array(diagnostics.prefix(200)),suggestions:suggestions,replacement:replacement,procedureCompletion:execution && !inLiteral,variableCompletion:prefix.hasPrefix("@") && !inLiteral,objectCompletion:!inLiteral && (objectPosition || scalarPosition && !prefix.isEmpty && suggestions.contains {$0.kind == .column || $0.kind == .function && !$0.detail.isEmpty}))
+    return Analysis(tokens:all,diagnostics:Array(diagnostics.prefix(200)),suggestions:suggestions,replacement:replacement,procedureCompletion:execution && !inLiteral,variableCompletion:prefix.hasPrefix("@") && !inLiteral,objectCompletion:!inLiteral && (insertBinding != nil || objectPosition || scalarPosition && !prefix.isEmpty && suggestions.contains {$0.kind == .column || $0.kind == .function && !$0.detail.isEmpty}))
   }
 }

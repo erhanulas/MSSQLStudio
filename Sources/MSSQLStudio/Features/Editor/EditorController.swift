@@ -102,6 +102,7 @@ import SQLServerKit
       width: 884, height: CGFloat.greatestFiniteMagnitude)
     editor.autoresizingMask = []
     editor.delegate = self
+    editor.requestFormat = { [weak self] in self?.formatSQL(options: SQLEditorPreferences.formatting()) }
     editor.requestParameterInfo = { [weak self] in self?.scheduleParameters(manual:true) }
     editor.jumpToMatchingPair = { [weak self] in self?.jumpToMatchingPair() }
     editor.navigateDefinition = { [weak self] in self?.navigateDefinition() }

@@ -236,6 +236,10 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
           let binding=GridShortcuts.binding(item.action == #selector(SQLTextView.toggleSQLComment(_:)) ? .comment:.uncomment)
           item.keyEquivalent=binding.key;item.keyEquivalentModifierMask=binding.flags
         }
+        if item.action == #selector(SQLTextView.formatSQLText(_:)) || item.action == #selector(formatSQL) {
+          let binding = GridShortcuts.binding(.format)
+          item.keyEquivalent = binding.key; item.keyEquivalentModifierMask = binding.flags
+        }
         if item.action == #selector(newQuery) {
           let binding = GridShortcuts.binding(.newQuery)
           item.keyEquivalent = binding.key; item.keyEquivalentModifierMask = binding.flags
@@ -249,8 +253,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     if let menu = NSApp.mainMenu { update(menu) }
     if isViewLoaded {
-      for item in view.window?.toolbar?.items ?? [] where item.itemIdentifier.rawValue == "favorites" {
-        item.toolTip="Favori Sorgular ("+GridShortcuts.binding(.favorites).label+")"
+      for item in view.window?.toolbar?.items ?? [] where ["favorites","format"].contains(item.itemIdentifier.rawValue) {
+        let action: GridShortcuts.Action = item.itemIdentifier.rawValue == "format" ? .format : .favorites
+        item.toolTip=(action == .format ? "Formatla" : "Favori Sorgular")+" ("+GridShortcuts.binding(action).label+")"
         (item.view as? NSButton)?.toolTip=item.toolTip
       }
       renderTabs()
@@ -781,7 +786,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     guard let definition = definitions[id.rawValue] else { return nil }
     let item = NSToolbarItem(itemIdentifier: id)
     item.label = definition.0
-    item.toolTip = id.rawValue == "favorites" ? definition.0+" ("+GridShortcuts.binding(.favorites).label+")":definition.0
+    item.toolTip = ["favorites","format"].contains(id.rawValue) ? definition.0+" ("+GridShortcuts.binding(id.rawValue == "format" ? .format:.favorites).label+")":definition.0
     item.image = NSImage(systemSymbolName: definition.1, accessibilityDescription: definition.0)
     item.target = self
     item.action = definition.2

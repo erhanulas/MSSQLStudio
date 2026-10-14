@@ -39,6 +39,7 @@ import SQLServerKit
   }
   func didReplaceCharacters() {didChangeText()}
   override func validateUserInterfaceItem(_ item:any NSValidatedUserInterfaceItem)->Bool {
+    if item.action == #selector(formatSQLText(_:)) {return isEditable && !hasMarkedText() && requestFormat != nil}
     if item.action == #selector(toggleSQLComment(_:)) || item.action == #selector(uncommentSQL(_:)) {return isEditable && !hasMarkedText() && selectedRanges.count == 1}
     if item.action == #selector(undoSQL(_:)) || item.action == #selector(undoFromMenu(_:)) {return isEditable && undoManager?.canUndo == true}
     if item.action == #selector(redoSQL(_:)) || item.action == #selector(redoFromMenu(_:)) {return isEditable && undoManager?.canRedo == true}
@@ -256,6 +257,7 @@ import SQLServerKit
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
     if window?.firstResponder === self,handleHistoryKey(event) {return true}
     if window?.firstResponder === self,handleCommentKey(event) {return true}
+    if window?.firstResponder === self, GridShortcuts.matches(.format,event) {formatSQLText(nil);return true}
     if GridShortcuts.matches(.matchingPair,event) {jumpToMatchingPair?();return true}
     if GridShortcuts.matches(.parameterInfo,event) {requestParameterInfo?();return true}
     if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, event.charactersIgnoringModifiers?.lowercased() == "b" { navigateDefinition?(); return true }
@@ -324,6 +326,11 @@ import SQLServerKit
     return NSUnionRange(first,last)
   }
   var jumpToMatchingPair:(()->Void)?
+  var requestFormat:(()->Void)?
+  @objc func formatSQLText(_ sender: Any?) {
+    guard isEditable, !hasMarkedText() else { return }
+    requestFormat?()
+  }
   var requestParameterInfo:(()->Void)?
   @objc private func goToMatchingPair(_ sender:Any?) {jumpToMatchingPair?()}
   @objc private func showParameterInfo(_ sender:Any?) {requestParameterInfo?()}
@@ -365,6 +372,9 @@ import SQLServerKit
       let item=NSMenuItem(title:title,action:action,keyEquivalent:"");item.target=self;menu.addItem(item)
     }
     menu.addItem(.separator())
+    let formatBinding = GridShortcuts.binding(.format)
+    let formatItem = NSMenuItem(title: "SQL Formatla", action: #selector(formatSQLText(_:)), keyEquivalent: formatBinding.key)
+    formatItem.target = self; formatItem.keyEquivalentModifierMask = formatBinding.flags; menu.addItem(formatItem)
     for (title,action,shortcut) in [("Yorum Yap / Kaldır",#selector(toggleSQLComment(_:)),GridShortcuts.Action.comment),("Yorumu Kaldır",#selector(uncommentSQL(_:)),.uncomment)] {
       let binding=GridShortcuts.binding(shortcut)
       let item=NSMenuItem(title:title,action:action,keyEquivalent:binding.key);item.target=self;item.keyEquivalentModifierMask=binding.flags;menu.addItem(item)
@@ -438,6 +448,7 @@ import SQLServerKit
   override func keyDown(with event: NSEvent) {
     if handleHistoryKey(event) {return}
     if handleCommentKey(event) {return}
+    if GridShortcuts.matches(.format,event) {formatSQLText(nil);return}
     if GridShortcuts.matches(.matchingPair,event) {jumpToMatchingPair?();return}
     if GridShortcuts.matches(.parameterInfo,event) {requestParameterInfo?();return}
     if isFindShortcut(event) {showSelectionFind();return}

@@ -265,9 +265,9 @@ import SwiftUI
       title: "Bul…", action: #selector(NSTextView.performFindPanelAction(_:)), keyEquivalent: "f")
     find.tag = 1
     edit.addItem(find)
-    command(
-      edit, "SQL Formatla", #selector(WorkbenchController.formatSQL), "f",
-      modifiers: [.command, .shift])
+    let formatBinding = GridShortcuts.binding(.format)
+    let formatItem = edit.addItem(withTitle: "SQL Formatla", action: #selector(SQLTextView.formatSQLText(_:)), keyEquivalent: formatBinding.key)
+    formatItem.keyEquivalentModifierMask = formatBinding.flags
     edit.addItem(.separator())
     for (title,action,shortcut) in [("Yorum Yap / Kaldır",#selector(SQLTextView.toggleSQLComment(_:)),GridShortcuts.Action.comment),("Yorumu Kaldır",#selector(SQLTextView.uncommentSQL(_:)),.uncomment)] {
       let binding=GridShortcuts.binding(shortcut)

@@ -3,9 +3,10 @@ import SQLServerKit
 import SwiftUI
 
 @MainActor enum GridShortcuts {
-  enum Action: String, CaseIterable { case headers, newQuery, favorites, columns, matchingPair, parameterInfo, undo, redo, comment, uncomment }
+  enum Action: String, CaseIterable { case format, headers, newQuery, favorites, columns, matchingPair, parameterInfo, undo, redo, comment, uncomment }
   static func title(_ action:Action)->String {
     switch action {
+    case .format: return "Editör · SQL Formatla"
     case .headers: return "Grid · Başlıklarla kopyala"
     case .newQuery: return "Yeni sorgu"
     case .favorites: return "Favori sorgu seçici"
@@ -30,6 +31,7 @@ import SwiftUI
   static let changed = Notification.Name("MSSQLStudio.gridShortcutsChanged")
   static func binding(_ action: Action) -> Binding {
     if let data = UserDefaults.standard.data(forKey: "shortcut.\(action.rawValue)"), let binding = try? JSONDecoder().decode(Binding.self, from: data) { return binding }
+    if action == .format {return Binding(key:"f",modifiers:NSEvent.ModifierFlags([.command,.shift]).rawValue)}
     if action == .undo {return Binding(key:"z",modifiers:NSEvent.ModifierFlags.control.rawValue)}
     if action == .redo {return Binding(key:"y",modifiers:NSEvent.ModifierFlags.control.rawValue)}
     if action == .comment {return Binding(key:"/",modifiers:NSEvent.ModifierFlags.command.rawValue)}
@@ -64,7 +66,7 @@ import SwiftUI
     else { return "Bir harf/rakam veya / ile ⌘ veya ⌃ kullanın. Escape iptal eder." }
     if key == "/" {flags.remove(.shift)}
     // Existing application and standard editing commands remain reserved.
-    let reserved: [(String,NSEvent.ModifierFlags)] = [("q",.command),("w",.command),("s",.command),("s",[.command,.shift]),("o",.command),("c",.command),("v",.command),("x",.command),("a",.command),("z",.command),("z",[.command,.shift]),("f",.command),("f",.control),("f",[.command,.shift]),("r",.command),("m",.command),("l",.command),("b",[.command,.option])]
+    let reserved: [(String,NSEvent.ModifierFlags)] = [("q",.command),("w",.command),("s",.command),("s",[.command,.shift]),("o",.command),("c",.command),("v",.command),("x",.command),("a",.command),("z",.command),("z",[.command,.shift]),("f",.command),("f",.control),("r",.command),("m",.command),("l",.command),("b",[.command,.option])]
     let historyOwner:Action? = key == "z" && (flags == .command || flags == .control) ? .undo
       : (key == "z" && (flags == [.command,.shift] || flags == [.control,.shift])) || (key == "y" && flags == .control) ? .redo : nil
     guard historyOwner == nil || historyOwner == action,

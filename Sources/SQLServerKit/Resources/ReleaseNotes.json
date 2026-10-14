@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.113",
+    "date": "2026-10-14",
+    "title": "Ayarlanabilir Formatla kısayolu ve INSERT kolon tamamlama",
+    "changes": [
+      "SQL Formatla kısayolu Ayarlar → Kısayollar bölümünden değiştirilebilir; varsayılan Command+Shift+F. Düzen menüsü, editör sağ tık menüsü ve Formatla araç ipucu güncel kısayolu gösterir. Odaktaki editörde seçili SQL veya tüm metin mevcut biçimlendirme tercihleriyle, tek geri alma adımında düzenlenir.",
+      "INSERT INTO hedef tablonun kolon listesinde ilk kolondan sonra ve her virgülde otomatik öneriler devam eder. Yalnız hedef tablonun henüz kullanılmamış kolonları önerilir; açık/kapalı listeler, TOP, şema, quoted identifier ve tablo hint’leri desteklenir.",
+      "Tamamlama tablo/view/synonym adlarında da metni içeren sonuçları gösterir. Kolon, routine, fonksiyon, keyword ve tanımlı değişken eşleşmeleri bağlama göre sunulur; başlangıç eşleşmeleri üstte, diğer içeren eşleşmeler ardından gelir. Şema/tür/kapsam filtreleri, öneri sınırı, Tab kabulü ve SQL çalıştırmama davranışı korunur."
+    ]
+  },
+  {
     "version": "0.2.112",
     "date": "2026-10-14",
     "title": "Veritabanı bazında içerik indeksi ve hızlı tablo eşitleme",

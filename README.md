@@ -64,3 +64,5 @@ Tanım indeksi kotası varsayılan **1 GB**’tır. **Ayarlar → Çalışma Ala
 Veritabanı adının yanındaki indeks düğmesinde **Nesne içerikleri** durumu da bulunur: kayıtlı tanım sayısı, son eşitleme/okuma zamanı, ilerleme ve varsa hata/okunamayan nesneler gösterilir. Çevrimdışıyken son disk durumu korunur.
 
 Sorgu geçmişinin saklama gününü **Ayarlar → Çalışma Alanı → Geçmiş ve kurtarma** içinde elle girebilirsiniz (1–3650 gün).
+
+SQL editöründe **⌘⇧F** seçili SQL’i veya tüm metni biçimlendirir. **Ayarlar → Kısayollar → Editör · SQL Formatla** bölümünden değiştirilebilir. INSERT kolon listelerinde virgülden sonra öneriler devam eder; nesne ve kolon adlarında metni içeren eşleşmeler de gösterilir.
