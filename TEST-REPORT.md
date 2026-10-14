@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.111 / build 112 public yayın doğrulandı
+
+- [Public/latest v0.2.111](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.111), kaynak `5e06dae28c05596ada6913e1068902945eeaa74d`; [Actions 38486620030](https://github.com/erhanulas/MSSQLStudio/actions/runs/38486620030) bütün adımlarıyla başarılı. Toplu tanım eşitleme/disk yazımı, elle kota/geçmiş günü ve sınırlı otomatik kota artışı yayımlandı.
+- CI gerçek yayın paketleriyle **338 app +321 core +8 text =667 test; 640 geçti /27 dış koşullu atlandı, 0 issue**; tamamlanmış özetler 109.087 /14.093 /0.006 sn. 7.000 modül fixture’ı 110 detay sorgusu ile 1.913 sn; gerçek DB/ağ ölçümü değildir. Sabit kimlik/izole Keychain fixture ve geçici CI kimliği temizliği geçti. Loglar `/tmp/MSSQLStudio-111-ci-tests.log`, `111-ci-feed.log`, `111-ci-logs.zip`.
+- GitHub’dan indirilen dört public asset SHA-256 değerleri GitHub digest’leriyle aynı; ZIP/PKG URL/hash eşliği manifest ile doğrulandı. Exact 0.2.111/build 112, ZIP/PKG metadata/binary/notlar eşliği, kaynak ReleaseNotes byte eşliği ve yayın metni geçti. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği doğrulandı; helper v1 yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed app kendi Foundation/URLSession updater yoluyla `Foundation updater feed verified: 0.2.111` verdi. Kanıt `/tmp/MSSQLStudio-111-public-verification/verification.json` altında.
+- Yerel native/geometry ve performans kanıtları aşağıdadır. Gerçek uygulama/SQL/Keychain/geçmiş ve `.vscode/` değiştirilmedi; kurulum yapılmadı. Canlı SQL Server, gerçek CUA fare akışı ve Installer denenmedi. Önceki smoke geçmiş olayı ve kurtarma belirsizliği tarihsel kayıtta korunur; yeni yayın bunu çözülmüş saymaz.
+
+Public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.111.pkg`: `bd62447b5c60b041e71d5cd3ef40333bfc24c58340ae34f22aace16b25f888ff`.
+- `MSSQLStudio-0.2.111.zip`: `d24b7356691f93abee21f7ccfce7f37cf8e6906b31b41c121242da2085297169`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `1b8f5ba121666bb143c3422bedac603a1c8f3eb426679bdf4819f2ca1503d652`.
+
 ## 14 Ekim 2026 — v0.2.111 / build 112 yayın hazırlığı
 
 - Tanım eşitlemesi modüllerde 64 kimlikli set sorgusu, tablo/synonym için mevcut metadata SQL’ini koruyan 8’li batch kullanır. 8 MB/30 sn grup yanıtı kısmi ise ikiye bölünür; tek nesne kısmi kalırsa eski kayıt korunur ve hata gösterilir. Sabit 25 ms bekleme kaldırıldı, inventory çözümleme/decode/script worker’da; grup arası yield ve tek ODBC reader korunur. SQLite grup savepoint’i, tek kota kontrolü, monoton fetch/lease/generation ve disk hata yayılımı doğrulandı.
