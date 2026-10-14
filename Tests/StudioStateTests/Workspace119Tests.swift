@@ -26,7 +26,9 @@ import Testing
     let origin=scroll.contentView.bounds.origin
     var pending:CheckedContinuation<Execution,Never>?
     doc.executionFixture={_,_ in await withCheckedContinuation {pending=$0}}
-    doc.execute()
+    #expect(doc.lastExecutionDate==nil)
+    let before=Date();doc.execute()
+    #expect(doc.lastExecutionDate.map {$0>=before} == true)
     for _ in 0..<1000 where pending == nil {try await Task.sleep(for:.milliseconds(2))}
     #expect(window.firstResponder === editor && editor.selectedRange()==selection)
     var output=Execution();output.results=[Rows(fields:[Field("n")],values:[["1"]])]
@@ -85,6 +87,48 @@ import Testing
     let final=try JSONDecoder().decode([QueryRecord].self,from:Data(contentsOf:url))
     #expect(final[0].text=="SELECT 19;" && final[0].reopenedAt != nil)
   }
+  @Test func closedTabLimitUsesActiveDatabaseAndEmptyTabsAreIgnored() {
+    let (state,server)=fixture();state.closedTabLimit=2
+    for db in ["DemoDB","Other"] {
+      for index in 0..<3 {
+        let doc=state.newQuery(server:server,database:db,text:"SELECT \(index);",title:"\(db) \(index)")
+        #expect(state.close(doc,discardChanges:true))
+      }
+    }
+    #expect(state.closedTabs.count==4)
+    let current=state.newQuery(server:server,database:"DemoDB",text:" \n\t")
+    #expect(state.lastClosedTab?.database=="DemoDB" && state.lastClosedTab?.text=="SELECT 2;")
+    #expect(state.close(current,discardChanges:true) && state.closedTabs.count==4)
+    let other=state.newQuery(server:server,database:"Other",text:"SELECT 100;")
+    #expect(state.lastClosedTab(for:current)?.database=="DemoDB" && state.lastClosedTab?.database=="Other")
+    let host=WorkbenchController(state:state)
+    let item=host.tabMenu(for:current).items.first {$0.title=="Kapatılan Sekmeyi Aç"}
+    #expect(item?.representedObject as? QueryDocument === current)
+    host.reopenLastClosedTab(item)
+    #expect(state.active?.database=="DemoDB" && state.active !== other)
+
+  }
+  @Test func explorerUsesActualViewTypeInsteadOfLegacyCompletionKindAndRetriesFailedBranch() async throws {
+    let (state,server)=fixture();server.online=true
+    server.asyncCatalogFixture={sql in
+      var result=Execution()
+      if sql.contains("sys.objects") || sql.contains("sys.views") {result.results=[Rows(values:[["12","Example","dbo","VIEW"]])]}
+      return result
+    }
+    let host=WorkbenchController(state:state),window=NSWindow(contentViewController:host)
+    window.isReleasedWhenClosed=false;window.setFrameOrigin(NSPoint(x:-20000,y:0));defer {window.close()}
+    let doc=state.newQuery(server:server,database:"DemoDB",text:"SELECT * FROM dbo.Example;")
+    doc.applyTargetedCatalog(.init(snapshot:.init(symbols:[.init(schema:"dbo",name:"Example",columns:[])])),database:"DemoDB",generation:server.generation)
+    let db=host.explorerTree.databaseNode(server:server,database:"DemoDB")
+    let views=db?.children.first {if case .folder(.views)=$0.kind {return true};return false}
+    views?.loaded=true;views?.error="Previous failure"
+    var errors:[String]=[];state.errorFixture={errors.append($0)}
+    host.revealExplorerObject(["dbo","Example"],document:doc);await host.explorerRevealTask?.value
+    let selected=host.outline.item(atRow:host.outline.selectedRow) as? TreeNode
+    #expect(errors.isEmpty && selected?.item?.name=="Example")
+    if let selected {if case .object(.views)=selected.kind {} else {Issue.record("View must be selected in Views")}}
+    #expect(doc.lastExecutionDate==nil && doc.state == .disconnected)
+  }
   @Test func unreadableHistoryIsNeverReplacedByClosingATab() async throws {
     let (state,server)=fixture();state.historyEnabled=true
     let url=state.folder.appendingPathComponent("history.json"),previous=try? Data(contentsOf:url)
@@ -112,6 +156,22 @@ import Testing
     let menu=host.tabMenu(for:doc)
     #expect(menu.items.contains {$0.title=="Kapatılan Sekmeyi Aç" && $0.keyEquivalent==GridShortcuts.binding(.reopenTab).key})
     #expect(menu.items.contains {$0.title=="History…"})
+  }
+  @Test func statusBarShowsPerDocumentExecutionDateWithThemedSurfaceAndConnectionIcon() async throws {
+    let (state,server)=fixture()
+    let host=WorkbenchController(state:state),window=NSWindow(contentViewController:host)
+    window.isReleasedWhenClosed=false;window.setFrameOrigin(NSPoint(x:-20000,y:0));defer {window.close()}
+    let doc=state.newQuery(server:server,database:"DemoDB",text:"SELECT 1;")
+    doc.state = .ready;doc.executionFixture={_,_ in Execution()}
+    doc.execute()
+    for _ in 0..<1000 where doc.busy {try await Task.sleep(for:.milliseconds(2))}
+    host.updateControls()
+    #expect(host.executionDate.stringValue.contains(try #require(doc.lastExecutionDate).formatted(date:.numeric,time:.standard)))
+    #expect(host.statusStrip.subviews.contains {$0 is NSBox})
+    #expect(host.statusStrip.layer?.backgroundColor==StudioTheme.statusCanvas.cgColor)
+    #expect(host.roots.first?.displayTitle==server.profile.name)
+    _=state.newQuery(server:server,database:"Other",text:"")
+    host.updateControls();#expect(host.executionDate.stringValue=="Son çalıştırma: —")
   }
   @Test func editorRevealsOnlyTheMatchingExplorerObjectAndKeepsSQL() async throws {
     let (state,server)=fixture();server.online=true

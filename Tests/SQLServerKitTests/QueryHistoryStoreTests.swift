@@ -3,6 +3,22 @@ import Testing
 @testable import SQLServerKit
 
 struct QueryHistoryStoreTests {
+  @Test func closedTabsRetainNewestPerServerDatabaseAndIgnoreEmptySQL() async throws {
+    let first=UUID(),second=UUID(),now=Date()
+    func record(_ server:UUID,_ db:String,_ n:Int,_ text:String="SELECT 1")->QueryRecord {
+      var value=QueryRecord(server:"Same name",database:db,text:text,serverID:server,seconds:0,status:"Kapatılan Sekme")
+      value.tabTitle="Tab \(n)";value.time=now.addingTimeInterval(Double(n)-4000000);return value
+    }
+    let values=[record(first,"A",1),record(first,"A",2),record(first,"A",3),record(first,"B",1),record(second,"A",1),record(first,"B",2," \n\t")]
+    let kept=QueryHistoryPolicy.retained(values,days:1,closedTabLimit:2)
+    #expect(kept.count==4 && !kept.contains {$0.serverID==first && $0.database=="A" && $0.tabTitle=="Tab 1"})
+    #expect(QueryHistoryPolicy.closedTabs(values,limit:2).map(\.id)==kept.map(\.id))
+    let folder=URL(fileURLWithPath:"/tmp/StudioHistoryScopes-\(UUID())")
+    defer {try? FileManager.default.removeItem(at:folder)}
+    let url=folder.appendingPathComponent("history.json")
+    _=try await QueryHistoryStore().save(values,to:url,days:1,closedTabLimit:2)
+    #expect(try JSONDecoder().decode([QueryRecord].self,from:Data(contentsOf:url)).count==4)
+  }
   @Test func optionalTabMetadataPreservesLegacyRecordsAndAtomicWrites() async throws {
     let folder=URL(fileURLWithPath:"/tmp/StudioHistory119-\(UUID())")
     defer {try? FileManager.default.removeItem(at:folder)}

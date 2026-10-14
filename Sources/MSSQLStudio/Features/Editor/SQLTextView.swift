@@ -10,8 +10,8 @@ import SQLServerKit
   }()
   var findMatchesChanged:(([NSRange])->Void)?
   private var findObservation:NSKeyValueObservation?
-  func configureFinder(in scroll:NSScrollView) {
-    sqlFinder.findBarContainer=scroll
+  func configureFinder(in container:any NSTextFinderBarContainer) {
+    sqlFinder.findBarContainer=container
     findObservation=sqlFinder.observe(\.incrementalMatchRanges,options:[.new]) { [weak self] finder,_ in
       let ranges=finder.incrementalMatchRanges.map { $0.rangeValue }
       Task { @MainActor [weak self] in self?.findMatchesChanged?(ranges) }
@@ -281,7 +281,11 @@ import SQLServerKit
       prepareEdit?()
       if selectedRange().length > 0 {sqlFinder.performAction(.setSearchString)}
     }
-    if let item=sender as? NSValidatedUserInterfaceItem,let action=NSTextFinder.Action(rawValue:item.tag) {sqlFinder.performAction(action)}
+    if let item=sender as? NSValidatedUserInterfaceItem,let action=NSTextFinder.Action(rawValue:item.tag) {
+      sqlFinder.performAction(action)
+      if action == .showFindInterface || action == .showReplaceInterface {sqlFinder.findBarContainer?.isFindBarVisible=true}
+
+    }
   }
   override func selectAll(_ sender: Any?) { dismissSuggestions?(); super.selectAll(sender) }
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -396,7 +400,10 @@ import SQLServerKit
       let item=NSMenuItem(title:title,action:action,keyEquivalent:"");item.target=self;menu.addItem(item)
     }
     let point=convert(event.locationInWindow,from:nil)
-    let parts=DefinitionReference.parts(in:string,at:characterIndexForInsertion(at:point),maxParts:3)
+    let caret=characterIndexForInsertion(at:point)
+    var parts=DefinitionReference.parts(in:string,at:caret,maxParts:3)
+    if let reference=parts,reference.count<=2,let alias=reference.first,
+      let resolved=(try? SQLIntelligence.analyze(source:string,caret:caret,catalog:nil,verified:false))?.referenceBindings[alias.lowercased()] {parts=resolved}
     let reveal=NSMenuItem(title:"Explorer’da Git",action:#selector(revealExplorerObject(_:)),keyEquivalent:"")
     reveal.target=self;reveal.representedObject=parts;reveal.isEnabled=parts != nil && revealInExplorer != nil
     menu.addItem(reveal)

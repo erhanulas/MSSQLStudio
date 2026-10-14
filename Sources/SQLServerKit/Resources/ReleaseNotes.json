@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.2.121",
+    "date": "2026-10-14",
+    "title": "DB bazlı sekme geçmişi ve editör etkileşimleri",
+    "changes": [
+      "History, Sorgular ve Kapatılan Sekmeler sekmelerine ayrıldı. Ayarlar → Çalışma Alanı’nda her bağlantı/veritabanı için tutulacak dolu sekme sayısı 1–1000 arasında belirlenir; varsayılan 100. Boş sekmeler kaydedilmez. Geri açma kısayolu aktif DB’yi, sekme sağ tık menüsü tıklanan sekmenin DB’sini kullanır. Kalıcı kayıt History tercihine bağlıdır.",
+      "⌘F bulucunun arama alanı tıklamaları SQL editörüne aktarılmaz. Native Bul/Değiştir satırı editörün üstünde ayrı yer kullanır; ilk SQL satırını örtmez. Gutter, arama/değiştirme ve undo korunur.",
+      "Formatla sonrasında imleç aynı SQL token’ında ve görünür konumda kalır. Seçili SQL biçimlendirme, tek undo ve SQL token güvenliği korunur.",
+      "Explorer bağlantı durumları metin yerine ikon ve renk ile gösterilir. Explorer’da Git alias kapsamı ve gerçek nesne türünü kullanır; hatalı veya eksik ilgili dalı yükleyip nesneyi seçer. Çevrimdışı indeks ve geç yanıt koruması sürer.",
+      "Alt durum çubuğuna ayrı ayraçla sekmeye ait son çalıştırma tarihi eklendi. Açık/koyu temada hafif renkli zemin kullanılır.",
+      "INSERT SELECT için açık hedef kolon listesiyle SELECT ifadeleri sıra bazında eşlenir; CASE, alt sorgu ve UNION kolları desteklenir. SELECT * veya belirsiz kolon sayısı tahmin edilmez. VALUES önizlemesi korunur; kompakt kolon kartı tıklanan ifadenin yakınında açılır."
+    ]
+  },
+  {
     "version": "0.2.120",
     "date": "2026-10-14",
     "title": "Editör odağı, sekme History ve sade Explorer",

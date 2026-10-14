@@ -28,19 +28,19 @@ import Testing
     #expect(editor.validateUserInterfaceItem(item))
     var prepared=0;editor.prepareEdit={prepared+=1}
     editor.performFindPanelAction(item)
-    #expect(controller.scroll.isFindBarVisible && prepared == 1)
+    #expect(controller.findContainer.isFindBarVisible && prepared == 1)
     editor.sqlFinder.performAction(.hideFindInterface)
     doc.sql="SELECT N'İstanbul'";controller.setText();editor.setSelectedRange(NSRange(location:0,length:6))
     func key(_ flags:NSEvent.ModifierFlags)->NSEvent {
       NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:flags,timestamp:0,windowNumber:0,context:nil,characters:"f",charactersIgnoringModifiers:"f",isARepeat:false,keyCode:3)!
     }
     #expect(editor.performKeyEquivalent(with:key(.command)))
-    #expect(controller.scroll.isFindBarVisible && prepared == 2 && NSPasteboard(name:.find).string(forType:.string) == "SELECT")
+    #expect(controller.findContainer.isFindBarVisible && prepared == 2 && NSPasteboard(name:.find).string(forType:.string) == "SELECT")
     editor.sqlFinder.performAction(.hideFindInterface)
-    editor.keyDown(with:key(.command));#expect(controller.scroll.isFindBarVisible && prepared == 3)
+    editor.keyDown(with:key(.command));#expect(controller.findContainer.isFindBarVisible && prepared == 3)
     editor.sqlFinder.performAction(.hideFindInterface)
     #expect(editor.performKeyEquivalent(with:key([.control,.capsLock])))
-    #expect(controller.scroll.isFindBarVisible && !editor.sqlFinder.incrementalSearchingShouldDimContentView)
+    #expect(controller.findContainer.isFindBarVisible && !editor.sqlFinder.incrementalSearchingShouldDimContentView)
     editor.sqlFinder.performAction(.hideFindInterface)
     #expect(!editor.performKeyEquivalent(with:key([.command,.shift])))
   }
@@ -52,7 +52,7 @@ import Testing
     let window=NSWindow(contentRect:NSRect(x:-3000,y:0,width:800,height:600),styleMask:[.titled],backing:.buffered,defer:false)
     window.isReleasedWhenClosed=false;window.contentView=controller.surface;defer {window.close()};window.makeFirstResponder(editor)
     editor.setSelectedRange(NSRange(location:0,length:6));editor.showSelectionFind()
-    #expect(controller.scroll.isFindBarVisible && !editor.sqlFinder.incrementalSearchingShouldDimContentView)
+    #expect(controller.findContainer.isFindBarVisible && !editor.sqlFinder.incrementalSearchingShouldDimContentView)
     #expect(editor.sqlFinder.isIncrementalSearchingEnabled && editor.textLayoutManager != nil)
     #expect(editor.backgroundColor == StudioTheme.editorCanvas)
     let undo=try #require(editor.undoManager);undo.groupsByEvent=false;undo.beginUndoGrouping()
@@ -60,7 +60,31 @@ import Testing
     editor.replaceCharacters(in:NSRange(location:0,length:6),with:"PRINT");editor.didReplaceCharacters();undo.endUndoGrouping()
     #expect(doc.sql.hasPrefix("PRINT"));undo.undo();#expect(editor.string.hasPrefix("SELECT"));undo.groupsByEvent=true
     editor.sqlFinder.performAction(.hideFindInterface)
-    #expect(!controller.scroll.isFindBarVisible && editor.backgroundColor == StudioTheme.editorCanvas)
+    #expect(!controller.findContainer.isFindBarVisible && editor.backgroundColor == StudioTheme.editorCanvas)
+  }
+  @Test func findBarReservesSpaceAndSearchFieldKeepsNativeHitAndFocus() throws {
+    _=NSApplication.shared
+    let server=ConnectedServer(profile:.init(),password:"");server.online=false
+    let doc=QueryDocument(server:server,database:"master",title:"Find clicks");doc.sql="SELECT 1;\nSELECT 2;"
+    let controller=EditorController(document:doc),editor=controller.editor
+    let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:800,height:450),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=controller.surface;window.orderFront(nil)
+    defer {editor.sqlFinder.performAction(.hideFindInterface);window.close()}
+    window.makeFirstResponder(editor);editor.showSelectionFind()
+    controller.surface.layoutSubtreeIfNeeded();controller.scroll.layoutSubtreeIfNeeded()
+    let bar=try #require(controller.findContainer.findBarView)
+
+    let barRect=controller.findContainer.convert(bar.bounds,from:bar)
+    let viewport=controller.findContainer.convert(controller.scroll.bounds,from:controller.scroll)
+    #expect(barRect.intersection(viewport).height<=1,"Find \(barRect), viewport \(viewport)")
+    func views(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(views)}
+    let field=try #require(views(bar).compactMap {$0 as? NSTextField}.first {$0.isEditable})
+    let point=controller.surface.convert(NSPoint(x:field.bounds.midX,y:field.bounds.midY),from:field)
+    let hit=try #require(controller.findContainer.hitTest(point))
+    #expect(hit !== editor && (hit === field || hit.isDescendant(of:field)))
+    #expect(window.makeFirstResponder(field))
+    #expect(window.firstResponder !== editor)
+    #expect(doc.sql=="SELECT 1;\nSELECT 2;")
   }
   @Test func parameterMetadataOrderOutputNamedIndexCacheAndStaleRequest() async throws {
     _=NSApplication.shared

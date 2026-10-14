@@ -15,32 +15,39 @@ struct HistoryPanel: View {
   @State private var database = ""
   @State private var status = ""
   @State private var period = 0
+  @State private var tab=0
   @State private var slowest = false
   var filtered: [QueryRecord] {
     records.filter {
+      ($0.tabTitle != nil ? tab==1:tab==0) &&
       (search.isEmpty || ($0.text + $0.database + $0.server + ($0.tabTitle ?? "")).localizedCaseInsensitiveContains(search)) &&
       (server.isEmpty || $0.server == server) && (database.isEmpty || $0.database == database) &&
       (status.isEmpty || $0.status == status) && (period == 0 || $0.time >= Date().addingTimeInterval(-Double(period)*86400))
     }.sorted { slowest ? $0.seconds > $1.seconds : $0.time > $1.time }
   }
   var record: QueryRecord? { filtered.first { $0.id == selected } }
+  private func refreshRecords() {
+    var ids=Set<UUID>()
+    records=(state.history+(state.historyEnabled ? []:state.closedTabs)).filter {ids.insert($0.id).inserted}
+  }
   private func insertRecord(_ record:QueryRecord) {
     do {try insert?(record);insertError=""} catch {insertError=error.localizedDescription}
   }
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       StudioPanelHeading(title: "History", icon: "clock.arrow.circlepath", subtitle: "Sorgularını bul, sürelerini karşılaştır ve yeniden aç")
+      Picker("History kapsamı",selection:$tab) {Text("Sorgular").tag(0);Text("Kapatılan Sekmeler").tag(1)}.pickerStyle(.segmented)
       HStack {
-        Label("\(records.count) sorgu", systemImage: "text.badge.checkmark")
+        Label("\(records.filter {($0.tabTitle != nil) == (tab==1)}.count) " + (tab==1 ? "sekme":"sorgu"), systemImage:tab==1 ? "rectangle.stack":"text.badge.checkmark")
         Spacer()
-        Text("Saklama: \(state.historyRetentionDays) gün").foregroundStyle(.secondary)
+        Text(tab==1 ? "Her DB: \(state.closedTabLimit) sekme":"Saklama: \(state.historyRetentionDays) gün").foregroundStyle(.secondary)
       }.font(.callout)
       if !state.historyEnabled { Text("Geçmiş kaydı kapalı. Ayarlar → Çalışma Alanı'ndan açabilirsiniz.").foregroundStyle(.secondary) }
       TextField("SQL, sunucu veya veritabanında ara", text: $search)
       HStack {
         Picker("Sunucu", selection: $server) { Text("Tümü").tag(""); ForEach(Array(Set(records.map(\.server))).sorted(), id: \.self) { Text($0).tag($0) } }
         Picker("Veritabanı", selection: $database) { Text("Tümü").tag(""); ForEach(Array(Set(records.map(\.database))).sorted(), id: \.self) { Text($0).tag($0) } }
-        Picker("Durum", selection: $status) { Text("Tümü").tag(""); ForEach(["Başarılı", "Hata", "Kısmi", "Kapatılan Sekme"], id: \.self) { Text($0).tag($0) } }
+        Picker("Durum", selection: $status) { Text("Tümü").tag(""); ForEach(tab==1 ? ["Kapatılan Sekme"]:["Başarılı", "Hata", "Kısmi"], id: \.self) { Text($0).tag($0) } }
         Picker("Tarih", selection: $period) { Text("Tümü").tag(0); Text("24 saat").tag(1); Text("7 gün").tag(7); Text("30 gün").tag(30) }
         Toggle("En yavaş önce", isOn: $slowest)
       }.controlSize(.small)
@@ -66,7 +73,7 @@ struct HistoryPanel: View {
           Spacer()
           StudioActionButton("Kopyala", icon: "doc.on.doc", tint: .accentColor) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(record.text, forType: .string) }
           StudioActionButton("İmlece Ekle", icon: "text.insert") {insertRecord(record)}.disabled(insert == nil)
-          StudioActionButton("Yeni Sekmede Aç", icon: "plus.square", tint: .accentColor) { open(record) }
+          StudioActionButton(record.tabTitle == nil ? "Yeni Sekmede Aç":"Kapatılan Sekmeyi Aç", icon: "plus.square", tint: .accentColor) { open(record) }
             .disabled(state.historyServer(record) == nil)
         }
         if let message = record.errorMessage { Text(message).foregroundStyle(.red).font(.caption).lineLimit(3).textSelection(.enabled) }
@@ -77,7 +84,8 @@ struct HistoryPanel: View {
         StudioEmptyState(title: filtered.isEmpty ? "Eşleşen sorgu yok" : "Sorguyu seçin", icon: "clock", detail: "SQL önizlemesi ve yeniden açma işlemleri burada görünür.").frame(height: 170)
       }
     }.padding(20).studioPanel()
-      .onAppear { records = state.history; selected = records.first?.id }
-      .onReceive(NotificationCenter.default.publisher(for: .init("queryHistoryChanged"))) { _ in records = state.history }
+      .onAppear { refreshRecords(); selected = filtered.first?.id }
+      .onChange(of:tab) { _,_ in status="";selected=filtered.first?.id }
+      .onReceive(NotificationCenter.default.publisher(for: .init("queryHistoryChanged"))) { _ in refreshRecords() }
   }
 }

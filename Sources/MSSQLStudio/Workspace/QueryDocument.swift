@@ -23,6 +23,7 @@ struct ObjectEditorKey: Codable, Equatable {
   private(set) var lastExecutionSucceeded = false
   private(set) var resultGeneration = 0
   private(set) var repeating = false
+  private(set) var lastExecutionDate: Date?
   private(set) var lastExecutedSQL: String?
   private(set) var lastExecutedDatabase: String?
   private(set) var lastExecutedReadLimit: Int?
@@ -245,6 +246,7 @@ struct ObjectEditorKey: Codable, Equatable {
     lastExecutedSQL = estimated ? nil : query
     lastExecutedDatabase = database
     lastExecutedReadLimit = executionLimits.rows
+    lastExecutionDate=Date()
     state = .running
     results = []
     messages = "Çalıştırma: \(Date().formatted(date: .numeric, time: .standard)) · \(database)\n"

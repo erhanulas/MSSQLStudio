@@ -278,8 +278,8 @@ import Testing
     let event=try #require(NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:.control,timestamp:0,windowNumber:window.windowNumber,context:nil,characters:"f",charactersIgnoringModifiers:"f",isARepeat:false,keyCode:3))
     #expect(controller.editor.performKeyEquivalent(with:event))
     func all(_ view:NSView) -> [NSView] {[view]+view.subviews.flatMap(all)}
-    #expect(controller.scroll.isFindBarVisible)
-    let bar=try #require(controller.scroll.findBarView)
+    #expect(controller.findContainer.isFindBarVisible)
+    let bar=try #require(controller.findContainer.findBarView)
     let field=try #require(all(bar).compactMap {$0 as? NSTextField}.first {$0.stringValue == "@STOK_KODU"})
     #expect(field.stringValue == "@STOK_KODU")
     let hide=NSMenuItem();hide.tag=NSTextFinder.Action.hideFindInterface.rawValue
@@ -426,7 +426,7 @@ import Testing
     let controller = EditorController(document:doc)
     controller.surface.frame = NSRect(x:0,y:0,width:1000,height:600)
     controller.surface.layoutSubtreeIfNeeded(); controller.resizeToViewport()
-    #expect(controller.scroll.frame.minX == 44)
+    #expect(controller.surface.convert(controller.scroll.bounds,from:controller.scroll).minX == 44)
     #expect(controller.scroll.verticalRulerView == nil)
     let line = (doc.sql as NSString).lineRange(for:NSRange(location:0,length:0))
     controller.selectSourceLine(line)

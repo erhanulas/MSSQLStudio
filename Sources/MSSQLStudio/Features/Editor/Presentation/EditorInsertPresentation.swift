@@ -22,28 +22,28 @@ import SQLServerKit
   var previewView: NSView { panel.view }
   var isShown: Bool { popover.isShown }
   init() {
-    panel.view = NSView(frame: NSRect(x: 0, y: 0, width: 340, height: 94))
+    panel.view = NSView(frame: NSRect(x: 0, y: 0, width: 280, height: 72))
     StudioTheme.surface(panel.view, card: true)
     title.font = .systemFont(ofSize: 10)
     column.font = .systemFont(ofSize: 12, weight: .semibold)
     value.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
     title.lineBreakMode = .byTruncatingMiddle
     column.lineBreakMode = .byTruncatingMiddle
-    value.maximumNumberOfLines = 2
+    value.maximumNumberOfLines = 1
     value.lineBreakMode = .byTruncatingTail
     for field in [title, column, value] {
       field.translatesAutoresizingMaskIntoConstraints = false
       panel.view.addSubview(field)
-      field.leadingAnchor.constraint(equalTo: panel.view.leadingAnchor, constant: 12).isActive =
+      field.leadingAnchor.constraint(equalTo: panel.view.leadingAnchor, constant: 9).isActive =
         true
-      field.trailingAnchor.constraint(equalTo: panel.view.trailingAnchor, constant: -12).isActive =
+      field.trailingAnchor.constraint(equalTo: panel.view.trailingAnchor, constant: -9).isActive =
         true
     }
     NSLayoutConstraint.activate([
-      title.topAnchor.constraint(equalTo: panel.view.topAnchor, constant: 10),
-      column.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 5),
-      value.topAnchor.constraint(equalTo: column.bottomAnchor, constant: 5),
-      value.bottomAnchor.constraint(lessThanOrEqualTo: panel.view.bottomAnchor, constant: -10),
+      title.topAnchor.constraint(equalTo: panel.view.topAnchor, constant: 7),
+      column.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 3),
+      value.topAnchor.constraint(equalTo: column.bottomAnchor, constant: 3),
+      value.bottomAnchor.constraint(lessThanOrEqualTo: panel.view.bottomAnchor, constant: -7),
     ])
     popover.contentViewController = panel
     popover.contentSize = panel.view.frame.size
@@ -139,20 +139,26 @@ import SQLServerKit
       anchor = rect.offsetBy(dx: editor.textContainerOrigin.x, dy: editor.textContainerOrigin.y)
       return false
     }
-    guard let anchor, anchor.intersects(editor.visibleRect) else {
+    guard var anchor, anchor.intersects(editor.visibleRect) else {
       hidePreview()
       return ranges
     }
+    // TextKit segments and visibleRect use document coordinates. Keep a tiny
+    // clipped anchor at the clicked expression, not the full selection/window.
+    anchor=anchor.intersection(editor.visibleRect)
+    anchor.size.width=max(1,min(8,anchor.width))
     title.stringValue =
       "INSERT \(match.target) · \(match.ordinal) / \(match.columnCount)"
-      + (match.row.map { " · satır \($0)" } ?? "")
+      + (match.sourceKind == .select ? " · SELECT" : (match.row.map { " · satır \($0)" } ?? ""))
     column.stringValue = "→ \(match.column)"
     value.stringValue =
       match.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       ? "Bu kolonun değerini girin." : String(match.value.prefix(400))
     refreshTheme()
     panel.view.setAccessibilityLabel(title.stringValue + " · " + column.stringValue)
-    popover.show(relativeTo: anchor, of: editor, preferredEdge: .maxY)
+    let host=editor.enclosingScrollView?.contentView ?? editor
+    let local=host.convert(anchor,from:editor)
+    popover.show(relativeTo:local,of:host,preferredEdge:.maxY)
     editor.window?.makeFirstResponder(editor)
     return ranges
   }

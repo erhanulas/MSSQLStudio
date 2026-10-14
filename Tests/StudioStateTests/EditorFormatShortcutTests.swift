@@ -53,6 +53,28 @@ import Testing
     GridShortcuts.reset(.format); #expect(GridShortcuts.binding(.format).label == "⇧⌘F")
     #expect(SettingsSearch.results("formatla").contains { $0.id == "shortcut.format" })
   }
+  @Test func wholeDocumentFormatKeepsCaretAtSameTokenAndScrolledViewport() throws {
+    _=NSApplication.shared
+    let server=ConnectedServer(profile:.init(),password:"");server.online=false
+    let doc=QueryDocument(server:server,database:"master",title:"Format caret")
+    doc.sql=(0..<100).map {"select \($0) as Value\($0), '🦊' as Label from dbo.T;"}.joined(separator:"\n")
+    let source=doc.sql,controller=EditorController(document:doc),editor=controller.editor
+    let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:900,height:500),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=controller.surface;window.orderFront(nil);defer {window.close()}
+    controller.surface.layoutSubtreeIfNeeded();controller.resizeToViewport();window.makeFirstResponder(editor)
+    let caret=(source as NSString).range(of:"Value50").location+3
+    editor.setSelectedRange(NSRange(location:caret,length:0));editor.scrollRangeToVisible(editor.selectedRange())
+    #expect(controller.scroll.contentView.bounds.minY>0)
+    let undo=try #require(editor.undoManager);undo.removeAllActions();undo.beginUndoGrouping()
+    controller.formatSQL(options:.init());undo.endUndoGrouping()
+    let expected=(editor.string as NSString).range(of:"Value50").location+3
+    #expect(editor.selectedRange()==NSRange(location:expected,length:0) && doc.selectedRange==editor.selectedRange())
+    #expect(controller.scroll.contentView.bounds.minY>0 && expected<editor.string.utf16.count-100)
+    let caretScreen=editor.firstRect(forCharacterRange:editor.selectedRange(),actualRange:nil)
+    #expect(window.frame.intersects(caretScreen))
+    #expect(SQLFormatter.preservesSQLTokens(source,formatted:editor.string))
+    undo.undo();#expect(editor.string==source && doc.sql==source)
+  }
   @Test func menuShortcutTracksSettingsAndTargetsNativeEditorResponder() throws {
     _ = NSApplication.shared
     let previous = NSApp.mainMenu, old = UserDefaults.standard.data(forKey: "shortcut.format")

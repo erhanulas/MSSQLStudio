@@ -16,7 +16,7 @@ Microsoft ODBC Driver 18, unixODBC ve OpenSSL 3 ayrı kurulur; sürücüler app 
 
 Editörde **⌘Enter**, seçili SQL’i çalıştırır; seçim yokken birden fazla ifade varsa ifade/batch/tüm SQL seçimini açar (Escape iptal). **Formatla**, SELECT ve ardışık DECLARE grupları sonrasında boş satır bırakır; iki seçenek **Ayarlar → SQL Editörü → SQL biçimlendirme** altında kapatılabilir.
 
-Kapatılan sekmeyi sekme sağ tık menüsünden veya **Command+Shift+T** ile geri açabilirsiniz. **Option+Command+H** History açar; iki kısayol Ayarlar’dan değiştirilebilir. Kapatılan SQL ve imleç konumu History tercihiyle saklanır; tercih kapalıysa yalnız oturum içinde geri açılır. Editörde ve çevrimdışı önizlemede **Explorer’da Git** nesneyi seçer.
+Kapatılan sekmeyi sekme sağ tık menüsünden veya **Command+Shift+T** ile geri açabilirsiniz. **Option+Command+H** History açar; iki kısayol Ayarlar’dan değiştirilebilir. History içindeki **Kapatılan Sekmeler** sekmesi SQL ve imleç konumunu veritabanı bazında saklar; boş sekmeler alınmaz. Ayarlar → Çalışma Alanı’nda her DB için tutulacak sekme sayısı belirlenir (varsayılan 100). History kapalıysa yalnız oturum içinde geri açılır. Editörde ve çevrimdışı önizlemede **Explorer’da Git** nesneyi seçer.
 
 Yeni sorgu sekmesi hemen açılır; bağlantı **Çalıştır** ile denenir. Bağlantı yönetimi ayrı pencerede çalışır, işlem ve hata alt durum çubuğunda görünür. History/Favorilerde çift tıklama mevcut editörde imlece SQL ekler; yeni sekmede açma ayrı eylemdir.
 

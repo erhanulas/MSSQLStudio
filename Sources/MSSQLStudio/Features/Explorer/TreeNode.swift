@@ -44,7 +44,7 @@ import UniformTypeIdentifiers
   }
   var displayTitle: String {
     if case .server = kind {
-      return server.profile.name + (server.updatingProfile ? " · Kaydediliyor…" : server.reconnecting ? " · Bağlanıyor…" : server.online ? " · Bağlı" : " · Bağlantı kapalı")
+      return server.profile.name
     }
     if case .object(.triggers)=kind { return title }
     if case .object(.jobs)=kind { return item?.name ?? title }

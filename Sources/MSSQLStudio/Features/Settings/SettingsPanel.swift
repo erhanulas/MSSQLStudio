@@ -82,6 +82,7 @@ struct SettingsPanel: View {
   @State private var noLock = UserDefaults.standard.bool(forKey:"sqlAutomaticNoLock")
   @State private var shortcutRevision = 0
   @State private var history = false
+  @State private var closedTabLimit = QueryHistoryPolicy.defaultClosedTabLimit
   @State private var historyDays = QueryHistoryPolicy.defaultDays
   @State private var recovery = false
   @State private var updateRepository = UserDefaults.standard.string(forKey:"githubUpdateRepository") ?? ""
@@ -269,7 +270,7 @@ struct SettingsPanel: View {
             settingsNote("Varsayılan 1 GB (1024 MB). Kota ve otomatik artış Uygula ile kaydedilir. Üst sınır dolunca veya kota küçültülürse en eski tanımlar temizlenir. Otomatik artış fiziksel diskte boş alan oluşturmaz. Doluluk tanım verisini ölçer; SQLite dosya/WAL ve diğer katalog alanları dahil değildir. İndeksleme bağlantı ayarlarından açılır.",icon:"info.circle")
           }
           settingsCard("Geçmiş ve kurtarma", icon: "clock.arrow.circlepath") {
-            settingsToggle("Sorgu geçmişini sakla", detail: "Çalıştırılan sorgular Timeline üzerinden yeniden açılabilir.", value: $history)
+            settingsToggle("Sorgu geçmişini sakla", detail: "Çalıştırılan sorgular History üzerinden yeniden açılabilir.", value: $history)
             StudioFormField("Saklama süresi") {
               HStack {
                 SettingsIntegerInput("Gün", value: $historyDays).accessibilityIdentifier("historyRetentionDays")
@@ -278,6 +279,10 @@ struct SettingsPanel: View {
               }
             }.disabled(!history).id("retention")
             settingsNote("Varsayılan 30 gün. Süresi dolan kayıtlar açılışta, yeni sorguda ve Uygula ile temizlenir. Üst sınır 16 MB / 20.000 kayıttır.", icon: "calendar")
+            StudioFormField("Kapatılan sekmeler / DB") {
+              SettingsIntegerInput("Sekme",value:$closedTabLimit).accessibilityIdentifier("closedTabLimit")
+            }.id("closedTabs")
+            settingsNote("Her bağlantı ve veritabanında en yeni 1–1000 dolu sekme saklanır. Varsayılan 100; boş sekmeler kaydedilmez. Kalıcı kayıt için sorgu geçmişi açık olmalı.",icon:"rectangle.stack")
             Divider()
             settingsToggle("Sorgu sekmelerini kurtar", detail: "Açık sekmeleri sonraki uygulama açılışında geri getirir.", value: $recovery)
           }
@@ -348,6 +353,7 @@ struct SettingsPanel: View {
     }.padding(18).studioPanel().onAppear {
       history = state.historyEnabled
       historyDays = state.historyRetentionDays
+      closedTabLimit = state.closedTabLimit
       recovery = state.recoveryEnabled
     }.task {await definitionStorage.refresh()}
   }
@@ -460,6 +466,7 @@ struct SettingsPanel: View {
   private func applySettings() {
     Task {
           guard (1...3650).contains(historyDays) else { message = "Saklama süresi 1–3650 gün arasında olmalı."; return }
+          guard (1...1000).contains(closedTabLimit) else {message="Kapatılan sekme sayısı 1–1000 arasında olmalı.";return}
           let source=updateRepository.trimmingCharacters(in:.whitespacesAndNewlines)
           if !source.isEmpty {
             do {updateRepository=try GitHubUpdateSource.repository(source)}catch {message=error.localizedDescription;return}
@@ -480,6 +487,9 @@ struct SettingsPanel: View {
           state.historyEnabled = history
           state.historyRetentionDays = historyDays
           UserDefaults.standard.set(historyDays, forKey: "historyRetentionDays")
+          state.closedTabLimit=closedTabLimit
+          UserDefaults.standard.set(closedTabLimit,forKey:"closedTabLimit")
+          state.closedTabs=QueryHistoryPolicy.closedTabs(state.closedTabs,limit:closedTabLimit)
           state.saveHistory()
           state.recoveryEnabled = recovery
           UserDefaults.standard.set(history, forKey: "historyEnabled")

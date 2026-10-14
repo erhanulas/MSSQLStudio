@@ -41,6 +41,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   let tabs = QueryTabStrip()
   let content = NSView()
   let database = NSPopUpButton()
+  let executionDate = NSTextField(labelWithString:"Son çalıştırma: —")
+  let statusStrip = NSStackView()
   let status = NSTextField(labelWithString: "Bağlantı bekleniyor")
   let context = NSTextField(labelWithString: "")
   private let queryToolbarHost=NSView()
@@ -164,8 +166,18 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     database.widthAnchor.constraint(equalToConstant: 170).isActive = true
     status.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
     status.textColor = .secondaryLabelColor
-    let statusRow = NSStackView(views: [status, NSView()])
-    StudioTheme.surface(statusRow)
+    status.lineBreakMode = .byTruncatingTail
+    status.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+    let statusRow = statusStrip
+    executionDate.font = .monospacedSystemFont(ofSize:10,weight:.regular)
+    executionDate.textColor=StudioTheme.muted
+    executionDate.setAccessibilityIdentifier("queryLastExecutionDate")
+    let divider=NSBox();divider.boxType = .separator
+    statusRow.setViews([status,NSView(),divider,executionDate],in:.center)
+    divider.widthAnchor.constraint(equalToConstant:1).isActive=true
+    divider.heightAnchor.constraint(equalToConstant:14).isActive=true
+    statusRow.spacing=10
+    StudioTheme.statusSurface(statusRow)
     statusRow.edgeInsets = NSEdgeInsets(top: 1, left: 8, bottom: 1, right: 8)
     let stack = NSStackView(views: [tabScroll, row, separator(), content, separator(), statusRow])
     stack.orientation = .vertical
@@ -428,6 +440,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     guard isViewLoaded else { return }
     updateIndexStatus()
     let doc = state.active
+    executionDate.stringValue="Son çalıştırma: " + (doc?.lastExecutionDate?.formatted(date:.numeric,time:.standard) ?? "—")
     for controller in controllers.values { controller.updateConnectionAppearance() }
     for owner in detached.values { owner.updateConnectionAppearance() }
     database.removeAllItems()
@@ -505,7 +518,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     for (title,action,shortcut) in [("Kapatılan Sekmeyi Aç",#selector(reopenLastClosedTab),GridShortcuts.Action.reopenTab),("History…",#selector(showHistory),.history)] {
       let binding=GridShortcuts.binding(shortcut)
       let item=NSMenuItem(title:title,action:action,keyEquivalent:binding.key);item.target=self;item.keyEquivalentModifierMask=binding.flags
-      if shortcut == .reopenTab {item.isEnabled=state.lastClosedTab != nil}
+      if shortcut == .reopenTab {item.representedObject=document;item.isEnabled=state.lastClosedTab(for:document) != nil}
       menu.addItem(item)
     }
     return menu
@@ -769,7 +782,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       return state.active?.state == .ready
     }
     if item.action == #selector(addFavorite) {return favoriteContextDocument?.sql.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty == false}
-    if item.action == #selector(reopenLastClosedTab) {return state.lastClosedTab != nil}
+    if item.action == #selector(reopenLastClosedTab) {return state.lastClosedTab(for:(item as? NSMenuItem)?.representedObject as? QueryDocument ?? state.active) != nil}
     if item.action == #selector(cancel) { return state.active?.state == .running || state.active?.state == .connecting }
     if [
       #selector(saveSQL), #selector(saveAsSQL), #selector(formatSQL), #selector(closeTab),

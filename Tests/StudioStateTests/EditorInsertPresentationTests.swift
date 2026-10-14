@@ -89,6 +89,34 @@ import Testing
     }
     #expect(doc.lastExecutedSQL == nil)
   }
+  @Test func insertSelectPreviewIsCompactAnchoredToExpressionAndDoesNotTakeFocus() throws {
+    _=NSApplication.shared
+    let sql=String(repeating:"-- prefix\n",count:80)+"INSERT dbo.T(STOK,CARI) SELECT s.Code, CONCAT(s.Name,N'🦊') FROM dbo.Source s;"
+    let doc=QueryDocument(server:ConnectedServer(profile:.init(),password:""),database:"master",title:"Select mapping")
+    doc.server.online=false;doc.sql=sql
+    let controller=EditorController(document:doc),editor=controller.editor
+    let visible=NSScreen.main?.visibleFrame ?? NSRect(x:0,y:0,width:1400,height:900)
+    let window=NSWindow(contentRect:NSRect(x:visible.minX+120,y:visible.minY+160,width:800,height:400),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=controller.surface;window.orderFront(nil)
+    defer {controller.insertPresentation.hidePreview();window.close()}
+    controller.surface.layoutSubtreeIfNeeded();controller.resizeToViewport();window.makeFirstResponder(editor)
+    let range=(sql as NSString).range(of:"CONCAT")
+    editor.setSelectedRange(NSRange(location:range.location+2,length:0));editor.scrollRangeToVisible(editor.selectedRange())
+    editor.mouseSelectionEnded?()
+    #expect(controller.insertPresentation.match?.column=="CARI" && controller.insertPresentation.match?.sourceKind == .select)
+    #expect(controller.insertPresentation.isShown && window.firstResponder === editor)
+    let preview=controller.insertPresentation.previewView
+    preview.layoutSubtreeIfNeeded()
+    #expect(preview.bounds.width<=280 && preview.bounds.height<=72)
+    let previewWindow=try #require(preview.window)
+    let frame=previewWindow.convertToScreen(preview.convert(preview.bounds,to:nil))
+    let caret=editor.firstRect(forCharacterRange:editor.selectedRange(),actualRange:nil)
+    #expect(frame.insetBy(dx:-40,dy:-80).intersects(caret))
+    #expect(editor.string==sql && doc.lastExecutedSQL==nil)
+    let bitmap=try #require(preview.bitmapImageRepForCachingDisplay(in:preview.bounds))
+    preview.cacheDisplay(in:preview.bounds,to:bitmap)
+    try bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/MSSQLStudio-insert-select-preview.png"))
+  }
   @Test func lateLargeSourceAnalysisCannotReplaceNewInsertMapping() async throws {
     _ = NSApplication.shared
     let doc = QueryDocument(

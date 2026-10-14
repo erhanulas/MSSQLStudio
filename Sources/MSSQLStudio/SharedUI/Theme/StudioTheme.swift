@@ -62,13 +62,15 @@ import SwiftUI
     view.wantsLayer = true
     paintSurface(view)
   }
+  static var statusCanvas:NSColor {color(0xEEF3FC,0x242D40)}
+  static func statusSurface(_ view:NSView) {view.identifier = .init("studio.status");view.wantsLayer=true;paintSurface(view)}
   static func resultSurface(_ view: NSView) {
     view.identifier = .init("studio.results")
     view.wantsLayer = true
     paintSurface(view)
   }
   private static func paintSurface(_ view: NSView) {
-    view.layer?.backgroundColor = (view.identifier?.rawValue == "studio.results" ? resultCanvas : view.identifier?.rawValue == "studio.sidebar" ? explorerCanvas : view.identifier?.rawValue == "studio.card" ? canvas : view.identifier?.rawValue == "studio.frame" ? chrome : panel).cgColor
+    view.layer?.backgroundColor = (view.identifier?.rawValue == "studio.status" ? statusCanvas : view.identifier?.rawValue == "studio.results" ? resultCanvas : view.identifier?.rawValue == "studio.sidebar" ? explorerCanvas : view.identifier?.rawValue == "studio.card" ? canvas : view.identifier?.rawValue == "studio.frame" ? chrome : panel).cgColor
     if ["studio.card", "studio.sidebar"].contains(view.identifier?.rawValue ?? "") {
       view.layer?.cornerRadius = 10
       view.layer?.borderWidth = 1

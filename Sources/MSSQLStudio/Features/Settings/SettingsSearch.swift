@@ -39,6 +39,7 @@ struct SettingsSearchEntry:Identifiable,Equatable {
         ("nolock","Alias sonrasında WITH(NOLOCK) ekle","kilit kirli okuma read uncommitted")]),
       (.workspace,"Geçmiş ve kurtarma",[
         ("history","Sorgu geçmişini sakla","timeline sql yerel kayıt"),
+        ("closedTabs","Kapatılan sekmeler / DB","history sekme sayısı limit veritabanı"),
         ("retention","Saklama süresi","geçmiş gün 30 3650 history retention"),
         ("recovery","Sorgu sekmelerini kurtar","oturum yeniden açılış recovery restore")]),
       (.workspace,"Nesne tanım indeksi",[("definitionQuota","Tanım indeksi disk kotası ve doluluk","index indeks sqlite disk depolama kota quota otomatik artış kapasite üst sınır yüzde doluluk 1 gb 1024 mb offline çevrimdışı")]),

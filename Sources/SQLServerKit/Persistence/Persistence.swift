@@ -160,17 +160,35 @@ public struct QueryRecord: Codable, Sendable, Identifiable {
   }
 }
 public enum QueryHistoryPolicy {
+  public static let defaultClosedTabLimit = 100
+  public static func closedTabLimit(_ value:Int)->Int {min(1000,max(1,value))}
+  /// Cheap in-memory closed-tab pruning; JSON byte enforcement stays on the disk actor.
+  public static func closedTabs(_ records:[QueryRecord],limit:Int)->[QueryRecord] {
+    var counts:[String:Int]=[:],bytes=0
+    return records.sorted {$0.time>$1.time}.filter {record in
+      let scope=(record.serverID?.uuidString ?? record.server)+"|"+record.database
+      let size=record.text.utf8.count
+      guard !record.text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,
+        counts[scope,default:0]<closedTabLimit(limit),bytes+size<=16_000_000 else {return false}
+      counts[scope,default:0]+=1;bytes+=size;return true
+    }
+  }
   public static let defaultDays = 30
   public static func days(_ value: Int) -> Int { min(3650, max(1, value)) }
-  public static func retained(_ records: [QueryRecord], days: Int, now: Date = Date()) -> [QueryRecord] {
+  public static func retained(_ records: [QueryRecord], days: Int, closedTabLimit:Int = defaultClosedTabLimit, now: Date = Date()) -> [QueryRecord] {
     let cutoff = now.addingTimeInterval(-Double(self.days(days)) * 86400)
     // A byte budget keeps unusually large statements from making the history file unreadable.
     var bytes = 0
     var count = 0
+    var scopes:[String:Int]=[:]
     return records.sorted { $0.time > $1.time }.filter {
-      guard $0.time >= cutoff else { return false }
+      let scope=($0.serverID?.uuidString ?? $0.server)+"|"+$0.database
+      if $0.tabTitle != nil {
+        guard !$0.text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,scopes[scope,default:0]<self.closedTabLimit(closedTabLimit) else {return false}
+      } else if $0.time < cutoff {return false}
       let size = (try? JSONEncoder().encode($0).count) ?? 16_000_001
       guard bytes + size <= 16_000_000, count < 20000 else { return false }
+      if $0.tabTitle != nil {scopes[scope,default:0]+=1}
       bytes += size; count += 1
       return true
     }

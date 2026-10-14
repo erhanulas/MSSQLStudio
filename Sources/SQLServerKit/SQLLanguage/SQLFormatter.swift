@@ -23,6 +23,19 @@ public struct SQLFormattingOptions: Codable, Equatable, Sendable {
 /// Whitespace/case-only T-SQL formatting. No alias, comma, comment or statement
 /// token is inserted/removed. A lexical equivalence check rejects unsafe output.
 public enum SQLFormatter {
+  /// Map a caret through whitespace/case-only formatting by lexical token ordinal.
+  public static func correspondingOffset(_ offset:Int,in source:String,formatted:String)->Int {
+    let before=TSQL.lex(source).filter {$0.kind != .space},after=TSQL.lex(formatted).filter {$0.kind != .space}
+    let location=min(max(0,offset),source.utf16.count)
+    guard before.count==after.count else {return min(location,formatted.utf16.count)}
+    for (index,token) in before.enumerated() {
+      if location<=NSMaxRange(token.range) {
+        let target=after[index].range
+        return target.location+min(target.length,max(0,location-token.range.location))
+      }
+    }
+    return formatted.utf16.count
+  }
   private static let clauseWords = Set("FROM WHERE JOIN LEFT RIGHT INNER FULL OUTER CROSS ON AS AND OR IS IN BETWEEN LIKE GROUP BY HAVING ORDER ASC DESC OFFSET FETCH UNION ALL EXCEPT INTERSECT WHEN THEN ELSE END OVER PARTITION WITH SET VALUES OUTPUT INTO BEGIN SELECT".split(separator:" ").map(String.init))
   private struct Frame {
     var clause = ""

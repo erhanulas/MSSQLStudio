@@ -5,6 +5,8 @@ import SQLServerKit
 @MainActor final class EditorController: NSObject, NSTextViewDelegate {
   let surface = NSView()
   let scroll = SQLEditorScrollView()
+  lazy var findContainer=EditorFindContainer(scroll:scroll)
+  private var rulerTop:NSLayoutConstraint?
   let editor = SQLTextView(usingTextLayoutManager: true)
   let occurrenceHighlights = OccurrenceHighlights()
   let insertPresentation = EditorInsertPresentation()
@@ -81,7 +83,7 @@ import SQLServerKit
     editor.isAutomaticSpellingCorrectionEnabled = false
     editor.isContinuousSpellCheckingEnabled = false
     editor.usesFindBar = false
-    editor.configureFinder(in:scroll)
+    editor.configureFinder(in:findContainer)
     editor.findMatchesChanged = { [weak self] ranges in self?.occurrenceHighlights.findRanges=Array(ranges.prefix(500)) }
     editor.font = StudioTheme.codeFont
     editor.textColor = StudioTheme.editorText
@@ -133,17 +135,19 @@ import SQLServerKit
     ruler.editor = editor
     ruler.ruleThickness = 44
     surface.wantsLayer = true; surface.clipsToBounds = true
-    surface.addSubview(ruler); surface.addSubview(scroll)
+    surface.addSubview(ruler); surface.addSubview(findContainer)
     surface.addSubview(commentHint)
     commentHint.isHidden=true;commentHint.target=editor;commentHint.action=#selector(SQLTextView.toggleSQLComment(_:))
     commentHint.setAccessibilityIdentifier("sqlSelectionComment")
-    ruler.translatesAutoresizingMaskIntoConstraints = false; scroll.translatesAutoresizingMaskIntoConstraints = false
+    ruler.translatesAutoresizingMaskIntoConstraints = false; findContainer.translatesAutoresizingMaskIntoConstraints = false
+    rulerTop=ruler.topAnchor.constraint(equalTo:surface.topAnchor)
+    findContainer.heightChanged = { [weak self] height in self?.rulerTop?.constant=height }
     rulerWidth=ruler.widthAnchor.constraint(equalToConstant:44)
     NSLayoutConstraint.activate([
-      ruler.leadingAnchor.constraint(equalTo:surface.leadingAnchor), ruler.topAnchor.constraint(equalTo:surface.topAnchor),
+      ruler.leadingAnchor.constraint(equalTo:surface.leadingAnchor), rulerTop!,
       ruler.bottomAnchor.constraint(equalTo:surface.bottomAnchor), rulerWidth!,
-      scroll.leadingAnchor.constraint(equalTo:ruler.trailingAnchor), scroll.trailingAnchor.constraint(equalTo:surface.trailingAnchor),
-      scroll.topAnchor.constraint(equalTo:surface.topAnchor), scroll.bottomAnchor.constraint(equalTo:surface.bottomAnchor)
+      findContainer.leadingAnchor.constraint(equalTo:ruler.trailingAnchor), findContainer.trailingAnchor.constraint(equalTo:surface.trailingAnchor),
+      findContainer.topAnchor.constraint(equalTo:surface.topAnchor), findContainer.bottomAnchor.constraint(equalTo:surface.bottomAnchor)
     ])
     ruler.lineNumber = { [weak self] in self?.sourceLineNumber($0) ?? 1 }
     ruler.sourceText = { [weak self] in self?.document.sql ?? "" }
@@ -276,6 +280,9 @@ import SQLServerKit
     let range = projection?.sourceRange(selection) ?? selection
     let target = range.length > 0 ? range : NSRange(location:0,length:source.utf16.count)
     let input = (source as NSString).substring(with:target)
+    let visibleOrigin=scroll.contentView.bounds.origin
+    let oldCaretScreen=editor.firstRect(forCharacterRange:NSRange(location:selection.location,length:0),actualRange:nil)
+    let caretViewportY=editor.window.map {editor.convert($0.convertFromScreen(oldCaretScreen),from:nil).minY-visibleOrigin.y}
     let revision = textRevision
     formattingTask?.cancel()
     func apply(_ text: String) {
@@ -287,8 +294,20 @@ import SQLServerKit
       editor.finishUndoInput()
       editor.insertText(text,replacementRange:target)
       editor.finishUndoInput()
-      if range.length > 0 { editor.setSelectedRange(NSRange(location:target.location,length:text.utf16.count)) }
+      let newSelection: NSRange
+      if range.length > 0 {newSelection=NSRange(location:target.location,length:text.utf16.count)}
+      else {newSelection=NSRange(location:SQLFormatter.correspondingOffset(range.location,in:source,formatted:candidate),length:0)}
+      editor.setSelectedRange(newSelection)
       highlight(); resizeToViewport()
+      editor.scrollRangeToVisible(NSRange(location:newSelection.location,length:0))
+      let screen=editor.firstRect(forCharacterRange:NSRange(location:newSelection.location,length:0),actualRange:nil)
+      if let window=editor.window,let caretViewportY,screen.height>0 {
+        let local=editor.convert(window.convertFromScreen(screen),from:nil)
+        scroll.contentView.scroll(to:NSPoint(x:visibleOrigin.x,y:max(0,local.minY-caretViewportY)))
+        scroll.reflectScrolledClipView(scroll.contentView)
+      }
+      document.selectedRange=newSelection
+      editor.updateInsertionPointStateAndRestartTimer(true)
     }
     if input.utf16.count <= 50000 { apply(TSQL.format(input,options:options)) }
     else {

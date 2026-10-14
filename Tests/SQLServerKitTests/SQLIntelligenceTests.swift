@@ -7,6 +7,17 @@ struct SQLIntelligenceTests {
     try SQLIntelligence.analyze(source:source,caret:caret ?? (source as NSString).length,catalog:.init(snapshot:.init(symbols:symbols,synchronizedAt:date)),verified:verified,automaticAliases:aliases)
   }
   func marked(_ sql: String) throws -> [String] { let value = try analyze(sql); return value.diagnostics.map { (sql as NSString).substring(with:$0.range) } }
+  @Test func explorerAliasBindingsRespectNestedAndSiblingStatementScopes() throws {
+    let source="SELECT c.Name, (SELECT c.Amount FROM dbo.Orders c) FROM dbo.Customers c; SELECT c.City FROM report.CustomerSummary c;"
+    let outer=try analyze(source,caret:(source as NSString).range(of:"c.Name").location+2)
+    let inner=try analyze(source,caret:(source as NSString).range(of:"c.Amount").location+2)
+    let sibling=try analyze(source,caret:(source as NSString).range(of:"c.City").location+2)
+    #expect(outer.referenceBindings["c"]==["dbo","Customers"])
+    #expect(inner.referenceBindings["c"]==["dbo","Orders"])
+    #expect(sibling.referenceBindings["c"]==["report","CustomerSummary"])
+    let literal=try analyze("SELECT 'c.Name' FROM dbo.Customers c",caret:12)
+    #expect(literal.referenceBindings.isEmpty)
+  }
   @Test func stockColumnsLeadHintedPredicatesAndWideTablesKeepTheirSlots() throws {
     let columns=(0..<110).map {String(format:"STOK_%03d",$0)}
     let catalog=SQLIntelligence.Catalog(snapshot:.init(symbols:[

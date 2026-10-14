@@ -122,10 +122,12 @@ import SQLServerKit
     func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
     let outline=try #require(descendants(host.view).compactMap {$0 as? NSOutlineView}.first)
     let root=try #require(outline.item(atRow:0) as? TreeNode)
-    #expect(root.displayTitle.contains("Bağlantı kapalı"))
+    #expect(root.displayTitle==server.profile.name)
     let cell=try #require(outline.view(atColumn:0,row:outline.row(forItem:root),makeIfNecessary:true))
     let labels=descendants(cell).compactMap {$0 as? NSTextField}.map(\.stringValue)
-    #expect(labels.contains {$0.contains("Bağlantı kapalı")})
+    #expect(labels.contains(server.profile.name) && !labels.contains {$0.contains("Bağlantı kapalı")})
+    let icon=try #require(descendants(cell).compactMap {$0 as? NSImageView}.first)
+    #expect(icon.accessibilityLabel()=="Bağlantı kapalı" && icon.contentTintColor == .secondaryLabelColor)
     var calls=0
     server.healthCheckFixture={calls+=1}
     await server.checkExplorerHealth();#expect(calls == 0)
@@ -308,9 +310,11 @@ import SQLServerKit
     #expect(doc.sql == "SELECT N'keep';" && !server.online)
     #expect(outline.item(atRow: 0) as? TreeNode === root)
     #expect(root.children.elementsEqual(children, by: { $0 === $1 }))
-    #expect(root.displayTitle.contains("Bağlantı kapalı"))
+    #expect(root.displayTitle==server.profile.name)
     server.reconnecting = true
-    #expect(root.displayTitle.contains("Bağlanıyor"))
+    #expect(root.displayTitle==server.profile.name)
+    let cell=try #require(host.outlineView(outline,viewFor:outline.tableColumns[0],item:root) as? NSTableCellView)
+    #expect(cell.imageView?.accessibilityLabel()=="Bağlanıyor" && cell.imageView?.contentTintColor == .systemOrange)
     server.reconnecting = false
     server.online = true
     server.recordExplorerFailure(SQLFailure("Denied", diagnostics: [.init(state: "42000", code: 229, message: "permission")]))

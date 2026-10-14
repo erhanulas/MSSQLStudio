@@ -8,10 +8,38 @@ import SQLServerKit
     let local = convert(point, from: superview)
     // An empty NSTextView may not expose a text hit region before its first edit.
     // The entire document viewport remains an editing surface; keep rulers/scrollers native.
-    if contentView.frame.contains(local), !(hit is NSScroller), let text = documentView as? SQLTextView {
+    if contentView.frame.contains(local), let text = documentView as? SQLTextView,
+      !(hit is NSControl) {
       return text
     }
     return hit
+  }
+}
+/// Native finder controls have their own layout area, outside the SQL viewport.
+@MainActor final class EditorFindContainer:NSView,@preconcurrency NSTextFinderBarContainer {
+  let scroll:NSScrollView
+  var heightChanged:((CGFloat)->Void)?
+  var findBarView:NSView? {didSet {
+    if oldValue !== findBarView {oldValue?.removeFromSuperview();if let findBarView {addSubview(findBarView)}}
+    retile()
+  }}
+  var isFindBarVisible=false {didSet {retile()}}
+  override var isFlipped:Bool {true}
+  init(scroll:NSScrollView) {self.scroll=scroll;super.init(frame:.zero);addSubview(scroll)}
+  required init?(coder:NSCoder) {fatalError()}
+  func findBarViewDidChangeHeight() {retile()}
+  private var barHeight:CGFloat {isFindBarVisible ? max(0,findBarView?.frame.height ?? 0):0}
+  private func retile() {
+    findBarView?.isHidden = !isFindBarVisible
+    heightChanged?(barHeight);needsLayout=true
+    layoutSubtreeIfNeeded()
+  }
+  override func layout() {
+    super.layout()
+    let height=min(bounds.height,barHeight)
+    if let bar=findBarView {bar.setFrameOrigin(.zero);bar.setFrameSize(NSSize(width:bounds.width,height:bar.frame.height))}
+    scroll.frame=NSRect(x:0,y:height,width:bounds.width,height:max(0,bounds.height-height))
+    scroll.tile()
   }
 }
 @MainActor final class SQLClipView: NSClipView {

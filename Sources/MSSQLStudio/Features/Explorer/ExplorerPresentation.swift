@@ -240,8 +240,8 @@ extension WorkbenchController {
       image: NSImage(systemSymbolName: node.icon, accessibilityDescription: nil)!)
     image.contentTintColor = node.error == nil ? node.tint : .systemOrange
     if case .server = node.kind {
-      image.image = NSImage(systemSymbolName: node.server.reconnecting ? "arrow.triangle.2.circlepath" : node.server.online ? "externaldrive.connected.to.line.below" : "externaldrive.badge.xmark", accessibilityDescription: node.displayTitle)
-      image.contentTintColor = node.server.reconnecting ? .systemOrange : node.server.online ? .systemGreen : .secondaryLabelColor
+      image.image = NSImage(systemSymbolName: node.server.reconnecting || node.server.updatingProfile ? "arrow.triangle.2.circlepath" : node.server.online ? "externaldrive.connected.to.line.below" : "externaldrive.badge.xmark", accessibilityDescription: node.displayTitle)
+      image.contentTintColor = node.server.reconnecting || node.server.updatingProfile ? .systemOrange : node.server.online ? .systemGreen : .secondaryLabelColor
     }
     label.textColor = node.error == nil ? .labelColor : .systemOrange
     if case .server = node.kind { label.font = .systemFont(ofSize: 12, weight: .semibold) }
@@ -289,6 +289,7 @@ extension WorkbenchController {
     cell.toolTip = node.error ?? (!node.server.online ? "Explorer bağlantısı kapalı. Son yüklenen nesneler gösteriliyor. Bağlantı işlemleri menüsünden yeniden bağlanabilirsiniz; açık sorgu oturumları korunur." : nil) ?? node.item?.detail ?? "\(node.server.profile.name) · \(node.server.profile.host),\(node.server.profile.port) · \(node.database)"
     if case .server = node.kind {
       cell.toolTip=(cell.toolTip ?? "")+" · "+(node.server.profile.appearance?.badge ?? "")+"\nSürükleyerek Explorer bağlantılarının sırasını değiştirin."
+      image.setAccessibilityLabel(node.server.updatingProfile ? "Kaydediliyor" : node.server.reconnecting ? "Bağlanıyor" : node.server.online ? "Bağlı" : "Bağlantı kapalı")
       label.setAccessibilityHelp(cell.toolTip)
     }
     if case .relation(let relation)=node.linked {

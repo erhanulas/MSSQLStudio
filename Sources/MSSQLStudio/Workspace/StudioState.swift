@@ -92,6 +92,7 @@ import UniformTypeIdentifiers
   var changed: (() -> Void)?
   var history: [QueryRecord] = []
   var closedTabs: [QueryRecord] = []
+  var closedTabLimit=QueryHistoryPolicy.closedTabLimit(UserDefaults.standard.object(forKey:"closedTabLimit") as? Int ?? QueryHistoryPolicy.defaultClosedTabLimit)
   let historyStore=QueryHistoryStore()
   var historySaveTask:Task<Bool,Never>?
   var historyWriteRevision=UUID()
@@ -404,7 +405,7 @@ import UniformTypeIdentifiers
     do {
       let data = try Data(contentsOf: folder.appendingPathComponent("history.json"))
       guard data.count<20_000_000 else {throw SQLFailure("Sorgu geçmişi 20 MB okuma sınırını aşıyor; mevcut dosya korunuyor.")}
-      history = QueryHistoryPolicy.retained(try JSONDecoder().decode([QueryRecord].self, from: data), days: historyRetentionDays)
+      history = QueryHistoryPolicy.retained(try JSONDecoder().decode([QueryRecord].self, from: data), days: historyRetentionDays,closedTabLimit:closedTabLimit)
       saveHistory()
     } catch {
       if FileManager.default.fileExists(atPath: folder.appendingPathComponent("history.json").path)

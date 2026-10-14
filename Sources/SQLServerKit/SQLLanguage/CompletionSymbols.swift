@@ -101,6 +101,7 @@ public enum SQLIntelligence {
     public let diagnostics: [Diagnostic]
     public let suggestions: [Suggestion]
     public let replacement: NSRange
+    public var referenceBindings:[String:[String]] = [:]
     public var procedureCompletion = false
     public var variableCompletion = false
     public var objectCompletion = false
@@ -567,6 +568,9 @@ public enum SQLIntelligence {
     try Task.checkCancellation()
     var seen = Set<String>()
     suggestions = suggestions.filter { seen.insert($0.text).inserted }.prefix(100).map { $0 }
-    return Analysis(tokens:all,diagnostics:Array(diagnostics.prefix(200)),suggestions:suggestions,replacement:replacement,procedureCompletion:execution && !inLiteral,variableCompletion:prefix.hasPrefix("@") && !inLiteral,objectCompletion:!inLiteral && (insertBinding != nil || objectPosition || scalarPosition && !prefix.isEmpty && suggestions.contains {$0.kind == .column || $0.kind == .function && !$0.detail.isEmpty}))
+    let referencesByAlias=Dictionary(uniqueKeysWithValues:activeBindings(caret).filter {
+      local[$0.parts.joined(separator:".").lowercased()] == nil
+    }.map {($0.alias.lowercased(),$0.parts)})
+    return Analysis(tokens:all,diagnostics:Array(diagnostics.prefix(200)),suggestions:suggestions,replacement:replacement,referenceBindings:inLiteral ? [:]:referencesByAlias,procedureCompletion:execution && !inLiteral,variableCompletion:prefix.hasPrefix("@") && !inLiteral,objectCompletion:!inLiteral && (insertBinding != nil || objectPosition || scalarPosition && !prefix.isEmpty && suggestions.contains {$0.kind == .column || $0.kind == .function && !$0.detail.isEmpty}))
   }
 }

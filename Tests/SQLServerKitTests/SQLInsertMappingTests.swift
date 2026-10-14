@@ -36,9 +36,23 @@ struct SQLInsertMappingTests {
     #expect(second.column == "X" && second.target == "@t")
     #expect(mapping.match(at: (sql as NSString).range(of: "OUTPUT")) == nil)
   }
+  @Test func selectProjectionsMapNestedExpressionsCaseAliasesAndUnionArms() throws {
+    let sql="INSERT dbo.T(A,B) SELECT TOP(2) x AS X, CASE WHEN x=1 THEN CONCAT(N'a,b',N'🦊') ELSE (SELECT MAX(y) FROM U) END AS Y FROM S UNION ALL SELECT 2,3; SELECT 4,5;"
+    let mapping=SQLInsertMapping(sql)
+    let match=try #require(mapping.match(at:(sql as NSString).range(of:"CONCAT")))
+    #expect(match.column=="B" && match.ordinal==2 && match.sourceKind == .select)
+    #expect(match.value.hasPrefix("CASE") && match.value.hasSuffix("AS Y"))
+    let a=try #require(mapping.match(at:(sql as NSString).range(of:"A")))
+    #expect(a.ranges.map {(sql as NSString).substring(with:$0)} == ["A","x AS X","2"])
+    #expect(mapping.match(at:(sql as NSString).range(of:"SELECT 4")) == nil)
+    for text in ["INSERT T(A,B) SELECT s.*,x FROM S s", "INSERT T(A,B) SELECT x,y,z FROM S", "INSERT T(A,B) SELECT x, CASE WHEN 1=1 THEN 2", "INSERT T(A,B) SELECT x,y FROM S UNION SELECT * FROM S"] {
+      #expect(SQLInsertMapping(text).statements.isEmpty)
+    }
+  }
   @Test func ambiguousOrImplicitMappingsAreNeverGuessed() {
     for sql in [
-      "INSERT dbo.T VALUES (1,2)", "INSERT dbo.T(A,B) SELECT x,y FROM dbo.U",
+      "INSERT dbo.T VALUES (1,2)", "INSERT dbo.T(A,B) SELECT * FROM dbo.U",
+      "INSERT dbo.T(A,B) SELECT x FROM dbo.U",
       "INSERT dbo.T(A) VALUES (1,2)", "-- INSERT dbo.T(A) VALUES(1)",
       "SELECT N'INSERT dbo.T(A) VALUES(1)'", "INSERT dbo.T(A) DEFAULT VALUES",
     ] {
