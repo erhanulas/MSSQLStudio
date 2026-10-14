@@ -1,3 +1,18 @@
+## 14 Ekim 2026 — v0.2.126 / build 127 public yayın doğrulandı
+
+- [Public/latest v0.2.126](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.126), kaynak `185c86fc9e16f96ca17ae875b1cfcba68f877c7f`; [Actions 38587129093](https://github.com/erhanulas/MSSQLStudio/actions/runs/38587129093) bütün adımlarıyla başarılı. Alias + temel tip hover, tablo/view nesne önizlemesini kapatma, ortak Ready bar özeti, dikey tek kolon toplamı, # select-all, overlay scroll ve ekrana uyarlanan Settings ilk açılışı yayımlandı. v0.2.125 public olmadı; etiketi/CI kanıtı aşağıda korunur.
+- CI gerçek yayın paketleriyle **403 app +349 core +8 text =760 test; 733 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 95.188 /11.582 /0.003 sn (`/tmp/MSSQLStudio-126-ci-tests.log`). Native ekran beklentisi ve küçük içerikte footer kenarları geçti. Sabit kimlik/izole Keychain denetimi ve geçici kimlik temizliği başarılı.
+- Dört public asset indirildi: GitHub digest/SHA-256, ZIP/PKG URL/hash manifest eşliği, exact 0.2.126/build127 metadata/binary/notlar ve kaynak ReleaseNotes byte eşliği doğrulandı. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği geçti; helper yeniden derlenmedi/imzalanmadı. PKG kapsayıcısı için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu `Foundation updater feed verified: 0.2.126` verdi. Kanıt `/tmp/MSSQLStudio-126-public-verification/verification.json` içindedir.
+- Fiziksel CUA/fare/scroll/ilk açılış ve gerçek Installer denenmedi; canlı SQL Server UDT metadata okunmadı. Native fixture/bitmap ve core SQL kapsam kontrolleri bu canlı koşulların yerine sayılmaz. Kullanıcı uygulaması/SQL/Keychain/history/favoriler ve `.vscode/` korunur; kurulum veya yeniden başlatma yapılmadı.
+
+Public asset SHA-256 değerleri:
+
+- `MSSQLStudio-0.2.126.pkg`: `fbb05b1bbc811fbd210e79228573b4d8f29e2e6a78e46d77d96badcc032a48b8`.
+- `MSSQLStudio-0.2.126.zip`: `aa1d278213c33c475250159803bafb3877de1380b8e02d3301153dff08399517`.
+- `MSSQLStudio-CredentialAgent-v1.zip`: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json`: `a7ae06b779377dbf2c780132ad9f0d1c81242547c206191e5541e877b7ba8a3c`.
+
 ## 14 Ekim 2026 — v0.2.126 / build 127 hazırlığı; v0.2.125 public olmadı
 
 - v0.2.125 kaynak etiketi `99a8b53628746c8b3d2258eb766a8463a7a6026d` korunur. [Actions 38585296280](https://github.com/erhanulas/MSSQLStudio/actions/runs/38585296280) imza/Keychain/signed build/manifest kontrollerini geçti; 403 app testinde tek issue, ilk Settings kök yüksekliğinin sabit 720 pt beklenmesiydi. CI ekranında macOS gerçek içerik yüksekliğini 642 pt’ye sığdırdı (genişlik 960 pt doğruydu). 349 core ve 8 text geçti; özetler 107.442 /13.294 /0.004 sn (`/tmp/MSSQLStudio-125-ci-tests.log`). Publish/feed skipped, signing cleanup success; release lookup HTTP 404 ve public/latest v0.2.124 doğrulandı. Tablo/kolon/type hover, seçim/detach/Ready bar ve # native davranışları bu koşuda geçti.
