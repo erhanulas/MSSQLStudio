@@ -525,16 +525,18 @@ import SQLServerKit
     updateOccurrences()
   }
   func navigateDefinition() {
-    guard projection == nil, editor.string.utf16.count <= 100_000, let catalog = document.intelligenceCatalog, document.catalogDatabase == document.database else { return }
-    let caret = editor.selectedRange().location
-    let tokens = TSQL.lex(editor.string).filter { ![.space,.comment,.string].contains($0.kind) }
-    guard let i = tokens.firstIndex(where:{ caret >= $0.range.location && caret <= NSMaxRange($0.range) && $0.kind == .word }) else { return }
-    func raw(_ value:String) -> String { value.hasPrefix("[") ? String(value.dropFirst().dropLast()).replacingOccurrences(of:"]]",with:"]") : value.hasPrefix("\"") ? String(value.dropFirst().dropLast()) : value }
-    var parts = [raw(tokens[i].text)]
-    if i >= 2, tokens[i-1].text == ".", tokens[i-2].kind == .word { parts.insert(raw(tokens[i-2].text),at:0) }
-    else if i+2 < tokens.count, tokens[i+1].text == ".", tokens[i+2].kind == .word { parts.append(raw(tokens[i+2].text)) }
-    if let symbol = catalog.resolve(parts) { document.openDefinition?(symbol) }
+    guard projection == nil,let parts=DefinitionReference.parts(in:editor.string,at:editor.selectedRange().location) else {return}
+    if !document.server.online {document.openDefinitionNamed?(parts);return}
+    if let catalog=document.intelligenceCatalog,document.catalogDatabase == document.database,let symbol=catalog.resolve(parts) {document.openDefinition?(symbol)}
   }
+  func insertSQLAtCaret(_ text:String) throws {
+    guard document.offlinePreview == nil,!document.definitionLoading,document.definitionError == nil,!editor.hasMarkedText() else {throw SQLFailure("SQL’e dönün ve metin girişini tamamlayın.")}
+    if projection != nil {expandAll()}
+    editor.finishUndoInput()
+    editor.insertText(text,replacementRange:editor.selectedRange())
+    editor.finishUndoInput()
+  }
+
   func selectSourceLine(_ range: NSRange) {
     let start = projection?.displayOffset(range.location) ?? range.location
     let end = projection?.displayOffset(NSMaxRange(range)) ?? NSMaxRange(range)

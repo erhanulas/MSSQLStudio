@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 extension WorkbenchController {
   func openEditorDefinition(_ symbol: CatalogSymbol, document: QueryDocument) {
     let server=document.server,db=document.database,generation=document.server.generation
+    if !server.online {openOfflineDefinition(named:[symbol.schema,symbol.name],server:server,database:db,in:document);return}
     if let existing=state.documents.first(where: {$0.server === server && $0.database == db && $0.definitionSymbol?.schema == symbol.schema && $0.definitionSymbol?.name == symbol.name}) {
       state.active=existing;state.changed?()
       detached[existing.id]?.showWindow(nil)
@@ -48,7 +49,7 @@ extension WorkbenchController {
         guard server.generation == generation else {throw SQLFailure("Bağlantı değişti; nesne tanımını yeniden açın.")}
         target.sql=sql;target.savedText=sql
         if let original {target.moduleOriginal=original;target.moduleInitialSQL=sql;target.moduleObjectID=id}
-        target.definitionLoading=false;target.changed?();target.connect()
+        target.definitionLoading=false;target.changed?()
       } catch {
         guard current() else {return}
         target.definitionLoading=false;target.definitionError=error.localizedDescription;target.changed?()

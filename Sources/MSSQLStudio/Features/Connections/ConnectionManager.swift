@@ -50,3 +50,7 @@ struct ConnectionManager: View {
     else { selected = id }
   }
 }
+
+@MainActor final class ConnectionPanelWindow: StudioPanelWindow {
+  override func performClose(_ sender:Any?) {cancelAction?()}
+}

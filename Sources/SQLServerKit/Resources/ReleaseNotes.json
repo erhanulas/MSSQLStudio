@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.114",
+    "date": "2026-10-14",
+    "title": "Anında sorgu sekmeleri ve aynı sekmede çevrimdışı tanım",
+    "changes": [
+      "Yeni sorgu sekmeleri bağlantı beklemeden açılır. Bağlantı yalnız Çalıştır ile denenir; tıklandığı andaki seçili SQL korunur. Başarısızlık görünürdür; iptal edilen veya hedefi değişen deneme SQL göndermez. Explorer oturumu sorgudan bağımsız kalır.",
+      "Bağlantı yönetimi bağımsız pencerede çalışır; Explorer ve sorgular kullanılabilir. Bağlantı, yeniden bağlantı ve nesne yükleme durumları alt durum çubuğunda görünür. Explorer veritabanı keşfi sınırlı süreyle yapılır; eksik liste mevcut kapsamı değiştirmez.",
+      "Çevrimdışı indekslenmiş nesneler mevcut sekmede salt okunur önizleme açar. SQL’e Dön metni, imleci, geri alma geçmişini, sonuçları ve oturumu korur. ⌘B de disk indeksinden aynı yolu kullanır; bağlıyken tanım canlı sunucudan okunmaya devam eder.",
+      "History ve Favoriler çift tıklaması mevcut editörde imlece SQL ekler; seçili metni standart yapıştırma gibi değiştirir ve tek adımda geri alınabilir. Yeni sekmede açma ayrı eylemdir; SQL otomatik çalıştırılmaz."
+    ]
+  },
+  {
     "version": "0.2.113",
     "date": "2026-10-14",
     "title": "Ayarlanabilir Formatla kısayolu ve INSERT kolon tamamlama",

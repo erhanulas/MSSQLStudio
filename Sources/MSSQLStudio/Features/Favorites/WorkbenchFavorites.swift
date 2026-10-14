@@ -84,7 +84,9 @@ extension WorkbenchController {
         guard let self else {return}
         try self.state.openFavorite(favorite,contextServerID:server?.id,contextDatabase:database)
         self.view.window?.makeKeyAndOrderFront(nil)
-      },manage:{[weak self] in self?.presentFavorites(server:server,database:database)})
+      },insert:{[weak self,weak document] favorite in
+        guard let self else {return};try insertSavedSQL(favorite.sql,into:document)
+      },manage:{[weak self] in self?.presentFavorites(server:server,database:database,target:document)})
     let window=StudioPanelWindow(contentViewController:controller)
     window.animationBehavior = .none
     window.identifier = .init(identity);window.title="Favori Sorgular"
@@ -105,8 +107,10 @@ extension WorkbenchController {
     presentFavorites(server:document?.server ?? selectedServer,database:document?.database ?? selectedDatabase)
   }
   @objc func showFavoritesAtNode() {if let node=contextNode {presentFavorites(server:node.server,database:Self.queryDatabase(for:node))}}
-  private func presentFavorites(server:ConnectedServer?,database:String) {
+  private func presentFavorites(server:ConnectedServer?,database:String,target:QueryDocument? = nil) {
+    let document=target ?? favoriteContextDocument
     present(FavoriteQueriesPanel(state:state,model:state.favorites,contextServerID:server?.id,contextDatabase:database,didOpen:{[weak self] in self?.view.window?.makeKeyAndOrderFront(nil)},
+      insert:{[weak self,weak document] favorite in guard let self else {return};try insertSavedSQL(favorite.sql,into:document)},
       editFavorite:{[weak self] favorite,serverID,database in self?.presentFavoriteEditor(favorite:favorite,serverID:serverID,database:database)}),
       title:"Favori Sorgular",width:1100,height:760,minWidth:900,minHeight:660,identity:"favorites|\(server?.id.uuidString ?? "global")|\(database)")
   }
@@ -121,5 +125,18 @@ extension WorkbenchController {
     target.window=present(FavoriteQueryEditor(model:state.favorites,servers:state.servers,contextServerID:serverID,database:database,favorite:favorite,sql:sql,name:name,close:target.close),
       title:favorite == nil ? "Favorilere Ekle":"Favoriyi Düzenle",width:720,height:660,minWidth:720,minHeight:660,identity:identity)
     return target
+  }
+}
+
+extension WorkbenchController {
+  func insertSavedSQL(_ sql:String, into target:QueryDocument?) throws {
+    guard let target,state.documents.contains(where:{$0 === target}),
+      let controller=queryController(for:target) else {throw SQLFailure("Önce SQL eklenecek sorgu sekmesini açın.")}
+    try controller.insertSQLAtCaret(sql)
+  }
+  func insertExplorerFavorite(_ node:TreeNode) {
+    guard let favorite=node.favorite else {return}
+    do {try insertSavedSQL(favorite.sql,into:favoriteContextDocument)}
+    catch {state.showError(error.localizedDescription)}
   }
 }

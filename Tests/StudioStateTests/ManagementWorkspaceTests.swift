@@ -15,6 +15,8 @@ import SwiftUI
     doc.moduleInitialSQL="ALTER PROC dbo.P AS SELECT 1;";doc.sql=doc.moduleInitialSQL!
     #expect(!doc.canSubmitModule)
     doc.sql="ALTER PROC dbo.P AS SELECT 2;";#expect(doc.canSubmitModule)
+    doc.state = .disconnected;#expect(doc.canSubmitModule && doc.task == nil)
+    doc.state = .connecting;#expect(!doc.canSubmitModule);doc.state = .ready
     doc.transactionCount=1;#expect(!doc.canSubmitModule);doc.transactionCount=0
     doc.state = .running;#expect(!doc.canSubmitModule);doc.state = .ready
     doc.database="Other";#expect(!doc.canSubmitModule);doc.database="Demo"

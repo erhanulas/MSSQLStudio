@@ -318,7 +318,7 @@ import SQLServerKit
     server.recordExplorerFailure(SQLFailure("Lost", diagnostics: [.init(state: "08S01", code: 0, message: "link")]))
     #expect(!server.online && server.startupError != nil)
   }
-  @Test func offlineRefreshNeverReconnectsAndNewQueryExplicitlyAttemptsOnce() async throws {
+  @Test func offlineRefreshAndNewQueryNeverReconnectExplorer() async throws {
     let state=StudioState(),server=ConnectedServer(profile:ServerProfile(),password:"")
     server.online=false;state.servers=[server]
     var attempts=0,checks=0
@@ -330,17 +330,17 @@ import SQLServerKit
     host.refresh(root);await server.checkExplorerHealth()
     #expect(attempts == 0 && checks == 0)
     host.newQuery();host.newQuery()
-    for _ in 0..<100 where attempts == 0 || server.reconnecting {try await Task.sleep(for:.milliseconds(10))}
-    #expect(attempts == 1 && !server.online && !server.reconnecting)
-    #expect(server.startupError == "Fixture unavailable" && state.documents.isEmpty)
+    #expect(attempts == 0 && !server.online && !server.reconnecting)
+    #expect(state.documents.count == 2 && state.documents.allSatisfy {$0.state == .disconnected && $0.task == nil})
     host.refresh(root);await server.checkExplorerHealth()
-    #expect(attempts == 1 && checks == 0)
+    #expect(attempts == 0 && checks == 0)
+    await state.reconnectExplorer(server)
+    #expect(attempts == 1 && server.startupError == "Fixture unavailable")
     server.reconnectFixture={attempts += 1}
-    #expect(await state.prepareExplorerForNewQuery(server))
+    await state.reconnectExplorer(server)
     #expect(server.online && attempts == 2)
-    #expect(await state.prepareExplorerForNewQuery(server))
-    #expect(attempts == 2)
   }
+
   @Test func connectionMenuClosesOnlyExplorerAndOffersExplicitReconnect() async throws {
     let state=StudioState(),server=ConnectedServer(profile:ServerProfile(),password:"")
     state.servers=[server]

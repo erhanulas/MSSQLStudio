@@ -67,7 +67,8 @@ import Testing
     outline.expandItem(first);outline.expandItem(dbFolder);outline.expandItem(second)
     outline.selectRowIndexes(IndexSet(integer:outline.row(forItem:second)),byExtendingSelection:false)
     a.reconnectFixture={throw SQLFailure("Anonymous offline fixture")}
-    #expect(await state.prepareExplorerForNewQuery(a)==false)
+    await state.reconnectExplorer(a)
+    #expect(a.startupError == "Anonymous offline fixture")
     #expect(!a.reconnecting && !a.online && !b.online && state.servers.count==2)
     #expect(outline.row(forItem:first)>=0 && outline.row(forItem:second)>=0 && outline.isItemExpanded(first) && outline.isItemExpanded(dbFolder) && outline.isItemExpanded(second))
     #expect(outline.item(atRow:outline.selectedRow) as? TreeNode === second && outline.isEnabled && NSApp.modalWindow==nil)

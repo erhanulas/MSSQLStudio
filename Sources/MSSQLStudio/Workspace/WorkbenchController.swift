@@ -371,6 +371,12 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         doc.openDefinition = { [weak self, weak doc] symbol in
           guard let self, let doc else { return }; self.openEditorDefinition(symbol,document:doc)
         }
+        doc.openDefinitionNamed = { [weak self,weak doc] parts in
+          guard let self,let doc else {return};openOfflineDefinition(named:parts,server:doc.server,database:doc.database,in:doc)
+        }
+        doc.openOfflineReference = { [weak self,weak doc] parts,server,db in
+          guard let self,let doc else {return};openOfflineDefinition(named:parts,server:server,database:db,in:doc)
+        }
         controller = QueryController(document: doc)
         initialFocus = controller
         controller.favorites=state.favorites
@@ -419,36 +425,39 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       let names = doc.server.databases.map(\.name)
       database.addItems(withTitles: names.contains(doc.database) ? names : [doc.database] + names)
       database.selectItem(withTitle: doc.database)
-      database.isEnabled = doc.state == .ready
+      database.isEnabled = !doc.busy && doc.offlinePreview == nil
       context.stringValue = "\(doc.server.profile.name) · \(doc.server.profile.host),\(doc.server.profile.port)  •  \(doc.server.profile.login)"
       context.toolTip=context.stringValue+" · "+(doc.server.profile.appearance?.badge ?? "")
       context.textColor = .secondaryLabelColor
       let phase: String
       switch doc.state {
-      case .disconnected: phase = "Disconnected"
+      case .disconnected: phase = doc.connectionError.map {"Bağlantı başarısız: " + $0} ?? "Çalıştırıldığında bağlanacak"
       case .connecting: phase = "Connecting…"
-      case .ready: phase = "Ready"
+      case .ready: phase = doc.offlinePreview != nil ? "Çevrimdışı tanım · Salt okunur" : doc.definitionLoading ? "Nesne tanımı yükleniyor…" : "Ready"
       case .running: phase = "Executing…"
       case .cancelling: phase = "Cancelling…"
       }
+      let operation=state.connectionActivities[doc.server.id] ?? (doc.server.reconnecting ? "Explorer yeniden bağlanıyor…" : doc.server.updatingProfile ? "Bağlantı ayarları kaydediliyor…" : connectionSheetBusy ? "Bağlantı yönetimi işlemi sürüyor…" : nil)
+      let displayPhase=operation ?? state.connectionErrors[doc.server.id].map {"Explorer bağlantısı başarısız: " + $0} ?? (doc.offlinePreview != nil ? "Çevrimdışı tanım · Salt okunur" : doc.definitionLoading ? "Nesne tanımı yükleniyor…" : phase)
       let loaded = doc.results.filter { !$0.isPlan }.reduce(0) { $0 + $1.values.count }
       let shown = doc.results.filter { !$0.isPlan }.reduce(0) { $0 + min($1.values.count, max(1, doc.limits.rows)) }
       let rows = shown < loaded ? "\(shown.formatted()) gösterilen · \(loaded.formatted()) yüklenen" : "\(doc.rowCount.formatted()) rows"
+      status.toolTip=doc.connectionError ?? state.connectionErrors[doc.server.id] ?? doc.server.startupError
       status.setAccessibilityIdentifier("queryStatus")
       status.stringValue =
-        "\(phase)   |   \(doc.database)   |   \(rows)   |   \(String(format:"%.3f",doc.elapsed)) s\(doc.partial ? "   |   PARTIAL" : "")\(doc.transactionCount > 0 ? "   |   TRAN: \(doc.transactionCount)" : "")"
+        "\(displayPhase)   |   \(doc.database)   |   \(rows)   |   \(String(format:"%.3f",doc.elapsed)) s\(doc.partial ? "   |   PARTIAL" : "")\(doc.transactionCount > 0 ? "   |   TRAN: \(doc.transactionCount)" : "")"
     } else {
       database.isEnabled = false
       context.stringValue = ""
-      status.stringValue =
-        state.servers.isEmpty ? "Connect to SQL Server" : "Yeni bir sorgu açın veya nesne seçin"
+      status.stringValue = (connectionSheetBusy ? "Bağlantı yönetimi işlemi sürüyor…" : nil) ?? state.connectionActivities.values.sorted().first ?? state.connectionErrors.values.sorted().first ?? selectedServer?.startupError ?? (
+        state.servers.isEmpty ? "Connect to SQL Server" : "Yeni bir sorgu açın veya nesne seçin")
     }
     for item in view.window?.toolbar?.items ?? [] {
       switch item.itemIdentifier.rawValue {
-      case "run", "plan": item.isEnabled = doc?.state == .ready && doc?.definitionLoading == false
-      case "cancel": item.isEnabled = doc?.state == .running
+      case "run", "plan": item.isEnabled = doc?.canExecute == true
+      case "cancel": item.isEnabled = doc?.state == .running || doc?.state == .connecting
       case "save", "format": item.isEnabled = doc != nil
-      case "query": item.isEnabled = selectedServer?.reconnecting == false
+      case "query": item.isEnabled = selectedServer != nil
       default: break
       }
       (item.view as? NSControl)?.isEnabled = item.isEnabled
@@ -564,20 +573,11 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     openNewQuery(server:server,database:selectedDatabase)
   }
+  func queryController(for document:QueryDocument)->QueryController? {detached[document.id]?.query ?? controllers[document.id]}
   func openNewQuery(server:ConnectedServer,database:String) {
-    guard !server.reconnecting,!server.updatingProfile else {return}
-    if server.online || Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" {
-      state.newQuery(server:server,database:database); return
-    }
-    Task { [weak self] in
-      guard let self else {return}
-      guard await state.prepareExplorerForNewQuery(server) else {
-        if let error=server.startupError {status.stringValue="Yeniden bağlantı başarısız: "+error;status.toolTip=error}
-        return
-      }
-      state.newQuery(server:server,database:database)
-    }
+    state.newQuery(server:server,database:database)
   }
+
   @objc func execute() { state.active?.execute() }
   @objc func cancel() { state.active?.cancel() }
   @objc func estimatedPlan() { state.active?.execute(estimated: true) }
@@ -637,7 +637,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     if let server = contextNode?.server { presentConnection(editing: server) }
   }
   private func presentConnection(editing server: ConnectedServer? = nil) {
-    guard sheet == nil, let window = view.window else { return }
+    guard sheet == nil, view.window != nil else { sheet?.makeKeyAndOrderFront(nil);return }
     connectionSheetBusy=false
     let form = ConnectionManager(
       servers: state.servers, initial: server,
@@ -658,20 +658,25 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         guard let self else {throw SQLFailure("Çalışma alanı kapandı.")}
         try await state.saveConnectionProfile(editingServer,profile:profile,password:password,remember:remember)
         finishSheet();reloadWorkspace()
-      }, loadingChanged:{[weak self] busy in self?.connectionSheetBusy=busy}, cancel: { [weak self] in self?.finishSheet() })
+      }, loadingChanged:{[weak self] busy in
+        guard let self else {return};connectionSheetBusy=busy
+        sheet?.standardWindowButton(.closeButton)?.isEnabled = !busy
+        updateControls()
+      }, cancel: { [weak self] in self?.finishSheet() })
     let controller = NSHostingController(
       rootView: form.font(.custom(StudioTheme.uiFont.fontName, size: 12)))
-    let sheet = StudioPanelWindow(contentViewController: controller)
+    let sheet = ConnectionPanelWindow(contentViewController: controller)
     sheet.animationBehavior = .none
     sheet.cancelAction={ [weak self] in guard let self,!connectionSheetBusy else {return};finishSheet() }
     sheet.title = "Bağlantılar"
-    sheet.styleMask = [.titled]
+    sheet.styleMask = [.titled,.closable]
+    sheet.isReleasedWhenClosed=false;sheet.center()
     self.sheet = sheet
-    window.beginSheet(sheet)
+    sheet.makeKeyAndOrderFront(nil)
   }
   private func finishSheet() {
     if let sheet {
-      view.window?.endSheet(sheet)
+      if sheet.sheetParent != nil {sheet.sheetParent?.endSheet(sheet)}
       sheet.orderOut(nil)
     }
     sheet = nil;connectionSheetBusy=false
@@ -739,14 +744,15 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       default:return true
       }
     }
+    if item.action == #selector(execute) || item.action == #selector(estimatedPlan) {return state.active?.canExecute == true}
     if [
-      #selector(execute), #selector(estimatedPlan), #selector(beginTransaction),
+      #selector(beginTransaction),
       #selector(commitTransaction), #selector(rollbackTransaction),
     ].contains(item.action) {
       return state.active?.state == .ready
     }
     if item.action == #selector(addFavorite) {return favoriteContextDocument?.sql.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty == false}
-    if item.action == #selector(cancel) { return state.active?.state == .running }
+    if item.action == #selector(cancel) { return state.active?.state == .running || state.active?.state == .connecting }
     if [
       #selector(saveSQL), #selector(saveAsSQL), #selector(formatSQL), #selector(closeTab),
       #selector(toggleResults),

@@ -390,7 +390,7 @@ import Testing
     controller.editor.setSelectedRange(source.range(of:"Customers")); controller.updateOccurrences()
     #expect(controller.occurrenceRanges.count == 3)
     var opened: String?
-    doc.openDefinition = { opened = $0.name }
+    doc.openDefinitionNamed = {parts in #expect(parts == ["dbo","Customers"]);opened=parts.last}
     controller.navigateDefinition()
     #expect(opened == "Customers")
     opened = nil

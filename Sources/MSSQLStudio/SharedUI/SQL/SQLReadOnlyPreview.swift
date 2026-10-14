@@ -20,8 +20,19 @@ import SwiftUI
     StudioTheme.border.setFill(); NSRect(x:bounds.maxX-1,y:bounds.minY,width:1,height:bounds.height).fill()
   }
 }
+@MainActor private final class DefinitionPreviewTextView: NSTextView {
+  var navigateDefinition: (([String]) -> Void)?
+  override func keyDown(with event: NSEvent) {
+    if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, event.charactersIgnoringModifiers?.lowercased() == "b", let navigateDefinition {
+      if let parts=DefinitionReference.parts(in:string,at:selectedRange().location) {navigateDefinition(parts)}
+      return
+    }
+    super.keyDown(with:event)
+  }
+}
 @MainActor final class SQLPreviewScrollView: NSScrollView {
-  private let preview = NSTextView(usingTextLayoutManager:true)
+  private let preview = DefinitionPreviewTextView(usingTextLayoutManager:true)
+  var navigateDefinition: (([String]) -> Void)? {didSet {preview.navigateDefinition=navigateDefinition}}
   private var lastSQL: String?
   private var lastDark: Bool?
   override init(frame frameRect: NSRect) {
@@ -61,6 +72,7 @@ import SwiftUI
 }
 struct SQLReadOnlyPreview: NSViewRepresentable {
   let sql: String
+  var navigateDefinition: (([String]) -> Void)? = nil
   func makeNSView(context: Context) -> SQLPreviewScrollView { SQLPreviewScrollView(frame:.zero) }
-  func updateNSView(_ scroll: SQLPreviewScrollView, context: Context) { scroll.display(sql) }
+  func updateNSView(_ scroll: SQLPreviewScrollView, context: Context) { scroll.navigateDefinition=navigateDefinition; scroll.display(sql) }
 }

@@ -103,6 +103,17 @@ import SwiftUI
       document.savedText = document.sql
       document.intelligenceCatalog = SQLIntelligence.Catalog(snapshot:SQLCatalogSnapshot(symbols:[CatalogSymbol(schema:"dbo",name:"Customers",columns:["CustomerID","Name","City"]),CatalogSymbol(schema:"dbo",name:"Orders",columns:["OrderID","CustomerID","Amount"]),CatalogSymbol(schema:"dbo",name:"ActiveCustomers",columns:["CustomerID","Name"],kind:"VIEW"),CatalogSymbol(schema:"dbo",name:"usp_GetCustomerDetails",columns:[],kind:"SQL_STORED_PROCEDURE"),CatalogSymbol(schema:"dbo",name:"ufn_GetCustomerName",columns:[],kind:"SQL_SCALAR_FUNCTION"),CatalogSymbol(schema:"dbo",name:"ufn_GetCustomerRows",columns:["CustomerID","Name"],kind:"SQL_INLINE_TABLE_VALUED_FUNCTION")]))
       document.catalogDatabase = "master"; document.catalogVerified = true
+      if Bundle.main.object(forInfoDictionaryKey:"StudioOfflinePreviewSmoke") as? Bool == true {
+        document.sql="SELECT * FROM dbo.Example;";document.savedText=document.sql
+        document.offlinePreview=OfflineDefinitionPreview(server:server,database:"master",value:.init(id:1,schema:"dbo",name:"Example",type:"V",sql:"CREATE VIEW dbo.Example AS\nSELECT 1 AS ExampleID, N'Çevrimdışı önizleme' AS Name;"))
+      }
+      if Bundle.main.object(forInfoDictionaryKey:"StudioConnectionSmoke") as? Bool == true {
+        if !studio.servers.contains(where:{$0 === server}) {studio.servers.append(server)}
+        document.connectionFixture={_,_ in
+          try await Task.sleep(for:.seconds(2))
+          throw SQLFailure("Sentetik bağlantı hatası · Gerçek sunucuya erişilmedi.")
+        }
+      }
       if let sql=Bundle.main.object(forInfoDictionaryKey:"StudioRefreshSmokeSQL") as? String {
         document.sql=sql;document.savedText=sql;document.state = .ready
         var executionCount=0

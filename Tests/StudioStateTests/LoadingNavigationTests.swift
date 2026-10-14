@@ -6,7 +6,7 @@ import Testing
 @MainActor @Suite(.serialized) struct LoadingNavigationTests {
   @Test func definitionOpensImmediatelyDeduplicatesAndPreservesEdits() async throws {
     _=NSApplication.shared
-    let server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false
+    let server=ConnectedServer(profile:ServerProfile(visibleDatabases:[]),password:"");server.online=true
     let original="CREATE PROCEDURE dbo.Example AS BEGIN SELECT 1; END"
     server.asyncCatalogFixture={sql in
       try await Task.sleep(for:.milliseconds(80))
@@ -29,6 +29,7 @@ import Testing
     for _ in 0..<100 where target.definitionLoading {try await Task.sleep(for:.milliseconds(10))}
     #expect(!target.definitionLoading && target.definitionError == nil)
     #expect(target.sql.contains("ALTER PROCEDURE") && target.moduleOriginal == original)
+    #expect(target.state == .disconnected && target.task == nil)
     #expect(!target.dirty && !target.hasPendingDatabaseChanges && state.active === source)
     target.sql += "\n-- edit"
     host.openEditorDefinition(symbol,document:source)
@@ -36,7 +37,7 @@ import Testing
   }
   @Test func closedLoadingTabCannotReappearAndFailureStaysInTab() async throws {
     _=NSApplication.shared
-    let server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false
+    let server=ConnectedServer(profile:ServerProfile(visibleDatabases:[]),password:"");server.online=true
     server.asyncCatalogFixture={_ in
       // An uncooperative request still cannot publish to a closed tab.
       try? await Task.sleep(for:.milliseconds(100))
@@ -58,7 +59,7 @@ import Testing
   }
   @Test func resolvedIdentityReusesExistingEditedObjectTabAndTablesLoadCreate() async throws {
     _=NSApplication.shared
-    let server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false
+    let server=ConnectedServer(profile:ServerProfile(visibleDatabases:[]),password:"");server.online=true
     server.catalogFixture=ObjectManagementUIFixture.catalog
     let state=StudioState(),host=WorkbenchController(state:state)
     let source=state.newQuery(server:server)

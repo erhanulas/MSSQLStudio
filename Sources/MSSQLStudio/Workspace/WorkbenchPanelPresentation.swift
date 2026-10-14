@@ -12,6 +12,7 @@ extension WorkbenchController {
     window.minSize = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: 780, height: 600)).size
   }
   func showHistoryWindow() {
+    let document=favoriteContextDocument
     state.loadHistory()
     present(
       HistoryPanel(
@@ -21,7 +22,7 @@ extension WorkbenchController {
           state.newQuery(
             server: server, database: record.database, text: record.text,
             title: "Timeline · \(record.time.formatted())")
-        }), title: "Timeline — Sorgu Geçmişi", width: 1120, height: 760, minWidth: 1000, minHeight: 650, identity: "studio.timeline")
+        },insert:{[weak self,weak document] record in guard let self else {return};try insertSavedSQL(record.text,into:document)}), title: "Timeline — Sorgu Geçmişi", width: 1120, height: 760, minWidth: 1000, minHeight: 650, identity: "studio.timeline")
   }
   func showAIWindow() {
     present(

@@ -21,6 +21,7 @@ import SwiftUI
   private let definitionStatus=NSTextField(wrappingLabelWithString: "")
   private let definitionSpinner=NSProgressIndicator()
   private let definitionOverlay=NSStackView()
+  private var offlinePreviewHost: NSHostingView<InlineOfflineDefinitionView>?
   private let editor: EditorController
   private let resultTabs = NSTabView()
   private let navigationHost = NSStackView()
@@ -613,9 +614,9 @@ import SwiftUI
       child.bottomAnchor.constraint(equalTo: parent.bottomAnchor),
     ])
   }
-  func focusEditor() { view.window?.makeFirstResponder(editor.editor) }
+  func focusEditor() { if document.offlinePreview == nil {view.window?.makeFirstResponder(editor.editor)} }
   func setText() { editor.setText() }
-  func format() { editor.formatSQL(options: SQLEditorPreferences.formatting()) }
+  func format() { guard document.offlinePreview == nil else {return};editor.formatSQL(options: SQLEditorPreferences.formatting()) }
   @objc private func refreshTheme() {
     StudioTheme.decorate(view)
     for controller in tables.values {
@@ -687,6 +688,11 @@ import SwiftUI
     stripScroll.contentView.scroll(to: .zero)
     stripScroll.reflectScrolledClipView(stripScroll.contentView)
   }
+  func insertSQLAtCaret(_ text:String) throws {
+    _ = view
+    try editor.insertSQLAtCaret(text)
+    view.window?.makeKeyAndOrderFront(nil);focusEditor()
+  }
   func update() {
     compareModuleButton.isHidden = document.moduleOriginal == nil
     compareModuleButton.isEnabled = !document.busy
@@ -699,8 +705,21 @@ import SwiftUI
     if document.definitionLoading {definitionSpinner.startAnimation(nil)} else {definitionSpinner.stopAnimation(nil)}
     definitionStatus.stringValue=document.definitionError ?? "Nesne tanımı yükleniyor…"
     definitionStatus.textColor=document.definitionError == nil ? StudioTheme.muted:.systemRed
-    editor.surface.isHidden=pending
-    editor.editor.isEditable = !pending
+    if let preview=document.offlinePreview {
+      let root=InlineOfflineDefinitionView(preview:preview,back:{[weak self] in
+        guard let self else {return};document.offlinePreview=nil;document.changed?();focusEditor()
+      },navigate:{[weak self] parts in
+        guard let self else {return};document.openOfflineReference?(parts,preview.server,preview.database)
+      })
+      if let host=offlinePreviewHost {host.rootView=root}
+      else if let pane=editor.surface.superview {
+        let host=NSHostingView(rootView:root);offlinePreviewHost=host;pane.addSubview(host)
+        host.translatesAutoresizingMaskIntoConstraints=false
+        NSLayoutConstraint.activate([host.leadingAnchor.constraint(equalTo:editor.surface.leadingAnchor),host.trailingAnchor.constraint(equalTo:editor.surface.trailingAnchor),host.topAnchor.constraint(equalTo:editor.surface.topAnchor),host.bottomAnchor.constraint(equalTo:editor.surface.bottomAnchor)])
+      }
+    } else {offlinePreviewHost?.removeFromSuperview();offlinePreviewHost=nil}
+    editor.surface.isHidden=pending || document.offlinePreview != nil
+    editor.editor.isEditable = !pending && document.offlinePreview == nil
     editor.setText()
     if displayedGeneration != document.resultGeneration {
       displayedGeneration = document.resultGeneration
@@ -814,6 +833,10 @@ import SwiftUI
   }
   private func submitModule(sql:String,database db:String,original:String) {
     guard let object=document.moduleObjectID,document.objectEditorKey?.database == db,document.sql == sql,document.database == db,document.canSubmitModule,!checkingModuleSubmission else {return}
+    if document.state == .disconnected {
+      document.connect { [weak self] in self?.submitModule(sql:sql,database:db,original:original) }
+      return
+    }
     checkingModuleSubmission=true;update()
     Task { [weak self] in
       guard let self else {return}

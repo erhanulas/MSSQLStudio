@@ -209,7 +209,7 @@ import Testing
       id: 1, schema: "dbo", name: "Example", type: "V",
       sql: "CREATE VIEW [dbo].[Example]\nAS\nSELECT N'Çevrimdışı içerik' AS [Ad];")
     let host = NSHostingView(
-      rootView: OfflineObjectDefinitionView(value: value, database: "Synthetic"))
+      rootView: InlineOfflineDefinitionView(preview:OfflineDefinitionPreview(server:ConnectedServer(profile:ServerProfile(),password:""),database:"Synthetic",value:value),back:{},navigate:{_ in}))
     let window = NSWindow(
       contentRect: NSRect(x: -20000, y: 0, width: 820, height: 540), styleMask: [.titled],
       backing: .buffered, defer: false)

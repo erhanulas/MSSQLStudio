@@ -6,6 +6,8 @@ import SwiftUI
 struct HistoryPanel: View {
   let state: StudioState
   var open: (QueryRecord) -> Void
+  var insert: ((QueryRecord) throws -> Void)?
+  @State private var insertError=""
   @State private var records: [QueryRecord] = []
   @State private var search = ""
   @State private var selected: UUID?
@@ -22,6 +24,9 @@ struct HistoryPanel: View {
     }.sorted { slowest ? $0.seconds > $1.seconds : $0.time > $1.time }
   }
   var record: QueryRecord? { filtered.first { $0.id == selected } }
+  private func insertRecord(_ record:QueryRecord) {
+    do {try insert?(record);insertError=""} catch {insertError=error.localizedDescription}
+  }
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       StudioPanelHeading(title: "Timeline", icon: "clock.arrow.circlepath", subtitle: "Sorgularını bul, sürelerini karşılaştır ve yeniden aç")
@@ -47,12 +52,16 @@ struct HistoryPanel: View {
         TableColumn("Sorgu") { Text($0.text.replacingOccurrences(of: "\n", with: " ")).lineLimit(1) }.width(min: 180, ideal: 300)
         TableColumn("Durum") { Label($0.status, systemImage: $0.status == "Hata" ? "xmark.circle" : $0.status == "Kısmi" ? "exclamationmark.circle" : "checkmark.circle").foregroundStyle($0.status == "Hata" ? Color.red : Color.secondary) }
         TableColumn("Süre") { Text(String(format: "%.3f sn", $0.seconds)).monospacedDigit() }.width(85)
+      }.contextMenu(forSelectionType: UUID.self) { _ in } primaryAction: { ids in
+        if let id=ids.first,let record=filtered.first(where:{$0.id == id}) {insertRecord(record)}
       }.frame(minHeight: 180)
+      if !insertError.isEmpty {Text(insertError).foregroundStyle(.red)}
       if let record {
         HStack {
           Text(record.server + " / " + record.database).font(.headline)
           Spacer()
           StudioActionButton("Kopyala", icon: "doc.on.doc", tint: .accentColor) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(record.text, forType: .string) }
+          StudioActionButton("İmlece Ekle", icon: "text.insert") {insertRecord(record)}.disabled(insert == nil)
           StudioActionButton("Yeni Sekmede Aç", icon: "plus.square", tint: .accentColor) { open(record) }
             .disabled(state.historyServer(record) == nil)
         }

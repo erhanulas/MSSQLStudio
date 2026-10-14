@@ -104,9 +104,28 @@ import UniformTypeIdentifiers
     }
     return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("MSSQLStudio")
   }()
+  private static var discoveryLimits: Limits {
+    var value=Limits();value.rows=50_001;value.totalBytes=16*1024*1024;value.timeout=10;return value
+  }
+  private static func discoverDatabases(using connection:ODBCConnection) async throws -> [CatalogItem] {
+    let result=try await connection.execute(Catalog.databases,limits:discoveryLimits)
+    guard !result.partial,!result.stoppedEarly,!result.results.contains(where:{$0.truncated}) else {throw SQLFailure("Veritabanı listesi tam okunamadı; mevcut Explorer kapsamı korundu.")}
+    return Catalog.rows(result)
+  }
+  private(set) var connectionErrors:[UUID:String]=[:]
+  private(set) var connectionActivities:[UUID:String]=[:]
   func connect(_ profile: ServerProfile, password: String, save: Bool) async throws
     -> ConnectedServer
   {
+    guard connectionActivities[profile.id] == nil else {throw SQLFailure("Bu bağlantı için işlem sürüyor.")}
+    connectionActivities[profile.id]="Explorer bağlanıyor: " + profile.name
+    changed?()
+    defer {connectionActivities[profile.id]=nil;changed?()}
+    connectionErrors[profile.id]=nil
+    do {return try await performConnect(profile,password:password,save:save)}
+    catch {connectionErrors[profile.id]=error.localizedDescription;throw error}
+  }
+  private func performConnect(_ profile:ServerProfile,password:String,save:Bool) async throws -> ConnectedServer {
     if let old = servers.first(where: { $0.id == profile.id }) {
       guard !old.updatingProfile else {throw SQLFailure("Bağlantı bilgileri kaydediliyor.")}
       let previousProfile=old.profile,previousDatabases=old.databases
@@ -127,7 +146,7 @@ import UniformTypeIdentifiers
       let candidate = ODBCConnection()
       do {
         try await candidate.connect(profile, password: password)
-        let items = Catalog.rows(try await candidate.execute(Catalog.databases))
+        let items = try await Self.discoverDatabases(using:candidate)
         if reconnect { try checkSessions() }
         if save || (old.remembered && (old.profile != profile || old.password != password)) {
           try await Task.detached {try ServerVault().save(profile,password:profile.kerberos ? "":password)}.value
@@ -157,7 +176,7 @@ import UniformTypeIdentifiers
             doc.partial = false
             doc.runAfterConnect = false
             doc.state = .disconnected
-            doc.connect()
+            doc.changed?()
           }
         } else {
           let previous = old.metadata
@@ -182,7 +201,7 @@ import UniformTypeIdentifiers
     let server = ConnectedServer(profile: profile, password: password)
     do {
       try await server.metadata.connect(profile, password: password)
-      let available=Catalog.rows(try await server.metadata.execute(Catalog.databases))
+      let available=try await Self.discoverDatabases(using:server.metadata)
       server.databases = profile.visibleItems(from:available)
       await server.synchronizeCatalogVisibility(available:available)
       if save {try await Task.detached {try ServerVault().save(profile,password:profile.kerberos ? "":password)}.value}
@@ -203,6 +222,7 @@ import UniformTypeIdentifiers
   func disconnectExplorer(_ server: ConnectedServer) async {
     guard !server.reconnecting,!server.updatingProfile else { return }
     server.online = false
+    connectionErrors[server.id]=nil
     server.startupError = nil
     server.pauseIndexing()
     let previous = server.metadata
@@ -235,11 +255,6 @@ import UniformTypeIdentifiers
       server.startupError = error.localizedDescription
     }
   }
-  func prepareExplorerForNewQuery(_ server:ConnectedServer) async -> Bool {
-    guard !server.reconnecting,!server.updatingProfile else {return false}
-    if !server.online {await reconnectExplorer(server)}
-    return server.online
-  }
   func rememberExplorer(_ id: UUID, selected: Bool) {
     var ids = UserDefaults.standard.stringArray(forKey: "explorerActiveServerIDs") ?? servers.filter(\.remembered).map { $0.id.uuidString }
     ids.removeAll { $0 == id.uuidString }
@@ -263,9 +278,11 @@ import UniformTypeIdentifiers
       }
       changed?()
       for server in servers where !server.online {
+        connectionActivities[server.id]="Explorer bağlanıyor: " + server.profile.name;changed?()
+        defer {connectionActivities[server.id]=nil;changed?()}
         do {
           try await server.metadata.connect(server.profile,password:server.password)
-          let available=Catalog.rows(try await server.metadata.execute(Catalog.databases))
+          let available=try await Self.discoverDatabases(using:server.metadata)
           server.databases = server.profile.visibleItems(from:available)
           await server.synchronizeCatalogVisibility(available:available)
           server.online = true; server.startupError = nil; server.generation = UUID()
@@ -273,14 +290,14 @@ import UniformTypeIdentifiers
           changed?()
           recover(for:server)
           if !documents.contains(where: { $0.server === server }) { newQuery(server:server) }
-        } catch { server.startupError = error.localizedDescription; changed?() }
+        } catch { server.startupError = error.localizedDescription; await server.metadata.disconnect(); changed?() }
       }
       return !chosen.isEmpty
     } catch { showError("Kayıtlı Explorer bağlantıları okunamadı: " + error.localizedDescription); return true }
   }
   @discardableResult func newQuery(
     server: ConnectedServer, database: String? = nil, text: String = "", title: String? = nil,
-    run: Bool = false, refreshSeconds: Int? = nil, startConnection:Bool = true
+    run: Bool = false, refreshSeconds: Int? = nil, startConnection:Bool = false
   ) -> QueryDocument {
     let doc = QueryDocument(
       server: server, database: database ?? server.profile.database,
@@ -304,7 +321,8 @@ import UniformTypeIdentifiers
     doc.runAfterConnect = run
     doc.initialRefreshSeconds = refreshSeconds
     changed?()
-    if startConnection {doc.connect()}
+    if run {doc.runAfterConnect=false;doc.execute()} else if startConnection {doc.connect()}
+    else {Task {[weak doc] in await doc?.loadSymbols()}}
 
     return doc
   }

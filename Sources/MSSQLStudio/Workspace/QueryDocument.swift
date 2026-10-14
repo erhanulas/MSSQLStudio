@@ -27,13 +27,21 @@ struct ObjectEditorKey: Codable, Equatable {
   private(set) var lastExecutedDatabase: String?
   private(set) var lastExecutedReadLimit: Int?
   // In-process test injection; normal documents always use their independent ODBC session.
+  var connectionFixture: ((ServerProfile, String) async throws -> Void)?
+  var connectionError: String?
+  var offlinePreviewRequest=UUID()
+  var offlinePreview: OfflineDefinitionPreview? {didSet {offlinePreviewRequest=UUID()}}
+  var openOfflineReference: (([String], ConnectedServer, String) -> Void)?
+  var openDefinitionNamed: (([String]) -> Void)?
+  var canExecute: Bool { !busy && !definitionLoading && offlinePreview == nil && !server.updatingProfile }
   var executionFixture: ((String, Limits) async throws -> Execution)?
   var sessionProbeFixture: ((String, Limits) async throws -> Execution)?
   var refreshDisabledReason: String? {
+    if offlinePreview != nil {return "SQL’e dönmeden sonuçlar yenilenemez."}
     switch state {
     case .running, .cancelling: return "Sorgu işlemi sürerken sonuçlar yenilenemez."
     case .connecting: return "Bağlantı kurulurken sonuçlar yenilenemez."
-    case .disconnected: return "Sorgu bağlantısı kapalı. Önce bu sorgu sekmesini yeniden bağlayın."
+    case .disconnected: return "Sorgu bağlantısı kapalı. Çalıştır düğmesiyle bağlantıyı yeniden deneyin."
     case .ready: break
     }
     guard lastExecutionSucceeded, let lastExecutedSQL else { return "Önce bu sekmede bir okuma sorgusunu başarıyla çalıştırın." }
@@ -106,7 +114,7 @@ struct ObjectEditorKey: Codable, Equatable {
   var dirty: Bool { sql != savedText }
   var hasPendingDatabaseChanges: Bool { moduleInitialSQL.map {sql != $0} ?? false }
   var canSubmitModule: Bool {
-    server.online && state == .ready && !busy && transactionCount == 0 &&
+    server.online && canExecute && transactionCount == 0 &&
       moduleObjectID != nil && objectEditorKey?.database == database &&
       moduleOriginal != nil && hasPendingDatabaseChanges
   }
@@ -122,10 +130,12 @@ struct ObjectEditorKey: Codable, Equatable {
     self.database = database
     self.title = title
   }
-  func connect() {
+  func connect(afterConnected: (() -> Void)? = nil) {
     guard !busy else { return }
-    guard server.online,!server.updatingProfile else { state = .disconnected; changed?(); return }
+    guard !server.updatingProfile else { state = .disconnected; changed?(); return }
     state = .connecting
+    connectionError = nil
+    let generation = server.generation
     changed?()
     var profile = server.profile
     profile.database = database
@@ -133,18 +143,28 @@ struct ObjectEditorKey: Codable, Equatable {
     task = Task { [weak self] in
       guard let self else { return }
       do {
-        try await connection.connect(profile, password: password)
+        if let connectionFixture {try await connectionFixture(profile, password)}
+        else {try await connection.connect(profile, password: password)}
+        guard !Task.isCancelled, server.generation == generation, database == profile.database else {
+          await connection.disconnect(); state = .disconnected; task=nil; runAfterConnect=false; connectionError=Task.isCancelled ? "Bağlantı iptal edildi." : "Bağlantı hedefi değişti; tekrar çalıştırın."; changed?(); return
+        }
         state = .ready
         messages = "Bağlandı: \(profile.host) / \(database)\n"
         changed?()
         Task { [weak self] in await self?.loadSymbols() }
       } catch {
         state = .disconnected
-        await recordConnectionFailure(error)
-        messages = error.localizedDescription
+        connectionError = Task.isCancelled ? "Bağlantı iptal edildi." : error.localizedDescription
+        messages = connectionError!
+        if let failure=error as? SQLFailure,failure.diagnostics.contains(where:{$0.state.hasPrefix("08")}) {
+          let server=self.server
+          Task {if server.generation == generation {await server.checkExplorerHealth()}}
+        }
         changed?()
       }
       task = nil
+      if state == .ready, let afterConnected {afterConnected(); return}
+      if state != .ready {runAfterConnect=false}
       if runAfterConnect && state == .ready {
         runAfterConnect = false
         execute()
@@ -164,7 +184,7 @@ struct ObjectEditorKey: Codable, Equatable {
     }
     do {
       if let cached = try await server.cachedCompletionCatalog(database:database) { publish(cached,verified:!force && cached.fresh) }
-      guard server.catalogIndexRevision==indexRevision,server.allowsCatalogIndex(database) else {return}
+      guard server.online,server.catalogIndexRevision==indexRevision,server.allowsCatalogIndex(database) else {return}
       let catalog = try await server.refreshCompletionCatalog(database:database,force:force)
       publish(catalog,verified:true)
     } catch {
@@ -174,6 +194,7 @@ struct ObjectEditorKey: Codable, Equatable {
     }
   }
   func useDatabase(_ name: String) {
+    if state == .disconnected {database=name;clearSymbols();connectionError=nil;changed?();Task {[weak self] in await self?.loadSymbols()};return}
     guard state == .ready else { return }
     state = .running
     changed?()
@@ -198,13 +219,17 @@ struct ObjectEditorKey: Codable, Equatable {
     }
   }
   func execute(override: String? = nil, estimated: Bool = false, repeatRead: Bool = false) {
-    guard !definitionLoading,state == .ready, confirmDiscardResultEdits?() != false else { return }
+    guard canExecute, confirmDiscardResultEdits?() != false else { return }
     let source = sql as NSString
     let query =
       override
       ?? (selectedRange.length > 0 && NSMaxRange(selectedRange) <= source.length
         ? source.substring(with: selectedRange) : sql)
     guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    if state == .disconnected {
+      connect { [weak self] in self?.execute(override:query,estimated:estimated,repeatRead:repeatRead) }
+      return
+    }
     let executionServer=server,executionServerGeneration=server.generation,executionDatabase=database
     let executionLimits=limits
     repeating = repeatRead
@@ -369,7 +394,7 @@ struct ObjectEditorKey: Codable, Equatable {
     changed?()
   }
   func cancel() {
-    guard state == .running else { return }
+    guard state == .running || state == .connecting else { return }
     state = .cancelling
     task?.cancel()
     connection.cancel()

@@ -46,6 +46,7 @@ extension StudioState {
   let database:String
   private let contextLabel:String
   private let open:(FavoriteQuery)throws->Void
+  private let insert:((FavoriteQuery)throws->Void)?
   private let manage:()->Void
   private let search=NSSearchField()
   private let table=FavoritePickerTable()
@@ -59,8 +60,8 @@ extension StudioState {
   private let openButton=StudioToolbarButton(symbol:"arrow.up.right.square",label:"Favoriyi sorguda aç",tone:.accent,title:"Sorguda Aç",width:122)
   private(set) var visible:[FavoriteQuery]=[]
   var selectedFavorite:FavoriteQuery? {visible.indices.contains(table.selectedRow) ? visible[table.selectedRow]:nil}
-  init(model:FavoriteQueriesModel,serverID:UUID?,database:String,contextLabel:String,open:@escaping (FavoriteQuery)throws->Void,manage:@escaping ()->Void) {
-    self.model=model;self.serverID=serverID;self.database=database;self.contextLabel=contextLabel;self.open=open;self.manage=manage
+  init(model:FavoriteQueriesModel,serverID:UUID?,database:String,contextLabel:String,open:@escaping (FavoriteQuery)throws->Void,insert:((FavoriteQuery)throws->Void)? = nil,manage:@escaping ()->Void) {
+    self.model=model;self.serverID=serverID;self.database=database;self.contextLabel=contextLabel;self.open=open;self.insert=insert;self.manage=manage
     super.init(nibName:nil,bundle:nil)
     NotificationCenter.default.addObserver(self,selector:#selector(reloadItems),name:FavoriteQueriesModel.changed,object:model)
     NotificationCenter.default.addObserver(self,selector:#selector(refreshTheme),name:StudioTheme.changed,object:nil)
@@ -83,7 +84,7 @@ extension StudioState {
     let column=NSTableColumn(identifier:.init("favorite"));column.title="Favori Sorgular";column.resizingMask = .autoresizingMask
     table.addTableColumn(column);table.headerView=nil;table.rowHeight=48;table.intercellSpacing=NSSize(width:0,height:2)
     table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle;table.style = .plain
-    table.dataSource=self;table.delegate=self;table.target=self;table.doubleAction = #selector(openSelected)
+    table.dataSource=self;table.delegate=self;table.target=self;table.doubleAction = #selector(insertSelected)
     table.openSelected = {[weak self] in self?.openSelected()}
     table.setAccessibilityIdentifier("favoritePickerList");table.setAccessibilityLabel("Bu sorguda kullanılabilen favoriler")
     scroll.documentView=table;scroll.hasVerticalScroller=true;scroll.drawsBackground=false
@@ -165,6 +166,10 @@ extension StudioState {
     table.selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false);table.scrollRowToVisible(index)
   }
   @objc private func searchChanged() {reloadItems()}
+  @objc func insertSelected() {
+    guard let favorite=selectedFavorite else {return}
+    do {if let insert {try insert(favorite);view.window?.close()} else {openSelected()}} catch {message.stringValue=error.localizedDescription;message.isHidden=false}
+  }
   @objc func openSelected() {
     guard let favorite=selectedFavorite,serverID != nil else {return}
     do {try open(favorite);view.window?.close()} catch {message.stringValue=error.localizedDescription;message.isHidden=false}
@@ -199,6 +204,7 @@ struct FavoriteQueriesPanel:View {
   @State var contextServerID:UUID?
   @State var contextDatabase:String
   var didOpen:()->Void = {}
+  var insert:((FavoriteQuery)throws->Void)?
   var editFavorite:((FavoriteQuery?,UUID?,String)->Void)?
   @State private var all=false
   @State private var search=""
@@ -229,6 +235,8 @@ struct FavoriteQueriesPanel:View {
             Label(item.name,systemImage:item.scope == .global ? "globe":item.scope == .connection ? "server.rack":"externaldrive")
             Text(scopeLabel(item)).font(.caption).foregroundStyle(.secondary)
           }.padding(.vertical,5).tag(item.id)
+        }.contextMenu(forSelectionType:UUID.self) { _ in } primaryAction: { ids in
+          if let id=ids.first,let item=visible.first(where:{$0.id == id}) {insertFavorite(item)}
         }.frame(minWidth:230,idealWidth:280,maxWidth:360).accessibilityIdentifier("favoriteList")
         VStack(alignment:.leading,spacing:12) {
           if let current {
@@ -246,18 +254,22 @@ struct FavoriteQueriesPanel:View {
           .frame(width:90,height:30).disabled(current == nil || editFavorite == nil)
         StudioActionButton("Sil",icon:"trash",tint:Color(nsColor:StudioTheme.danger)) {deleting=true}.disabled(current == nil)
         Spacer()
+        StudioActionButton("İmlece Ekle",icon:"text.insert") {if let current {insertFavorite(current)}}.disabled(current == nil || insert == nil)
         StudioActionButton("Sorguda Aç",icon:"arrow.up.right.square") {
           guard let current else {return}
           do {try state.openFavorite(current,contextServerID:contextServerID,contextDatabase:targetDatabase(current));openError="";didOpen()}
           catch {openError=error.localizedDescription}
         }.buttonStyle(StudioPrimaryButton()).disabled(current == nil).accessibilityIdentifier("favoriteOpen")
       }
-      Text("Favoriler bu Mac’te saklanır. Sorguda Aç yeni bir sekme açar; SQL otomatik çalıştırılmaz.").font(.caption).foregroundStyle(.secondary)
+      Text("Çift tıklama mevcut editörde imlece ekler. Sorguda Aç yeni bir sekme açar; SQL otomatik çalıştırılmaz.").font(.caption).foregroundStyle(.secondary)
     }.padding(20).studioPanel().task {await model.load()}
       .confirmationDialog("Seçili favori silinsin mi?",isPresented:$deleting,titleVisibility:.visible) {
         Button("Favoriyi Sil",role:.destructive) {if let current {Task {await model.remove(current.id);selected=nil}}}
         Button("Vazgeç",role:.cancel) {}
       }
+  }
+  private func insertFavorite(_ favorite:FavoriteQuery) {
+    do {try insert?(favorite);openError=""} catch {openError=error.localizedDescription}
   }
   private func scopeLabel(_ favorite:FavoriteQuery) -> String {
     guard favorite.scope != .global else {return "Genel · Tüm bağlantılar"}

@@ -7,7 +7,7 @@ extension WorkbenchController {
   @objc func openObject() {
     let row=outline.clickedRow>=0 ? outline.clickedRow:outline.selectedRow
     guard let node = outline.item(atRow:row) as? TreeNode else { return }
-    if case .favorite = node.kind {openExplorerFavorite(node);return}
+    if case .favorite = node.kind {insertExplorerFavorite(node);return}
     if case .favorites = node.kind {
       if outline.isItemExpanded(node) {outline.collapseItem(node)} else {outline.expandItem(node)}
       return
