@@ -1,3 +1,20 @@
+## 14 Ekim 2026 — v0.2.132 / build 133 public yayın doğrulandı
+
+- [Public/latest v0.2.132](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.132), kaynak `2c4ee962fac910469fd06309cc3945c1907dd640`; [Actions 38627638943](https://github.com/erhanulas/MSSQLStudio/actions/runs/38627638943) bütün adımlarıyla başarılı. Kullanıcı fonksiyonlarında zorunlu şema ve INSERT/VALUES iç fonksiyon biçimlendirme düzeltmeleri yayımlandı.
+- CI gerçek yayın paketleriyle **433 app +358 core +8 text =799 test; 772 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 202.002 /13.765 /0.003 sn (`/tmp/mssql132-ci.log`). Sabit kimlik/izole Keychain fixture ve geçici kimlik temizliği geçti.
+- Dört public asset bağımsız indirildi: GitHub digest/SHA-256, manifest URL/hash, exact 0.2.132/build133 bundle metadata ve kaynak/paket/GitHub sürüm notları eşliği doğrulandı. ZIP/PKG app/helper strict/deep sabit imza/DR, binary/metadata/notlar ve frozen helper byte/hash eşliği geçti; helper yeniden derlenmedi/imzalanmadı. PKG için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu exact `Foundation updater feed verified: 0.2.132` verdi. Kanıt `/tmp/MSSQLStudio-132-public-verification/verification.json` ve `foundation-feed.log`.
+- Tamamlama/formatter regresyonları ve native editör format/undo kısayolu testleri çalıştı. Canlı SQL Server yürütmesi veya Installer kurulumu denenmedi. Kurulu kullanıcı uygulaması, açık SQL oturumları, kullanıcı verileri ve `.vscode/` korunur.
+
+Public asset SHA-256 değerleri:
+
+| Dosya | SHA-256 |
+|---|---|
+| MSSQLStudio-0.2.132.pkg | `75926e703a838a1a2238c80c35e73704d8f74e4698d36a7df9f5e4f545715337` |
+| MSSQLStudio-0.2.132.zip | `b4a9f7f79d3ffb31ee826b3e73fff21f82237ac3aa4a62e780a0a2e77f463a9b` |
+| MSSQLStudio-CredentialAgent-v1.zip | `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713` |
+| update.json | `1fb788544b98936772c857ed06b71c9354823c46fc40dd92df26f7d15eeab5f6` |
+
 ## 14 Ekim 2026 — v0.2.132 / build 133 yayın hazırlığı
 
 - Fonksiyon tamamlama için Catalog.needsSchema kuralı yalnız scalar yerine tüm FUNCTION türlerini kapsar. SQL/CLR scalar ve inline/multi-statement/CLR TVF, EXEC dahil, şema tercihi kapalıyken de nitelendirilir; yazılmış qualifier ve güvenli identifier/parantez tercihi korunur. Tablo/view tercihi ve yerleşik sistem fonksiyonları değişmez. Ayar açıklaması bu istisnayı açıkça bildirir.
