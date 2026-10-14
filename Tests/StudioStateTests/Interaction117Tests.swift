@@ -4,6 +4,17 @@ import SwiftUI
 @testable import MSSQLStudio
 @testable import SQLServerKit
 
+private actor Interaction117Gate {
+  private(set) var started=false
+  private var released=false
+  private var continuation:CheckedContinuation<Void,Never>?
+  func wait() async {
+    started=true
+    if released {return}
+    await withCheckedContinuation {continuation=$0}
+  }
+  func open() {released=true;continuation?.resume();continuation=nil}
+}
 @MainActor private final class Click117Target:NSObject {
   var count=0
   @objc func activate(_ sender:Any?) {count+=1}
@@ -72,23 +83,36 @@ import SwiftUI
     let folder=URL(fileURLWithPath:"/tmp/StudioDBSwitch-\(UUID())")
     defer {try? FileManager.default.removeItem(at:folder)}
     let disk=CatalogDiskIndex(url:folder.appendingPathComponent("catalog.sqlite"))
+    let metadata=Interaction117Gate(),execution=Interaction117Gate()
+    defer {Task {await metadata.open();await execution.open()}}
     let service=SQLCatalogService(index:disk,refreshFixture:{_,_,_ in
-      try await Task.sleep(for:.milliseconds(350))
+      await metadata.wait()
       return SQLCatalogSnapshot(symbols:[])
     })
     let server=ConnectedServer(profile:ServerProfile(),password:"",diskIndex:disk,objectIndexService:CatalogIndexService(index:disk),completionIndexService:service)
     let doc=QueryDocument(server:server,database:"master",title:"Test");doc.state = .ready
     doc.databaseChangeFixture={_ in}
     doc.useDatabase("Other")
-    for _ in 0..<100 where doc.busy {try await Task.sleep(for:.milliseconds(2))}
+    for _ in 0..<1000 {
+      if await metadata.started {break}
+      try await Task.sleep(for:.milliseconds(2))
+    }
+    #expect(await metadata.started)
     #expect(doc.database=="Other" && !doc.busy && doc.canExecute && doc.task==nil)
     doc.sql="SELECT 42";#expect(doc.sql=="SELECT 42")
-    doc.executionFixture={_,_ in try await Task.sleep(for:.milliseconds(600));return Execution()}
+    doc.executionFixture={_,_ in await execution.wait();return Execution()}
     doc.execute()
+    for _ in 0..<1000 {
+      if await execution.started {break}
+      try await Task.sleep(for:.milliseconds(2))
+    }
+    #expect(await execution.started)
     #expect(doc.busy && doc.task != nil)
-    try await Task.sleep(for:.milliseconds(450))
+    await metadata.open()
+    for _ in 0..<1000 where !doc.catalogVerified {try await Task.sleep(for:.milliseconds(2))}
     #expect(doc.catalogVerified && doc.busy && doc.task != nil)
-    try await Task.sleep(for:.milliseconds(250))
+    await execution.open()
+    for _ in 0..<1000 where doc.busy {try await Task.sleep(for:.milliseconds(2))}
     #expect(doc.database=="Other" && !doc.busy)
   }
   @Test func progressRowRefreshDoesNotRestoreOtherBranches() throws {
