@@ -1,3 +1,20 @@
+## 14 Ekim 2026 — v0.2.128 / build 129 public yayın doğrulandı
+
+- [Public/latest v0.2.128](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.128), kaynak `51adecb6b63d7604fd76f2da41fe63605ab9798f`; [Actions 38599515506](https://github.com/erhanulas/MSSQLStudio/actions/runs/38599515506) bütün adımlarıyla başarılı. Ortak native menüde daha ferah metin/sade simgeler, Explorer işlem grupları ve yedi kategorili aranabilir/atama filtreli kısayollar yayımlandı. Mevcut kısayollar ve native komut/validation davranışları korunur.
+- CI gerçek yayın paketleriyle **418 app +354 core +8 text =780 test; 753 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 98.316 /13.800 /0.003 sn (`/tmp/MSSQLStudio-128-ci-tests.log`). Sabit kimlik/izole Keychain denetimi ve geçici kimlik temizliği başarılı.
+- Dört public asset bağımsız indirildi: GitHub digest/SHA-256, ZIP/PKG URL/hash manifest eşliği, exact 0.2.128/build129 metadata ve kaynak ReleaseNotes byte eşliği doğrulandı. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği geçti; helper yeniden derlenmedi/imzalanmadı. PKG için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu `Foundation updater feed verified: 0.2.128` verdi. Kanıt `/tmp/MSSQLStudio-128-public-verification/verification.json` içindedir.
+- İzole CUA/native kanıtları ve menü screenshot katmanı sınırı aşağıdaki yerel bölümde ayrıdır; koyu minimum Settings bitmap’i ayrıca görsel incelendi. Canlı SQL Server/gerçek Installer denenmedi. Kullanıcı uygulaması/SQL/Keychain/history/favoriler ve `.vscode/` korunur; uygulama kurulmadı/yeniden başlatılmadı.
+
+Public asset SHA-256 değerleri:
+
+| Dosya | SHA-256 |
+|---|---|
+| MSSQLStudio-0.2.128.pkg | `c44643d6fab4d9657d9f778522ed86e8e4807554f3f2301550a406e34e6192a7` |
+| MSSQLStudio-0.2.128.zip | `baee1263dc928ff988da34c1e1cc6953af29b8aa29934addeaf46b6df7479d63` |
+| MSSQLStudio-CredentialAgent-v1.zip | `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713` |
+| update.json | `141786b32777c052be192c672a10911eabf9b9f12ff298173c7c440df98dcf45` |
+
 ## 14 Ekim 2026 — v0.2.128 / build 129 yerel geliştirme doğrulaması
 
 - Ortak StudioMenu 14 pt metin/en az 280 pt genişlik, seçici sakin simgeler ve fallback simgesiz ikincil eylemler kullanır. Explorer kök menüsünde sorgu/yenileme, favoriler, bağlantı, organizasyon/kaldırma ve kopyalama grupları ayrıldı. Native target/action, tag, representedObject, submenu, validation, disabled ve kısayol yolu korunur; özel NSMenuItem.view yoktur.
