@@ -1,3 +1,20 @@
+## 14 Ekim 2026 — v0.2.131 / build 132 public yayın doğrulandı
+
+- [Public/latest v0.2.131](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.131), kaynak `00ee901b2e32d7ad39778f5f81371e195283e075`; [Actions 38624820288](https://github.com/erhanulas/MSSQLStudio/actions/runs/38624820288) bütün adımlarıyla başarılı. DDL TRY_CONVERT uyumluluk düzeltmesi, eksiksiz/hizalı TVF önizlemesi ve sonuç araç çubuğu iyileştirmeleri yayımlandı.
+- CI gerçek yayın paketleriyle **433 app +356 core +8 text =797 test; 770 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 201.617 /14.422 /0.005 sn (`/tmp/mssql131-ci-tests.log`). Sabit kimlik/izole Keychain fixture ve geçici kimlik temizliği geçti.
+- Dört public asset bağımsız indirildi: GitHub digest/SHA-256, manifest URL/hash, exact 0.2.131/build132 bundle metadata ve kaynak/paket/GitHub sürüm notları eşliği doğrulandı. ZIP/PKG app/helper strict/deep sabit imza/DR, binary/metadata/notlar ve frozen helper byte/hash eşliği geçti; helper yeniden derlenmedi/imzalanmadı. PKG için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu exact `Foundation updater feed verified: 0.2.131` verdi. Kanıt `/tmp/MSSQLStudio-131-public-verification/verification.json` ve `foundation-feed.log`.
+- SQL Server 2017 grammar ve yerel UI kanıtı aşağıdadır. Canlı compatibility-100 DB’de uçtan uca karşılaştırma/taşıma, gerçek fareyle TVF hover kaydırması veya Installer kurulumu denenmedi. Kurulu kullanıcı uygulaması, açık SQL oturumları, kullanıcı verileri ve `.vscode/` korunur.
+
+Public asset SHA-256 değerleri:
+
+| Dosya | SHA-256 |
+|---|---|
+| MSSQLStudio-0.2.131.pkg | `502971e11ed2b4e9b87c1af6d5650bbf269fef88cf212025d27117b2abfa3552` |
+| MSSQLStudio-0.2.131.zip | `effcc902f25a9f673bc6b8daeaa3f57e50001ba3581e912cd102c974303c3348` |
+| MSSQLStudio-CredentialAgent-v1.zip | `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713` |
+| update.json | `9775804284dcacf97da8f7582ab9537ea7841f7a521f0f5c51d9bce6c505b9ac` |
+
 ## 14 Ekim 2026 — v0.2.131 / build 132 yayın hazırlığı
 
 - Bildirilen DDL Karşılaştırma hatasının kaynağı inventory başlığındaki TRY_CONVERT idi. Sürüm denetimi `ISNULL(CONVERT(int,SERVERPROPERTY('ProductMajorVersion')),0)` kullanır; compatibility 110 gerektiren fonksiyona bağımlılık kaldırıldı. SQL Server 2017+ sınırı ve NULL sürümün reddi korunur; DB compatibility ayarı değiştirilmez. Resmî kaynak: [Microsoft TRY_CONVERT](https://learn.microsoft.com/en-us/sql/t-sql/functions/try-convert-transact-sql).
