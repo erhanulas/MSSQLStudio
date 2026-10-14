@@ -1,3 +1,20 @@
+## 14 Ekim 2026 — v0.2.129 / build 130 public yayın doğrulandı
+
+- [Public/latest v0.2.129](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.129), kaynak `60235de18bfb84e5e4ccac6873600a4f0f23ddcb`; [Actions 38606440440](https://github.com/erhanulas/MSSQLStudio/actions/runs/38606440440) bütün adımlarıyla başarılı. Kompakt sorgu sekmeleri, DB yanında ortak Çalıştır/İptal/Plan/Formatla, aynı araçları taşıyan detached pencere ve yazınca araması açılan ortak seçiciler yayımlandı. Değişmeyen kapsam/liste güncellemeleri açık aramayı korur; değişen kapsam eski kabulü reddeder.
+- CI gerçek yayın paketleriyle **422 app +354 core +8 text =784 test; 757 geçti /27 dış koşullu atlandı, 0 issue**. Tamamlanmış özetler 110.058 /11.295 /0.003 sn (`/tmp/MSSQLStudio-129-ci-tests.log`). Sabit kimlik/izole Keychain denetimi ve geçici kimlik temizliği başarılı.
+- Dört public asset bağımsız indirildi: GitHub digest/SHA-256, ZIP/PKG URL/hash manifest eşliği, exact 0.2.129/build130 metadata ve kaynak ReleaseNotes byte eşliği doğrulandı. App/helper strict/deep sabit imza/DR ve frozen helper byte eşliği geçti; helper yeniden derlenmedi/imzalanmadı. PKG için Developer ID Installer/notarization iddia edilmez.
+- CI ve bağımsız indirilen signed uygulamanın kendi Foundation/URLSession updater yolu `Foundation updater feed verified: 0.2.129` verdi. Kanıt `/tmp/MSSQLStudio-129-public-verification/verification.json` içindedir.
+- İzole CUA/native kanıtları aşağıdaki yerel bölümde ayrıdır. Canlı SQL Server/gerçek Installer ve bütün picker noktalarının fiziksel fare turu denenmedi. Kullanıcı uygulaması/SQL/Keychain/history/favoriler ve `.vscode/` korunur; uygulama kurulmadı/yeniden başlatılmadı.
+
+Public asset SHA-256 değerleri:
+
+| Dosya | SHA-256 |
+|---|---|
+| MSSQLStudio-0.2.129.pkg | `088289cd9916b80f01937c3e7356a742a832fc1d41d6d614e84062d6e9f98d90` |
+| MSSQLStudio-0.2.129.zip | `e0a45d3606c73825980cbe5466dba860e72c8fc60b29196d82f2ea200b98375f` |
+| MSSQLStudio-CredentialAgent-v1.zip | `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713` |
+| update.json | `5da612e3fd07611fc42bb9f3ef847cdddd19afbc8c2b43d52571d8beefebabe0` |
+
 ## 14 Ekim 2026 — v0.2.129 / build 130 yayın hazırlığı
 
 - Kullanıcının açık yayın isteğiyle yerel editör araç satırı/sekme ve ortak seçici yenilemesi 0.2.129/build130 olarak hazırlandı. Debug/Release metadata ve tek kaynak ReleaseNotes.json eşitlendi. Aynı ürün kaynağının son tam seri sonucu aşağıdadır: **422 app +354 core +8 text =784 test; 757 geçti /27 dış koşullu atlandı, 0 issue** (`/tmp/mssql-editor-chrome-all2.log`).
