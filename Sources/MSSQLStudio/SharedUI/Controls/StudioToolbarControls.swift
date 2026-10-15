@@ -4,6 +4,12 @@ import SQLServerKit
 import SwiftUI
 
 @MainActor final class StudioToolbarPopUpButton: NSPopUpButton {
+  private var helpText:String?
+  override var toolTip:String? {
+    get {helpText}
+    set {helpText=newValue;super.toolTip=nil;StudioHoverHelp.shared.configureText(newValue,for:self)}
+  }
+
   // Borderless native popup cells still report bezel alignment insets.
   // Their complete hit surface must match the toolbar layout rectangle.
   override var alignmentRectInsets:NSEdgeInsets {
@@ -26,6 +32,12 @@ import SwiftUI
 
 /// Native tabs retain keyboard, target/action and accessibility behavior.
 @MainActor final class StudioResultTabButton: StudioFullAreaButton {
+  private var helpText:String?
+  override var toolTip:String? {
+    get {helpText}
+    set {helpText=newValue;super.toolTip=nil;StudioHoverHelp.shared.configureText(newValue,for:self)}
+  }
+
   private var hoverArea: NSTrackingArea?
   var source: SQLResultSource? {
     didSet {
@@ -84,6 +96,13 @@ import SwiftUI
 }
 
 @MainActor final class StudioToolbarButton: NSButton {
+  private var helpText:String?
+  override var toolTip:String? {
+    get {helpText}
+    set {helpText=newValue;super.toolTip=nil;StudioHoverHelp.shared.configureText(newValue,for:self)}
+  }
+  override var alignmentRectInsets:NSEdgeInsets {.init(top:0,left:0,bottom:0,right:0)}
+
   enum Tone { case neutral, accent, success, warning, danger }
   var tone: Tone { didSet { refreshStyle() } }
   var prominent: Bool { didSet { refreshStyle() } }
@@ -100,6 +119,8 @@ import SwiftUI
     super.init(frame: .zero)
     cell = StudioToolbarButtonCell()
     setButtonType(.momentaryPushIn)
+    (cell as? NSButtonCell)?.highlightsBy=[]
+    (cell as? NSButtonCell)?.showsStateBy=[]
     focusRingType = .none
     self.title = title
     image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)?
@@ -108,7 +129,7 @@ import SwiftUI
     bezelStyle = .rounded; isBordered = false; controlSize = .small
     font = .systemFont(ofSize: 11, weight: .semibold)
     setAccessibilityLabel(label); toolTip = label
-    wantsLayer = true; layer?.cornerRadius = 7; layer?.borderWidth = 1
+    wantsLayer = true; clipsToBounds=true;layer?.cornerRadius = StudioMetrics.controlRadius; layer?.borderWidth = 0
     widthAnchor.constraint(equalToConstant: width).isActive = true
     heightAnchor.constraint(equalToConstant: 26).isActive = true
     setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -129,7 +150,8 @@ import SwiftUI
     layer?.backgroundColor = (isEnabled
       ? color.withAlphaComponent(prominent ? pressed ? 0.80 : hovered ? 0.92 : 1 : pressed ? 0.20 : hovered ? 0.12 : active ? 0.12 : flat ? 0 : 0.035)
       : StudioTheme.muted.withAlphaComponent(0.015)).cgColor
-    layer?.borderColor = (isEnabled ? color.withAlphaComponent(active || hovered ? 0.28 : 0) : NSColor.clear).cgColor
+    layer?.borderWidth = isEnabled && active ? 1:0
+    layer?.borderColor = (isEnabled && active ? color.withAlphaComponent(0.28) : NSColor.clear).cgColor
   }
   override func sendAction(_ action:Selector?, to target:Any?) -> Bool {
     // Native momentary cells may leave their last state behind. Only controls

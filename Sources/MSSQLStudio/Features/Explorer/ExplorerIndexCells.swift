@@ -5,19 +5,25 @@ extension WorkbenchController {
   func indexCell(for node:TreeNode)->NSView {
     let cell=ExplorerIndexCell();cell.outline=outline
     if case .database = node.kind {
+      let server=node.server,database=node.database
+      explorerIndexStatuses.request(server:server,database:database) { [weak self,weak server] in
+        guard let self,let server,let current=explorerTree.databaseNode(server:server,database:database) else {return}
+        reloadExplorer(item:current)
+      }
+      let snapshot=explorerIndexStatuses.snapshot(server:server,database:database)
       let activity=node.server.definitionIndex.activities[node.database]
       for content in [false,true] {
         let badge=DatabaseIndexButton();badge.node=node;badge.target=self;badge.action=#selector(showDatabaseIndex(_:))
         let enabled = !content || node.server.allowsDefinitionIndex(node.database)
-        let details=indexDetailsByDatabase[node.server.id.uuidString+"|"+node.database] ?? ""
-        let ready = content ? details.contains("nesne içerikleri · Hazır") : details.contains("nesne indeksi")
-        let failed = content ? activity?.phase == .failed || details.contains("nesne içerikleri · Kısmi indeks") : node.server.indexErrors[node.database] != nil
+        let ready = content ? snapshot?.definitionsReady == true : snapshot?.objectsReady == true
+        let failed = content ? activity?.phase == .failed || snapshot?.definitionsWarning == true : node.server.indexErrors[node.database] != nil
         let building = content ? activity?.phase == .building || activity?.phase == .waiting : node.server.indexingDatabases.contains(node.database)
         let title = content ? "Nesne içerikleri" : "Nesne indeksi"
         badge.image=NSImage(systemSymbolName:content ? "doc.text.magnifyingglass":"square.stack.3d.up",accessibilityDescription:nil)
         badge.contentTintColor = !enabled ? StudioTheme.muted : failed ? .systemOrange : building ? StudioTheme.accent : ready ? .systemGreen : StudioTheme.muted
         badge.bezelStyle = .inline;badge.isBordered=false;badge.imagePosition = .imageOnly
-        badge.toolTip=node.database + " · " + title + " · " + (enabled ? failed ? "Hata" : building ? "Hazırlanıyor" : "Durumu göster" : "Kapalı")
+        badge.toolTip=node.database + " · " + title + " · " + (enabled ? failed ? "Hata" : building ? "Hazırlanıyor" : ready ? "Hazır" : "Durumu göster" : "Kapalı")
+        if let error=snapshot?.readError {badge.toolTip=(badge.toolTip ?? "")+"\n"+error}
         if content,let activity {badge.toolTip=(badge.toolTip ?? "")+" · \(activity.processed) / \(activity.total.map(String.init) ?? "…")"}
         badge.setAccessibilityLabel(badge.toolTip)
         badge.setAccessibilityIdentifier((content ? "databaseDefinitionIndex_":"databaseIndex_")+node.database)

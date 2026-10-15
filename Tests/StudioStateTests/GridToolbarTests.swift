@@ -4,6 +4,41 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct GridToolbarTests {
+  @Test func toolbarHoverStaysInsideControlAndUsesOneCustomHelp() async throws {
+    _=NSApplication.shared
+    let button=StudioToolbarButton(symbol:"play",label:"Çalıştır",tone:.success)
+    button.flat=true;button.toolTip="Çalıştır · ⌃R"
+    let root=NSView(frame:NSRect(x:0,y:0,width:320,height:100))
+    let window=NSWindow(contentRect:root.frame,styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=root
+    defer {StudioHoverHelp.shared.hide();window.close()}
+    root.addSubview(button);button.translatesAutoresizingMaskIntoConstraints=false
+    NSLayoutConstraint.activate([button.leadingAnchor.constraint(equalTo:root.leadingAnchor,constant:12),button.topAnchor.constraint(equalTo:root.topAnchor,constant:12)])
+    window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil);root.layoutSubtreeIfNeeded()
+    #expect(button.frame.size==NSSize(width:28,height:26))
+    #expect(button.alignmentRectInsets.top==0 && button.alignmentRectInsets.bottom==0)
+    let event=try #require(NSEvent.enterExitEvent(with:.mouseEntered,location:.zero,modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,eventNumber:0,trackingNumber:0,userData:nil))
+    button.mouseEntered(with:event)
+    #expect(button.layer?.borderWidth==0 && button.clipsToBounds)
+    #expect((button.cell as? NSButtonCell)?.highlightsBy.isEmpty==true)
+    try await Task.sleep(for:.milliseconds(250))
+    #expect(StudioHoverHelp.shared.visibleTitle=="Çalıştır · ⌃R")
+    #expect(window.childWindows?.count==1)
+    button.toolTip="Yeni açıklama"
+    #expect(StudioHoverHelp.shared.visibleTitle==nil && button.accessibilityHelp()=="Yeni açıklama")
+    button.tracksActiveState=true;button.state = .on
+    #expect(button.layer?.borderWidth==1)
+    let host=WorkbenchController(state:StudioState())
+    let toolbar=NSToolbar(identifier:"HoverFixture")
+    let item=try #require(host.toolbar(toolbar,itemForItemIdentifier:.init("query"),willBeInsertedIntoToolbar:true))
+    #expect(item.toolTip==nil && (item.view as? StudioToolbarButton)?.toolTip?.isEmpty==false)
+    let controls:[NSView]=[StudioToolbarPopUpButton(),StudioResultTabButton(),StudioSearchablePopUpButton()]
+    for control in controls {
+      control.toolTip="Tek yardım"
+      #expect(control.toolTip=="Tek yardım" && control.accessibilityHelp()=="Tek yardım")
+      control.toolTip=nil;#expect(control.accessibilityHelp()==nil)
+    }
+  }
   func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
   func editingFixture() throws -> (QueryController, ResultController, NSWindow) {
     _ = NSApplication.shared

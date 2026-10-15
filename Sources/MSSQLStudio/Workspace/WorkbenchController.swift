@@ -26,7 +26,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   var explorerRevealTask:Task<Void,Never>?
   var explorerRevealID=UUID()
   let indexStatus = StudioToolbarButton(symbol: "externaldrive", label: "Yerel indeks durumu ve işlemleri", tone: .neutral, width: 26)
-  var indexDetailsByDatabase:[String:String]=[:]
+  let explorerIndexStatuses=ExplorerIndexStatusController()
   var indexPopover:NSPopover?
   var indexStatusTask: Task<Void,Never>?
   var lastIndexStatusCheck = Date.distantPast
@@ -295,8 +295,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     if let menu = NSApp.mainMenu { update(menu) }
     if isViewLoaded {
       for item in view.window?.toolbar?.items ?? [] {
-        item.toolTip=StudioCommandCatalog.help(item.label,selector:item.action)
-        (item.view as? NSButton)?.toolTip=item.toolTip
+        let help=StudioCommandCatalog.help(item.label,selector:item.action)
+        if let button=item.view as? StudioToolbarButton {button.toolTip=help;item.toolTip=nil}
+        else {item.toolTip=help}
       }
       renderTabs()
     }
@@ -310,6 +311,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       indexStatusTask?.cancel();indexPopover?.performClose(nil)
       lastIndexStatusScope=""; indexStatus.toolTip="İndeks durumu için bağlantı seçin"
     }
+    explorerIndexStatuses.retain(servers:Set(state.servers.map(\.id)))
     for root in roots {synchronizeFavorites(in:root)}
     rebuildOrganizationRoots()
     rebuildSearchScopes()
@@ -893,7 +895,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     guard let definition = definitions[id.rawValue] else { return nil }
     let item = NSToolbarItem(itemIdentifier: id)
     item.label = definition.0
-    item.toolTip = StudioCommandCatalog.help(definition.0,selector:definition.2)
+    let help = StudioCommandCatalog.help(definition.0,selector:definition.2)
     item.image = NSImage(systemSymbolName: definition.1, accessibilityDescription: definition.0)
     item.target = self
     item.action = definition.2
@@ -902,7 +904,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       title: id.rawValue == "run" ? "Çalıştır" : "", width: id.rawValue == "run" ? 88 : 30,
       prominent: id.rawValue == "run")
     button.target = self; button.action = definition.2
-    button.toolTip=item.toolTip
+    button.toolTip=help
+    item.toolTip=nil
     item.view = button
     return item
   }

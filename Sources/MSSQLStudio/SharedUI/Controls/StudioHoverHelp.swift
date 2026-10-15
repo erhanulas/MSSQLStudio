@@ -25,6 +25,12 @@ import SwiftUI
   private weak var source: NSView?
   private(set) var visibleTitle: String?
   private(set) var visibleDetail: String?
+  /// Custom help controls must not also register AppKit's delayed tooltip.
+  func configureText(_ text:String?,for view:NSView) {
+    view.removeAllToolTips()
+    view.setAccessibilityHelp(text)
+    hide(for:view)
+  }
   @discardableResult func begin(for view:NSView)->UUID {
     hide();source=view
     monitor=NSEvent.addLocalMonitorForEvents(matching:[.leftMouseDown,.rightMouseDown,.otherMouseDown,.keyDown,.scrollWheel]) { [weak self] event in

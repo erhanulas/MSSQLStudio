@@ -3,6 +3,12 @@ import SwiftUI
 
 /// Retains NSPopUpButton selection/target-action API; searching never changes selection.
 @MainActor final class StudioSearchablePopUpButton:NSPopUpButton {
+  private var helpText:String?
+  override var toolTip:String? {
+    get {helpText}
+    set {helpText=newValue;super.toolTip=nil;StudioHoverHelp.shared.configureText(newValue,for:self)}
+  }
+
   private let popup=NSPopover()
   private var hoverArea:NSTrackingArea?
   private var hovered=false

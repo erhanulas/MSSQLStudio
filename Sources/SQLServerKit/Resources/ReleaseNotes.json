@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.144",
+    "date": "2026-10-16",
+    "title": "Otomatik indeks renkleri ve sade araç çubuğu etkileşimleri",
+    "changes": [
+      "Explorer veritabanı indeks ikonları, veritabanına tıklamayı beklemeden kendi yerel indeks durumlarını okuyup renklerini günceller. Durum artık seçili veritabanının açıklama metnine bağlı değildir.",
+      "İndeks durumları veritabanı başına önbelleğe alınır; eşitleme bildirimleri ilgili satırı yeniler. Sık ilerleme bildirimleri ek disk okuması başlatmaz.",
+      "Ortak araç düğmelerinde taşan hover çerçevesi kaldırıldı; hafif vurgu düğme sınırlarında kalır. Aktif mod göstergeleri ve tıklama davranışı korunur.",
+      "Araç düğmeleri, sonuç sekmeleri ve açılır seçicilerde native ve özel tooltip’in birlikte açılması engellendi. Üst araç çubuğundaki mükerrer tooltip kaydı da kaldırıldı; kısayol ve erişilebilir yardım korunur."
+    ]
+  },
+  {
     "version": "0.2.143",
     "date": "2026-10-16",
     "title": "Yeni güncelleme ekranı ve Explorer durum göstergeleri",

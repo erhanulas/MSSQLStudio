@@ -256,6 +256,10 @@ extension WorkbenchController {
   @objc func catalogIndexUpdated(_ notification: Notification) {
     // Editor snapshots do not change Explorer metadata or index status.
     if notification.name.rawValue == "sqlCatalogChanged" { return }
+    if let server=notification.object as? ConnectedServer,
+      notification.userInfo?["definitionProgress"] as? Bool != true {
+      explorerIndexStatuses.invalidate(server:server,database:notification.userInfo?["database"] as? String)
+    }
     if notification.userInfo?["definitionsOnly"] as? Bool == true {
       if notification.userInfo?["definitionProgress"] as? Bool != true {lastIndexStatusCheck = .distantPast;updateIndexStatus()}
       for row in 0..<outline.numberOfRows {
@@ -355,9 +359,6 @@ extension WorkbenchController {
       let building = !server.indexingDatabases.isDisjoint(with:databases) || definitions.values.contains(where: \.building)
       indexStatus.image=NSImage(systemSymbolName:failed ? "exclamationmark.triangle" : building ? "arrow.triangle.2.circlepath" : ready == databases.count && ready > 0 ? "externaldrive.badge.checkmark":"externaldrive",accessibilityDescription:nil)
       indexStatus.contentTintColor=failed ? .systemOrange : building ? StudioTheme.accent : ready > 0 ? .systemGreen:.secondaryLabelColor
-      for db in databases {
-        indexDetailsByDatabase[server.id.uuidString+"|"+db] = lines.filter {$0.hasPrefix(db+":")}.joined(separator:"\n")
-      }
       indexStatus.toolTip = lines.joined(separator:"\n\n")
       indexStatus.setAccessibilityLabel(indexStatus.toolTip ?? "Yerel indeks")
       let databaseSet=Set(databases)

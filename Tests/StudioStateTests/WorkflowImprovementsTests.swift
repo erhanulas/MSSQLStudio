@@ -59,6 +59,41 @@ import Testing
     server.online=false
     host.updateIndexStatus();#expect(!host.indexStatus.isHidden)
   }
+  @Test func unselectedOfflineDatabaseLoadsItsOwnIndexColors() async throws {
+    _=NSApplication.shared
+    let url=URL(fileURLWithPath:"/tmp/ExplorerIndexColors-"+UUID().uuidString+"/catalog.sqlite")
+    defer {try? FileManager.default.removeItem(at:url.deletingLastPathComponent())}
+    let disk=CatalogDiskIndex(url:url)
+    let profile=ServerProfile(name:"Fixture",visibleDatabases:["A","B"],definitionIndexDatabases:["B":true])
+    let scope=CatalogDiskIndex.scope(profile:profile,database:"B")
+    try await disk.append(scope:"stage",items:[CatalogItem(id:1,name:"T",schema:"dbo",detail:"USER_TABLE")])
+    try await disk.finishBuild(staging:"stage",scope:scope)
+    let lease=try #require(try await disk.configureDefinitions(owner:profile.id,enabled:true))
+    let generation=try await disk.generation(scope:scope)
+    try await disk.finishDefinitionSync(scope:scope,owner:profile.id,lease:lease,generation:generation,expected:0,unavailable:0)
+    let server=ConnectedServer(profile:profile,password:"",diskIndex:disk)
+    server.online=false;server.databases=[CatalogItem(id:5,name:"A"),CatalogItem(id:6,name:"B")]
+    let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false;state.servers=[server]
+    let host=WorkbenchController(state:state);_=host.view
+    let node=try #require(host.explorerTree.databaseNode(server:server,database:"B"))
+    _=host.indexCell(for:node)
+    for _ in 0..<200 {
+      if host.explorerIndexStatuses.snapshot(server:server,database:"B") != nil {break}
+      try await Task.sleep(for:.milliseconds(10))
+    }
+    #expect(host.selected?.database != "B")
+    let snapshot=try #require(host.explorerIndexStatuses.snapshot(server:server,database:"B"))
+    #expect(snapshot.objectsReady && snapshot.definitionsReady)
+    let cell=host.indexCell(for:node)
+    let buttons=cell.subviews.compactMap {$0 as? DatabaseIndexButton}
+    #expect(buttons.count==2 && buttons.allSatisfy {$0.contentTintColor == NSColor.systemGreen})
+    server.indexErrors["B"]="Fixture error"
+    host.catalogIndexUpdated(Notification(name:.init("catalogIndexUpdated"),object:server,userInfo:["database":"B"]))
+    let failed=host.indexCell(for:node).subviews.compactMap {$0 as? DatabaseIndexButton}
+    #expect(failed.first?.contentTintColor == NSColor.systemOrange)
+    host.explorerIndexStatuses.retain(servers:[])
+    #expect(host.explorerIndexStatuses.snapshot(server:server,database:"B")==nil)
+  }
   @Test func connectionFailureKeepsTooltipWithoutWarningSuffixOrOrangeName() throws {
     _=NSApplication.shared
     let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false
