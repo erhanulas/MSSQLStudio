@@ -1,3 +1,9 @@
+## 16 Ekim 2026 — v0.2.143 / build 144 public yayın doğrulandı
+
+- [Public/latest v0.2.143](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.143), kaynak `9115de435773e63e222c8c2f8fa65e50b02a1a13`; [Actions 38812888985](https://github.com/erhanulas/MSSQLStudio/actions/runs/38812888985) bütün adımlarıyla başarılı. Kullanıcı isteğiyle yerel test/build tekrarlanmadı; mevcut yayın iş akışındaki otomatik paket testleri **465 app +375 core +8 text =848 test; 820 geçti /28 dış koşullu atlandı /0 issue** verdi. Tamamlanmış özetler 193.394 /10.933 /0.003 sn (`/tmp/mssql143-ci.log`).
+- Dört public asset indirildi; SHA-256/GitHub digest/manifest, exact 0.2.143/build144, kaynak/paket/GitHub notları, ZIP/PKG app/helper strict/deep imzaları, frozen helper byte/hash ve Icon Composer varyant eşliği doğrulandı. İndirilen signed uygulamanın kendi Foundation updater yolu exact 0.2.143 için exit 0 verdi. Kanıt: `/tmp/MSSQLStudio-143-public-verification/verification.json`, `verification.log`, `foundation-feed.log`.
+- ZIP SHA-256 `8335e108435e5d8e36df4b6e12385c7a19f129c8b9ac0c2f65736cd3e4d37bcf`; PKG `5d4a6765d01c11708671680bbcdf778d0f8c99da90dc67580a1f9602cbddfec0`. Kurulu uygulama/veri değiştirilmedi; gerçek Installer ve kullanıcı güncellemesi denenmedi. Yerel özellik/native/CUA ve gerçek download callback kapsamı aşağıdadır.
+
 ## 16 Ekim 2026 — native güncelleme ekranı ve gerçek indirme ilerlemesi, yerel
 
 - UpdateProgressController sürüm geçişi, aşama başlıkları, native bar, indirilen/toplam byte ve gerçek yüzdeyle yenilendi. Kontrol/doğrulama ve toplam boyut bilinmiyorsa indeterminate kalır; sonucu alan ekran geç transfer callback’lerini yok sayar. Uzun hata tam metni kaydırılabilir/seçilebilir; Kapat busy sırasında pasif, bitişte etkin/Enter ile erişilebilir kalır. Mevcut kurulum kararı/watcher/termination/imza/PKG akışı korunur.
