@@ -1,3 +1,9 @@
+## 16 Ekim 2026 — v0.2.144 / build 145 public yayın doğrulandı
+
+- [Public/latest v0.2.144](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.144), kaynak `def67417067e4b8a84f4a45dcb1dff305ca08095`; [Actions 38817323897](https://github.com/erhanulas/MSSQLStudio/actions/runs/38817323897) bütün adımlarıyla başarılı. Kullanıcı isteğiyle yerel test/build tekrarlanmadı; mevcut yayın iş akışındaki otomatik paket testleri **467 app +375 core +8 text =850 test; 822 geçti /28 dış koşullu atlandı /0 issue** verdi. Tamamlanmış özetler 190.226 /11.929 /0.003 sn (`/tmp/mssql144-ci.log`).
+- Dört public asset indirildi; SHA-256/GitHub digest/manifest, exact 0.2.144/build145, kaynak/paket/GitHub notları, ZIP/PKG app/helper strict/deep imzaları, frozen helper byte/hash ve Icon Composer varyant eşliği doğrulandı. İndirilen signed uygulamanın kendi Foundation updater yolu exact 0.2.144 için exit 0 verdi. Kanıt: `/tmp/MSSQLStudio-144-public-verification/verification.json`, `verification.log`, `foundation-feed.log`.
+- ZIP SHA-256 `5b2cf7c80a5dfe5e0b835154b339b18307f44b4e9d9c769691b072858e7ced39`; PKG `5a57b6f56448a85343a708b25abd13c6304c2fe010fd945d8eaef72165ccbd7d`. Kurulu uygulama/veri değiştirilmedi; gerçek Installer/gerçek kullanıcı hover’ı denenmedi. Yerel özellik/native kapsamı aşağıdadır.
+
 ## 16 Ekim 2026 — ortak toolbar hover sınırları ve mükerrer tooltip, yerel
 
 - Kullanıcı Çalıştır üzerinde büyük çerçeve ve iki tooltip bildirdi. StudioToolbarButton hem toolTip ile AppKit tooltip’i kaydediyor hem StudioHoverHelp açıyordu. Native rounded button alignment payı ve layer hover border’ı da kontrol alanından büyük görünüm oluşturabiliyordu. Toolbar alignment insets sıfırlandı, clipsToBounds açıldı; hover kenarlığı kaldırıldı, yalnız gerçek active/prominent model kenarlığı korunur. Native cell push-in/state çizimi devre dışı; native target/action/hit/tracking aynı kalır.
