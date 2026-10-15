@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.146",
+    "date": "2026-10-16",
+    "title": "Hızlı sorgu kurtarma ve geniş favori önizlemesi",
+    "changes": [
+      "Kayıtlı sorgu sekmeleri, Explorer bağlantısı ve veritabanı keşfi beklenmeden çevrimdışı açılır. Kurtarma dosyası başlangıçta bir kez arka planda okunur; sekmeler toplu güncellenir.",
+      "Kurtarma sırasında mevcut sorgu odağı, SQL, kayıtlı metin ve pin bilgileri korunur; aynı profil sekmeleri tekrar eklenmez, SQL otomatik çalıştırılmaz.",
+      "Favori sorgu seçicisindeki sol liste 220 pt kompakt genişlikte kalır; pencere büyüdükçe kalan alan SQL önizlemesine ayrılır."
+    ]
+  },
+  {
     "version": "0.2.145",
     "date": "2026-10-16",
     "title": "Akıcı sekme taşıma ve kompakt yardımcı pencereler",

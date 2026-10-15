@@ -26,6 +26,13 @@ import Testing
     let window=NSWindow(contentViewController:picker);window.isReleasedWhenClosed=false;window.setContentSize(NSSize(width:840,height:540));defer {window.close()}
     let search=try #require(descendants(picker.view).compactMap {$0 as? NSSearchField}.first)
     let table=try #require(descendants(picker.view).compactMap {$0 as? NSTableView}.first)
+    let sidebar = try #require(descendants(picker.view).first { $0.accessibilityIdentifier() == "favoritePickerSidebar" })
+    for width: CGFloat in [720, 840, 1246] {
+      window.setContentSize(NSSize(width: width, height: 540))
+      picker.view.layoutSubtreeIfNeeded()
+      #expect(abs(sidebar.frame.width - 220) < 1)
+      #expect(table.frame.width <= 220)
+    }
     #expect(picker.visible.map(\.id) == [values[2].id,values[1].id,values[0].id])
     let editor=NSTextView()
     #expect(picker.control(search,textView:editor,doCommandBy:#selector(NSResponder.moveDown(_:))))

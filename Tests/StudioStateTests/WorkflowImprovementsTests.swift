@@ -5,6 +5,31 @@ import Testing
 
 @MainActor @Suite(.serialized) struct WorkflowImprovementsTests {
   private func views(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(views)}
+  @Test func recoveryPublishesOnceBeforeConnectionsAndPreservesExistingFocus() {
+    let state = StudioState(); state.historyEnabled = false; state.recoveryEnabled = true
+    let first = ConnectedServer(profile: .init(), password: "")
+    let second = ConnectedServer(profile: .init(), password: "")
+    first.online = false; second.online = false
+    state.servers = [first, second]
+    let tabs = (0..<20).map { index in
+      StudioState.SavedTab(title: "Recovered \(index)", sql: "SELECT \(index)", saved: "baseline", serverID: index < 10 ? first.id : second.id, database: "master", pinned: index == 0)
+    }
+    var updates = 0
+    state.changed = { updates += 1 }
+    state.recover(for: state.servers, tabs: tabs)
+    #expect(updates == 1 && state.documents.count == 20)
+    #expect(state.documents.first?.pinned == true)
+    #expect(state.documents.allSatisfy { $0.state == .disconnected && $0.lastExecutedSQL == nil && $0.savedText == "baseline" })
+    let active = state.active
+    state.completeExplorerConnection(first, previousActive: active)
+    #expect(state.documents.count == 20 && state.active === active)
+    state.recover(for: state.servers, tabs: tabs)
+    #expect(updates == 1 && state.documents.count == 20)
+    let third = ConnectedServer(profile: .init(), password: ""); third.online = false
+    let extra = StudioState.SavedTab(title: "Extra", sql: "SELECT 99", saved: "SELECT 99", serverID: third.id, database: "master")
+    state.recover(for: [third], tabs: [extra])
+    #expect(state.active === active && state.documents.count == 21 && updates == 2)
+  }
   @Test func cancelledCatalogWorkDoesNotBecomeAnExplorerWarning() async {
     let server=ConnectedServer(profile:.init(),password:"")
     server.recordExplorerFailure(CancellationError())

@@ -286,6 +286,14 @@ import UniformTypeIdentifiers
         }
         servers.append(server)
       }
+      // Restore local documents before any server login or catalog discovery.
+      if recoveryEnabled {
+        let recoveryFolder = folder
+        do {
+          let tabs = try await Task.detached { try Self.readSavedTabs(in: recoveryFolder) }.value
+          recover(for: servers, tabs: tabs)
+        } catch { showError(error.localizedDescription) }
+      }
       changed?()
       for server in servers where !server.online {
         connectionActivities[server.id]="Explorer bağlanıyor: " + server.profile.name;changed?()
@@ -314,7 +322,7 @@ import UniformTypeIdentifiers
   }
   @discardableResult func newQuery(
     server: ConnectedServer, database: String? = nil, text: String = "", title: String? = nil,
-    run: Bool = false, refreshSeconds: Int? = nil, startConnection:Bool = false, selection:NSRange? = nil
+    run: Bool = false, refreshSeconds: Int? = nil, startConnection:Bool = false, selection:NSRange? = nil, notifyChanges:Bool = true
   ) -> QueryDocument {
     let doc = QueryDocument(
       server: server, database: database ?? server.profile.database,
@@ -340,7 +348,7 @@ import UniformTypeIdentifiers
     active = doc
     doc.runAfterConnect = run
     doc.initialRefreshSeconds = refreshSeconds
-    changed?()
+    if notifyChanges { changed?() }
     if run {doc.runAfterConnect=false;doc.execute()} else if startConnection {doc.connect()}
     else {Task {[weak doc] in await doc?.loadSymbols()}}
 
@@ -355,7 +363,7 @@ import UniformTypeIdentifiers
       self?.saveSnapshot()
     }
   }
-  struct SavedTab: Codable {
+  struct SavedTab: Codable, Sendable {
     var title: String
     var sql: String
     var saved: String
@@ -386,26 +394,39 @@ import UniformTypeIdentifiers
   private func endpoint(_ profile: ServerProfile) -> String {
     "\(profile.host.lowercased()):\(profile.port)|\(profile.login)|\(profile.kerberos)"
   }
+  nonisolated static func readSavedTabs(in folder: URL) throws -> [SavedTab] {
+    let url = folder.appendingPathComponent("tabs.json")
+    guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+    let data = try Data(contentsOf: url)
+    guard data.count < 20_000_000 else {
+      throw SQLFailure("Kurtarma dosyası 20 MB okuma sınırını aşıyor; mevcut dosya korunuyor.")
+    }
+    return try JSONDecoder().decode([SavedTab].self, from: data)
+  }
   func recover(for server: ConnectedServer) {
     guard recoveryEnabled else { return }
-    do {
-      let url = folder.appendingPathComponent("tabs.json")
-      guard FileManager.default.fileExists(atPath: url.path) else { return }
-      let data = try Data(contentsOf: url)
-      guard data.count < 20_000_000 else { return }
-      for tab in try JSONDecoder().decode([SavedTab].self, from: data).filter({
-        $0.serverID == server.id || $0.endpoint == endpoint(server.profile)
-      }).prefix(30) {
-        let doc = newQuery(server: server, database: tab.database, text: tab.sql, title: tab.title)
+    do { recover(for: [server], tabs: try Self.readSavedTabs(in: folder)) }
+    catch { showError(error.localizedDescription) }
+  }
+  func recover(for servers: [ConnectedServer], tabs: [SavedTab]) {
+    guard recoveryEnabled else { return }
+    let previousActive = active
+    var restored = false
+    for server in servers where !documents.contains(where: { $0.server.id == server.id }) {
+      for tab in tabs.filter({ $0.serverID == server.id || $0.endpoint == endpoint(server.profile) }).prefix(30) {
+        let doc = newQuery(server: server, database: tab.database, text: tab.sql, title: tab.title, notifyChanges: false)
         doc.pinned = tab.pinned ?? false
         doc.savedText = tab.saved
         doc.file = tab.path.map { URL(fileURLWithPath: $0) }
         if let key=tab.objectKey {doc.objectEditorKey=ObjectEditorKey(serverID:server.id,database:key.database,objectID:key.objectID);doc.moduleObjectID=key.objectID}
         doc.moduleOriginal=tab.moduleOriginal;doc.moduleInitialSQL=tab.moduleInitialSQL
+        restored = true
       }
-      documents=documents.filter(\.pinned)+documents.filter {!$0.pinned}
-      changed?()
-    } catch { showError(error.localizedDescription) }
+    }
+    guard restored else { return }
+    documents=documents.filter(\.pinned)+documents.filter {!$0.pinned}
+    if let previousActive { active = previousActive }
+    changed?()
   }
   func historyServer(_ record: QueryRecord) -> ConnectedServer? {
     if let id = record.serverID { return servers.first { $0.id == id } }

@@ -90,7 +90,7 @@ extension StudioState {
     scroll.documentView=table;scroll.hasVerticalScroller=true;scroll.drawsBackground=false
     scroll.wantsLayer=true;scroll.layer?.cornerRadius=9;scroll.layer?.borderWidth=1
     empty.alignment = .center;empty.font = .systemFont(ofSize:12);empty.setAccessibilityIdentifier("favoritePickerEmpty")
-    let list=NSView();list.addSubview(scroll);list.addSubview(empty)
+    let list=NSView();list.setAccessibilityIdentifier("favoritePickerSidebar");list.addSubview(scroll);list.addSubview(empty)
     for child in [scroll,empty] {child.translatesAutoresizingMaskIntoConstraints=false}
     NSLayoutConstraint.activate([scroll.leadingAnchor.constraint(equalTo:list.leadingAnchor),scroll.trailingAnchor.constraint(equalTo:list.trailingAnchor),scroll.topAnchor.constraint(equalTo:list.topAnchor),scroll.bottomAnchor.constraint(equalTo:list.bottomAnchor),empty.centerXAnchor.constraint(equalTo:list.centerXAnchor),empty.centerYAnchor.constraint(equalTo:list.centerYAnchor),empty.widthAnchor.constraint(lessThanOrEqualTo:list.widthAnchor,constant:-32)])
     titleLabel.font = .systemFont(ofSize:13,weight:.semibold);titleLabel.lineBreakMode = .byTruncatingTail
@@ -101,7 +101,8 @@ extension StudioState {
     preview.view.setContentHuggingPriority(.init(1),for:.vertical)
     preview.view.widthAnchor.constraint(equalTo:detail.widthAnchor).isActive=true
     let body=NSStackView(views:[list,detail]);body.orientation = .horizontal;body.spacing=16;body.distribution = .fill
-    list.widthAnchor.constraint(equalTo:body.widthAnchor,multiplier:0.43,constant:-8).isActive=true
+    // Keep navigation compact as the window grows; SQL gets all remaining width.
+    list.widthAnchor.constraint(equalToConstant:220).isActive=true
     list.heightAnchor.constraint(equalTo:body.heightAnchor).isActive=true;detail.heightAnchor.constraint(equalTo:body.heightAnchor).isActive=true
     message.font = .systemFont(ofSize:11);message.isHidden=true
     let manageButton=StudioToolbarButton(symbol:"slider.horizontal.3",label:"Favori sorguları yönet",tone:.neutral,title:"Yönet",width:80)
