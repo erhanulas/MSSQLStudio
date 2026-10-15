@@ -1,3 +1,9 @@
+## 16 Ekim 2026 — v0.2.145 / build 146 public yayın doğrulandı
+
+- [Public/latest v0.2.145](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.145), kaynak `2632758c91a1a0b6f2b7444e95401850d2e97b7e`; [Actions 38819787925](https://github.com/erhanulas/MSSQLStudio/actions/runs/38819787925) bütün adımlarıyla başarılı. Kullanıcı isteğiyle yerel test/build tekrarlanmadı. Mevcut yayın akışının otomatik testleri **470 app +375 core +8 text =853 test** için başarılı tamamlanmış özet verdi (190.162 /10.834 /0.003 sn; `/tmp/mssql145-ci.log`); dış koşullu skip’ler canlı doğrulama sayılmaz.
+- Dört public asset indirildi; GitHub digest/SHA-256/manifest, exact 0.2.145/build146, kaynak/paket/GitHub notları, app/helper strict/deep imzaları, frozen helper ve Icon Composer varyant eşliği doğrulandı. İndirilen signed uygulamanın Foundation updater yolu exact 0.2.145 için exit 0 verdi. Kanıt: `/tmp/MSSQLStudio-145-public-verification/verification.json`, `verification.log`, `foundation-feed.log`.
+- ZIP SHA-256 `2a6217f3eeaab9891c1ee3ea5ad122939e51d79ca89adf38c3838a2c642e820c`; PKG `c980848693b38d65eaee63bee344ec20a9bd35965980cec40e1a4299d53cfff8`. Kurulu uygulama/veri değiştirilmedi; gerçek Installer/arkadaşın cihazı denenmedi. Yerel özellik/native kapsamı aşağıdadır.
+
 ## 16 Ekim 2026 — kompakt favori listesi ve geniş SQL önizlemesi, yerel
 
 - Favori Sorgular yönetimindeki sol liste 230/280/360 pt minimum/ideal/maksimum yerine 180/220/280 pt kullanır; native HSplitView ayarlanabilirliği korunur. Sağ SQL önizlemesi kalan alanı alır, iç boşluk 16’dan ortak 12 pt’ye düşürüldü. Favori kayıt/kapsam/açma/düzenleme davranışları değişmedi.
