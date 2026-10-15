@@ -66,3 +66,13 @@ struct UpdateFeedTransportTests {
     #expect(await cancelled.requests.count == 1)
   }
 }
+
+struct UpdateDownloadProgressTests {
+  @Test func unknownAndInvalidByteTotalsNeverInventPercentage() {
+    #expect(UpdateDownloadProgress(receivedBytes:10,expectedBytes:-1).fraction==nil)
+    #expect(UpdateDownloadProgress(receivedBytes:10,expectedBytes:0).expectedBytes==nil)
+    #expect(UpdateDownloadProgress(receivedBytes:-10,expectedBytes:100).fraction==0)
+    #expect(UpdateDownloadProgress(receivedBytes:25,expectedBytes:100).fraction==0.25)
+    #expect(UpdateDownloadProgress(receivedBytes:200,expectedBytes:100).fraction==1)
+  }
+}

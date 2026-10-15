@@ -90,10 +90,16 @@ public actor ApplicationUpdate {
     }
     throw SQLFailure("Güncelleme kontrolü tamamlanamadı.")
   }
-  public func download(_ release: Release) async throws -> URL {
+  public func download(_ release: Release,progress:(@Sendable (UpdateDownloadProgress)->Void)?=nil) async throws -> URL {
     guard release.downloadURL.scheme == "https" else { throw SQLFailure("Paket adresi HTTPS olmalı.") }
-    let (url,response) = try await URLSession.shared.download(from:release.downloadURL)
+    let url:URL,response:URLResponse
+    if let progress {
+      (url,response)=try await UpdateDownloadObserver(report:progress).download(from:release.downloadURL)
+    } else {
+      (url,response)=try await URLSession.shared.download(from:release.downloadURL)
+    }
     do {
+      try Task.checkCancellation()
       guard let http = response as? HTTPURLResponse, http.statusCode == 200,
         response.url?.scheme == "https" else { throw SQLFailure("Güncelleme indirilemedi.") }
       let size = try url.resourceValues(forKeys:[.fileSizeKey]).fileSize ?? 0
@@ -191,11 +197,11 @@ public actor ApplicationUpdate {
     public let package:URL
     public let version:String
   }
-  public func downloadInstaller(_ release:Release) async throws -> URL {
+  public func downloadInstaller(_ release:Release,progress:(@Sendable (UpdateDownloadProgress)->Void)?=nil) async throws -> URL {
     guard let url=release.installerURL, let sha=release.installerSHA256, url.scheme == "https", sha.count == 64, sha.allSatisfy({$0.isHexDigit}) else {
       throw SQLFailure("Bu yayın uygulama içi PKG güncellemesini desteklemiyor. GitHub yayınındaki PKG paketini kullanın.")
     }
-    return try await download(Release(version:release.version,downloadURL:url,sha256:sha,installerURL:nil,installerSHA256:nil))
+    return try await download(Release(version:release.version,downloadURL:url,sha256:sha,installerURL:nil,installerSHA256:nil),progress:progress)
   }
   public func prepareInstaller(package:URL,expectedVersion:String,currentVersion:String) throws -> Installer {
     guard Self.isNewer(expectedVersion,than:currentVersion) else {throw SQLFailure("Kurulum sürümü güncel sürümden yeni değil.")}

@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.143",
+    "date": "2026-10-16",
+    "title": "Yeni güncelleme ekranı ve Explorer durum göstergeleri",
+    "changes": [
+      "Güncelleme ekranı sürüm geçişi, Kontrol/İndirme/Doğrulama aşamaları ve native ilerleme çubuğuyla yenilendi. İndirilen/toplam boyut ve gerçek yüzde gösterilir; toplam boyut bilinmiyorsa belirsiz ilerleme kullanılır.",
+      "Güncelleme indirmesinde gerçek aktarım bildirimleri kullanılır. Uzun hata ayrıntıları kaydırılabilir; mevcut paket doğrulama ve kurulum güvenlikleri korunur.",
+      "Explorer bağlantı adındaki sarı ünlem ve turuncu yazı kaldırıldı; hata ayrıntısı tooltip’te korunur. Nesne ve metadata hataları kendi satırında görünür kalır.",
+      "Disk/indeks durum göstergesi çevrimdışıyken de yerel indeks durumunu mevcut renkleriyle gösterir."
+    ]
+  },
+  {
     "version": "0.2.142",
     "date": "2026-10-16",
     "title": "Explorer renk sürekliliği ve genişletilmiş DBA araçları",

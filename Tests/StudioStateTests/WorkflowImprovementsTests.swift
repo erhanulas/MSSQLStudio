@@ -45,7 +45,7 @@ import Testing
     await #expect(throws:SQLFailure.self) {try await document.resultEditingMetadata("SELECT metadata",database:"master")}
     #expect(reads==2)
   }
-  @Test func explorerDiskStatusHiddenWithoutExplorerConnection() {
+  @Test func explorerDiskStatusRemainsAvailableForOfflineIndex() {
     _=NSApplication.shared
     let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false
     let emptyHost=WorkbenchController(state:state);_=emptyHost.view
@@ -53,11 +53,25 @@ import Testing
     let server=ConnectedServer(profile:.init(name:"Offline"),password:"");server.online=false
     state.servers=[server]
     let host=WorkbenchController(state:state);_=host.view
-    host.updateIndexStatus();#expect(host.indexStatus.isHidden)
+    host.updateIndexStatus();#expect(!host.indexStatus.isHidden)
     server.online=true
     host.updateIndexStatus();#expect(!host.indexStatus.isHidden)
     server.online=false
-    host.updateIndexStatus();#expect(host.indexStatus.isHidden)
+    host.updateIndexStatus();#expect(!host.indexStatus.isHidden)
+  }
+  @Test func connectionFailureKeepsTooltipWithoutWarningSuffixOrOrangeName() throws {
+    _=NSApplication.shared
+    let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false
+    let server=ConnectedServer(profile:.init(name:"HARMAN"),password:"")
+    server.online=false;server.startupError="Sentetik bağlantı hatası"
+    state.servers=[server]
+    let host=WorkbenchController(state:state);_=host.view
+    let node=try #require(host.roots.first)
+    let cell=try #require(host.outlineView(host.outline,viewFor:host.outline.tableColumns[0],item:node) as? NSTableCellView)
+    #expect(cell.textField?.stringValue=="HARMAN")
+    #expect(cell.textField?.textColor == NSColor.labelColor)
+    #expect(cell.toolTip?.contains("Sentetik bağlantı hatası")==true)
+    #expect(cell.imageView?.image != nil)
   }
   @Test func cappedSuccessfulSelectAllowsEditingButStoppedReadDoesNot() async {
     let server=ConnectedServer(profile:.init(),password:"");server.online=false

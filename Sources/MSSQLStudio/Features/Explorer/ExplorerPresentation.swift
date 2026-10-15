@@ -260,9 +260,13 @@ extension WorkbenchController {
     guard let node = item as? TreeNode else { return nil }
     if tableColumn?.identifier.rawValue == "indexes" {return indexCell(for:node)}
     let cell = ExplorerMetadataCell();cell.node=node
+    // Connection health is represented by its connection icon and tooltip.
+    // Keep errors on actual metadata nodes visible without warning adornments on servers.
+    let presentsError:Bool
+    if case .server=node.kind {presentsError=false} else {presentsError=node.error != nil}
     let label = NSTextField(
       labelWithString: node.displayTitle + (node.loading ? " …" : "")
-        + (node.error != nil ? " ⚠" : ""))
+        + (presentsError ? " ⚠" : ""))
     label.font = .systemFont(ofSize: 12)
     label.lineBreakMode = .byClipping
     if let scroll=outlineView.enclosingScrollView as? ExplorerScrollView {
@@ -275,12 +279,12 @@ extension WorkbenchController {
     }
     let image = NSImageView(
       image: NSImage(systemSymbolName: node.icon, accessibilityDescription: nil)!)
-    image.contentTintColor = node.error == nil ? node.tint : .systemOrange
+    image.contentTintColor = presentsError ? .systemOrange : node.tint
     if case .server = node.kind {
       image.image = NSImage(systemSymbolName: node.server.reconnecting || node.server.updatingProfile ? "arrow.triangle.2.circlepath" : node.server.online ? "externaldrive.connected.to.line.below" : "externaldrive.badge.xmark", accessibilityDescription: node.displayTitle)
       image.contentTintColor = node.server.reconnecting || node.server.updatingProfile ? .systemOrange : node.server.online ? .systemGreen : .secondaryLabelColor
     }
-    label.textColor = node.error == nil ? .labelColor : .systemOrange
+    label.textColor = presentsError ? .systemOrange : .labelColor
     if case .server = node.kind { label.font = .systemFont(ofSize: 12, weight: .semibold) }
     if case .database=node.kind {label.font = .systemFont(ofSize:12,weight:.medium)}
     if let id=node.connectionGroupID {

@@ -89,6 +89,22 @@ import Testing
     editor.setSelectedRange(NSRange(location:15,length:0));controller.updateOccurrences()
     #expect(controller.occurrenceHighlights.blockRanges.isEmpty)
   }
+  @Test func downloadProgressUsesRealCountsAndIgnoresLateCallbacks() {
+    _=NSApplication.shared
+    let progress=UpdateProgressController();defer {progress.close()}
+    progress.beginDownload(version:"9.0.0")
+    progress.updateTransfer(.init(receivedBytes:1024,expectedBytes:4096))
+    #expect(!progress.progressBar.isIndeterminate && progress.progressBar.doubleValue==0.25)
+    #expect(progress.percentage.stringValue=="%25" && !progress.done.isEnabled)
+    progress.updateTransfer(.init(receivedBytes:2048,expectedBytes:-1))
+    #expect(progress.progressBar.isIndeterminate && progress.percentage.stringValue.isEmpty)
+    progress.phase("Doğrulanıyor",stage:.verifying)
+    progress.updateTransfer(.init(receivedBytes:4096,expectedBytes:4096))
+    #expect(progress.status.stringValue=="Doğrulanıyor" && progress.percentage.stringValue.isEmpty)
+    progress.finish("Sentetik hata",failed:true)
+    progress.updateTransfer(.init(receivedBytes:4096,expectedBytes:4096))
+    #expect(progress.progressBar.isHidden && progress.done.isEnabled && progress.status.stringValue=="Sentetik hata")
+  }
   @Test func updateProgressRemainsBusyUntilResult() {
     _=NSApplication.shared
     let progress=UpdateProgressController()

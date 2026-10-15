@@ -171,6 +171,12 @@ import SwiftUI
         workbench.showAgentProperties(node)
         workbench.showAgentHistory(node)
       }
+      if Bundle.main.object(forInfoDictionaryKey:"StudioUpdateSmoke") as? Bool == true {
+        let progress=UpdateProgressController();workbench.updateProgress=progress
+        progress.beginDownload(version:"0.3.0")
+        progress.updateTransfer(.init(receivedBytes:25_000_000,expectedBytes:100_000_000))
+        progress.showWindow(nil)
+      }
       if Bundle.main.object(forInfoDictionaryKey:"StudioActivitySmoke") as? Bool == true {
         server.catalogFixture=ObjectManagementUIFixture.catalog
         if studio.servers.isEmpty {studio.servers.append(server)}
