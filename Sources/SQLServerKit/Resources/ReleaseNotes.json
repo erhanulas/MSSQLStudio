@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.145",
+    "date": "2026-10-16",
+    "title": "Akıcı sekme taşıma ve kompakt yardımcı pencereler",
+    "changes": [
+      "Sorgu sekmeleri sürüklenirken ikon, başlık ve kapatma düğmesi birlikte taşınır; komşu sekmeler yer açmak için kayar. Pin sırası ve Hareketi azalt tercihi korunur.",
+      "Bağlantı ayarlarında profil seçimi artık formu bütünüyle yeniden oluşturmaz; alanlar, düğmeler ve sürücü modeli yerinde kalır. Kaydedilmemiş değişiklik uyarısı korunur.",
+      "Favori Sorgular penceresinin sol listesi daha kompakt hale getirildi; SQL önizlemesine daha geniş alan ayrıldı. Ayarlanabilir ayırıcı korunur."
+    ]
+  },
+  {
     "version": "0.2.144",
     "date": "2026-10-16",
     "title": "Otomatik indeks renkleri ve sade araç çubuğu etkileşimleri",

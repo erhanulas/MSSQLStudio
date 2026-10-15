@@ -132,6 +132,27 @@ private struct DatabaseChoices: View {
   }
 }
 
+/// Selection is part of the draft so replacing it is distinguishable from user edits.
+@MainActor struct ConnectionFormDraft: Equatable {
+  let selection: UUID?
+  var profile: ServerProfile
+  var password: String
+  var remember: Bool
+  var chosen: Set<String>
+  var defaultDatabase: String
+  init(_ server: ConnectedServer?) {
+    selection = server?.id
+    profile = server?.profile ?? ServerProfile(visibleDatabases: [])
+    password = server?.password ?? ""
+    remember = server?.remembered ?? true
+    chosen = Set(server?.profile.visibleDatabases ?? server?.databases.map(\.name) ?? [])
+    defaultDatabase = server?.profile.database ?? ""
+  }
+  func isUserEdit(from old: Self) -> Bool {
+    selection == old.selection && self != old
+  }
+}
+
 struct ConnectionForm: View {
   var connect: (ServerProfile, String, Bool) async throws -> Void
   var saveProfile:((ServerProfile,String,Bool) async throws->Void)?
@@ -139,18 +160,20 @@ struct ConnectionForm: View {
   var cancel: () -> Void
   var draftChanged: () -> Void = {}
   @StateObject private var driver = DriverSetupModel()
-  @State private var profile = ServerProfile(visibleDatabases: [])
-  @State private var password = ""
-  @State private var remember = false
+  let initial: ConnectedServer?
+  @State private var draft: ConnectionFormDraft
+  private var profile: ServerProfile { get { draft.profile } nonmutating set { draft.profile = newValue } }
+  private var password: String { get { draft.password } nonmutating set { draft.password = newValue } }
+  private var remember: Bool { get { draft.remember } nonmutating set { draft.remember = newValue } }
   @State private var loading = false
   @State private var listed = false
   @State private var phase = ""
   @State private var status = ""
   @State private var error = ""
   @State private var items: [CatalogItem] = []
-  @State private var chosen: Set<String> = []
-  @State private var defaultDatabase = ""
-  private let editing: Bool
+  private var chosen: Set<String> { get { draft.chosen } nonmutating set { draft.chosen = newValue } }
+  private var defaultDatabase: String { get { draft.defaultDatabase } nonmutating set { draft.defaultDatabase = newValue } }
+  private var editing: Bool { initial != nil }
   init(
     initial: ConnectedServer? = nil,
     connect: @escaping (ServerProfile, String, Bool) async throws -> Void,
@@ -164,13 +187,9 @@ struct ConnectionForm: View {
     self.loadingChanged=loadingChanged
     self.cancel = cancel
     self.draftChanged = draftChanged
-    editing = initial != nil
-    _profile = State(initialValue: initial?.profile ?? ServerProfile(visibleDatabases: []))
-    _password = State(initialValue: initial?.password ?? "")
-    _remember = State(initialValue: initial?.remembered ?? true)
+    self.initial = initial
+    _draft = State(initialValue: ConnectionFormDraft(initial))
     _items=State(initialValue:initial?.databases ?? [])
-    _chosen=State(initialValue:Set(initial?.profile.visibleDatabases ?? initial?.databases.map(\.name) ?? []))
-    _defaultDatabase=State(initialValue:initial?.profile.database ?? "")
     _listed=State(initialValue:initial?.databases.isEmpty == false)
   }
   private var appearance: Binding<ServerAppearance> {
@@ -191,19 +210,19 @@ struct ConnectionForm: View {
           Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
             GridRow {
               Text("Görünen ad").frame(width:126,alignment:.leading).foregroundStyle(.secondary)
-              TextField("Bağlantı adı", text: $profile.name)
+              TextField("Bağlantı adı", text: $draft.profile.name)
             }
             GridRow {
               Text("Sunucu / port").frame(width:126,alignment:.leading).foregroundStyle(.secondary)
               HStack(spacing: 6) {
-                TextField("Sunucu", text: $profile.host)
-                TextField("Port", value: $profile.port, format: .number.grouping(.never)).frame(
+                TextField("Sunucu", text: $draft.profile.host)
+                TextField("Port", value: $draft.profile.port, format: .number.grouping(.never)).frame(
                   width: 58)
               }
             }
             GridRow {
               Text("Kimlik").frame(width:126,alignment:.leading).foregroundStyle(.secondary)
-              Picker("Kimlik doğrulama", selection: $profile.kerberos) {
+              Picker("Kimlik doğrulama", selection: $draft.profile.kerberos) {
                 Text("SQL Server Authentication").tag(false)
                 Text("Windows / Kerberos").tag(true)
               }.labelsHidden()
@@ -211,16 +230,16 @@ struct ConnectionForm: View {
             if !profile.kerberos {
               GridRow {
                 Text("Kullanıcı").frame(width:126,alignment:.leading).foregroundStyle(.secondary)
-                TextField("Login", text: $profile.login)
+                TextField("Login", text: $draft.profile.login)
               }
               GridRow {
                 Text("Parola").frame(width:126,alignment:.leading).foregroundStyle(.secondary)
-                SecureField("Password", text: $password)
+                SecureField("Password", text: $draft.password)
               }
             }
             GridRow {
               Text("Test veritabanı").frame(width:126,alignment:.leading).foregroundStyle(.secondary)
-              TextField("master", text: $profile.database)
+              TextField("master", text: $draft.profile.database)
                 .studioHelp(
                   "Bağlantı testi ve listeleme için kullanılır. Yeni sorguların veritabanını sağdaki yıldızla seçin."
                 )
@@ -231,11 +250,11 @@ struct ConnectionForm: View {
             Text("Geçerli Kerberos bileti ve sunucu SPN ayarı gerekir.").font(.caption)
               .foregroundStyle(.secondary)
           }
-          Toggle("Bağlantıyı Keychain’de sakla", isOn: $remember).toggleStyle(.checkbox)
+          Toggle("Bağlantıyı Keychain’de sakla", isOn: $draft.remember).toggleStyle(.checkbox)
           } else {
           Text("Güvenlik").font(.headline)
           Label("Bağlantı şifrelemesi zorunlu",systemImage:"lock.shield").font(.caption).foregroundStyle(.secondary)
-          Toggle("Trust server certificate", isOn: $profile.trustCertificate).toggleStyle(.checkbox)
+          Toggle("Trust server certificate", isOn: $draft.profile.trustCertificate).toggleStyle(.checkbox)
             .studioHelp("Şifreleme açık kalır; sunucu sertifikası doğrulanmaz.")
           if profile.trustCertificate {
             Text("Şifreleme açık; sertifika doğrulanmayacak.").font(.caption).foregroundStyle(
@@ -259,7 +278,7 @@ struct ConnectionForm: View {
             StudioActionButton(listed ? "Test Et / Yenile" : "Test Et ve Yükle",icon:"arrow.clockwise",tint:.accentColor,action:test).disabled(loading || driver.busy)
           }
           if listed {
-            DatabaseChoices(items: items, chosen: $chosen, defaultDatabase: $defaultDatabase, profile: $profile)
+            DatabaseChoices(items: items, chosen: $draft.chosen, defaultDatabase: $draft.defaultDatabase, profile: $draft.profile)
               .disabled(loading)
           } else {
             VStack(spacing: 12) {
@@ -300,19 +319,23 @@ struct ConnectionForm: View {
         }
       }
     }.padding(22).studioPanel().frame(minWidth:820,idealWidth:820,maxWidth:.infinity,minHeight:620,idealHeight:620,maxHeight:.infinity)
-      .onChange(of: profile) { old, new in
-        var previous = old
-        previous.name = new.name
-        previous.appearance = new.appearance
-        previous.indexObjectDefinitions = new.indexObjectDefinitions
-        previous.definitionIndexDatabases = new.definitionIndexDatabases
-        draftChanged()
-        if previous != new { invalidate() }
+      .onChange(of: initial?.id) { _, _ in
+        draft = ConnectionFormDraft(initial)
+        items = initial?.databases ?? []
+        listed = !items.isEmpty
+        phase = ""; status = ""; error = ""
+        connectionPage = "Genel"
       }
-      .onChange(of: password) { _, _ in draftChanged();invalidate() }
-      .onChange(of: remember) { _, _ in draftChanged() }
-      .onChange(of: chosen) { _, _ in draftChanged() }
-      .onChange(of: defaultDatabase) { _, _ in draftChanged() }
+      .onChange(of: draft) { old, new in
+        guard new.isUserEdit(from: old) else { return }
+        draftChanged()
+        var previous = old.profile
+        previous.name = new.profile.name
+        previous.appearance = new.profile.appearance
+        previous.indexObjectDefinitions = new.profile.indexObjectDefinitions
+        previous.definitionIndexDatabases = new.profile.definitionIndexDatabases
+        if previous != new.profile || old.password != new.password { invalidate() }
+      }
       .onChange(of: driver.busy) { _, value in loadingChanged(loading || value) }
       .onChange(of: loading) {_,value in loadingChanged(value || driver.busy)}
   }

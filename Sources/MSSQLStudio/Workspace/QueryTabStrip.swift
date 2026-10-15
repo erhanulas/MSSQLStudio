@@ -51,6 +51,17 @@ import UniformTypeIdentifiers
   var draggable = false
   weak var selectionSurface: NSView?
   var trackingEventFixture: (() -> NSEvent?)?
+  private weak var draggedSurface:NSView?
+  private weak var draggedStrip:QueryTabStrip?
+  func dragPreview()->(frame:NSRect,image:NSImage) {
+    let surface=selectionSurface ?? self
+    surface.layoutSubtreeIfNeeded()
+    let image=NSImage(size:surface.bounds.size)
+    if let rep=surface.bitmapImageRepForCachingDisplay(in:surface.bounds) {
+      surface.cacheDisplay(in:surface.bounds,to:rep);image.addRepresentation(rep)
+    }
+    return (convert(surface.bounds,from:surface),image)
+  }
   private func nextTrackingEvent(in window:NSWindow)->NSEvent? {
     if let trackingEventFixture {return trackingEventFixture()}
     return window.nextEvent(matching:[.leftMouseDragged,.leftMouseUp])
@@ -70,16 +81,26 @@ import UniformTypeIdentifiers
         highlight(false)
         let item = NSPasteboardItem(); item.setString(document.id.uuidString,forType: QueryTabStrip.type)
         let drag = NSDraggingItem(pasteboardWriter: item)
-        let image = NSImage(size: bounds.size)
-        if let rep = bitmapImageRepForCachingDisplay(in: bounds) { cacheDisplay(in: bounds,to: rep); image.addRepresentation(rep) }
-        drag.setDraggingFrame(bounds,contents: image)
-        beginDraggingSession(with: [drag],event: next,source: self)
+        let preview=dragPreview()
+        drag.setDraggingFrame(preview.frame,contents:preview.image)
+        let surface=selectionSurface ?? self
+        draggedSurface=surface;draggedStrip=surface.superview as? QueryTabStrip
+        if let strip=draggedStrip,let index=strip.documentIDs.firstIndex(of:document.id) {
+          strip.showDragPreview(id:document.id,insertionIndex:index,animated:false)
+        } else {surface.alphaValue=0}
+        let session=beginDraggingSession(with:[drag],event:next,source:self)
+        session.animatesToStartingPositionsOnCancelOrFail=true
+        session.draggingFormation = .none
         return
       }
     }
     highlight(false)
   }
   func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation { .move }
+  func draggingSession(_ session:NSDraggingSession,endedAt screenPoint:NSPoint,operation:NSDragOperation) {
+    draggedStrip?.resetDragPreview(animated:false)
+    draggedSurface?.alphaValue=1;draggedSurface=nil;draggedStrip=nil
+  }
 }
 @MainActor final class QueryTabCloseButton:DocumentButton {
   private var tracking:NSTrackingArea?
@@ -167,9 +188,48 @@ import UniformTypeIdentifiers
     super.init(frame: frame)
     registerForDraggedTypes([Self.type])
     indicator.wantsLayer = true; indicator.isHidden = true
-    addSubview(indicator)
+    indicator.layer?.cornerRadius=6;indicator.layer?.borderWidth=1
+    addSubview(indicator,positioned:.below,relativeTo:nil)
   }
   required init?(coder: NSCoder) { fatalError() }
+  func showDragPreview(id:UUID,insertionIndex:Int,animated:Bool=true) {
+    let surfaces=arrangedSubviews.prefix(documentIDs.count).compactMap {$0 as? QueryTabSurface}
+    guard let old=documentIDs.firstIndex(of:id),old<surfaces.count else {return}
+    let pinned=surfaces.filter {$0.primaryButton?.document?.pinned == true}.count
+    let isPinned=surfaces[old].primaryButton?.document?.pinned == true
+    let raw=insertionIndex>old ? insertionIndex-1:insertionIndex
+    let destination=min(isPinned ? max(0,pinned-1):surfaces.count-1,max(isPinned ? 0:pinned,raw))
+    let source=surfaces[old],distance=source.frame.width+spacing
+    for (index,view) in surfaces.enumerated() {
+      let x:CGFloat = old<destination && index>old && index<=destination ? -distance:
+        destination<old && index>=destination && index<old ? distance:0
+      view.alphaValue=index==old ? 0:1
+      translate(view,x:x,animated:animated)
+    }
+    let x=destination>old ? surfaces[destination].frame.maxX-source.frame.width:surfaces[destination].frame.minX
+    indicator.frame=NSRect(x:x,y:source.frame.minY,width:source.frame.width,height:source.frame.height)
+    indicator.layer?.backgroundColor=StudioTheme.selection.withAlphaComponent(0.45).cgColor
+    indicator.layer?.borderColor=StudioTheme.accent.withAlphaComponent(0.3).cgColor
+    indicator.isHidden=false
+  }
+  private func translate(_ view:NSView,x:CGFloat,animated:Bool) {
+    view.wantsLayer=true
+    guard let layer=view.layer else {return}
+    let target=CATransform3DMakeTranslation(x,0,0)
+    guard !CATransform3DEqualToTransform(layer.transform,target) else {return}
+    let previous=layer.presentation()?.transform ?? layer.transform
+    CATransaction.begin();CATransaction.setDisableActions(true);layer.transform=target;CATransaction.commit()
+    if animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+      let animation=CABasicAnimation(keyPath:"transform")
+      animation.fromValue=NSValue(caTransform3D:previous);animation.toValue=NSValue(caTransform3D:target)
+      animation.duration=0.14;animation.timingFunction=CAMediaTimingFunction(name:.easeInEaseOut)
+      layer.add(animation,forKey:"queryTabReorder")
+    } else {layer.removeAnimation(forKey:"queryTabReorder")}
+  }
+  func resetDragPreview(animated:Bool=false) {
+    indicator.isHidden=true
+    for view in arrangedSubviews.prefix(documentIDs.count) {view.alphaValue=1;translate(view,x:0,animated:animated)}
+  }
   private func location(_ sender: NSDraggingInfo) -> Int {
     let point = convert(sender.draggingLocation,from: nil)
     for (index,view) in arrangedSubviews.prefix(documentIDs.count).enumerated() where point.x < view.frame.midX { return index }
@@ -177,18 +237,16 @@ import UniformTypeIdentifiers
   }
   override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
   override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-    guard let raw = sender.draggingPasteboard.string(forType: Self.type), let id = UUID(uuidString: raw), documentIDs.contains(id), sender.draggingSource is DocumentButton else { return [] }
-    let index = location(sender)
-    let x = index < documentIDs.count ? arrangedSubviews[index].frame.minX : arrangedSubviews.prefix(documentIDs.count).last?.frame.maxX ?? 0
-    indicator.frame = NSRect(x:x,y:2,width:2,height:max(0,bounds.height-4))
-    indicator.layer?.backgroundColor = StudioTheme.accent.cgColor; indicator.isHidden = false
+    guard let raw = sender.draggingPasteboard.string(forType: Self.type), let id = UUID(uuidString: raw), documentIDs.contains(id), sender.draggingSource is DocumentButton else {resetDragPreview();return []}
+    if let event=NSApp.currentEvent {_ = autoscroll(with:event)}
+    showDragPreview(id:id,insertionIndex:location(sender))
     return .move
   }
-  override func draggingExited(_ sender: NSDraggingInfo?) { indicator.isHidden = true }
+  override func draggingExited(_ sender: NSDraggingInfo?) { resetDragPreview(animated:true) }
   override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-    indicator.isHidden = true
+    resetDragPreview()
     guard sender.draggingSource is DocumentButton, let raw = sender.draggingPasteboard.string(forType: Self.type), let id = UUID(uuidString: raw), documentIDs.contains(id) else { return false }
     reorder?(id,location(sender)); return true
   }
-  override func draggingEnded(_ sender: NSDraggingInfo) { indicator.isHidden = true }
+  override func draggingEnded(_ sender: NSDraggingInfo) { resetDragPreview() }
 }

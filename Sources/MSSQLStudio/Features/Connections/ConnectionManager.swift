@@ -53,7 +53,7 @@ struct ConnectionManager: View {
       ConnectionForm(initial: initial, connect: connect,
         saveProfile: initial.map { server in { profile, password, remember in try await save(server, profile, password, remember) } },
         loadingChanged: { busy = $0; loadingChanged($0) }, cancel: cancel, draftChanged: { dirty = true })
-        .id(selected)
+        .transaction { $0.animation = nil; $0.disablesAnimations = true }
     }.studioPanel()
       .alert("Kaydedilmemiş bağlantı değişiklikleri", isPresented: $switching) {
         Button("Vazgeç", role: .cancel) { }

@@ -4,6 +4,40 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct TabPresentation137Tests {
+  @Test func draggingCapturesWholeTabAndPreviewsSlotsWithoutChangingDocuments() throws {
+    _=NSApplication.shared
+    let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false
+    let server=ConnectedServer(profile:.init(),password:"");server.online=false
+    state.documents=(0..<3).map {index in
+      let doc=QueryDocument(server:server,database:"master",title:"Query \(index).sql")
+      doc.sql="SELECT \(index)";doc.savedText=doc.sql;return doc
+    }
+    state.documents[0].pinned=true;state.active=state.documents[2]
+    let ids=state.documents.map(\.id),sql=state.documents.map(\.sql)
+    let host=WorkbenchController(state:state),window=NSWindow(contentViewController:host)
+    window.isReleasedWhenClosed=false;window.setFrameOrigin(NSPoint(x:-20000,y:0));window.setContentSize(NSSize(width:1200,height:800));window.orderFront(nil)
+    defer {window.close()}
+    host.view.layoutSubtreeIfNeeded()
+    let strip=try #require(descendants(host.view).compactMap {$0 as? QueryTabStrip}.first)
+    let surfaces=strip.arrangedSubviews.compactMap {$0 as? QueryTabSurface}
+    let source=try #require(surfaces.last),button=try #require(source.primaryButton)
+    let preview=button.dragPreview(),frames=surfaces.map(\.frame)
+    #expect(preview.image.size==source.bounds.size && preview.image.size.width>button.bounds.width)
+    #expect(source.convert(preview.frame,from:button)==source.bounds)
+    #expect(preview.image.tiffRepresentation != nil)
+    strip.showDragPreview(id:ids[2],insertionIndex:0,animated:false)
+    #expect(source.alphaValue==0 && surfaces[0].layer?.transform.m41==0)
+    #expect(surfaces[1].layer?.transform.m41==source.frame.width+strip.spacing)
+    #expect(surfaces.map(\.frame)==frames && state.documents.map(\.id)==ids)
+    strip.resetDragPreview()
+    #expect(surfaces.allSatisfy {$0.alphaValue==1 && ($0.layer?.transform.m41 ?? 0)==0})
+    strip.showDragPreview(id:ids[1],insertionIndex:3,animated:false)
+    #expect(surfaces[2].layer?.transform.m41 == -(surfaces[1].frame.width+strip.spacing))
+    strip.resetDragPreview()
+    host.moveQueryTab(ids[2],to:1)
+    #expect(state.documents.map(\.id)==[ids[0],ids[2],ids[1]])
+    #expect(state.documents.map(\.sql)==[sql[0],sql[2],sql[1]] && state.active?.id==ids[2])
+  }
   @Test func horizontalTabViewportSurvivesResizeAndFullscreenNotifications() async throws {
     _=NSApplication.shared
     let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false

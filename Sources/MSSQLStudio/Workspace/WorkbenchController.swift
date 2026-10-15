@@ -339,6 +339,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     guard signature != tabSignature else {return}
     tabSignature=signature
+    tabs.resetDragPreview()
     tabs.documentIDs = state.documents.map(\.id)
     for view in tabs.arrangedSubviews {
       tabs.removeArrangedSubview(view)
@@ -370,6 +371,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       close.heightAnchor.constraint(equalToConstant:24).isActive=true
       let group = QueryTabSurface(views: [button, close])
       group.primaryButton = button
+      button.selectionSurface=group
       group.identifier = NSUserInterfaceItemIdentifier("connectionAccent")
       group.sourceColor=sourceColor(for:doc.server)
       button.font = .systemFont(ofSize: 12, weight: state.active === doc ? .medium : .regular)

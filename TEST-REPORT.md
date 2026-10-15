@@ -1,3 +1,20 @@
+## 16 Ekim 2026 — kompakt favori listesi ve geniş SQL önizlemesi, yerel
+
+- Favori Sorgular yönetimindeki sol liste 230/280/360 pt minimum/ideal/maksimum yerine 180/220/280 pt kullanır; native HSplitView ayarlanabilirliği korunur. Sağ SQL önizlemesi kalan alanı alır, iç boşluk 16’dan ortak 12 pt’ye düşürüldü. Favori kayıt/kapsam/açma/düzenleme davranışları değişmedi.
+- Mevcut ilgili native regresyon **17 test /2 suite geçti /0 issue**, 4.782 sn (`/tmp/mssql-favorite-compact.log`); gerçek favori yönetim penceresi Yeni/Düzenle/Kaydet/hata ve native kontrol yolları dahil. Release BUILD SUCCEEDED (`/tmp/mssql-favorite-compact-release.log`), mimari ve diff kontrolü geçti. Yeni test veya ayrı CUA görsel incelemesi yapılmadı. Kurulu uygulama/veri değiştirilmedi; henüz yayımlanmadı.
+
+## 16 Ekim 2026 — bağlantı profili geçişinde form sürekliliği, yerel
+
+- ConnectionManager `.id(selected)` ile her seçimde ConnectionForm ağacını/sürücü modelini yeniden kuruyordu; alan ve düğmelerin yeniden oluşturulması ile sürücü kontrolünün yeniden başlaması göz kırpma üretebiliyordu. Form kimliği sabitlendi, seçim geçişinde örtük animasyon kapatıldı; profil/parola/DB seçimi seçim kimlikli tek taslakla yenilenir. Yüklenen profil kullanıcı değişikliği sayılmaz; credential editi DB listesini invalidate eder, kaydedilmemiş taslağı bırakma uyarısı korunur. Ağ/Keychain/kayıt çağrısı eklenmedi.
+- **5 native test /1 suite geçti /0 issue**, 0.982 sn (`/tmp/mssql-connection-switch.log`). Yeni regresyon gerçek NSHostingView’da üç profil geçişinde aynı native NSTextField nesnesinin kaldığını, adın doğru güncellendiğini ve draftChanged çağrılmadığını doğrular. Taslak izolasyonu, sürücü kurulum onayı/hata ve mevcut açık/koyu form geometrisi de geçti.
+- Release BUILD SUCCEEDED (`/tmp/mssql-connection-switch-release.log`); mimari ve diff kontrolü geçti. Ayrı CUA/video veya arkadaşın cihazında doğrulama yapılmadı; native yerleşim/nesne sürekliliği sınandı. Kurulu uygulama/veri değiştirilmedi. Henüz yayımlanmadı.
+
+## 16 Ekim 2026 — tarayıcı benzeri sorgu sekmesi sürükleme, yerel
+
+- Kök neden: DocumentButton sürükleme görüntüsünü yalnız kendi başlık bounds’undan alıyordu. Görüntü tüm QueryTabSurface’tan alınır; ikon, kapatma ve zemin birlikte taşınır, kaynak yerinde boşluk gösterilir. Komşular 140 ms katman geçişiyle yer açar; Auto Layout/frame ve belge sırası sürükleme sırasında değişmez. Bırakmada mevcut reorder yolu çalışır; pin sınırı, aktif belge ve SQL korunur. Native iptal dönüşü ve Hareketi azalt desteği vardır.
+- İlgili native regresyon **11 test /2 suite geçti /0 issue**, 2.884 sn (`/tmp/mssql-tab-drag-checked.log`): tam yüzey bitmap/frame, pin sınırı, komşu transformları, opacity temizliği, değişmeyen belge/SQL ve mevcut sekme görünürlük/hit alanı yolları. İlk derlemedeki CATransform3D karşılaştırması düzeltilmiştir; başarısız koşu başarı sayılmaz. Final Release BUILD SUCCEEDED (`/tmp/mssql-tab-drag-release.log`).
+- CUA: `/tmp/MSSQLStudio-Tab-Drag-QA.app`, izole `local.mssqlstudio.uitest --ui-smoke` penceresinde üç sekme açıldı; SQLQuery2 sağdan başa gerçek sürüklemeyle taşındı, AX UUID sırası ve aktif belge doğrulandı. Ara animasyon video kaydı, başka macOS/gerçek kullanıcı cihazı veya canlı DB denenmedi. Kurulu uygulama ve kullanıcı verisi değiştirilmedi. Henüz yayımlanmadı.
+
 ## 16 Ekim 2026 — v0.2.144 / build 145 public yayın doğrulandı
 
 - [Public/latest v0.2.144](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.144), kaynak `def67417067e4b8a84f4a45dcb1dff305ca08095`; [Actions 38817323897](https://github.com/erhanulas/MSSQLStudio/actions/runs/38817323897) bütün adımlarıyla başarılı. Kullanıcı isteğiyle yerel test/build tekrarlanmadı; mevcut yayın iş akışındaki otomatik paket testleri **467 app +375 core +8 text =850 test; 822 geçti /28 dış koşullu atlandı /0 issue** verdi. Tamamlanmış özetler 190.226 /11.929 /0.003 sn (`/tmp/mssql144-ci.log`).

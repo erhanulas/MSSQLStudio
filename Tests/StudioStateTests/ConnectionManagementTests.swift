@@ -8,6 +8,47 @@ import Testing
   private func status(_ available: Bool) -> ODBCDriverSetup.Status {
     .init(available:available,version:available ? "18.7.1.1":"18",detail:"Synthetic driver",brew:"/synthetic/brew")
   }
+  @Test func profileReplacementIsNotAnEditAndKeepsIndependentDraftValues() {
+    let first = ConnectedServer(profile: ServerProfile(name: "First", host: "first"), password: "synthetic-a")
+    let second = ConnectedServer(profile: ServerProfile(name: "Second", host: "second"), password: "synthetic-b")
+    var draft = ConnectionFormDraft(first)
+    let original = draft
+    draft.profile.name = "Unsaved"
+    #expect(draft.isUserEdit(from: original))
+    let replacement = ConnectionFormDraft(second)
+    #expect(!replacement.isUserEdit(from: draft))
+    #expect(replacement.profile.host == "second" && replacement.password == "synthetic-b")
+    #expect(first.profile.name == "First")
+    #expect(!ConnectionFormDraft(nil).isUserEdit(from: replacement))
+  }
+  @Test func switchingProfilesReusesNativeFieldsWithoutReportingAnEdit() async throws {
+    _ = NSApplication.shared
+    let first = ConnectedServer(profile: ServerProfile(name: "First fixture"), password: "")
+    let second = ConnectedServer(profile: ServerProfile(name: "Second fixture"), password: "")
+    var edits = 0
+    func form(_ server: ConnectedServer) -> ConnectionForm {
+      ConnectionForm(initial: server, connect: { _, _, _ in }, cancel: {}, draftChanged: { edits += 1 })
+    }
+    func fields(_ view: NSView) -> [NSTextField] {
+      (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap { fields($0) }
+    }
+    let host = NSHostingView(rootView: form(first))
+    let window = NSWindow(contentRect: NSRect(x: -20000, y: 0, width: 1020, height: 680), styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false; window.contentView = host
+    defer { window.close() }
+    window.orderFront(nil)
+    try await Task.sleep(for: .milliseconds(100))
+    host.layoutSubtreeIfNeeded()
+    let nameField = try #require(fields(host).first { $0.stringValue == "First fixture" })
+    for server in [second, first, second] {
+      host.rootView = form(server)
+      try await Task.sleep(for: .milliseconds(100))
+      host.layoutSubtreeIfNeeded()
+      #expect(nameField.stringValue == server.profile.name)
+      #expect(fields(host).contains { $0 === nameField })
+      #expect(edits == 0)
+    }
+  }
   @Test func driverInstallationRequiresApprovalUsesOfficialCommandsAndRedetects() async {
     let model=DriverSetupModel(); var calls:[[String]]=[], inspections=0
     model.inspect={ inspections += 1; return self.status(inspections > 1) }

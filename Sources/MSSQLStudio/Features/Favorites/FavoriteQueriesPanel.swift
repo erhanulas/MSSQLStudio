@@ -237,7 +237,7 @@ struct FavoriteQueriesPanel:View {
           }.padding(.vertical,3).tag(item.id)
         }.contextMenu(forSelectionType:UUID.self) { _ in } primaryAction: { ids in
           if let id=ids.first,let item=visible.first(where:{$0.id == id}) {insertFavorite(item)}
-        }.frame(minWidth:230,idealWidth:280,maxWidth:360).accessibilityIdentifier("favoriteList")
+        }.frame(minWidth:180,idealWidth:220,maxWidth:280).accessibilityIdentifier("favoriteList")
         VStack(alignment:.leading,spacing:12) {
           if let current {
             Text(current.name).font(.system(size:17,weight:.semibold))
@@ -245,7 +245,7 @@ struct FavoriteQueriesPanel:View {
             SQLReadOnlyPreview(sql:current.sql).frame(minHeight:200)
             Text("Açılacak hedef: "+targetLabel(current)).font(.caption).foregroundStyle(.secondary)
           } else {StudioEmptyState(title:"Bir favori seçin",icon:"star",detail:"Genel favoriler her bağlantıda, bağlantı ve veritabanı favorileri kendi kapsamlarında görünür.")}
-        }.padding(16).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
+        }.padding(StudioMetrics.gap).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
       }
       if !model.error.isEmpty {Text(model.error).foregroundStyle(Color(nsColor:StudioTheme.danger)).textSelection(.enabled)}
       if !openError.isEmpty {Text(openError).foregroundStyle(Color(nsColor:StudioTheme.danger))}
