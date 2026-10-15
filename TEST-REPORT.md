@@ -1,3 +1,9 @@
+## 15 Ekim 2026 — v0.2.141 / build 142 public yayın doğrulandı
+
+- [Public/latest v0.2.141](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.141), kaynak `14d0ace7a52cbe4febfa27af2b578884045f04e1`; [Actions 38803915314](https://github.com/erhanulas/MSSQLStudio/actions/runs/38803915314) bütün adımlarıyla başarılı. Gerçek yayın paketleriyle **460 app +373 core +8 text =841 test; 813 geçti /28 dış koşullu atlandı /0 issue**; tamamlanmış özetler 210.890 /12.164 /0.005 sn (`/tmp/mssql141-ci.log`).
+- Dört public asset indirildi; SHA-256/GitHub digest/manifest, exact 0.2.141/build142, kaynak/paket/GitHub notları, ZIP/PKG app/helper strict/deep imzaları, frozen helper byte/hash ve Icon Composer varyant eşliği doğrulandı. İndirilen signed uygulamanın kendi Foundation updater yolu exact 0.2.141 için exit 0 verdi. Kanıt: `/tmp/MSSQLStudio-141-public-verification/verification.json`, `verification.log`, `foundation-feed.log`.
+- ZIP SHA-256 `deb7d9c044b545eca5331e22ddc0ada9e2cd242beaac1d34314981a766090287`; PKG `2eca014f8e00a38c01b730030b1c6c2b17eb534b54f7480a27f0a501568df13d`. Kurulu uygulama/veri değiştirilmedi; gerçek Installer ve kullanıcının cihazındaki kesin tetikleme denenmedi. Yerel native/CUA kapsamı aşağıdadır.
+
 ## 15 Ekim 2026 — Explorer adlarının örtülmesini önleyen yerel düzeltme
 
 - Kullanıcı görüntüsünde disclosure okları ve seçim görünürken ad/simgeler kayıp. Son değişen ExplorerIndexCell opak yüzeyinde dirtyRect doğrudan boyanıyordu ve clipsToBounds kapalıydı; native frame genişliği sütunla sınırlanmıyordu. Bu, komşu nesne hücresinin örtülmesine izin veriyordu. Hücre clipsToBounds ile kırpılır; boyama rect’i bounds ile kesiştirilir, frame/setFrameSize genişliği indexes sütunundan alınır. Pin hesabı outline’ın gerçek bounds’u ile kesişen viewport üzerinde yapılır; bağlı olmayan görünümün sınırsız visibleRect’i kullanılmaz. Kullanıcının cihazındaki kesin tetikleme birebir yeniden üretilmedi.
