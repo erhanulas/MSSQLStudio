@@ -1,3 +1,9 @@
+## 15 Ekim 2026 — v0.2.138 / build 139 public yayın doğrulandı
+
+- [Public/latest v0.2.138](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.138), kaynak `d026edce9f4e91cba0429fe4ddc55510862f23e6`; [Actions 38774594629](https://github.com/erhanulas/MSSQLStudio/actions/runs/38774594629) bütün adımlarıyla başarılı. Gerçek yayın paketleriyle **447 app +368 core +8 text =823 test; 795 geçti /28 dış koşullu atlandı, 0 issue**; tamamlanmış özetler 197.889 /15.041 /0.005 sn (`/tmp/mssql138-ci.log`).
+- Dört public asset indirildi; SHA-256/GitHub digest/manifest, exact 0.2.138/build139, kaynak/paket/GitHub notları, ZIP/PKG app/helper strict/deep imzaları, frozen helper byte/hash ve Icon Composer varyant/paket eşliği doğrulandı. İndirilen signed uygulamanın kendi Foundation updater yolu exact 0.2.138 için exit 0 verdi. Kanıt: `/tmp/MSSQLStudio-138-public-verification/verification.json`, `verification.log`, `foundation-feed.log`.
+- ZIP SHA-256 `1587de54e537d40662977f7a9d94ec8cae5a9e2f1f31cff92621be891fdf2936`; PKG `e1bfcde6046cc803b23ae13b0e81f77b4298d6931ea17d0f8fa14aa5cdffbc82`. Kurulu kullanıcı uygulaması/verisi değiştirilmedi; gerçek Installer ve arkadaşın cihazındaki fullscreen animasyonu denenmedi.
+
 ## 15 Ekim 2026 — v0.2.138 / build 139 yayın öncesi doğrulama
 
 - Sekme şeridi geometri düzeltmesi için sürüm/derleme ve tek sürüm notu kaynağı eşlendi. Tam yerel suite **447 app +368 core +8 text =823 test; 795 geçti /28 dış koşullu atlandı, 0 issue**; tamamlanmış özetler 136.422 /6.460 /0.002 sn (`/tmp/mssql138-full.log`). Release derlemesi (`/tmp/mssql138-release.log`), mimari/Xcode kaynak eşliği ve diff kontrolü geçti.
