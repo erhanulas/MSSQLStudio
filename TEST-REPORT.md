@@ -1,3 +1,9 @@
+## 15 Ekim 2026 — v0.2.139 / build 140 public yayın doğrulandı
+
+- [Public/latest v0.2.139](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.139), kaynak `ffbc0e028479d87039c1548a679db149d7126541`; [Actions 38780884375](https://github.com/erhanulas/MSSQLStudio/actions/runs/38780884375) bütün adımlarıyla başarılı. Gerçek yayın paketleriyle **449 app +368 core +8 text =825 test; 797 geçti /28 dış koşullu atlandı, 0 issue**; üç tamamlanmış özet 199.095 /14.163 /0.006 sn (`/tmp/mssql139-ci.log`).
+- Dört public asset indirildi; SHA-256/GitHub digest/manifest, exact 0.2.139/build140, kaynak/paket/GitHub notları, ZIP/PKG app/helper strict/deep imzaları, frozen helper byte/hash ve Icon Composer varyant/paket eşliği doğrulandı. İndirilen signed uygulamanın kendi Foundation updater yolu exact 0.2.139 için exit 0 verdi. Kanıt: `/tmp/MSSQLStudio-139-public-verification/verification.json`, `verification.log`, `foundation-feed.log`.
+- ZIP SHA-256 `417b364137581cea677428a6df5c9d2483a52c9051e1270a1e6656f3db8ff1ca`; PKG `1f95b4ac81217e7dc134aa6f0c724e5cfe580847c51b5a993d75e4f1661aff85`. Yerel tam suite ve native layout audit önceki kayıttadır. Gerçek Installer, arkadaşın cihazındaki fullscreen animasyonu ve Sistem Ayarları yüksek kontrast anahtarı denenmedi; native appearance varyantları sınandı. Kurulu kullanıcı uygulaması/verisi değiştirilmedi.
+
 ## 15 Ekim 2026 — v0.2.139 / build 140 yayın öncesi tam doğrulama
 
 - Sekme başlıklarının kararlı ölçüsü, leading yerleşimi, scrollbar çakışmasının kaldırılması ve semantik opak renkler tek sürümde toplandı; Debug/Release ve sürüm notları 0.2.139/build140 ile eşlendi. Başlangıçta 0×0 stack/autoresizing minimum boyut çakışması 12×36 başlangıç frame ile, + düğmesindeki 26/28 pt çift constraint mükerrer constraint kaldırılarak giderildi. Doğrudan native helper günlüğünde 5 sekme testi tamamlandı, constraint çakışması yok (`/tmp/mssql139-layout-audit.log`).
