@@ -40,8 +40,8 @@ struct ActivityFavoriteTests {
     #expect(sql.contains("process_kernel_time_ms") && sql.contains("process_user_time_ms") && sql.contains("cpu_count"))
     #expect(!sql.contains("sys.dm_os_ring_buffers"))
     #expect(sql.contains("s.is_user_process=1") && sql.contains("w.session_id<>@@SPID"))
-    #expect(sql.contains("sys.dm_io_virtual_file_stats") && sql.contains("cntr_type IN (272696320,272696576)"))
-    #expect(sql.components(separatedBy:"BEGIN CATCH").count == 10)
+    #expect(sql.contains("sys.dm_io_virtual_file_stats") && !sql.contains("sys.dm_os_performance_counters"))
+    #expect(sql.components(separatedBy:"BEGIN CATCH").count == 9)
     #expect(sql.contains("HAS_PERMS_BY_NAME(NULL,NULL,@monitorPermission)") && sql.contains("VIEW SERVER PERFORMANCE STATE") && sql.contains("VIEW SERVER STATE"))
     #expect(sql.contains("ISNULL(r.wait_type,N'') NOT IN") && !sql.contains("last_wait_type"))
     #expect(sql.contains("s.status=N'sleeping' THEN s.open_transaction_count"))
@@ -141,7 +141,19 @@ struct ActivityFavoriteTests {
   func diagnosticExecution() -> Execution {
     var result=Execution()
     result.results=[Rows(values:[["71","0","Sales","suspended","SELECT","60000","30","10","2","72","LCK_M_S","1",nil,nil,"SELECT N'İstanbul';"]]),Rows(values:[["71","1","Sales","running","SELECT","120000","500","30","0",nil,nil,"2",nil,nil,"SELECT 2;"]]),Rows(values:[["90","0","Sales","running","BACKUP DATABASE","100000","100","0","40",nil,"BACKUPIO","0","25.5",nil,"BACKUP DATABASE Sales TO DISK = N'backup.bak';"]]),Rows(),Rows()]
+    for index in 0..<3 {result.results[index]=Rows(values:result.results[index].values.map {$0+["report_user","REPORT-APP","Reporting","1000","200","KEY: fixture"]})}
     return result
+  }
+  @Test func dbaIdentityAndWaitDetailsDecodeAndToolsStayReadOnly() throws {
+    let diagnostics=try ActivityMonitoring.decodeDiagnostics(diagnosticExecution())
+    let request=try #require(diagnostics.blocked.first)
+    #expect(request.login=="report_user" && request.host=="REPORT-APP" && request.program=="Reporting")
+    #expect(request.logicalReads==1000 && request.waitMS==200 && request.waitResource=="KEY: fixture")
+    for tool in ActivityMonitoring.DBATool.allCases {
+      #expect(tool.sql.contains("TOP (100)") && tool.sql.contains("@canMonitor=0 THROW"))
+      #expect(!tool.sql.contains("KILL ") && !tool.sql.contains("DBCC ") && !tool.sql.contains("sys.dm_exec_query_plan"))
+    }
+    #expect(!ActivityMonitoring.overviewSQL.contains("Batch hızı") && !ActivityMonitoring.overviewSQL.contains("sys.dm_os_performance_counters"))
   }
   @Test func diagnosticsDecodeCategoriesRequestIdentityAndBackupProgress() throws {
     let result=try ActivityMonitoring.decodeDiagnostics(diagnosticExecution())
@@ -155,7 +167,7 @@ struct ActivityFavoriteTests {
     var e=diagnosticExecution();e.results[0]=Rows();e.results[4]=Rows(values:[["Bloklanan istekler","VIEW SERVER STATE izni gerekli."]])
     let result=try ActivityMonitoring.decodeDiagnostics(e)
     #expect(result.blocked.isEmpty && result.longRunning.count == 1 && result.backups.count == 1 && result.issues.count == 1)
-    e.results[2]=Rows(values:[["90","0",nil,nil,nil,"-1","NaN","overflow",nil,"-5",nil,"-2","101",nil,String(repeating:"🙂",count:2200)]])
+    e.results[2]=Rows(values:[["90","0",nil,nil,nil,"-1","NaN","overflow",nil,"-5",nil,"-2","101",nil,String(repeating:"🙂",count:2200),nil,nil,nil,nil,nil,nil]])
     let invalid=try ActivityMonitoring.decodeDiagnostics(e).backups[0]
     #expect(invalid.elapsedMS == nil && invalid.cpuMS == nil && invalid.reads == nil && invalid.blocker == nil && invalid.openTransactions == nil && invalid.percentComplete == nil)
     #expect(invalid.sql.count == 2000)

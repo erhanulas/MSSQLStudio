@@ -15,8 +15,8 @@ import SwiftUI
       let values:[String?]=[f.string(from:time),"fixture-start",nil,String(2+ticks%4),String(ticks*2_097_152),String(ticks*25),String(6+ticks%4),"2","1","5","2","48",String(6144+ticks%4*64),"32768",String(ticks%2),String(ticks*320),String(ticks*80),String(ticks*640),String(ticks*400),String(ticks*3200),"8"]
       e.results=[Rows(fields:columns.map {Field($0)},values:[values]),Rows(values:[])]
     } else if sql == ActivityMonitoring.diagnosticsSQL {
-      let columns=["session_id","request_id","database_name","status","command","elapsed_ms","cpu_ms","reads","writes","blocker","wait_type","open_transactions","percent_complete","remaining_ms","sql_text"]
-      func rows(_ values:[[String?]]) -> Rows {Rows(fields:columns.map {Field($0)},values:values)}
+      let columns=["session_id","request_id","database_name","status","command","elapsed_ms","cpu_ms","reads","writes","blocker","wait_type","open_transactions","percent_complete","remaining_ms","sql_text","login_name","host_name","program_name","logical_reads","wait_ms","wait_resource"]
+      func rows(_ values:[[String?]]) -> Rows {Rows(fields:columns.map {Field($0)},values:values.map {$0+["report_user","REPORT-APP","Reporting","980000","185000","KEY: offline fixture"]})}
       e.results=[rows([
         ["71","0","DemoDB","suspended","SELECT","185000","4000","4500","0","63","LCK_M_S","1",nil,nil,"SELECT CustomerID, Name FROM dbo.Customers WHERE City = N'İstanbul';"],
         ["72","0","DemoDB","suspended","UPDATE","92000","1800","2300","15","71","LCK_M_U","1",nil,nil,"UPDATE dbo.Orders SET Status = N'Processing' WHERE OrderID = 1024;"]

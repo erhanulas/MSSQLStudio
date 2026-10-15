@@ -102,6 +102,21 @@ struct ObjectEditorKey: Codable, Equatable {
   var rowCount = 0
   private(set) var resultReadStoppedEarly = false
   var canEditLoadedRows:Bool {canRefresh && !resultReadStoppedEarly && results.count == 1}
+  /// Result editing follows this console's live session, not Explorer health.
+  /// Metadata still uses a separate short-lived connection to protect its transaction.
+  func resultEditingMetadata(_ sql:String,database target:String) async throws -> Execution {
+    guard canEditLoadedRows,database==target,!server.updatingProfile else {
+      throw SQLFailure("Sorgu bağlantısı veya sonuç artık düzenlemeye uygun değil.")
+    }
+    let server=server,generation=server.generation,result=resultGeneration
+    let output=try await server.catalog(sql,database:target,access:.activeQuery)
+    try Task.checkCancellation()
+    guard self.server === server,server.generation==generation,resultGeneration==result,
+      database==target,canEditLoadedRows,!server.updatingProfile else {
+      throw SQLFailure("Metadata okunurken sorgu hedefi veya sonuç değişti.")
+    }
+    return output
+  }
   var partial = false
   var initialRefreshSeconds: Int?
   var limits: Limits = ResultReadPreferences.limits(rows:ResultReadPreferences.readLimit)

@@ -472,13 +472,13 @@ import SwiftUI
   }
   private func warmDataEditing() {
     guard let grid = selectedGrid, let context = editingContext(grid) else { editPreparation.invalidate(); return }
-    guard !preparingData, !submittingData, grid.editDefinition == nil, document.server.online else { return }
+    guard !preparingData, !submittingData, grid.editDefinition == nil else { return }
     // Synthetic query fixtures must never start an actual metadata connection.
     guard document.executionFixture == nil || document.server.catalogFixture != nil || document.server.asyncCatalogFixture != nil else { return }
-    let server = document.server, profile = server.profile, index = editingIndex
+    let document=document, server = document.server, profile = server.profile, index = editingIndex
     editPreparation.warm(context) {
       try await ResultEditingPreparation.load(sql: context.sql, fields: context.fields, profile: profile, database: context.database, index: index) { query in
-        try await server.catalog(query, database: context.database)
+        try await document.resultEditingMetadata(query, database: context.database)
       }
     }
   }
@@ -499,7 +499,7 @@ import SwiftUI
         let profile = server.profile
         let prepared = try await editPreparation.prepared(context) {
           try await ResultEditingPreparation.load(sql:sql,fields:context.fields,profile:profile,database:db,index:index) { query in
-            try await server.catalog(query,database:db)
+            try await self.document.resultEditingMetadata(query,database:db)
           }
         }
         let table = prepared.snapshot.table, id = prepared.snapshot.objectID
@@ -538,21 +538,21 @@ import SwiftUI
       let server = document.server, serverGeneration = document.server.generation
       let panel = DataChangesPreview(sql: sql, target: document.server.profile.name + " / " + db, submit: { [weak self, weak grid] in
         guard let self, let grid else { throw SQLFailure("Sorgu kapatıldı.") }
-        guard !submittingData, document.server === server, server.generation == serverGeneration, server.online, document.canRefresh, document.database == db, document.resultGeneration == generation, try grid.pendingSQL() == sql else { throw SQLFailure("Önizlemeden sonra sonuç veya düzenlemeler değişti. Yeniden önizleyin.") }
+        guard !submittingData, document.server === server, server.generation == serverGeneration, document.canRefresh, document.database == db, document.resultGeneration == generation, try grid.pendingSQL() == sql else { throw SQLFailure("Önizlemeden sonra sonuç veya düzenlemeler değişti. Yeniden önizleyin.") }
         submittingData = true; syncDataActions()
         defer { submittingData = false; syncDataActions() }
         guard let definition = grid.editDefinition, let objectID = grid.editObjectID else { throw SQLFailure("Kaynak kimliği kayboldu.") }
         do {
-          let freshSource = try ResultEditSource.decode(await server.catalog(ResultEditSource.metadata(sourceSQL),database:db),fields:grid.result.fields,database:db)
+          let freshSource = try ResultEditSource.decode(await document.resultEditingMetadata(ResultEditSource.metadata(sourceSQL),database:db),fields:grid.result.fields,database:db)
           guard ResultEditingSnapshot.matchesSource(freshSource,table:definition) else { throw SQLFailure("Sorgunun kaynak tablosu değişmiş; sonucu yeniden yükleyin.") }
-          let current = try ObjectMetadata.decode(try await server.catalog(ObjectMetadata.table(objectID), database: db), schema: definition.schema, name: definition.name)
+          let current = try ObjectMetadata.decode(try await document.resultEditingMetadata(ObjectMetadata.table(objectID), database: db), schema: definition.schema, name: definition.name)
           guard ResultEditingSnapshot.signature(table:current) == grid.editMetadataSignature else { throw SQLFailure("Tablo yapısı değişmiş; güncel sonucu yeniden yükleyin.") }
         } catch {
           // Reloading after a schema/source mismatch must not reuse the same stale entry.
           try? await editingIndex.invalidateEditingMetadata(scope:CatalogDiskIndex.scope(profile:server.profile,database:db))
           throw error
         }
-        guard document.server === server, server.generation == serverGeneration, server.online, document.canRefresh, document.database == db, document.resultGeneration == generation, try grid.pendingSQL() == sql else { throw SQLFailure("Önizleme artık güncel değil.") }
+        guard document.server === server, server.generation == serverGeneration, document.canRefresh, document.database == db, document.resultGeneration == generation, try grid.pendingSQL() == sql else { throw SQLFailure("Önizleme artık güncel değil.") }
         // Dedicated connection: commits cannot affect the console's transaction/session.
         let connection = ODBCConnection(); var profile = server.profile; profile.database = db
         do {

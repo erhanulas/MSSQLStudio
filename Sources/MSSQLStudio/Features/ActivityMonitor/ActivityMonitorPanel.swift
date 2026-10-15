@@ -93,6 +93,7 @@ import SQLServerKit
 struct ActivityMonitorPanel:View {
   @StateObject private var model:ActivityMonitorModel
   let openTable:()->Void
+  var openDBATool:((ActivityMonitoring.DBATool)->Void)?
   @State private var paused=false
   @State private var visible=false
   @State private var interval=10
@@ -102,8 +103,9 @@ struct ActivityMonitorPanel:View {
   @State private var selectedRequest:String?
   @State private var selectedBlockingContext:String?
   @State private var selectedBlockingSession:Int64?
-  init(server:ConnectedServer,openTable:@escaping ()->Void) {
+  init(server:ConnectedServer,openDBATool:((ActivityMonitoring.DBATool)->Void)?=nil,openTable:@escaping ()->Void) {
     self.init(model:ActivityMonitorModel(server:server),openTable:openTable)
+    self.openDBATool=openDBATool
   }
   init(model:ActivityMonitorModel,initialMode:Int=0,initialDiagnosticKind:Int=0,initialSelectedRequest:String?=nil,initialSelectedBlockingContext:String?=nil,openTable:@escaping ()->Void) {
     _model=StateObject(wrappedValue:model);self.openTable=openTable
@@ -222,7 +224,6 @@ struct ActivityMonitorPanel:View {
         ActivityMetricChart(title:"SQL Server CPU",unit:"%",icon:"cpu",color:StudioTheme.accent,samples:displayedSamples,key:{$0.cpu},percent:true,help:"SQL Server işlem CPU zamanı farkı / mantıksal işlemci kapasitesi. İlk örnekte hız hesaplanmaz.")
         ActivityMetricChart(title:"Bekleyen görevler",unit:"görev",icon:"hourglass",color:StudioTheme.warning,samples:displayedSamples,key:{$0.waiting},help:"Kullanıcı oturumlarının bekleyen görevleri; tüm beklemeler bir performans sorunu değildir.")
         ActivityMetricChart(title:"Veritabanı I/O",unit:"MiB/sn",icon:"internaldrive",color:StudioTheme.success,samples:displayedSamples,key:{$0.megabytesPerSecond},help:"Tüm veritabanı dosyalarının okunan ve yazılan byte farkı / geçen süre.")
-        ActivityMetricChart(title:"Batch istekleri",unit:"batch/sn",icon:"bolt.horizontal",color:StudioTheme.color(0x8A43B4,0xCB9BE8),samples:displayedSamples,key:{$0.batchesPerSecond},help:"SQL Statistics Batch Requests/sec kümülatif sayacından hesaplanan hız.")
         ActivityMetricChart(title:"Bloklanan işlemler",unit:"işlem",icon:"lock.shield",color:StudioTheme.danger,samples:displayedSamples,key:{$0.health.blockedRequests.map(Double.init)},help:"Başka bir kullanıcı oturumu tarafından bloklanan istekler; DBA sekmesinde ayrıntıları incelenir.")
         ActivityMetricChart(title:"Bellek bekleyen sorgular",unit:"istek",icon:"memorychip",color:StudioTheme.color(0x267B8C,0x78CAD8),samples:displayedSamples,key:{$0.health.memoryGrantsPending.map(Double.init)},help:"Henüz bellek tahsisi yapılmamış sorgular; sıfırdan yüksek değerler bellek baskısını incelemeyi gerektirebilir.")
       }.padding(1)
@@ -237,7 +238,6 @@ struct ActivityMonitorPanel:View {
       TableColumn("Tx") {Text(ActivityFormat.count($0.health.openTransactions))}.width(min:45,ideal:50,max:70)
       TableColumn("Bekleyen") {Text(ActivityFormat.number($0.waiting))}.width(min:55,ideal:70,max:90)
       TableColumn("I/O MiB/sn") {Text(ActivityFormat.number($0.megabytesPerSecond))}.width(min:65,ideal:85,max:120)
-      TableColumn("Batch/sn") {Text(ActivityFormat.number($0.batchesPerSecond))}.width(min:65,ideal:85,max:120)
       TableColumn("Okuma ms") {Text(ActivityFormat.number($0.readLatencyMS))}.width(min:65,ideal:85,max:120)
       TableColumn("Yazma ms") {Text(ActivityFormat.number($0.writeLatencyMS))}.width(min:65,ideal:85,max:120)
     }.accessibilityIdentifier("activitySamples")
@@ -258,12 +258,15 @@ struct ActivityMonitorPanel:View {
         StudioEmptyState(title:model.diagnosticsTime == nil ? "DBA verisi bekleniyor":!model.diagnosticsError.isEmpty || !model.diagnostics.issues.isEmpty ? "Tanı verisi doğrulanamadı":"Bu grupta istek yok",icon:diagnosticKind == 2 ? "externaldrive.badge.checkmark":"checkmark.shield",detail:model.diagnosticsTime == nil ? "DBA görünümü açıkken sınırlı, salt okunur örnek alınır.":"Yetki ve filtre kapsamı yukarıdaki uyarılarla birlikte değerlendirilmelidir.")
       } else {
         Table(diagnosticRows,selection:$selectedRequest) {
-          TableColumn("Oturum") {Text(String($0.sessionID)).monospacedDigit()}.width(min:50,ideal:58,max:75)
-          TableColumn("Veritabanı") {Text($0.database).lineLimit(1)}.width(min:80,ideal:110,max:160)
-          TableColumn("Komut") {Text($0.command).lineLimit(1)}.width(min:100,ideal:145,max:210)
-          TableColumn("Süre") {Text(ActivityFormat.duration($0.elapsedMS))}.width(min:65,ideal:75,max:95)
-          TableColumn("CPU") {Text(ActivityFormat.duration($0.cpuMS))}.width(min:60,ideal:70,max:90)
-          TableColumn("Bloklayan") {Text($0.blocker.map(String.init) ?? "—")}.width(min:60,ideal:70,max:85)
+          TableColumn("Oturum") {Text(String($0.sessionID)).monospacedDigit()}.width(min:40,ideal:50,max:75)
+          TableColumn("Login") {Text($0.login).lineLimit(1).studioHelp($0.login)}.width(min:55,ideal:65,max:180)
+          TableColumn("Host") {Text($0.host).lineLimit(1).studioHelp($0.host)}.width(min:55,ideal:65,max:180)
+          TableColumn("Uygulama") {Text($0.program).lineLimit(1).studioHelp($0.program)}.width(min:65,ideal:90,max:230)
+          TableColumn("Veritabanı") {Text($0.database).lineLimit(1)}.width(min:50,ideal:70,max:160)
+          TableColumn("Komut") {Text($0.command).lineLimit(1)}.width(min:65,ideal:90,max:210)
+          TableColumn("Süre") {Text(ActivityFormat.duration($0.elapsedMS))}.width(min:45,ideal:60,max:95)
+          TableColumn("CPU") {Text(ActivityFormat.duration($0.cpuMS))}.width(min:40,ideal:55,max:90)
+          TableColumn("Bloklayan") {Text($0.blocker.map(String.init) ?? "—")}.width(min:45,ideal:55,max:85)
           TableColumn(diagnosticKind == 2 ? "İlerleme":"Bekleme") {request in
             if diagnosticKind == 2 {Text(ActivityFormat.number(request.percentComplete)+" %").monospacedDigit()}
             else {Text(request.wait.isEmpty ? "—":request.wait).lineLimit(1).studioHelp(request.wait)}
@@ -289,6 +292,8 @@ struct ActivityMonitorPanel:View {
           HStack {ProgressView(value:min(100,max(0,percent)),total:100);Text(ActivityFormat.number(percent)+" %").monospacedDigit()}
             .studioHelp("SQL Server’ın bildirdiği tahmini ilerleme; bitiş zamanı garantisi değildir.")
         }
+        Text("Login: \(selected.login) · Host: \(selected.host) · Uygulama: \(selected.program)").font(.caption).textSelection(.enabled)
+        Text("Mantıksal okuma: \(ActivityFormat.count(selected.logicalReads)) · Bekleme: \(ActivityFormat.duration(selected.waitMS)) · Kaynak: \(selected.waitResource.isEmpty ? "—":selected.waitResource)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
         Text("SQL · İlk 2.000 karakter").font(.system(size:10)).foregroundStyle(.secondary)
         SQLReadOnlyPreview(sql:selected.sql.isEmpty ? "-- SQL metni sağlanmadı veya görüntüleme yetkisi yok.":String(selected.sql.prefix(2000)))
           .frame(minHeight:100,idealHeight:140,maxHeight:190).accessibilityIdentifier("activityRequestSQL")
@@ -387,6 +392,13 @@ struct ActivityMonitorPanel:View {
     VStack(alignment:.leading,spacing:7) {
       HStack {
         StudioActionButton("Sorguda Tablo Olarak İzle",icon:"tablecells") {openTable()}.accessibilityIdentifier("activityOpenQuery")
+        if let openDBATool {
+          Menu("DBA Sorguları") {
+            ForEach(ActivityMonitoring.DBATool.allCases) {tool in
+              Button(tool.title,systemImage:tool.icon) {openDBATool(tool)}
+            }
+          }.menuStyle(.borderlessButton).fixedSize().studioHelp("Salt okunur tanı sorgusunu yeni sekmede açar; otomatik çalıştırmaz.").accessibilityIdentifier("activityDBATools")
+        }
         Spacer(minLength:10)
         Text(latest.map {"Son örnek "+$0.time.formatted(date:.omitted,time:.standard)} ?? "Örnek bekleniyor…").font(.caption).foregroundStyle(.secondary)
         Text("\(model.samples.count) örnek").font(.caption).foregroundStyle(.secondary)

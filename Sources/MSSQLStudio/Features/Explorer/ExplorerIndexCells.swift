@@ -68,9 +68,25 @@ extension WorkbenchController {
   }
   func pinToViewport() {let current=frame;frame=current;needsDisplay=true}
   override func draw(_ dirtyRect:NSRect) {
-    let selected=(superview as? NSTableRowView)?.isSelected == true
-    (selected ? StudioTheme.selection:StudioTheme.explorerCanvas).setFill()
-    dirtyRect.intersection(bounds).fill()
+    // Empty index cells must remain transparent so connection/folder colors
+    // and the native row selection continue across the complete row.
+    guard !subviews.isEmpty else {super.draw(dirtyRect);return}
+    NSGraphicsContext.saveGraphicsState()
+    NSBezierPath(rect:dirtyRect.intersection(bounds)).addClip()
+    StudioTheme.explorerCanvas.setFill()
+    bounds.fill()
+    if let row=superview as? NSTableRowView {
+      let region=row.convert(bounds,from:self)
+      let origin=convert(NSPoint.zero,from:row)
+      let unit=convert(NSPoint(x:1,y:1),from:row)
+      let transform=NSAffineTransform()
+      transform.translateX(by:origin.x,yBy:origin.y)
+      transform.scaleX(by:unit.x-origin.x,yBy:unit.y-origin.y)
+      transform.concat()
+      row.drawBackground(in:region)
+      if row.isSelected {row.drawSelection(in:region)}
+    }
+    NSGraphicsContext.restoreGraphicsState()
     super.draw(dirtyRect)
   }
 }

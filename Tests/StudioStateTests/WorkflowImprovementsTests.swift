@@ -24,6 +24,41 @@ import Testing
     state.completeExplorerConnection(other,previousActive:before)
     #expect(state.documents.count==1 && state.active === manual)
   }
+  @Test func resultMetadataFollowsQueryConnectionAndRejectsChangedContext() async throws {
+    let server=ConnectedServer(profile:.init(),password:"");server.online=false
+    let document=QueryDocument(server:server,database:"master",title:"Independent")
+    document.state = .ready;document.sql="SELECT * FROM dbo.T;"
+    document.executionFixture={_,_ in
+      var result=Execution();result.results=[Rows(fields:[Field("Id",type:4)],values:[["1"]])];return result
+    }
+    document.execute();await document.task?.value
+    var reads=0
+    server.catalogFixture={_ in reads+=1;return Execution()}
+    _=try await document.resultEditingMetadata("SELECT metadata",database:"master")
+    #expect(reads==1 && !server.online && document.canEditLoadedRows)
+    document.state = .disconnected
+    await #expect(throws:SQLFailure.self) {try await document.resultEditingMetadata("SELECT metadata",database:"master")}
+    document.state = .ready;document.transactionCount=1
+    await #expect(throws:SQLFailure.self) {try await document.resultEditingMetadata("SELECT metadata",database:"master")}
+    document.transactionCount=0
+    server.catalogFixture={_ in reads+=1;document.database="Changed";return Execution()}
+    await #expect(throws:SQLFailure.self) {try await document.resultEditingMetadata("SELECT metadata",database:"master")}
+    #expect(reads==2)
+  }
+  @Test func explorerDiskStatusHiddenWithoutExplorerConnection() {
+    _=NSApplication.shared
+    let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false
+    let emptyHost=WorkbenchController(state:state);_=emptyHost.view
+    emptyHost.updateIndexStatus();#expect(emptyHost.indexStatus.isHidden)
+    let server=ConnectedServer(profile:.init(name:"Offline"),password:"");server.online=false
+    state.servers=[server]
+    let host=WorkbenchController(state:state);_=host.view
+    host.updateIndexStatus();#expect(host.indexStatus.isHidden)
+    server.online=true
+    host.updateIndexStatus();#expect(!host.indexStatus.isHidden)
+    server.online=false
+    host.updateIndexStatus();#expect(host.indexStatus.isHidden)
+  }
   @Test func cappedSuccessfulSelectAllowsEditingButStoppedReadDoesNot() async {
     let server=ConnectedServer(profile:.init(),password:"");server.online=false
     let document=QueryDocument(server:server,database:"master",title:"Capped")
@@ -163,6 +198,35 @@ import Testing
       #expect(cell.frame.width==56)
       #expect(cell.frame.minX==outline.bounds.maxX-56)
       #expect(cell.frame.maxX==outline.bounds.maxX)
+    }
+  }
+  @Test func indexAreaPreservesConnectionTintAndSelectedRowBackground() throws {
+    _=NSApplication.shared
+    for selected in [false,true] {
+      for hasIcons in [false,true] {
+        let row=ConnectionTreeRow(frame:NSRect(x:0,y:0,width:320,height:24))
+        row.color = .systemRed;row.isServer=true;row.isSelected=selected
+        let cell=ExplorerIndexCell(frame:NSRect(x:264,y:0,width:56,height:24))
+        row.addSubview(cell)
+        if hasIcons {cell.addSubview(NSView(frame:NSRect(x:4,y:4,width:16,height:16)))}
+        let image=NSImage(size:row.bounds.size)
+        image.lockFocus()
+        StudioTheme.explorerCanvas.setFill();row.bounds.fill()
+        row.drawBackground(in:row.bounds)
+        if selected {row.drawSelection(in:row.bounds)}
+        NSGraphicsContext.saveGraphicsState()
+        let transform=NSAffineTransform();transform.translateX(by:264,yBy:0);transform.concat()
+        cell.draw(cell.bounds)
+        NSGraphicsContext.restoreGraphicsState()
+        image.unlockFocus()
+        let data=try #require(image.tiffRepresentation)
+        let bitmap=try #require(NSBitmapImageRep(data:data))
+        let left=try #require(bitmap.colorAt(x:100,y:12)?.usingColorSpace(.sRGB))
+        let right=try #require(bitmap.colorAt(x:280,y:12)?.usingColorSpace(.sRGB))
+        #expect(abs(left.redComponent-right.redComponent)<0.02)
+        #expect(abs(left.greenComponent-right.greenComponent)<0.02)
+        #expect(abs(left.blueComponent-right.blueComponent)<0.02)
+      }
     }
   }
   @Test func jobPropertiesLoadsLiveHeaderAndReusesWindowWithFreshRead() async throws {

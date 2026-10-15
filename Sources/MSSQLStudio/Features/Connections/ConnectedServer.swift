@@ -189,14 +189,15 @@ import UniformTypeIdentifiers
     self.password = password
     self.diskIndex=diskIndex;self.objectIndexService=objectIndexService;self.completionIndexService=completionIndexService
   }
-  func catalog(_ sql: String, database: String, limits: Limits = Limits()) async throws -> Execution {
+  enum CatalogAccess {case explorer, activeQuery}
+  func catalog(_ sql: String, database: String, limits: Limits = Limits(), access:CatalogAccess = .explorer) async throws -> Execution {
     if let asyncCatalogFixture {
       let token=generation
       do {return try await asyncCatalogFixture(sql)}
       catch {await recordCatalogFailure(error,generation:token);throw error}
     }
     if let catalogFixture { return catalogFixture(sql) }
-    guard online else { throw SQLFailure("Bağlantı çevrimdışı. Bağlantı ayarlarından yeniden bağlanın.") }
+    guard online || access == .activeQuery else { throw SQLFailure("Bağlantı çevrimdışı. Bağlantı ayarlarından yeniden bağlanın.") }
     var profile = self.profile
     profile.database = database
     let token = generation

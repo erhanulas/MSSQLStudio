@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.2.142",
+    "date": "2026-10-16",
+    "title": "Explorer renk sürekliliği ve genişletilmiş DBA araçları",
+    "changes": [
+      "Explorer indeks alanının bağlantı ve klasör renklerini kesmesi düzeltildi; ikonlu alanlar satırın seçim ve zemin görünümünü korur.",
+      "Sonuç düzenleme hazırlığı ve gönderim doğrulaması sorgu sekmesinin bağlantısını esas alır; Explorer çevrimdışıyken bağlı sorguda düzenleme engellenmez. Transaction ve kaynak doğrulamaları korunur.",
+      "Explorer bağlantısı kapalıyken üst indeks/disk durum kontrolü gizlenir.",
+      "Activity Monitor DBA listelerine Login, Host ve Uygulama kolonları; ayrıntılara mantıksal okuma, bekleme süresi ve kaynak bilgisi eklendi.",
+      "Batch hızı ölçümü, grafiği ve eksik sayaç uyarısı kaldırıldı.",
+      "DBA Sorguları menüsüne aktif oturumlar, açık transaction ile bekleyen oturumlar, sorgu bellek tahsisleri ve sunucu bekleme istatistikleri eklendi. Salt okunur sorgular yeni sekmede açılır; otomatik çalıştırılmaz."
+    ]
+  },
+  {
     "version": "0.2.141",
     "date": "2026-10-15",
     "title": "Explorer nesne görünürlüğü",

@@ -316,7 +316,13 @@ extension WorkbenchController {
     }
   }
   func updateIndexStatus() {
-    guard let scope = (showingSearch ? searchScope : selected) ?? searchScope ?? roots.first else { indexStatus.toolTip = "İndeks durumu için bağlantı seçin"; return }
+    guard let scope = (showingSearch ? searchScope : selected) ?? searchScope ?? roots.first,
+      scope.server.online else {
+      indexStatusTask?.cancel();lastIndexStatusScope=""
+      indexStatus.isHidden=true;indexStatus.toolTip=nil
+      return
+    }
+    indexStatus.isHidden=false
     let databases = searchDatabases(scope), key = scope.server.id.uuidString + databases.joined(separator:"|")
     guard key != lastIndexStatusScope || Date().timeIntervalSince(lastIndexStatusCheck) > 2 else { return }
     lastIndexStatusScope = key; lastIndexStatusCheck = Date(); indexStatusTask?.cancel()
@@ -340,7 +346,7 @@ extension WorkbenchController {
           } else { lines.append("\(db): indeks henüz hazır değil / hazırlanıyor") }
         } catch { lines.append("\(db): indeks okunamadı · \(error.localizedDescription)") }
       }
-      guard !Task.isCancelled, let self else { return }
+      guard !Task.isCancelled, let self, server.online,lastIndexStatusScope==key else { return }
       for db in databases {
         if let error = server.indexErrors[db] { lines.append("\(db): eşitleme başarısız · \(error)") }
         else if server.indexingDatabases.contains(db) { lines.append("\(db): indeks hazırlanıyor…") }

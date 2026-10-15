@@ -15,7 +15,11 @@ extension WorkbenchController {
   }
   @objc func activity() {if let server=selectedServer {showPerformanceMonitor(server)}}
   func showPerformanceMonitor(_ server:ConnectedServer) {
-    let window=present(ActivityMonitorPanel(server:server,openTable:{[weak self] in self?.createActivityTable(server)}),
+    let window=present(ActivityMonitorPanel(server:server,openDBATool:{[weak self] tool in
+      guard let self else {return}
+      state.newQuery(server:server,database:"master",text:tool.sql,title:"DBA · "+tool.title)
+      view.window?.makeKeyAndOrderFront(nil)
+    },openTable:{[weak self] in self?.createActivityTable(server)}),
       title:"Activity Monitor · \(server.profile.name)",width:1220,height:840,minWidth:920,minHeight:700,identity:"activity|\(server.id)")
     window.minSize=window.frameRect(forContentRect:NSRect(x:0,y:0,width:920,height:700)).size
   }
