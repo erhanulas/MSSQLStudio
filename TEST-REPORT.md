@@ -1,3 +1,9 @@
+## 16 Ekim 2026 — v0.2.142 / build 143 public yayın doğrulandı
+
+- [Public/latest v0.2.142](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.142), kaynak `140a236eb86b8ce2f37479eafaad3e0110c4e514`; [Actions 38809880727](https://github.com/erhanulas/MSSQLStudio/actions/runs/38809880727) bütün adımlarıyla başarılı. Kullanıcı isteğiyle yerel test/build tekrarlanmadı; mevcut yayın iş akışındaki otomatik paket testleri **463 app +374 core +8 text =845 test; 817 geçti /28 dış koşullu atlandı /0 issue** verdi. Tamamlanmış özetler 190.837 /10.960 /0.003 sn (`/tmp/mssql142-ci.log`).
+- Dört public asset indirildi; SHA-256/GitHub digest/manifest, exact 0.2.142/build143, kaynak/paket/GitHub notları, ZIP/PKG app/helper strict/deep imzaları, frozen helper byte/hash ve Icon Composer varyant eşliği doğrulandı. İndirilen signed uygulamanın kendi Foundation updater yolu exact 0.2.142 için exit 0 verdi. Kanıt: `/tmp/MSSQLStudio-142-public-verification/verification.json`, `verification.log`, `foundation-feed.log`.
+- ZIP SHA-256 `6ac9ad54d5710dabccd16226a5556d72ddb68dac1b0ccf1004a609ac4afaf834`; PKG `b41a0dee75430b86d0110d10f6285e6799e71435a24a47651363e0e16cfcf404`. Kurulu uygulama/veri değiştirilmedi; gerçek Installer ve canlı SQL Server/DBA yazması denenmedi. Yerel özellik/native/CUA kapsamı aşağıdadır.
+
 ## 16 Ekim 2026 — Activity Monitor DBA kimlik alanları ve tanı sorguları, yerel
 
 - DBA bloklanan/uzun süren/backup listelerine Login, Host ve Uygulama sütunları eklendi. Request metadata’sı logical_reads, wait_time ve wait_resource taşır; uzun süren/backup seçili detayda mantıksal okuma/bekleme/kaynak gösterilir. Tek uçuş, opt-in tanı, TOP(30), 2.000 karakter SQL, 400 satır/5 sonuç/4 MB/10 sn bütçeleri korunur. Sunucu alanları Microsoft Learn sys.dm_exec_sessions, sys.dm_exec_requests ve sys.dm_exec_query_memory_grants belgeleriyle karşılaştırıldı.
