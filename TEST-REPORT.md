@@ -1,3 +1,9 @@
+## 15 Ekim 2026 — v0.2.140 / build 141 public yayın doğrulandı
+
+- [Public/latest v0.2.140](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.140), kaynak `53cbb3edd7099ea21ab3ce2fefcca3bcb71e5533`; [Actions 38800818746](https://github.com/erhanulas/MSSQLStudio/actions/runs/38800818746) bütün adımlarıyla başarılı. Gerçek yayın paketleriyle **459 app +373 core +8 text =840 test; 812 geçti /28 dış koşullu atlandı /0 issue**; tamamlanmış özetler 192.797 /11.335 /0.004 sn (`/tmp/mssql140-ci.log`).
+- Dört public asset indirildi; SHA-256/GitHub digest/manifest, exact 0.2.140/build141, kaynak/paket/GitHub notları, ZIP/PKG app/helper strict/deep imzaları, frozen helper byte/hash ve Icon Composer varyant eşliği doğrulandı. İndirilen signed uygulamanın kendi Foundation updater yolu exact 0.2.140 için exit 0 verdi. Kanıt: `/tmp/MSSQLStudio-140-public-verification/verification.json`, `verification.log`, `foundation-feed.log`.
+- ZIP SHA-256 `6c6a2d5f32a81f9a81f1a06044f5884700e50e98f6e4f8d8ad2e9114208f6817`; PKG `afc59f38f64437b5d8252ac311449cd2a30d1246c7f6f4e9af945324250dffdb`. Kurulu uygulama/veri değiştirilmedi; gerçek Installer, canlı SQL/Job yazması ve arkadaşın macOS sürümü denenmedi. Yerel native/CUA kapsamı aşağıdadır.
+
 ## 15 Ekim 2026 — v0.2.140 / build 141 yayın hazırlığı
 
 - Debug/Release sürüm ve tek ReleaseNotes kaynağı 0.2.140/build141 ile eşlendi. Aynı ürün kaynaklarının tamamlanmış yerel 840 test sonucu (812 geçti /28 dış koşullu atlandı) aşağıdadır; yalnız sürüm/not değişikliği sonrası Release yeniden başarılı (`/tmp/mssql140-publish-release.log`). Mimari/kaynak eşliği ve diff kontrolü geçti. Dondurulmuş helper/kimlik değişmedi.
