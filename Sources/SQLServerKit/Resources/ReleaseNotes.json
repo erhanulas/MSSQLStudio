@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.138",
+    "date": "2026-10-15",
+    "title": "Sorgu sekmesi görünürlüğü",
+    "changes": [
+      "Sorgu sekmesi şeridinin belge boyutu ve kaydırma sınırları düzenlendi. Pencere boyutu ve tam ekran geçişlerinden sonra sekmelerin görünür alan dışında kalması engellenir.",
+      "Sekme değişiminde ve tam ekran geçişi tamamlandığında aktif sekme görünür alana getirilir; normal yatay kaydırma, pin sırası ve sorgu içeriği korunur."
+    ]
+  },
+  {
     "version": "0.2.137",
     "date": "2026-10-15",
     "title": "Kararlılık, indeks uyumluluğu ve editör etkileşimleri",

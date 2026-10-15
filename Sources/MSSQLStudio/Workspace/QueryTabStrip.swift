@@ -3,6 +3,42 @@ import SQLServerKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+@MainActor private final class QueryTabClipView:NSClipView {
+  override func constrainBoundsRect(_ proposedBounds:NSRect)->NSRect {
+    var rect=super.constrainBoundsRect(proposedBounds)
+    rect.origin.y=0
+    rect.origin.x=max(0,min(rect.origin.x,max(0,(documentView?.frame.width ?? 0)-rect.width)))
+    return rect
+  }
+}
+
+@MainActor final class QueryTabScrollView:NSScrollView {
+  override init(frame:NSRect) {
+    super.init(frame:frame)
+    contentView=QueryTabClipView()
+    contentView.drawsBackground=false;drawsBackground=false
+    hasHorizontalScroller=true;scrollerStyle = .overlay
+    horizontalScroller?.controlSize = .small;autohidesScrollers=true
+    horizontalScrollElasticity = .none;verticalScrollElasticity = .none
+  }
+  required init?(coder:NSCoder) {fatalError()}
+  override func layout() {
+    super.layout()
+    guard let tabs=documentView as? QueryTabStrip else {return}
+    let size=NSSize(width:max(contentView.bounds.width,tabs.fittingSize.width),height:contentView.bounds.height)
+    if tabs.frame != NSRect(origin:.zero,size:size) {tabs.frame=NSRect(origin:.zero,size:size)}
+    tabs.layoutSubtreeIfNeeded()
+    let bounds=contentView.constrainBoundsRect(contentView.bounds)
+    if contentView.bounds.origin != bounds.origin {contentView.scroll(to:bounds.origin);reflectScrolledClipView(contentView)}
+  }
+  func revealActiveTab() {
+    needsLayout=true;layoutSubtreeIfNeeded()
+    if let tabs=documentView as? QueryTabStrip,let active=tabs.arrangedSubviews.compactMap({$0 as? QueryTabSurface}).first(where:{$0.isActiveTab}) {
+      active.scrollToVisible(active.bounds)
+    }
+  }
+}
+
 @MainActor class DocumentButton: StudioFullAreaButton, NSDraggingSource {
   var document: QueryDocument?
   var showMenu: ((NSEvent) -> Void)?

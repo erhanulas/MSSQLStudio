@@ -4,6 +4,33 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct TabPresentation137Tests {
+  @Test func horizontalTabViewportSurvivesResizeAndFullscreenNotifications() throws {
+    _=NSApplication.shared
+    let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false
+    let server=ConnectedServer(profile:.init(),password:"");server.online=false
+    state.documents=(0..<18).map {QueryDocument(server:server,database:"master",title:"Query \($0) — long document title")}
+    state.active=state.documents.last
+    let host=WorkbenchController(state:state),window=NSWindow(contentViewController:host)
+    window.isReleasedWhenClosed=false;window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
+    defer {window.close()}
+    let strip=try #require(descendants(host.view).compactMap {$0 as? QueryTabStrip}.first)
+    let scroll=try #require(strip.enclosingScrollView as? QueryTabScrollView)
+    for width in [1060,2400,1200,3000,1060] {
+      window.setContentSize(NSSize(width:width,height:800));host.view.layoutSubtreeIfNeeded()
+      // Simulate the stale clip origin of a document reparented during a Space change.
+      scroll.contentView.setBoundsOrigin(NSPoint(x:50000,y:90))
+      NotificationCenter.default.post(name:NSWindow.didEnterFullScreenNotification,object:window)
+      NotificationCenter.default.post(name:NSWindow.didExitFullScreenNotification,object:window)
+      host.view.layoutSubtreeIfNeeded();scroll.layoutSubtreeIfNeeded()
+      #expect(scroll.contentView.bounds.minY==0)
+      #expect(scroll.contentView.bounds.maxX<=strip.frame.width+1)
+      #expect(strip.frame.height>=34 && strip.frame.width>=scroll.contentView.bounds.width)
+      let active=try #require(strip.arrangedSubviews.compactMap {$0 as? QueryTabSurface}.first {$0.isActiveTab})
+      #expect(active.frame.intersects(scroll.contentView.bounds) && active.superview === strip)
+      #expect(strip.arrangedSubviews.count==19 && strip.documentIDs==state.documents.map(\.id))
+      #expect(strip.arrangedSubviews.last?.superview === strip)
+    }
+  }
   private func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
   @Test func pinningMovesTheActualDocumentAndDragKeepsPinnedPrefix() throws {
     _=NSApplication.shared

@@ -95,6 +95,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   @objc private func windowPresentationChanged(_ notification:Notification) {
     guard isViewLoaded,let window=notification.object as? NSWindow,window === view.window else {return}
     StudioTheme.decorate(tabs)
+    (tabs.enclosingScrollView as? QueryTabScrollView)?.revealActiveTab()
     tabs.needsDisplay=true
   }
   @objc func themeChanged() {
@@ -143,19 +144,16 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     tabs.alignment = .centerY
     tabs.spacing = 3
     tabs.edgeInsets = NSEdgeInsets(top: 3, left: 6, bottom: 3, right: 6)
-    let tabScroll = NSScrollView()
+    let tabScroll = QueryTabScrollView()
     tabScroll.documentView = tabs
     tabScroll.hasHorizontalScroller = true
     tabScroll.scrollerStyle = .overlay
     tabScroll.horizontalScroller?.controlSize = .small
     tabScroll.autohidesScrollers = true
     tabScroll.drawsBackground = false
-    tabs.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      tabs.leadingAnchor.constraint(equalTo: tabScroll.contentView.leadingAnchor),
-      tabs.topAnchor.constraint(equalTo: tabScroll.contentView.topAnchor),
-      tabs.heightAnchor.constraint(equalToConstant: 34),
-    ])
+    tabs.translatesAutoresizingMaskIntoConstraints = true
+    tabs.autoresizingMask=[]
+    tabs.detachesHiddenViews=false
     database.target = self
     database.action = #selector(changeDatabase)
     database.setAccessibilityIdentifier("databaseSelector")
@@ -400,6 +398,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     let plus = symbolButton("plus", tip: "Yeni Sorgu (\(GridShortcuts.binding(.newQuery).label))", action: #selector(newQuery))
     tabs.addArrangedSubview(plus)
+    (tabs.enclosingScrollView as? QueryTabScrollView)?.revealActiveTab()
   }
   private func renderActive() {
     var initialFocus: QueryController?

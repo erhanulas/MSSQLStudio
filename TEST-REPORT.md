@@ -1,3 +1,14 @@
+## 15 Ekim 2026 — v0.2.138 / build 139 yayın öncesi doğrulama
+
+- Sekme şeridi geometri düzeltmesi için sürüm/derleme ve tek sürüm notu kaynağı eşlendi. Tam yerel suite **447 app +368 core +8 text =823 test; 795 geçti /28 dış koşullu atlandı, 0 issue**; tamamlanmış özetler 136.422 /6.460 /0.002 sn (`/tmp/mssql138-full.log`). Release derlemesi (`/tmp/mssql138-release.log`), mimari/Xcode kaynak eşliği ve diff kontrolü geçti.
+- İmzalı public paket/CI doğrulaması yayın sonrasında ayrıca kaydedilir. Kullanıcı uygulaması/verisi değiştirilmedi; gerçek cihaz fullscreen animasyonu sınırı aşağıdaki kayıtta korunur.
+
+## 15 Ekim 2026 — boş sekme şeridi için yerel geometri düzeltmesi
+
+- Kullanıcı görüntünün v0.2.137’den olduğunu doğruladı; önceki renk yenilemesi tek başına yeterli değil. Eski scroll document yerleşiminde yalnız clip leading/top ve sabit yükseklik constraint’i vardı; belge genişliği ve geçiş sonrası clip origin açıkça yönetilmiyordu. QueryTabScrollView sekmelerin ölçülen genişliğini viewport ile sınırlar, dikey kaymayı engeller ve yatay origin’i belge sınırlarına alır. Sekme render/fullscreen tamamlanmasında aktif sekme görünür alana getirilir.
+- İzole native regresyon 18 sekmeyle beş pencere genişliğinde, bilinçli olarak sınır dışına taşınmış clip origin ve fullscreen bildirimleri sonrasında aktif sekme/görünür alan/çocuk view/kimlik sırasını kontrol etti. Pin, tema/yeniden bağlanma, odak ve kompakt yerleşim yollarıyla birlikte **25 test: 24 geçti, 1 dış koşullu atlandı, 0 issue** (`/tmp/mssql-tab-viewport.log`). Release derlemesi (`/tmp/mssql-tab-viewport-release.log`), mimari/Xcode kaynak eşliği ve diff kontrolü geçti.
+- Gerçek Space/fullscreen animasyonu ve arkadaşın cihazındaki neden birebir yeniden üretilmedi; zorlanmış geometri regresyonu bu sınırın dayanıklılığını doğrular. Kullanıcı uygulaması/verisi değiştirilmedi. Henüz public yayımlanmadı.
+
 ## 15 Ekim 2026 — v0.2.137 / build 138 public yayın doğrulandı
 
 - [Public/latest v0.2.137](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.137), kaynak `428595215dae03dca0bb743151f767ca9ef48506`; [Actions 38769434525](https://github.com/erhanulas/MSSQLStudio/actions/runs/38769434525) bütün adımlarıyla başarılı. CI gerçek yayın paketleriyle **446 app +368 core +8 text =822 test; 794 geçti /28 dış koşullu atlandı, 0 issue**; tamamlanmış özetler 190.664 /11.970 /0.005 sn (`/tmp/mssql137-publish-ci.log`).
