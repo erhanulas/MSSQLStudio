@@ -147,6 +147,24 @@ import Testing
       }
     }
   }
+  @Test func indexCellNeverCoversObjectColumnDuringReattachment() {
+    let outline=IndexViewportFixture(frame:NSRect(x:0,y:0,width:320,height:120))
+    let objects=NSTableColumn(identifier:.init("object"));objects.width=264
+    let indexes=NSTableColumn(identifier:.init("indexes"));indexes.width=56
+    outline.addTableColumn(objects);outline.addTableColumn(indexes)
+    let row=NSTableRowView(frame:outline.bounds)
+    outline.addSubview(row)
+    let cell=ExplorerIndexCell();cell.outline=outline;row.addSubview(cell)
+    #expect(cell.clipsToBounds)
+    for width in [CGFloat(320),640,1200,0,56] {
+      cell.frame=NSRect(x:0,y:0,width:width,height:24)
+      #expect(cell.frame.width==56)
+      cell.setFrameSize(NSSize(width:width,height:24))
+      #expect(cell.frame.width==56)
+      #expect(cell.frame.minX==outline.bounds.maxX-56)
+      #expect(cell.frame.maxX==outline.bounds.maxX)
+    }
+  }
   @Test func jobPropertiesLoadsLiveHeaderAndReusesWindowWithFreshRead() async throws {
     _=NSApplication.shared
     let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false
@@ -189,4 +207,8 @@ import Testing
     menu.addItem(.separator());menu.update()
     #expect(item.image != nil && !item.isEnabled && item.view==nil && menu.items[1].isSeparatorItem)
   }
+}
+
+@MainActor private final class IndexViewportFixture:NSOutlineView {
+  override var visibleRect:NSRect {bounds}
 }

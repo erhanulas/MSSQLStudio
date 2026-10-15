@@ -32,21 +32,45 @@ extension WorkbenchController {
 /// The tree scrolls long object names, while its native index cells stay at the viewport edge.
 @MainActor final class ExplorerIndexCell:NSTableCellView {
   weak var outline:NSOutlineView?
+  override init(frame frameRect:NSRect) {
+    super.init(frame:frameRect)
+    clipsToBounds=true
+  }
+  required init?(coder:NSCoder) {
+    super.init(coder:coder)
+    clipsToBounds=true
+  }
   override var frame:NSRect {
     get {super.frame}
     set {
       var value=newValue
+      // AppKit can propose the row width during reattachment. The opaque pinned
+      // surface must stay inside its own column rather than cover object names.
+      if let outline,let column=outline.tableColumns.first(where: {$0.identifier.rawValue == "indexes"}) {
+        value.size.width=column.width
+      }
       if let outline,let parent=superview {
-        let visible=parent.convert(outline.visibleRect,from:outline)
-        value.origin.x=max(visible.minX,visible.maxX-value.width)
+        let viewport=outline.visibleRect.intersection(outline.bounds)
+        if !viewport.isEmpty {
+          let visible=parent.convert(viewport,from:outline)
+          value.origin.x=max(visible.minX,visible.maxX-value.width)
+        }
       }
       super.frame=value
     }
   }
+  override func setFrameSize(_ newSize:NSSize) {
+    var size=newSize
+    if let outline,let column=outline.tableColumns.first(where: {$0.identifier.rawValue == "indexes"}) {
+      size.width=column.width
+    }
+    super.setFrameSize(size)
+  }
   func pinToViewport() {let current=frame;frame=current;needsDisplay=true}
   override func draw(_ dirtyRect:NSRect) {
     let selected=(superview as? NSTableRowView)?.isSelected == true
-    (selected ? StudioTheme.selection:StudioTheme.explorerCanvas).setFill();dirtyRect.fill()
+    (selected ? StudioTheme.selection:StudioTheme.explorerCanvas).setFill()
+    dirtyRect.intersection(bounds).fill()
     super.draw(dirtyRect)
   }
 }

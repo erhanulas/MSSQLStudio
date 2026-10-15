@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.141",
+    "date": "2026-10-15",
+    "title": "Explorer nesne görünürlüğü",
+    "changes": [
+      "Explorer indeks hücresinin nesne adları ve simgelerini örtebilmesine neden olan çizim sınırları düzeltildi. Hücrenin genişliği kendi sütunuyla sınırlanır.",
+      "Uzun nesne adlarında yatay kaydırma ve sağ kenardaki indeks ikonları korunur; görünür alan dışındaki yerleşim hesapları güvenli sınırlar içinde tutulur."
+    ]
+  },
+  {
     "version": "0.2.140",
     "date": "2026-10-15",
     "title": "Akıllı kolon tamamlama ve geliştirilmiş iş akışları",
