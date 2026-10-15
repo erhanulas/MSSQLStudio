@@ -395,6 +395,8 @@ import UniformTypeIdentifiers
         if let key=tab.objectKey {doc.objectEditorKey=ObjectEditorKey(serverID:server.id,database:key.database,objectID:key.objectID);doc.moduleObjectID=key.objectID}
         doc.moduleOriginal=tab.moduleOriginal;doc.moduleInitialSQL=tab.moduleInitialSQL
       }
+      documents=documents.filter(\.pinned)+documents.filter {!$0.pinned}
+      changed?()
     } catch { showError(error.localizedDescription) }
   }
   func historyServer(_ record: QueryRecord) -> ConnectedServer? {

@@ -580,7 +580,8 @@ import SQLServerKit
     updateOccurrences()
   }
   func navigateDefinition() {
-    guard projection == nil,let parts=DefinitionReference.parts(in:editor.string,at:editor.selectedRange().location) else {return}
+    let offset=projection?.sourceOffset(editor.selectedRange().location) ?? editor.selectedRange().location
+    guard let parts=DefinitionReference.parts(in:document.sql,at:offset) else {return}
     if !document.server.online {document.openDefinitionNamed?(parts);return}
     if let catalog=document.intelligenceCatalog,document.catalogDatabase == document.database,let symbol=catalog.resolve(parts) {document.openDefinition?(symbol)}
   }

@@ -16,6 +16,23 @@ import SwiftUI
   private static let titleFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
   private static let detailFont = NSFont.systemFont(ofSize: 9, weight: .regular)
 
+  override func copy(with zone: NSZone? = nil) -> Any {
+    // NSCell's shallow copy cannot retain Swift String storage in subclass ivars.
+    // Construct a fresh cell so both headers own their metadata independently.
+    let cell=FilterHeaderCell(textCell:stringValue)
+    cell.active=active;cell.pinned=pinned;cell.primaryKey=primaryKey
+    cell.hovered=hovered;cell.navigationTarget=navigationTarget
+    cell.typeSymbol=typeSymbol;cell.typeDetail=typeDetail
+    cell.showsFilter=showsFilter;cell.ascending=ascending
+    cell.font=font;cell.alignment=alignment;cell.textColor=textColor
+    cell.backgroundColor=backgroundColor;cell.backgroundStyle=backgroundStyle
+    cell.isEnabled=isEnabled;cell.isHighlighted=isHighlighted
+    cell.lineBreakMode=lineBreakMode;cell.wraps=wraps
+    cell.usesSingleLineMode=usesSingleLineMode
+    cell.attributedStringValue=attributedStringValue
+    return cell
+  }
+
   private func symbol(_ name: String, accent: Bool) -> NSImage? {
     let key = name + (accent ? "/accent" : "/muted") + (StudioTheme.dark ? "/dark" : "/light")
     if let image = Self.symbols[key] { return image }

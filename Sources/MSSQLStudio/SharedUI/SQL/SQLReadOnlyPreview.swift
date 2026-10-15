@@ -6,6 +6,17 @@ import SwiftUI
 @MainActor private final class DefinitionPreviewTextView: StudioTextView {
   var navigateDefinition: (([String]) -> Void)?
   var revealInExplorer: (([String]) -> Void)?
+  override func mouseDown(with event:NSEvent) {
+    if DefinitionReference.isNavigationClick(event),let navigateDefinition {
+      if let offset=DefinitionReference.clickedOffset(in:self,at:convert(event.locationInWindow,from:nil)),
+        let parts=DefinitionReference.parts(in:string,at:offset) {
+        window?.makeFirstResponder(self);setSelectedRange(NSRange(location:offset,length:0))
+        navigateDefinition(parts)
+      }
+      return
+    }
+    super.mouseDown(with:event)
+  }
   @objc private func revealExplorerObject(_ item:NSMenuItem) {if let parts=item.representedObject as? [String] {revealInExplorer?(parts)}}
   override func validateUserInterfaceItem(_ item:any NSValidatedUserInterfaceItem)->Bool {
     if item.action == #selector(revealExplorerObject(_:)) {return revealInExplorer != nil && (item as? NSMenuItem)?.representedObject is [String]}

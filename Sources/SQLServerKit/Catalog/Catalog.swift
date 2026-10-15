@@ -145,7 +145,7 @@ public enum Catalog {
   /// Column-only preview, explicitly labelled as incomplete in the editor.
   public static func tableColumnDefinition(_ id: Int) -> String {
     """
-    SELECT STRING_AGG(CONVERT(nvarchar(max),N'    '+QUOTENAME(c.name)+N' '+
+    SELECT STUFF((SELECT N','+CHAR(10)+N'    '+QUOTENAME(c.name)+N' '+
       CASE WHEN cc.object_id IS NOT NULL THEN N'AS '+cc.definition+CASE WHEN cc.is_persisted=1 THEN N' PERSISTED' ELSE N'' END
       ELSE CASE WHEN t.is_user_defined=1 THEN QUOTENAME(SCHEMA_NAME(t.schema_id))+N'.' ELSE N'' END+QUOTENAME(t.name)+CASE WHEN t.is_user_defined=1 THEN N''
         WHEN t.name IN ('varchar','char','varbinary','binary') THEN N'('+CASE WHEN c.max_length=-1 THEN N'max' ELSE CONVERT(nvarchar(10),c.max_length) END+N')'
@@ -154,11 +154,11 @@ public enum Catalog {
         WHEN t.name IN ('datetime2','datetimeoffset','time') THEN N'('+CONVERT(nvarchar(10),c.scale)+N')' ELSE N'' END
         +CASE WHEN ic.object_id IS NOT NULL THEN N' IDENTITY('+CONVERT(nvarchar(40),ic.seed_value)+N','+CONVERT(nvarchar(40),ic.increment_value)+N')' ELSE N'' END
         +CASE WHEN c.is_nullable=1 THEN N' NULL' ELSE N' NOT NULL' END
-        +CASE WHEN dc.object_id IS NOT NULL THEN N' DEFAULT '+dc.definition ELSE N'' END END),N','+CHAR(10)) WITHIN GROUP (ORDER BY c.column_id)
+        +CASE WHEN dc.object_id IS NOT NULL THEN N' DEFAULT '+dc.definition ELSE N'' END END
     FROM sys.columns c JOIN sys.types t ON t.user_type_id=c.user_type_id
     LEFT JOIN sys.computed_columns cc ON cc.object_id=c.object_id AND cc.column_id=c.column_id
     LEFT JOIN sys.identity_columns ic ON ic.object_id=c.object_id AND ic.column_id=c.column_id
-    LEFT JOIN sys.default_constraints dc ON dc.object_id=c.default_object_id WHERE c.object_id=\(id);
+    LEFT JOIN sys.default_constraints dc ON dc.object_id=c.default_object_id WHERE c.object_id=\(id) ORDER BY c.column_id FOR XML PATH(''),TYPE).value('.','nvarchar(max)'),1,2,N'');
     """
   }
   public static func definition(_ id: Int) -> String { "SELECT OBJECT_DEFINITION(\(id));" }

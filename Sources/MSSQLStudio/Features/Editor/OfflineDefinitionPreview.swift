@@ -32,6 +32,24 @@ struct InlineOfflineDefinitionView: View {
 }
 
 enum DefinitionReference {
+  static func isNavigationClick(_ event:NSEvent)->Bool {
+    event.clickCount==1 && event.modifierFlags.intersection([.command,.control,.option,.shift]) == .command
+  }
+  @MainActor static func clickedOffset(in editor:NSTextView,at point:NSPoint)->Int? {
+    guard editor.string.utf16.count<=100_000,let content=editor.textContentStorage,let layout=editor.textLayoutManager else {return nil}
+    let offset=editor.characterIndexForInsertion(at:point)
+    let tokens=TSQL.lex(editor.string)
+    guard let token=tokens.first(where:{$0.kind == .word && offset >= $0.range.location && offset <= NSMaxRange($0.range)}),
+      let start=content.location(content.documentRange.location,offsetBy:token.range.location),
+      let end=content.location(start,offsetBy:token.range.length),let range=NSTextRange(location:start,end:end) else {return nil}
+    layout.ensureLayout(for:range)
+    var hit=false
+    layout.enumerateTextSegments(in:range,type:.standard,options:[]) {_,rect,_,_ in
+      if rect.offsetBy(dx:editor.textContainerOrigin.x,dy:editor.textContainerOrigin.y).insetBy(dx:-3,dy:-3).contains(point) {hit=true}
+      return !hit
+    }
+    return hit ? offset:nil
+  }
   static func parts(in sql: String, at caret: Int,maxParts:Int=2) -> [String]? {
     guard sql.utf16.count <= 100_000 else {return nil}
     let tokens=TSQL.lex(sql).filter {![.space,.comment].contains($0.kind)}

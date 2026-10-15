@@ -308,10 +308,19 @@ import SQLServerKit
   private(set) var trackingMouseSelection=false
   var mouseSelectionEnded:(() -> Void)?
   override func mouseDown(with event: NSEvent) {
+    let navigationClick=DefinitionReference.isNavigationClick(event)
     trackingMouseSelection=true
-    defer {trackingMouseSelection=false;mouseSelectionEnded?()}
+    defer {trackingMouseSelection=false;if !navigationClick {mouseSelectionEnded?()}}
     dismissSuggestions?()
     window?.makeFirstResponder(self)
+    if navigationClick {
+      let point=convert(event.locationInWindow,from:nil)
+      if let offset=DefinitionReference.clickedOffset(in:self,at:point) {
+        setSelectedRange(NSRange(location:offset,length:0))
+        navigateDefinition?()
+      }
+      return
+    }
     if string.isEmpty,isEditable {
       setSelectedRange(NSRange(location:0,length:0))
       textLayoutManager?.textViewportLayoutController.layoutViewport()
@@ -323,7 +332,6 @@ import SQLServerKit
     if event.clickCount == 2, unfoldSelection?(selectedRange()) == true {return}
     if event.clickCount == 2 { normalizeSQLWordSelection() }
     // Double-click belongs to word selection. Navigation must be deliberate.
-    if event.modifierFlags.contains(.command) { navigateDefinition?() }
   }
   // AppKit may apply its own word boundaries after selectionRange; normalize the final
   // mouse selection as well, so SQL variable prefixes survive the native tracking loop.

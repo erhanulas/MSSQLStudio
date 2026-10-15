@@ -79,9 +79,17 @@ import UniformTypeIdentifiers
   private func refreshSurface() {
     CATransaction.begin(); CATransaction.setDisableActions(true)
     let selected = sourceColor.map {StudioTheme.canvas.blended(withFraction:StudioTheme.dark ? 0.18:0.08,of:$0) ?? StudioTheme.selection} ?? (StudioTheme.selection.blended(withFraction:0.55,of:StudioTheme.canvas) ?? StudioTheme.selection)
-    layer?.backgroundColor = (isActiveTab ? selected : hovered ? StudioTheme.panel : .clear).cgColor
+    layer?.borderWidth = isActiveTab ? 1:0
+    layer?.borderColor = StudioTheme.accent.withAlphaComponent(0.42).cgColor
+    layer?.backgroundColor = (isActiveTab ? selected : hovered ? StudioTheme.panel : StudioTheme.panel.withAlphaComponent(0.45)).cgColor
+    if let button=primaryButton {
+      button.contentTintColor=isActiveTab ? StudioTheme.accent:StudioTheme.muted
+      button.attributedTitle=NSAttributedString(string:button.title,attributes:[.font:button.font ?? StudioTheme.uiFont,.foregroundColor:isActiveTab ? StudioTheme.text:StudioTheme.muted])
+    }
     CATransaction.commit()
   }
+  override func viewDidMoveToWindow() {super.viewDidMoveToWindow();refreshSurface()}
+  override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance();refreshSurface()}
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
     if let hoverArea { removeTrackingArea(hoverArea) }

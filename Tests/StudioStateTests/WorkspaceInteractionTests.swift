@@ -239,7 +239,7 @@ import Testing
     state.documents = docs; state.active = docs[1]
     let controller = WorkbenchController(state:state); _ = controller.view
     controller.moveQueryTab(docs[1].id,to:4)
-    #expect(state.documents.map(\.title) == ["Q0","Q2","Q3","Q1"])
+    #expect(state.documents.map(\.title) == ["Q1","Q0","Q2","Q3"])
     #expect(state.active === docs[1] && docs[1].pinned && docs[1].sql == "SELECT 7")
     controller.moveQueryTab(docs[1].id,to:0)
     #expect(state.documents.first === docs[1])

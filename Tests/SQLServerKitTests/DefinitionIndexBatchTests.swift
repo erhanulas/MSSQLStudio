@@ -3,6 +3,19 @@ import Testing
 @testable import SQLServerKit
 
 struct DefinitionIndexBatchTests {
+  @Test func structureBatchUsesOrderedCompatibilitySafeXMLLists() throws {
+    let sql=try DefinitionIndexBatch.query([entry(5,type:"U"),entry(6,type:"SN")])
+    #expect(!sql.contains("STRING_AGG") && !sql.contains("WITHIN GROUP"))
+    #expect(sql.components(separatedBy:"FOR XML PATH(''),TYPE").count==5)
+    for order in ["ic.key_ordinal","ic.index_column_id","c.constraint_column_id"] {
+      #expect(sql.contains("ORDER BY "+order+" FOR XML"))
+    }
+    #expect(sql.components(separatedBy:".value('.','nvarchar(max)')").count==5)
+    try sql.write(toFile:"/tmp/mssql137-table-batch.sql",atomically:true,encoding:.utf8)
+    let preview=Catalog.tableColumnDefinition(5)
+    #expect(!preview.contains("STRING_AGG") && preview.contains("ORDER BY c.column_id FOR XML PATH(''),TYPE"))
+    try preview.write(toFile:"/tmp/mssql137-table-preview.sql",atomically:true,encoding:.utf8)
+  }
   private func entry(_ id: Int, type: String = "P") throws -> DefinitionIndexEntry {
     try .init([String(id), "dbo", "P\(id)", type, "1", "0"])
   }

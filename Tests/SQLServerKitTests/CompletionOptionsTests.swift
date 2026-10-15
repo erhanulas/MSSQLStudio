@@ -61,11 +61,17 @@ struct CompletionOptionsTests {
     #expect(try result("SELECT * FROM Prod", schema: true, brackets: false).suggestions.first?.text == "report.Products")
     #expect(try result("SELECT * FROM Prod", schema: false, brackets: true).suggestions.first?.text == "[Products]")
     #expect(try result("SELECT * FROM Prod", schema: false, brackets: false).suggestions.first?.text == "Products")
+    #expect(try result("SELECT * FROM Prod", schema: true, brackets: true).suggestions.first?.label == "[report].[Products]")
+    #expect(try result("SELECT * FROM Prod", schema: true, brackets: false).suggestions.first?.label == "report.Products")
+    #expect(try result("SELECT * FROM Prod", schema: false, brackets: true).suggestions.first?.label == "[Products]")
+    #expect(try result("SELECT * FROM Prod", schema: false, brackets: false).suggestions.first?.label == "Products")
     #expect(try result("SELECT * FROM [report].Prod", schema: false, brackets: false).suggestions.first?.text == "Products")
     #expect(try result("SELECT * FROM report.Products p WHERE Code", schema: false, brackets: false).suggestions.first?.text == "p.ProductCode")
     #expect(try result("SELECT * FROM report.Products p WHERE p.Code", schema: false, brackets: false).suggestions.first?.text == "ProductCode")
     let suggestion = try #require(result("SELECT * FROM Prod", schema: false, brackets: false).suggestions.first)
-    #expect(suggestion.label == "[report].[Products]" && suggestion.detail == "Products")
+    #expect(suggestion.label == "Products" && suggestion.detail == "Products")
+    #expect(try result("SELECT * FROM report.Products p WHERE p.Code",schema:false,brackets:true).suggestions.first?.label == "[p].[ProductCode]")
+    #expect(try result("SELECT * FROM report.Products p WHERE p.Code",schema:false,brackets:false).suggestions.first?.label == "p.ProductCode")
   }
 
   @Test func requiredIdentifierDelimitersRemainWhenOptionalBracketsAreDisabled() throws {
@@ -102,6 +108,11 @@ struct CompletionOptionsTests {
     #expect(try texts("SELECT * FROM Prod") == ["dbo.Products", "report.Products"])
     #expect(try texts("EXEC Code") == ["dbo.ufn_Code", "usp_Code"])
     #expect(try texts("EXEC dbo.Code") == ["ufn_Code", "usp_Code"])
+    let functions=try SQLIntelligence.analyze(source:"EXEC Code",caret:9,catalog:catalog,verified:true,includeSchema:false,quoteIdentifiers:false).suggestions
+    #expect(functions.first(where:{$0.kind == .function})?.label == "dbo.ufn_Code")
+    #expect(functions.first(where:{$0.kind == .procedure})?.label == "usp_Code")
+    let duplicates=try SQLIntelligence.analyze(source:"SELECT * FROM Prod",caret:18,catalog:catalog,verified:true,automaticAliases:false,includeSchema:false,quoteIdentifiers:false).suggestions
+    #expect(duplicates.map(\.label)==["dbo.Products","report.Products"])
   }
 
   @Test func generatedAliasNoLockAndLiteralSuppressionRespectFormattingOptions() throws {

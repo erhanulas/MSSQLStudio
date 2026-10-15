@@ -79,6 +79,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     NotificationCenter.default.addObserver(self, selector: #selector(refreshShortcuts), name: GridShortcuts.changed, object: nil)
     NotificationCenter.default.addObserver(
       self, selector: #selector(themeChanged), name: StudioTheme.changed, object: nil)
+    for name in [NSWindow.didEnterFullScreenNotification,NSWindow.didExitFullScreenNotification] {
+      NotificationCenter.default.addObserver(self,selector:#selector(windowPresentationChanged(_:)),name:name,object:nil)
+    }
     NotificationCenter.default.addObserver(self, selector: #selector(refreshChangedObjects(_:)), name: .init("studioDDLCompleted"), object: nil)
     NotificationCenter.default.addObserver(self,selector:#selector(refreshManagedObject(_:)),name:.init("studioManagedObjectCompleted"),object:nil)
     NotificationCenter.default.addObserver(self, selector: #selector(catalogIndexUpdated(_:)), name: .init("catalogIndexUpdated"), object: nil)
@@ -89,6 +92,11 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     state.changed = { [weak self] in self?.reloadWorkspace() }
   }
   deinit {agentPolling?.cancel();explorerRevealTask?.cancel()}
+  @objc private func windowPresentationChanged(_ notification:Notification) {
+    guard isViewLoaded,let window=notification.object as? NSWindow,window === view.window else {return}
+    StudioTheme.decorate(tabs)
+    tabs.needsDisplay=true
+  }
   @objc func themeChanged() {
     tabSignature=nil
     guard isViewLoaded else { return }
@@ -138,6 +146,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     let tabScroll = NSScrollView()
     tabScroll.documentView = tabs
     tabScroll.hasHorizontalScroller = true
+    tabScroll.scrollerStyle = .overlay
+    tabScroll.horizontalScroller?.controlSize = .small
     tabScroll.autohidesScrollers = true
     tabScroll.drawsBackground = false
     tabs.translatesAutoresizingMaskIntoConstraints = false
@@ -251,7 +261,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     guard let old = state.documents.firstIndex(where: { $0.id == id }) else { return }
     let document = state.documents.remove(at: old)
     let adjusted = insertionIndex > old ? insertionIndex - 1 : insertionIndex
-    state.documents.insert(document,at: min(state.documents.count,max(0,adjusted)))
+    let pinnedCount=state.documents.filter(\.pinned).count
+    let range=document.pinned ? 0...pinnedCount:pinnedCount...state.documents.count
+    state.documents.insert(document,at: min(range.upperBound,max(range.lowerBound,adjusted)))
     state.scheduleSnapshot(); renderTabs()
   }
   @objc func refreshShortcuts() {
@@ -550,7 +562,15 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     guard let doc = item.representedObject as? QueryDocument,
       let index = state.documents.firstIndex(where: { $0 === doc }) else { return }
     if item.tag == 5 {Task { @MainActor [weak self] in self?.requestCloseAllTabs() };return}
-    if item.tag == 0 { doc.pinned.toggle(); state.scheduleSnapshot(); renderTabs(); return }
+    if item.tag == 0 {
+      guard let index=state.documents.firstIndex(where:{$0 === doc}) else {return}
+      state.documents.remove(at:index)
+      doc.pinned.toggle()
+      state.documents=state.documents.filter(\.pinned)+state.documents.filter {!$0.pinned}
+      let destination=doc.pinned ? 0:state.documents.filter(\.pinned).count
+      state.documents.insert(doc,at:destination)
+      state.scheduleSnapshot();renderTabs();return
+    }
     let targets = state.documents.enumerated().filter { i, candidate in
       switch item.tag {
       case 1: return candidate === doc

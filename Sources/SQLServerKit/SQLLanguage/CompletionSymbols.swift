@@ -496,7 +496,7 @@ public enum SQLIntelligence {
               : visible.count == 1 ? "" : binding.parts.map(identifier).joined(separator:".")+"."
             let text = qualifier+identifier(column)
             guard seen.insert(text).inserted else { continue }
-            let label = alreadyQualified ? binding.alias+"."+identifier(column) : text
+            let label = alreadyQualified ? identifier(binding.alias)+"."+identifier(column) : text
             suggestions.append(Suggestion(text:text,label:label,kind:.column,detail:binding.parts.joined(separator:".")))
           }
         }
@@ -542,7 +542,8 @@ public enum SQLIntelligence {
       var offset:Int?
       if call,nextToken?.text != "(" {text+="()";offset=text.utf16.count-1}
       let kind:Suggestion.Kind=item.kind.contains("PROCEDURE") ? .procedure:item.kind.contains("FUNCTION") ? .function:item.kind == "VIEW" ? .view:item.kind == "SYNONYM" ? .synonym:.table
-      return Suggestion(text:text,label:SQL.identifier(item.schema)+"."+SQL.identifier(item.name),kind:kind,detail:text,caretOffset:offset)
+      let label=schemaRequired ? identifier(item.schema)+"."+identifier(item.name):identifier(item.name)
+      return Suggestion(text:text,label:label,kind:kind,detail:text,caretOffset:offset)
     }
     func appendScalarFunctions()throws {
       guard scalarPosition,!prefix.hasPrefix("@") else {return}

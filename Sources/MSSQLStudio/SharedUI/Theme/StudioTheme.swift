@@ -126,6 +126,7 @@ import SwiftUI
     NotificationCenter.default.post(name: changed, object: nil)
   }
   static func decorate(_ view: NSView) {
+    if let tab=view as? QueryTabSurface {tab.configure(active:tab.isActiveTab)}
     if let button = view as? StudioToolbarButton { button.refreshStyle() }
     if let button = view as? QueryTabCloseButton {button.refreshStyle()}
     if let button = view as? StudioResultTabButton { button.refreshStyle() }

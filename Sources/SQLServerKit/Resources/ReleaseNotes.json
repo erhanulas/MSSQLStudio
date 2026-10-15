@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.137",
+    "date": "2026-10-15",
+    "title": "Kararlılık, indeks uyumluluğu ve editör etkileşimleri",
+    "changes": [
+      "Sonuç başlık hücrelerinin kopyalanması sırasında Swift metin alanlarının geçersiz belleğe erişmesine yol açan çökme düzeltildi. Hücreler artık tür, filtre, pin ve sıralama durumlarını güvenli sahiplikle kopyalar.",
+      "Nesne içeriği indeksinin tablo metadata sorguları ve kolon önizlemesinde düşük DB uyumluluk düzeylerinde hata üreten sıralı STRING_AGG kullanımı değiştirildi. Kolon sırası ve mevcut indeks kayıtları korunur.",
+      "Tam ekran giriş/çıkışı ve pencere görünüm değişimlerinde sorgu sekmelerinin renkleri yenilenir. Sekme kaydırıcısı inceltildi; pinlenen sekmeler başa taşınır, sürükleme ve kurtarma sabit grubu önde tutar.",
+      "Command+tıklama eski metin seçimi yerine tıklanan nesneyi kullanır. Kelime kenarlarında tolerans, katlı kodda kaynak eşleme ve salt okunur önizlemede gezinti eklendi; boşluk ve metin sabitleri nesne açmaz.",
+      "Tamamlama listesindeki nesne adları şema ve köşeli parantez tercihlerini izler. Fonksiyonların zorunlu şeması, aynı adlı nesnelerin ayrımı ve gerekli identifier parantezleri korunur."
+    ]
+  },
+  {
     "version": "0.2.136",
     "date": "2026-10-15",
     "title": "Icon Composer uygulama simgesi entegrasyonu",
