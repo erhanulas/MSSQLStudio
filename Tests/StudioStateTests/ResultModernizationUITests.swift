@@ -76,7 +76,7 @@ private actor PreparationCalls {
     #expect(validCommitted)
     #expect(grid.editValidationMessage == nil && grid.pendingEdits[0]?.values[1] == "25")
     let sql = try grid.pendingSQL()
-    #expect(sql.contains("SET [Count] = CONVERT(int, N'25') WHERE [Id] = CONVERT(int, N'1');"))
+    #expect(sql.contains("SET [Count] = 25 WHERE [Id] = 1;"))
     #expect(!sql.contains("not an integer") && !sql.contains("N'10'"))
     grid.setColumnPinned(1, pinned: true)
     grid.frozenTable.editCell?(0, 1)

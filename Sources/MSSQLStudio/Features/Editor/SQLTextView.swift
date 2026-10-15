@@ -2,6 +2,11 @@ import AppKit
 import SwiftUI
 import SQLServerKit
 
+private final class SQLFindKeyMonitor:@unchecked Sendable {
+  let token:Any
+  init(_ token:Any) {self.token=token}
+  deinit {NSEvent.removeMonitor(token)}
+}
 @MainActor final class SQLTextView: StudioTextView, @preconcurrency NSTextFinderClient {
   lazy var sqlFinder:NSTextFinder = {
     let finder=NSTextFinder();finder.client=self
@@ -20,12 +25,30 @@ import SQLServerKit
   override func viewWillMove(toWindow newWindow:NSWindow?) {if newWindow==nil {hoverMoved?(nil)};super.viewWillMove(toWindow:newWindow)}
   var findMatchesChanged:(([NSRange])->Void)?
   private var findObservation:NSKeyValueObservation?
+  private var findKeyMonitor:SQLFindKeyMonitor?
   func configureFinder(in container:any NSTextFinderBarContainer) {
     sqlFinder.findBarContainer=container
+    if findKeyMonitor == nil,let token=NSEvent.addLocalMonitorForEvents(matching:.keyDown,handler:{[weak self] event in
+      let handled=MainActor.assumeIsolated {self?.handleFindKey(event) ?? false}
+      return handled ? nil:event
+    }) {findKeyMonitor=SQLFindKeyMonitor(token)}
     findObservation=sqlFinder.observe(\.incrementalMatchRanges,options:[.new]) { [weak self] finder,_ in
       let ranges=finder.incrementalMatchRanges.map { $0.rangeValue }
       Task { @MainActor [weak self] in self?.findMatchesChanged?(ranges) }
     }
+  }
+  func handleFindKey(_ event:NSEvent)->Bool {
+    guard [36,76].contains(event.keyCode),event.modifierFlags.intersection([.command,.control,.option]).isEmpty,
+      let window,event.window === window,let container=sqlFinder.findBarContainer,container.isFindBarVisible,
+      let bar=container.findBarView,let editor=window.firstResponder as? NSTextView,editor.isFieldEditor,!editor.hasMarkedText(),
+      let field=editor.delegate as? NSView,field.isDescendant(of:bar) else {return false}
+    func fields(_ view:NSView)->[NSTextField] {(view as? NSTextField).map {[$0]} ?? view.subviews.flatMap(fields)}
+    guard fields(bar).first(where:{$0.isEditable}) === field else {return false}
+    let selection=editor.selectedRange()
+    sqlFinder.performAction(event.modifierFlags.contains(.shift) ? .previousMatch:.nextMatch)
+    window.makeFirstResponder(field)
+    if let search=window.firstResponder as? NSTextView,search.isFieldEditor,NSMaxRange(selection)<=search.string.utf16.count {search.setSelectedRange(selection)}
+    return true
   }
   var firstSelectedRange:NSRange {selectedRange()}
   func contentView(at index:Int,effectiveCharacterRange range:NSRangePointer)->NSView {

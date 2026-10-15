@@ -3,11 +3,13 @@ import SQLServerKit
 import SwiftUI
 
 struct AgentPropertiesPanel:View {
+  static let refreshRequested=Notification.Name("studioAgentPropertiesRefreshRequested")
   let server:ConnectedServer
   let name:String
   let open:(String)->Void
   var history:()->Void = {}
   @State private var job:SQLAgent.Job?
+  @State private var loadedServerGeneration:UUID?
   @State private var title=""
   @State private var description=""
   @State private var owner=""
@@ -30,6 +32,9 @@ struct AgentPropertiesPanel:View {
   @State private var error=""
   @State private var loading=true
   @State private var generation=0
+  @State private var pendingStatements:[String]=[]
+  @State private var confirmSave=false
+  @State private var savedMessage=""
   @State private var confirmRefresh=false
   @State private var confirmDeleteStep=false
   @State private var confirmDetach=false
@@ -52,13 +57,14 @@ struct AgentPropertiesPanel:View {
   var body:some View {
     VStack(alignment:.leading,spacing:12) {
       HStack {
-        StudioPanelHeading(title:"Job Properties",icon:"gearshape.2",subtitle:server.profile.name+" · "+name)
+        StudioPanelHeading(title:"Job Properties",icon:"gearshape.2",subtitle:server.profile.name+" · "+(job?.name ?? name))
         Spacer()
         StudioActionButton("Geçmiş", icon:"clock.arrow.circlepath", tint:.accentColor,action:history).accessibilityIdentifier("agentPropertiesHistory")
         StudioActionButton("Yenile", icon:"arrow.clockwise", tint:.accentColor) {confirmRefresh=true}.disabled(loading)
       }
       if loading {ProgressView().controlSize(.small)}
       if !error.isEmpty {StudioFeedback(message:error)}
+      if !savedMessage.isEmpty {StudioFeedback(message:savedMessage,tone:.success)}
       HSplitView {
         VStack(alignment:.leading) {
           Text("İş ayarları").font(.caption).foregroundStyle(.secondary).padding(.horizontal,10)
@@ -82,16 +88,25 @@ struct AgentPropertiesPanel:View {
       }
       Divider()
       HStack {
-        Text("Değişiklikler önce SQL olarak açılır. Çalıştırdıktan sonra Yenile ile sunucudaki durumu okuyun.").font(.caption).foregroundStyle(.secondary)
+        Text("Kaydet, onayınızla değişiklikleri sunucuya gönderir ve güncel Job bilgilerini yeniden okur.").font(.caption).foregroundStyle(.secondary)
         Spacer()
-        if page == "Genel" || page == "Bildirimler" {
-          StudioActionButton("Değişiklik SQL’ini Aç", icon:"doc.badge.gearshape") {preparePage()}.buttonStyle(StudioPrimaryButton()).disabled(job == nil || loading).accessibilityIdentifier("agentPropertiesScript")
+        Group {
+          StudioActionButton("Kaydet", icon:"square.and.arrow.down") {preparePage()}.buttonStyle(StudioPrimaryButton()).disabled(job == nil || loading || !hasDraft).accessibilityIdentifier("agentPropertiesScript")
         }
       }
     }.padding(StudioMetrics.gap).studioPanel().task(id:generation) {await load()}
+      .onReceive(NotificationCenter.default.publisher(for:Self.refreshRequested)) {notification in
+        guard notification.object as? UUID == server.id,notification.userInfo?["name"] as? String == name,!loading else {return}
+        if let job,title != job.name || description != job.description || enabled != job.enabled || owner != job.owner || category != job.category || startStep != job.startStep || emailLevel != job.emailLevel || emailOperator != job.emailOperator || eventLogLevel != job.eventLogLevel || deleteLevel != job.deleteLevel {confirmRefresh=true}
+        else {generation+=1}
+      }
+      .confirmationDialog("Job değişiklikleri sunucuya kaydedilsin mi?",isPresented:$confirmSave,titleVisibility:.visible) {
+        Button("Kaydet") {save()}
+        Button("Vazgeç",role:.cancel) {pendingStatements=[]}
+      } message: {Text(server.profile.name+" / msdb · "+(job?.name ?? name))}
       .confirmationDialog("Kaydedilmemiş alanlar sunucudaki değerlerle değiştirilsin mi?",isPresented:$confirmRefresh) {Button("Sunucudan Yenile",role:.destructive) {generation+=1}}
-      .confirmationDialog("Adım silinirse adım numaraları ve akış hedefleri değişebilir; adımın çıktı günlüğü de silinir.",isPresented:$confirmDeleteStep) {Button("Silme SQL’ini Aç",role:.destructive) {if let job,let selected {stage {try SQLAgent.deleteStep(jobID:job.id,stepID:selected)}}}}
-      .confirmationDialog("Zamanlamanın yalnız bu işle bağlantısı kaldırılacak. Paylaşılan zamanlama silinmez.",isPresented:$confirmDetach) {Button("Bağlantı Kaldırma SQL’ini Aç") {if let job,let selectedSchedule {stage {try SQLAgent.detachSchedule(jobID:job.id,scheduleID:selectedSchedule)}}}}
+      .confirmationDialog("Adım silinirse adım numaraları ve akış hedefleri değişebilir; adımın çıktı günlüğü de silinir.",isPresented:$confirmDeleteStep) {Button("Adımı Sil",role:.destructive) {if let job,let selected {stage {try SQLAgent.deleteStep(jobID:job.id,stepID:selected)}}}}
+      .confirmationDialog("Zamanlamanın yalnız bu işle bağlantısı kaldırılacak. Paylaşılan zamanlama silinmez.",isPresented:$confirmDetach) {Button("İşten Ayır") {if let job,let selectedSchedule {stage {try SQLAgent.detachSchedule(jobID:job.id,scheduleID:selectedSchedule)}}}}
       .sheet(isPresented:$pickSchedule) {
         AgentPickSchedule(server:server,attached:Set(schedules.map(\.id))) {schedule in
           guard let job else {return};stage {try SQLAgent.attachSchedule(jobID:job.id,scheduleID:schedule.id)};pickSchedule=false
@@ -101,11 +116,11 @@ struct AgentPropertiesPanel:View {
         AgentStepEditor(server:server,step:step,steps:steps,isNew:newStep) {edited in
           guard let job else {return}
           stage {try SQLAgent.stepScript(jobID:job.id,step:edited,existingIDs:Set(steps.map(\.id)),isNew:newStep)}
-          editingStep=nil
+          selected=edited.id;editingStep=nil
         }
       }
       .sheet(item:$editingSchedule) {schedule in
-        AgentScheduleEditor(schedule:schedule,isNew:newSchedule) {edited in
+        AgentScheduleEditor(schedule:schedule,isNew:newSchedule,submitTitle:"Kaydet") {edited in
           guard let job else {return}
           stage {try SQLAgent.scheduleScript(edited,jobID:newSchedule ? job.id:nil)}
           editingSchedule=nil
@@ -123,9 +138,9 @@ struct AgentPropertiesPanel:View {
         Text("Açıklama").font(.headline)
         TextEditor(text:$description).frame(minHeight:140).studioEditor()
         Grid(alignment:.leading,horizontalSpacing:20,verticalSpacing:8) {
-          GridRow {Text("Oluşturulma");Text(job?.created ?? "")}
-          GridRow {Text("Son değişiklik");Text(job?.modified ?? "")}
-          GridRow {Text("Son çalışma");Text(job?.lastRun ?? "")}
+          GridRow {Text("Oluşturulma");Text(SQLAgent.displayDate(job?.created ?? ""))}
+          GridRow {Text("Son değişiklik");Text(SQLAgent.displayDate(job?.modified ?? ""))}
+          GridRow {Text("Son çalışma");Text(SQLAgent.displayDate(job?.lastRun ?? ""))}
           GridRow {Text("Son sonuç");AgentStatus(status:job?.lastStatus ?? -1)}
           GridRow {Text("Durum");Text(job?.state ?? "")}
         }.foregroundStyle(.secondary).textSelection(.enabled)
@@ -154,7 +169,6 @@ struct AgentPropertiesPanel:View {
         Spacer()
       }
       StudioFormField("Başlangıç adımı") {Picker("Başlangıç adımı",selection:$startStep) {ForEach(steps) {Text("\($0.id) · \($0.name)").tag($0.id)}}.labelsHidden()}.accessibilityIdentifier("agentStartStep")
-      StudioActionButton("Başlangıç Adımı SQL’ini Aç", icon:"list.number", tint:.accentColor) {guard let job else {return};stage {try SQLAgent.generalScript(job,name:job.name,description:job.description,enabled:job.enabled,owner:job.owner,category:job.category,startStep:startStep,stepIDs:Set(steps.map(\.id)))}}.disabled(steps.isEmpty || startStep == job?.startStep)
       Text("T-SQL adımları Genel/Gelişmiş sayfalarından düzenlenir. Diğer adım türlerinin komutları salt okunur görüntülenir.").font(.caption).foregroundStyle(.secondary)
     }
   }
@@ -197,23 +211,67 @@ struct AgentPropertiesPanel:View {
     StudioFormField(title) {Picker(title,selection:value) {Text("Hiçbir zaman").tag(0);Text("Başarılı olduğunda").tag(1);Text("Başarısız olduğunda").tag(2);Text("Tamamlandığında").tag(3)}.labelsHidden()}
   }
   private func load() async {
-    loading=true;error="";defer {loading=false}
+    let token=server.generation
+    loadedServerGeneration=nil;loading=true;error="";savedMessage="";defer {loading=false}
     do {
       let query=try job.map {try SQLAgent.details(id:$0.id)} ?? SQLAgent.details(name:name)
       let output=try await server.catalog(query,database:"msdb")
       let result=try await Task.detached(priority:.userInitiated) {try SQLAgent.decodeDetails(output)}.value
       try Task.checkCancellation()
-      job=result.0;steps=result.1;schedules=result.2;title=result.0.name;description=result.0.description;enabled=result.0.enabled
-      owner=result.0.owner;category=result.0.category;startStep=result.0.startStep;emailLevel=result.0.emailLevel;emailOperator=result.0.emailOperator;eventLogLevel=result.0.eventLogLevel;deleteLevel=result.0.deleteLevel
-      selected=steps.first?.id;selectedSchedule=schedules.first?.id
+      guard token==server.generation else {throw CancellationError()}
+      loadedServerGeneration=token
+      apply(result)
     } catch is CancellationError {} catch {job=nil;self.error=error.localizedDescription}
   }
+  private var hasDraft:Bool {
+    guard let job else {return false}
+    return title != job.name || description != job.description || enabled != job.enabled || owner != job.owner || category != job.category || startStep != job.startStep || emailLevel != job.emailLevel || emailOperator != job.emailOperator || eventLogLevel != job.eventLogLevel || deleteLevel != job.deleteLevel
+  }
+  private func draftStatements() throws -> [String] {
+    guard let job else {return []}
+    var statements:[String]=[]
+    if title != job.name || description != job.description || enabled != job.enabled || owner != job.owner || category != job.category || startStep != job.startStep {
+      statements.append(try SQLAgent.generalScript(job,name:title,description:description,enabled:enabled,owner:owner,category:category,startStep:startStep,stepIDs:Set(steps.map(\.id))))
+    }
+    if emailLevel != job.emailLevel || emailOperator != job.emailOperator || eventLogLevel != job.eventLogLevel || deleteLevel != job.deleteLevel {
+      statements.append(try SQLAgent.notifications(jobID:job.id,emailLevel:emailLevel,operatorName:emailOperator,eventLogLevel:eventLogLevel,deleteLevel:deleteLevel))
+    }
+    return statements
+  }
   private func stage(_ generate:()throws->String) {
-    do {let sql=try SQLAgent.checkedScript([generate()],job:job);error="";open(sql)} catch {self.error=error.localizedDescription}
+    do {try stageStatements(draftStatements()+[generate()])} catch {self.error=error.localizedDescription}
+  }
+  private func stageStatements(_ statements:[String]) throws {
+    guard !loading,let job else {return}
+    guard loadedServerGeneration==server.generation else {throw SQLFailure("Bağlantı değişti; kaydetmeden önce Job bilgilerini yenileyin.")}
+    _=try SQLAgent.checkedScript(statements,job:job)
+    error="";savedMessage="";pendingStatements=statements;confirmSave=true
+  }
+  private func apply(_ result:(SQLAgent.Job,[SQLAgent.Step],[SQLAgent.Schedule])) {
+    job=result.0;steps=result.1;schedules=result.2;title=result.0.name;description=result.0.description;enabled=result.0.enabled
+    owner=result.0.owner;category=result.0.category;startStep=result.0.startStep;emailLevel=result.0.emailLevel;emailOperator=result.0.emailOperator;eventLogLevel=result.0.eventLogLevel;deleteLevel=result.0.deleteLevel
+    if !steps.contains(where:{$0.id==selected}) {selected=steps.first?.id}
+    if !schedules.contains(where:{$0.id==selectedSchedule}) {selectedSchedule=schedules.first?.id}
+  }
+  private func save() {
+    guard !loading,let job,!pendingStatements.isEmpty else {return}
+    guard loadedServerGeneration==server.generation else {error="Bağlantı değişti; Job bilgilerini yenileyin.";pendingStatements=[];return}
+    let statements=pendingStatements,token=server.generation
+    pendingStatements=[];loading=true;error="";savedMessage=""
+    Task { @MainActor in
+      defer {loading=false}
+      do {
+        let result=try await SQLAgent.saveProperties(statements:statements,job:job) {sql in
+          guard await MainActor.run(body:{server.generation==token}) else {throw SQLFailure("Bağlantı değişti; Job işlemi durduruldu.")}
+          return try await server.catalog(sql,database:"msdb")
+        }
+        guard token==server.generation else {throw SQLFailure("Bağlantı değişti; Job bilgilerini yenileyin.")}
+        apply(result);savedMessage="Kaydedildi · Sunucudaki güncel bilgiler yüklendi."
+        NotificationCenter.default.post(name:.init("studioAgentChanged"),object:server)
+      } catch {self.error=error.localizedDescription}
+    }
   }
   private func preparePage() {
-    guard let job else {return}
-    if page == "Genel" {stage {try SQLAgent.generalScript(job,name:title,description:description,enabled:enabled,owner:owner,category:category,startStep:startStep,stepIDs:Set(steps.map(\.id)))}}
-    else {stage {try SQLAgent.notifications(jobID:job.id,emailLevel:emailLevel,operatorName:emailOperator,eventLogLevel:eventLogLevel,deleteLevel:deleteLevel)}}
+    do {try stageStatements(draftStatements())} catch {self.error=error.localizedDescription}
   }
 }

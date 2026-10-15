@@ -3,7 +3,7 @@ import SQLServerKit
 
 extension WorkbenchController {
   func indexCell(for node:TreeNode)->NSView {
-    let cell=NSTableCellView()
+    let cell=ExplorerIndexCell();cell.outline=outline
     if case .database = node.kind {
       let activity=node.server.definitionIndex.activities[node.database]
       for content in [false,true] {
@@ -29,15 +29,51 @@ extension WorkbenchController {
   }
 }
 
+/// The tree scrolls long object names, while its native index cells stay at the viewport edge.
+@MainActor final class ExplorerIndexCell:NSTableCellView {
+  weak var outline:NSOutlineView?
+  override var frame:NSRect {
+    get {super.frame}
+    set {
+      var value=newValue
+      if let outline,let parent=superview {
+        let visible=parent.convert(outline.visibleRect,from:outline)
+        value.origin.x=max(visible.minX,visible.maxX-value.width)
+      }
+      super.frame=value
+    }
+  }
+  func pinToViewport() {let current=frame;frame=current;needsDisplay=true}
+  override func draw(_ dirtyRect:NSRect) {
+    let selected=(superview as? NSTableRowView)?.isSelected == true
+    (selected ? StudioTheme.selection:StudioTheme.explorerCanvas).setFill();dirtyRect.fill()
+    super.draw(dirtyRect)
+  }
+}
+
 @MainActor final class ExplorerScrollView:NSScrollView {
   private var sizing=false
+  private var pinning=false
+  var requiredObjectWidth:CGFloat=40
   override func tile() {
     super.tile()
     guard !sizing,let table=documentView as? NSOutlineView,table.tableColumns.count==2,contentView.bounds.width>0 else {return}
     sizing=true;defer {sizing=false}
     let width=contentView.bounds.width
-    table.tableColumns[0].width=max(40,width-56-table.intercellSpacing.width*2)
-    table.setFrameSize(NSSize(width:width,height:table.frame.height))
+    table.tableColumns[0].width=max(requiredObjectWidth,width-56-table.intercellSpacing.width*2)
+    table.setFrameSize(NSSize(width:max(width,table.tableColumns[0].width+56+table.intercellSpacing.width*2),height:table.frame.height))
     table.tile()
+    pinIndexCells(table)
+  }
+  override func reflectScrolledClipView(_ clipView:NSClipView) {
+    super.reflectScrolledClipView(clipView)
+    if let table=documentView as? NSOutlineView {pinIndexCells(table)}
+  }
+  private func pinIndexCells(_ table:NSOutlineView) {
+    guard !pinning,table.tableColumns.count>1 else {return}
+    pinning=true;defer {pinning=false}
+    table.enumerateAvailableRowViews {_,row in
+      (table.view(atColumn:1,row:row,makeIfNecessary:true) as? ExplorerIndexCell)?.pinToViewport()
+    }
   }
 }

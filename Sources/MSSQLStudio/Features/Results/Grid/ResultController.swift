@@ -840,6 +840,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   }
   func tableView(_ tableView: NSTableView, willDisplayCell cell: Any, for column: NSTableColumn?, row: Int) {
     guard row >= 0, row < pageCount, let cell = cell as? GridDataCell else { return }
+    cell.searchTerm=filter.trimmingCharacters(in:.whitespacesAndNewlines)
     let ordinal = column.flatMap { Int($0.identifier.rawValue) }
     let index = sourceIndex(row)
     let values = values(at: index)

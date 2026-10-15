@@ -72,6 +72,7 @@ extension WorkbenchController {
           node.children.append(linkedNode("Kısmi liste: satır, süre veya boyut sınırına ulaşıldı.",kind:.detail,branch:.detail,parent:node,loaded:true))
         }
         node.loaded=true
+      } catch is CancellationError {node.loaded=false
       } catch {
         guard generation == node.server.generation, node.server.metadata === metadata else {return}
         node.error=error.localizedDescription; node.loaded=true

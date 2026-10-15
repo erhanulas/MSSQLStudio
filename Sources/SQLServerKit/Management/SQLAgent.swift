@@ -77,6 +77,23 @@ public enum SQLAgent {
     public var children:[History]?
     public var statusLabel:String {switch status {case 0:"Failed";case 1:"Succeeded";case 2:"Retry";case 3:"Canceled";case 4:"In Progress";default:"Unknown"}}
   }
+  public static func displayDate(_ value:String)->String {
+    guard !value.isEmpty else {return "—"}
+    let normalized=String(value.prefix(19)).replacingOccurrences(of:"T",with:" ")
+    let input=DateFormatter();input.locale=Locale(identifier:"en_US_POSIX");input.timeZone=TimeZone(secondsFromGMT:0);input.dateFormat="yyyy-MM-dd HH:mm:ss";input.isLenient=false
+    guard let date=input.date(from:normalized) else {return value}
+    let output=DateFormatter();output.locale=Locale(identifier:"tr_TR");output.timeZone=input.timeZone;output.dateFormat="dd.MM.yyyy HH:mm:ss"
+    return output.string(from:date)
+  }
+  public static func saveProperties(statements:[String],job:Job,fetch:@Sendable (String) async throws -> Execution) async throws -> (Job,[Step],[Schedule]) {
+    let script=try checkedScript(statements,job:job)
+    try Task.checkCancellation()
+    let result=try await fetch(script)
+    guard !result.partial,!result.stoppedEarly else {throw SQLFailure("Kaydetme sonucu kesin değil; tekrar göndermeden önce sunucudan yenileyin.")}
+    // Re-read by stable ID so renaming the job does not lose its identity.
+    do {return try decodeDetails(await fetch(details(id:job.id)))}
+    catch {throw SQLFailure("Değişiklik gönderildi, güncel Job bilgileri okunamadı. Yenile ile kontrol edin; kaydetmeyi tekrar etmeyin. "+error.localizedDescription)}
+  }
   public static func jobs(name:String?=nil) -> String {
     """
     /* StudioAgent.jobs */

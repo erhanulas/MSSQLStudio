@@ -25,7 +25,7 @@ extension WorkbenchController {
     header.heightAnchor.constraint(equalToConstant: 32).isActive = true
     label.textColor = StudioTheme.muted
     label.identifier = .init("studio.mutedLabel")
-    label.lineBreakMode = .byTruncatingTail
+    label.lineBreakMode = .byClipping
     label.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
     explorerSearch.controlSize = .small
     explorerSearch.font = .systemFont(ofSize: 12)
@@ -69,7 +69,7 @@ extension WorkbenchController {
     let scroll = ExplorerScrollView()
     scroll.documentView = outline
     scroll.hasVerticalScroller = true
-    scroll.hasHorizontalScroller = false
+    scroll.hasHorizontalScroller = true
     scroll.drawsBackground = false
     scroll.autohidesScrollers = true; scroll.scrollerStyle = .overlay
     searchOperator.addItems(withTitles: ["İçerir", "Eşittir", "İle başlar", "İle biter", "İçermez"])
@@ -183,10 +183,12 @@ extension WorkbenchController {
     (item as? TreeNode)?.expandable ?? false
   }
   func reloadExplorer(item:TreeNode?=nil,children:Bool=false) {
+    if item == nil {(outline.enclosingScrollView as? ExplorerScrollView)?.requiredObjectWidth=40}
     let previous=restoringTree;restoringTree=true
     if let item {outline.reloadItem(item,reloadChildren:children)} else {outline.reloadData()}
     restoringTree=previous
     if item == nil || children {restoreExplorerExpansion()}
+    outline.enclosingScrollView?.needsLayout=true
   }
   func restoreExplorerExpansion() {
     guard !showingSearch,!restoringTree else {return}
@@ -249,6 +251,9 @@ extension WorkbenchController {
     updateControls()
     // Database scope stays explicit within the selected Explorer connection.
   }
+  func outlineView(_ outlineView:NSOutlineView,didAdd rowView:NSTableRowView,forRow row:Int) {
+    (outlineView.view(atColumn:1,row:row,makeIfNecessary:true) as? ExplorerIndexCell)?.pinToViewport()
+  }
   func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any)
     -> NSView?
   {
@@ -259,7 +264,12 @@ extension WorkbenchController {
       labelWithString: node.displayTitle + (node.loading ? " …" : "")
         + (node.error != nil ? " ⚠" : ""))
     label.font = .systemFont(ofSize: 12)
-    label.lineBreakMode = .byTruncatingTail
+    label.lineBreakMode = .byClipping
+    if let scroll=outlineView.enclosingScrollView as? ExplorerScrollView {
+      let textWidth=ceil((label.stringValue as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:12,weight:.semibold)]).width)
+      let width=textWidth+CGFloat(max(0,outlineView.level(forItem:node)))*outlineView.indentationPerLevel+48
+      if width>scroll.requiredObjectWidth {scroll.requiredObjectWidth=width;scroll.needsLayout=true}
+    }
     if node.objectFolder == .jobs || node.objectFolder == .triggers {
       label.setAccessibilityLabel(node.displayTitle + " · " + (node.item?.detail ?? ""))
     }

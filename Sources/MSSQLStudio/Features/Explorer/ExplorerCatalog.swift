@@ -44,6 +44,7 @@ extension WorkbenchController {
           node.loaded = true
           reloadExplorer(item:node,children:true)
           updateControls()
+        } catch is CancellationError {return
         } catch {
           guard token == node.server.generation, node.server.online,
             node.server.metadata === connection else { return }

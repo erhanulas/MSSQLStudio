@@ -38,7 +38,7 @@ import SwiftUI
   private let deleteRowButton = StudioToolbarButton(symbol: "trash", label: "Satırı sil", tone: .danger)
   private let undoRowButton = StudioToolbarButton(symbol: "arrow.uturn.backward", label: "Seçili düzenlemeleri geri al", tone: .warning)
   private let editDataButton = StudioToolbarButton(symbol: "square.and.pencil", label: "Satır düzenlemeyi aç")
-  private let previewDataButton = StudioToolbarButton(symbol: "doc.text.magnifyingglass", label: "SQL önizle ve gönder", title: "SQL", width: 56, prominent: true)
+  private let previewDataButton = StudioToolbarButton(symbol: "eye", label: "SQL önizle ve gönder", title: "", width: 30, prominent: true)
   private let nullDataButton = StudioToolbarButton(symbol: "nosign", label: "Seçili hücreyi NULL yap", tone: .warning)
   private var preparingData = false
   private let editPreparation = ResultEditingCoordinator()
@@ -50,7 +50,7 @@ import SwiftUI
   private let resultPane = NSView()
   private(set) var resultsHidden = false
   private var savedEditorFraction: CGFloat = 0.60
-  private let messages = StudioTextView()
+  private let messages = ResultMessagesView()
   private let connectionBadge = NSTextField(labelWithString: "")
   private lazy var queryActions=QueryEditorActions(document:document,focus:{[weak self] in self?.focusEditor()},format:{[weak self] in self?.format()})
   private var editorHeader: NSStackView?
@@ -435,7 +435,7 @@ import SwiftUI
     editDataButton.image = NSImage(systemSymbolName: preparingData ? "hourglass" : editing ? "pencil.slash" : "square.and.pencil", accessibilityDescription: "Veri düzenleme")?.withSymbolConfiguration(.init(pointSize: 12,weight: .medium))
     editDataButton.setAccessibilityLabel(preparingData ? "Düzenleme hazırlanıyor" : editing ? "Vazgeç ve düzenleme modunu kapat" : "Satır düzenlemeyi aç")
     editDataButton.toolTip = editing ? "Düzenleme açık · Kapatmak için tıklayın" : "Hücreleri düzenlemek için kaynağı doğrula ve düzenleme modunu aç"
-    editDataButton.isEnabled = editing ? !preparingData && !submittingData : safe && grid != nil && document.results.count == 1 && !document.partial
+    editDataButton.isEnabled = editing ? !preparingData && !submittingData : safe && grid != nil && document.canEditLoadedRows
     columnSearchButton.isEnabled = grid != nil
     rowLimit.isEnabled = !document.busy && !submittingData
     syncReadOptionsHelp()
@@ -467,7 +467,7 @@ import SwiftUI
     else { prepareDataEditing() }
   }
   private func editingContext(_ grid: ResultController) -> ResultEditingCoordinator.Context? {
-    guard document.canRefresh, !document.partial, document.results.count == 1, let sql = document.lastExecutedSQL else { return nil }
+    guard document.canEditLoadedRows, let sql = document.lastExecutedSQL else { return nil }
     return .init(serverID: document.server.id, serverGeneration: document.server.generation, resultGeneration: document.resultGeneration, database: document.database, sql: sql, fields: grid.result.fields, profileScope: CatalogDiskIndex.scope(profile: document.server.profile, database: document.database))
   }
   private func warmDataEditing() {
@@ -484,7 +484,7 @@ import SwiftUI
   }
   private func prepareDataEditing(cell: (Int, Int)? = nil) {
     guard !preparingData, !submittingData else { return }
-    guard let grid = selectedGrid, document.canRefresh, !document.partial, document.results.count == 1, let sql = document.lastExecutedSQL, let context = editingContext(grid) else { return }
+    guard let grid = selectedGrid, document.canEditLoadedRows, let sql = document.lastExecutedSQL, let context = editingContext(grid) else { return }
     let generation = document.resultGeneration, db = document.database, server = document.server
     let serverGeneration = server.generation
     let index = editingIndex
@@ -794,8 +794,7 @@ import SwiftUI
         } else {
           controller = ResultController()
           controller.requestEditing = { [weak self, weak controller] row, column in
-            guard let self, selectedGrid === controller, document.canRefresh,
-              !document.partial, document.results.count == 1 else { return false }
+            guard let self, selectedGrid === controller, document.canEditLoadedRows else { return false }
             prepareDataEditing(cell: (row, column))
             return true
           }
@@ -840,7 +839,7 @@ import SwiftUI
     syncNavigation()
     syncResultStrip()
     syncResultSelector()
-    if messages.string != document.messages {messages.string = document.messages}
+    messages.show(document.messages)
     summary.stringValue =
       document.state == .running
       ? "Sonuçlar okunuyor · \(document.rowCount.formatted()) satır"

@@ -246,6 +246,15 @@ public enum DataEditScripts {
     _ = try ObjectScripts.validatedType(column.type)
     return "CONVERT(\(column.type), \(SQL.literal(value))\(column.collation.isEmpty ? "" : " COLLATE "+(try ObjectScripts.collation(column.collation))))"
   }
+  private static func readableValue(_ input:String?,column:TableColumn) throws -> String {
+    try ResultValueValidation.validate(input,column:column)
+    guard let input else {return "NULL"}
+    let base=column.valueType.lowercased().split(separator:"(").first.map(String.init) ?? ""
+    if base == "bit" {return ["1","true"].contains(input.trimmingCharacters(in:.whitespacesAndNewlines).lowercased()) ? "1":"0"}
+    if ["tinyint","smallint","int","bigint","decimal","numeric","float","real","money","smallmoney"].contains(base) {return input.trimmingCharacters(in:.whitespacesAndNewlines)}
+    if ["varchar","nvarchar","char","nchar"].contains(base) {return SQL.literal(input)}
+    return try value(input,column:column)
+  }
   public static func changes(table:TableDefinition,rows:[DataEditRow],expectedObjectID:Int? = nil,rowMatching:RowMatching = .optimistic) throws -> String {
     guard !table.primaryKey.isEmpty || rowMatching == .primaryKeyOrOriginalValues else { throw SQLFailure("Veri düzenlemesi için primary key gerekli; anahtarsız satırlar yazılmaz.") }
     guard rows.count <= 400 else { throw SQLFailure("En fazla 200 mevcut + 200 yeni satır düzenlenebilir.") }
@@ -279,7 +288,7 @@ public enum DataEditScripts {
       let predicate=try compared.map { i -> String in
         let c=table.columns[i], name=SQL.identifier(c.name)
         guard original[i] != nil else { return name+" IS NULL" }
-        let literal=try value(original[i],column:c)
+        let literal=try (rowMatching == .primaryKeyOrOriginalValues && !keyIndices.isEmpty ? readableValue(original[i],column:c):value(original[i],column:c))
         if ["text", "ntext", "xml"].contains(c.valueType.lowercased()) {
           let cast = c.valueType.lowercased() == "text" ? "varchar(max)" : "nvarchar(max)"
           return "CONVERT(varbinary(max),CONVERT(\(cast),\(name))) = CONVERT(varbinary(max),CONVERT(\(cast),\(literal)))"
@@ -290,7 +299,7 @@ public enum DataEditScripts {
         }
         return name+" = "+literal
       }.joined(separator:" AND ")
-      let action = row.deleted ? "DELETE FROM \(table.qualified)" : "UPDATE \(table.qualified) SET \(try changed.map { SQL.identifier(table.columns[$0].name)+" = "+(try value(row.values[$0],column:table.columns[$0])) }.joined(separator:", "))"
+      let action = row.deleted ? "DELETE FROM \(table.qualified)" : "UPDATE \(table.qualified) SET \(try changed.map { SQL.identifier(table.columns[$0].name)+" = "+(try (rowMatching == .primaryKeyOrOriginalValues ? readableValue(row.values[$0],column:table.columns[$0]):value(row.values[$0],column:table.columns[$0]))) }.joined(separator:", "))"
       if keyIndices.isEmpty {
         statements.append("IF (SELECT COUNT_BIG(*) FROM \(table.qualified) WITH (UPDLOCK, HOLDLOCK) WHERE \(predicate)) <> 1 THROW 51003, N'Anahtarsız satır tekil olarak bulunamadı; değişiklik gönderilmedi.', 1;")
       }

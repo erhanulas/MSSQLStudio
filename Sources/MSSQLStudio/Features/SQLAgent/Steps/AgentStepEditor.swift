@@ -78,7 +78,7 @@ struct AgentStepEditor:View {
       HStack {
         StudioActionButton("Vazgeç", icon:"xmark") {dismiss()}.keyboardShortcut(.cancelAction)
         Spacer()
-        StudioActionButton("Değişiklik SQL’ini Aç", icon:"doc.badge.gearshape") {
+        StudioActionButton("Kaydet", icon:"square.and.arrow.down") {
           do {
             _=try SQLAgent.stepScript(jobID:UUID().uuidString,step:step,existingIDs:Set(steps.map(\.id)),isNew:isNew)
             open(step)

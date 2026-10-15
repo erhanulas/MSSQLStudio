@@ -31,6 +31,7 @@ extension WorkbenchController {
     reloadExplorer(item:node)
     Task { [weak self, weak node] in
       guard let self, let node else { return }
+      let generation=node.server.generation
       do {
         let sql =
           node.item.map { Catalog.children(folder, object: $0.id) } ?? Catalog.objects(folder)
@@ -41,6 +42,7 @@ extension WorkbenchController {
           guard [.tables,.views,.procedures,.functions,.triggers,.synonyms].contains(folder) else {throw SQLFailure("Bu ayrıntı çevrimdışı indeks kapsamında değil.")}
           rows=try await node.server.definitionIndex.items(database:node.database,folder:folder,parentID:node.item?.id)
         }
+        guard generation==node.server.generation,!Task.isCancelled else {throw CancellationError()}
         node.children = rows.map { item in
           TreeNode(
             item.schema.isEmpty
@@ -50,6 +52,10 @@ extension WorkbenchController {
         }
         node.loaded = true
         node.error = nil
+      } catch is CancellationError {
+        node.loading=false;node.loaded=false
+        reloadExplorer(item:node)
+        return
       } catch {
         node.error = error.localizedDescription
         node.loaded = true

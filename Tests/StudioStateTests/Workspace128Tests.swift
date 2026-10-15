@@ -57,7 +57,7 @@ import Testing
     menu.update();menu.update()
     #expect(menu.font?.pointSize==14 && menu.minimumWidth>=280)
     #expect(primary.image != nil && primary.preferredImageVisibility == .visible && primary.keyEquivalent==GridShortcuts.binding(.newQuery).key)
-    #expect(secondary.image==nil && !secondary.isEnabled && secondary.view==nil)
+    #expect(secondary.image != nil && !secondary.isEnabled && secondary.view==nil)
     #expect(folder.image?.size==NSSize(width:16,height:16) && folder.submenu === child && menu.items[2].isSeparatorItem)
   }
   @Test func regroupedExplorerMenuKeepsEveryRootActionAndBusyValidation() throws {

@@ -15,6 +15,14 @@ extension WorkbenchController {
     }
     return document
   }
+  func selectScript(_ node:TreeNode,top:Int?=nil) async throws -> String {
+    guard let item=node.item else {throw SQLFailure("Tablo veya view seçin.")}
+    let output=try await node.server.catalog(Catalog.children(.columns,object:item.id),database:node.database)
+    guard !output.partial,!output.stoppedEarly,!output.results.contains(where:{$0.truncated}) else {throw SQLFailure("Kolon listesi tam okunamadı; script oluşturulmadı.")}
+    let columns=Catalog.rows(output)
+    guard !columns.isEmpty else {throw SQLFailure("Kolonlar okunamadı; metadata izinlerini kontrol edin.")}
+    return try Catalog.selectScript(item:item,columns:columns,top:top)
+  }
   func loadManagedTable(_ node:TreeNode) async throws -> TableDefinition {
     guard let item=node.item else { throw SQLFailure("Tablo seçin.") }
     let fetched=Date(),generation=node.server.generation
@@ -146,7 +154,7 @@ extension WorkbenchController {
             let drop=[Folder.indexes,.keys,.constraints].contains(folder) ? try await structureScript(node,drop:true) : try await managedDrop(node)
             script="-- DROP nesneyi kaldırır; tablo verisi / izinler kaybolabilir. İnceleyin.\n"+drop+"\nGO\n"+script
           }
-        case "SELECT":script="SELECT TOP (1000) * FROM \(item.qualified);"
+        case "SELECT":script=try await selectScript(node)
         case "INSERT","UPDATE":
           let columns=Catalog.rows(try await node.server.catalog(Catalog.children(.columns,object:item.id),database:node.database)).filter { !$0.detail.contains("identity") && !$0.detail.contains("computed") && !$0.detail.hasPrefix("timestamp") && !$0.detail.hasPrefix("rowversion") }
           guard !columns.isEmpty else {throw SQLFailure("Yazılabilir kolon bulunamadı.")}

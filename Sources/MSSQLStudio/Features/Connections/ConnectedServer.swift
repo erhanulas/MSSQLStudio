@@ -41,6 +41,7 @@ import UniformTypeIdentifiers
   var reconnecting = false
   func pauseIndexing() { indexPreparation?.cancel(); definitionIndex.pause() }
   func recordExplorerFailure(_ error: Error) {
+    guard !(error is CancellationError) else {return}
     startupError = error.localizedDescription
     if let failure = error as? SQLFailure,
       failure.diagnostics.contains(where: { $0.state.hasPrefix("08") }) {
@@ -49,7 +50,7 @@ import UniformTypeIdentifiers
     }
   }
   func recordCatalogFailure(_ error:Error,generation token:UUID) async {
-    guard generation == token else {return}
+    guard generation == token, !(error is CancellationError) else {return}
     startupError=error.localizedDescription
     guard let failure=error as? SQLFailure,
       failure.diagnostics.contains(where:{$0.state.hasPrefix("08")}) else {return}
@@ -170,6 +171,10 @@ import UniformTypeIdentifiers
           guard !Task.isCancelled,indexPreparationID==preparationID,allowsCatalogIndex(database) else {return}
           indexingDatabases.remove(database)
           NotificationCenter.default.post(name: .init("catalogIndexUpdated"), object: self, userInfo: ["database": database])
+        } catch is CancellationError {
+          guard indexPreparationID==preparationID else {return}
+          indexingDatabases.remove(database)
+          NotificationCenter.default.post(name:.init("catalogIndexUpdated"),object:self,userInfo:["database":database])
         } catch {
           guard !Task.isCancelled,indexPreparationID==preparationID,allowsCatalogIndex(database) else {return}
           indexingDatabases.remove(database); indexErrors[database] = error.localizedDescription

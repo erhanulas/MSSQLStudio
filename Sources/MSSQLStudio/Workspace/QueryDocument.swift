@@ -100,6 +100,8 @@ struct ObjectEditorKey: Codable, Equatable {
   }
   var elapsed = 0.0
   var rowCount = 0
+  private(set) var resultReadStoppedEarly = false
+  var canEditLoadedRows:Bool {canRefresh && !resultReadStoppedEarly && results.count == 1}
   var partial = false
   var initialRefreshSeconds: Int?
   var limits: Limits = ResultReadPreferences.limits(rows:ResultReadPreferences.readLimit)
@@ -254,6 +256,7 @@ struct ObjectEditorKey: Codable, Equatable {
     results = []
     messages = "Çalıştırma: \(Date().formatted(date: .numeric, time: .standard)) · \(database)\n"
     partial = false
+    resultReadStoppedEarly=false
     elapsed = 0
     rowCount = 0
     selectedResult = 0
@@ -320,6 +323,7 @@ struct ObjectEditorKey: Codable, Equatable {
         results = output.results
         messages += output.messages.joined(separator: "\n") + "\n"
         partial = output.partial
+        resultReadStoppedEarly=output.stoppedEarly
         rowCount = output.results.filter { !$0.isPlan }.reduce(0) { $0 + $1.values.count }
         elapsed = output.elapsed
         for result in output.results where result.fields.isEmpty && result.affected >= 0 {

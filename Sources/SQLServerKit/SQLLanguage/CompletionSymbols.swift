@@ -239,7 +239,8 @@ public enum SQLIntelligence {
     let all = TSQL.lex(source)
     guard original.length <= 100_000 else { return Analysis(tokens:all,diagnostics:[],suggestions:[],replacement:NSRange(location:caret,length:0)) }
     let active = all.first { [.word,.keyword,.variable].contains($0.kind) && caret >= $0.range.location && caret <= NSMaxRange($0.range) }
-    let replacement = active?.range ?? NSRange(location:caret,length:0)
+    let wildcard=all.first {$0.text == "*" && caret >= $0.range.location && caret <= NSMaxRange($0.range)}
+    let replacement = wildcard?.range ?? active?.range ?? NSRange(location:caret,length:0)
     let prefix = raw(original.substring(with:NSRange(location:replacement.location,length:caret-replacement.location)))
     let inLiteral = all.contains { [.string,.comment].contains($0.kind) && caret > $0.range.location && (caret < NSMaxRange($0.range) || caret == NSMaxRange($0.range) && ($0.kind == .comment || !$0.text.hasSuffix("'"))) }
     let tokens = all.filter { ![.space,.comment,.string].contains($0.kind) }
@@ -562,6 +563,17 @@ public enum SQLIntelligence {
         let declarations=TSQL.declaredVariables(in:batch,source:source).filter {NSMaxRange($0.range)<caret}
         let matching = declarations.filter { needle.count == 1 || $0.text.dropFirst().lowercased().contains(String(needle.dropFirst())) }
         suggestions=(matching.filter { $0.text.lowercased().hasPrefix(needle) } + matching.filter { !$0.text.lowercased().hasPrefix(needle) }).map {Suggestion(text:$0.text,label:$0.text,kind:.variable,detail:"Bu SQL grubunda tanımlı değişken")}
+      } else if wildcard != nil {
+        let sources=qualifier.map {name in visible.filter {$0.alias.caseInsensitiveCompare(name) == .orderedSame}} ?? visible
+        if clause == "SELECT",["SELECT","DISTINCT","ALL"].contains(context.last?.text.uppercased() ?? "") || context.last?.text == "," || topNumber || topParenthesis,
+          !sources.isEmpty,sources.allSatisfy({$0.columns?.isEmpty == false}) {
+          let columns=sources.flatMap {binding in (binding.columns ?? []).map {column in
+            let prefix=qualifier != nil ? "":binding.explicitAlias ? identifier(binding.alias)+".":sources.count>1 ? binding.parts.map(identifier).joined(separator:".")+".":""
+            return prefix+identifier(column)
+          }}
+          let separator=qualifier == nil ? ",\n    ":", "+identifier(qualifier!)+"."
+          suggestions=[Suggestion(text:columns.joined(separator:separator),label:"Tüm kolonları listele",kind:.column,detail:"\(columns.count) kolon · SELECT * yerine kolon adları")]
+        }
       } else if let insertBinding {
         try appendColumns(from: [insertBinding], alreadyQualified: true)
       } else if objectPosition {
@@ -614,7 +626,7 @@ public enum SQLIntelligence {
               let function=(scalarPosition || clause.isEmpty) && TSQL.functions.contains(word)
               let insertCall=function && !TSQL.bareFunctions.contains(word) && nextToken?.text != "("
               let text=word+(insertCall ? "()":"")
-              return Suggestion(text:text,label:word,kind:function ? .function:.keyword,caretOffset:insertCall ? text.utf16.count-1:nil)
+              return Suggestion(text:text,label:word,kind:function ? .function:.keyword,caretOffset:insertCall ? text.utf16.count-(TSQL.noArgumentFunctions.contains(word) ? 0:1):nil)
             }
         }
       }
@@ -625,6 +637,6 @@ public enum SQLIntelligence {
     let referencesByAlias=Dictionary(uniqueKeysWithValues:activeBindings(caret).filter {
       local[$0.parts.joined(separator:".").lowercased()] == nil
     }.map {($0.alias.lowercased(),$0.parts)})
-    return Analysis(tokens:all,diagnostics:Array(diagnostics.prefix(200)),suggestions:suggestions,replacement:replacement,referenceBindings:inLiteral ? [:]:referencesByAlias,procedureCompletion:execution && !inLiteral,variableCompletion:prefix.hasPrefix("@") && !inLiteral,objectCompletion:!inLiteral && (insertBinding != nil || objectPosition || scalarPosition && !prefix.isEmpty && suggestions.contains {$0.kind == .column || $0.kind == .function && !$0.detail.isEmpty}))
+    return Analysis(tokens:all,diagnostics:Array(diagnostics.prefix(200)),suggestions:suggestions,replacement:replacement,referenceBindings:inLiteral ? [:]:referencesByAlias,procedureCompletion:execution && !inLiteral,variableCompletion:prefix.hasPrefix("@") && !inLiteral,objectCompletion:!inLiteral && (wildcard != nil && !suggestions.isEmpty || insertBinding != nil || objectPosition || scalarPosition && !prefix.isEmpty && suggestions.contains {$0.kind == .column || $0.kind == .function && !$0.detail.isEmpty}))
   }
 }

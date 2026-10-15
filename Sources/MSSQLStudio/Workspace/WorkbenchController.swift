@@ -728,16 +728,10 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       servers: state.servers, initial: server,
       connect: { [weak self] profile, password, save in
         guard let self else { throw SQLFailure("Çalışma alanı kapandı.") }
+        let activeBefore=state.active
         let server = try await state.connect(profile, password: password, save: save)
         finishSheet()
-        state.recover(for: server)
-        if !state.documents.contains(where: { $0.server === server }) {
-          state.newQuery(
-            server: server, database: profile.database,
-            text:
-              "-- MSSQL Studio\nSELECT DB_NAME() AS [Database], @@SPID AS [Session], SYSDATETIME() AS [Server time];"
-          )
-        }
+        state.completeExplorerConnection(server,previousActive:activeBefore)
         reloadWorkspace()
       }, save: { [weak self] editingServer,profile,password,remember in
         guard let self else {throw SQLFailure("Çalışma alanı kapandı.")}

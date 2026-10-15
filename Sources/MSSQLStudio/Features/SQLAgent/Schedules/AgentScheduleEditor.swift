@@ -7,6 +7,7 @@ struct AgentScheduleEditor:View {
   @State var schedule:SQLAgent.Schedule
   let isNew:Bool
   var cancel:(()->Void)? = nil
+  var submitTitle="Değişiklik SQL’ini Aç"
   let open:(SQLAgent.Schedule)->Void
   @State private var error=""
   private var frequency:Int {Int(schedule.frequency) ?? 4}
@@ -48,7 +49,7 @@ struct AgentScheduleEditor:View {
         }.padding(4)
       }
       if !error.isEmpty {StudioFeedback(message:error)}
-      HStack {StudioActionButton("Vazgeç", icon:"xmark") {if let cancel {cancel()} else {dismiss()}}.keyboardShortcut(.cancelAction);Spacer();StudioActionButton("Değişiklik SQL’ini Aç", icon:"doc.badge.gearshape") {
+      HStack {StudioActionButton("Vazgeç", icon:"xmark") {if let cancel {cancel()} else {dismiss()}}.keyboardShortcut(.cancelAction);Spacer();StudioActionButton(submitTitle, icon:"square.and.arrow.down") {
         do {_=try SQLAgent.scheduleScript(schedule,jobID:isNew ? UUID().uuidString:nil);open(schedule)} catch {self.error=error.localizedDescription}
       }.buttonStyle(StudioPrimaryButton()).accessibilityIdentifier("agentScheduleScript")}
     }.padding(StudioMetrics.gap).frame(minWidth:620,idealWidth:760,maxWidth:.infinity,minHeight:480,idealHeight:670,maxHeight:.infinity).studioPanel().interactiveDismissDisabled()

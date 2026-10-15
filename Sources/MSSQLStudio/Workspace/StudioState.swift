@@ -132,6 +132,7 @@ import UniformTypeIdentifiers
     defer {connectionActivities[profile.id]=nil;changed?()}
     connectionErrors[profile.id]=nil
     do {return try await performConnect(profile,password:password,save:save)}
+    catch is CancellationError {throw CancellationError()}
     catch {connectionErrors[profile.id]=error.localizedDescription;throw error}
   }
   private func performConnect(_ profile:ServerProfile,password:String,save:Bool) async throws -> ConnectedServer {
@@ -260,7 +261,7 @@ import UniformTypeIdentifiers
       }
       if !servers.contains(where:{$0 === server}) {servers.append(server)}
       _ = try await connect(server.profile, password: server.password, save: false)
-    } catch {
+    } catch is CancellationError {} catch {
       server.startupError = error.localizedDescription
     }
   }
@@ -289,6 +290,7 @@ import UniformTypeIdentifiers
       for server in servers where !server.online {
         connectionActivities[server.id]="Explorer bağlanıyor: " + server.profile.name;changed?()
         defer {connectionActivities[server.id]=nil;changed?()}
+        let activeBefore=active
         do {
           try await server.metadata.connect(server.profile,password:server.password)
           let available=try await Self.discoverDatabases(using:server.metadata)
@@ -297,12 +299,18 @@ import UniformTypeIdentifiers
           server.online = true; server.startupError = nil; server.generation = UUID()
           server.prepareCatalogIndexes()
           changed?()
-          recover(for:server)
-          if !documents.contains(where: { $0.server === server }) { newQuery(server:server) }
-        } catch { server.startupError = error.localizedDescription; await server.metadata.disconnect(); changed?() }
+          completeExplorerConnection(server,previousActive:activeBefore)
+        } catch is CancellationError {await server.metadata.disconnect();server.online=false;changed?()}
+        catch { server.startupError = error.localizedDescription; await server.metadata.disconnect(); changed?() }
       }
       return !chosen.isEmpty
     } catch { showError("Kayıtlı Explorer bağlantıları okunamadı: " + error.localizedDescription); return true }
+  }
+  func completeExplorerConnection(_ server:ConnectedServer,previousActive:QueryDocument?) {
+    guard active === previousActive,!documents.contains(where:{$0.server.id == server.id}) else {return}
+    recover(for:server)
+    guard active === previousActive,!documents.contains(where:{$0.server.id == server.id}) else {return}
+    newQuery(server:server,database:server.profile.database,text:"-- MSSQL Studio\nSELECT DB_NAME() AS [Database], @@SPID AS [Session], SYSDATETIME() AS [Server time];")
   }
   @discardableResult func newQuery(
     server: ConnectedServer, database: String? = nil, text: String = "", title: String? = nil,

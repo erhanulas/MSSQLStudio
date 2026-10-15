@@ -26,7 +26,7 @@ struct DataChangesPreview: View {
       HStack {
         if sending { ProgressView().controlSize(.small) }
         Spacer()
-        StudioActionButton(completed ? "Gönderildi" : "Onayla ve Veritabanına Gönder", icon: completed ? "checkmark.circle.fill" : "paperplane.fill", tint: .green) {
+        StudioActionButton(completed ? "Gönderildi" : "Onayla ve Veritabanına Gönder", icon: completed ? "checkmark.circle.fill" : "externaldrive.badge.checkmark", tint: .green) {
           sending = true
           Task {
             defer { sending = false }

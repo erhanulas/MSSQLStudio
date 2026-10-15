@@ -96,10 +96,13 @@ extension WorkbenchController {
   @objc func refreshContextNode() { if let node = contextNode { refreshExplorerScope(node) } }
   @objc func refreshContextParent() {if let node=contextNode?.parent {refresh(node)}}
   @objc func selectRows() {
-    if let node = contextNode, let item = node.item {
-      state.newQuery(
-        server: node.server, database: node.database,
-        text: "SELECT TOP (1000) *\nFROM \(item.qualified);", title: item.name, run: true)
+    guard let node=contextNode else {return}
+    Task { [weak self] in
+      do {
+        guard let self else {return}
+        let sql=try await selectScript(node,top:100)
+        state.newQuery(server:node.server,database:node.database,text:sql,title:node.item?.name ?? "SELECT",run:true)
+      } catch is CancellationError {} catch {self?.state.showError(error.localizedDescription)}
     }
   }
   func stage(_ sql: String, title: String) {
@@ -110,9 +113,8 @@ extension WorkbenchController {
     }
   }
   @objc private func scriptSelect() {
-    if let item = contextNode?.item {
-      stage("SELECT TOP (1000) *\nFROM \(item.qualified);", title: "SELECT \(item.name)")
-    }
+    guard let node=contextNode else {return}
+    scriptManagedObject(node,mode:"SELECT",destination:"New Query Editor Window")
   }
   @objc private func scriptInsert() { scriptColumns(operation: "INSERT") }
   @objc private func scriptUpdate() { scriptColumns(operation: "UPDATE") }

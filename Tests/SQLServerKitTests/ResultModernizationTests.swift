@@ -42,8 +42,8 @@ struct ResultModernizationTests {
     let row = DataEditRow(original: ["7", "OLD", "Before", "0x0011"], values: ["7", "NEW", "After", "0x0011"])
     let sql = try DataEditScripts.changes(table: table, rows: [row], expectedObjectID: 42, rowMatching: .primaryKeyOrOriginalValues)
     let statement = try #require(sql.components(separatedBy: "\n").first { $0.hasPrefix("UPDATE ") })
-    #expect(statement.hasSuffix("WHERE [Tenant] = CONVERT(int, N'7') AND [Code] = CONVERT(nvarchar(10), N'OLD');"))
-    #expect(!statement.contains("Before") && !statement.contains("[Version]") && statement.contains("[Code] = CONVERT(nvarchar(10), N'NEW')"))
+    #expect(statement.hasSuffix("WHERE [Tenant] = 7 AND [Code] = N'OLD';"))
+    #expect(!statement.contains("Before") && !statement.contains("[Version]") && statement.contains("[Code] = N'NEW'"))
     #expect(sql.contains("@@ROWCOUNT <> 1") && sql.contains("ROLLBACK TRANSACTION") && sql.contains("<> 42"))
     var deleted = row; deleted.deleted = true
     #expect(try DataEditScripts.changes(table: table, rows: [deleted], rowMatching: .primaryKeyOrOriginalValues).contains("DELETE FROM [dbo].[T] WHERE [Tenant]"))

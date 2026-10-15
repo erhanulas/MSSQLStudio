@@ -160,7 +160,7 @@ extension WorkbenchController {
       if [.tables, .views].contains(folder) {
         if folder == .tables { command("Design…", #selector(designTableObject)); command("Edit Top 200 Rows…", #selector(editObjectData)) }
         else { command("Design…", #selector(designViewObject)); command("Modify · ALTER…", #selector(modifyManagedModule)) }
-        command("Select Top 1000 Rows", #selector(selectRows))
+        command("Select Top 100 Rows", #selector(selectRows))
         scriptMenu(folder == .tables ? "Script Table As" : "Script View As",modes:folder == .tables ? ["CREATE","DROP","DROP And CREATE","SELECT","INSERT","UPDATE","DELETE"] : ["CREATE","ALTER","CREATE OR ALTER","DROP","DROP And CREATE","SELECT","INSERT","UPDATE","DELETE"])
         if folder == .tables {
           command("Indexes / Keys…",#selector(manageObjectIndexes))

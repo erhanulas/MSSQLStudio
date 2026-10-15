@@ -41,6 +41,10 @@ public struct CatalogItem: Sendable {
   }
 }
 public enum Catalog {
+  public static func selectScript(item:CatalogItem,columns:[CatalogItem],top:Int?=nil) throws -> String {
+    guard !columns.isEmpty,top == nil || (1...5_000_000).contains(top!) else {throw SQLFailure("Geçerli kolonlar ve satır sınırı gerekli.")}
+    return "SELECT"+(top.map {" TOP (\($0))"} ?? "")+"\n    "+columns.sorted {$0.id<$1.id}.map {SQL.identifier($0.name)}.joined(separator:",\n    ")+"\nFROM \(item.qualified);"
+  }
   public static let databases =
     "SELECT database_id,name,CAST('' AS nvarchar(1)),state_desc FROM sys.databases WHERE HAS_DBACCESS(name)=1 ORDER BY CASE WHEN database_id<=4 THEN 0 ELSE 1 END,name;"
   public static func indexPage(after: Int) -> String {

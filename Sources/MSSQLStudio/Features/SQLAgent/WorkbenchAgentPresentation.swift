@@ -8,9 +8,15 @@ extension WorkbenchController {
   }
   func showAgentProperties(_ node:TreeNode) {
     guard let item=node.item else {return}
+    let identity="agent.properties|\(node.server.id)|\(item.name)"
+    if let existing=auxiliaryWindows.compactMap(\.window).first(where:{$0.identifier?.rawValue==identity && $0.isVisible}) {
+      existing.makeKeyAndOrderFront(nil)
+      NotificationCenter.default.post(name:AgentPropertiesPanel.refreshRequested,object:node.server.id,userInfo:["name":item.name])
+      return
+    }
     presentAgent(AgentPropertiesPanel(server:node.server,name:item.name,open:{ [weak self] sql in
       self?.stageAgentSQL(sql,server:node.server,title:"Job Properties · "+item.name)
-    },history:{[weak self] in self?.showAgentHistory(node)}),title:"Job Properties · "+item.name,width:1220,height:800,minWidth:1000,minHeight:680,identity:"agent.properties|\(node.server.id)|\(item.name)")
+    },history:{[weak self] in self?.showAgentHistory(node)}),title:"Job Properties · "+item.name,width:1220,height:800,minWidth:1000,minHeight:680,identity:identity)
   }
   func showAgentAction(_ node:TreeNode,action:SQLAgent.Action) {
     guard let item=node.item else {return}

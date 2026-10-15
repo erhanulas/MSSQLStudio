@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.2.140",
+    "date": "2026-10-15",
+    "title": "Akıllı kolon tamamlama ve geliştirilmiş iş akışları",
+    "changes": [
+      "SELECT yıldız tamamlama ile Tab tuşu kolonları sıralar; tablo/view SELECT scriptleri kolon adlarını içerir. Parametresiz sistem fonksiyonları sonrası imleç parantez dışında kalır.",
+      "Bulucuda Enter ve Shift+Enter eşleşmeler arasında döngüyle gezinir ve arama odağını korur.",
+      "Explorer iptal uyarıları, bağlantı sonrası otomatik sorgunun odağı alması ve uzun nesne adlarının kesilmesi düzeltildi. İndeks ikonları yatay kaydırmada görünür kalır; sağ tık menüleri simgelerle ortaklaştırıldı.",
+      "Sonuç düzenleme önizleme/gönder ikonları, okunabilir UPDATE değerleri ve başarılı satır limitli sonuçlarda düzenleme iyileştirildi; işlem güvenlikleri korunur.",
+      "Sonuç aramasında sarı eşleşme vurgusu ve Messages alanında semantik renkler eklendi.",
+      "Job Properties güncel sunucu bilgileriyle açılır; değişiklikler Kaydet ve onay üzerinden gönderilir, ardından sunucudan yeniden okunur. Tarih gösterimi düzenlendi."
+    ]
+  },
+  {
     "version": "0.2.139",
     "date": "2026-10-15",
     "title": "Kararlı ve okunabilir sorgu sekmeleri",

@@ -53,7 +53,7 @@ import SwiftUI
     font = .systemFont(ofSize:14,weight:.regular);minimumWidth=280
     StudioCommandCatalog.decorate(item)
     guard !item.isSeparatorItem else {return}
-    // Sparse, quiet symbols leave the action label and native shortcut column dominant.
+    // Every action gets a consistent symbol; explicit images retain their meaning.
     // Explicit non-template images (folder color swatches, for example) retain their meaning.
     if let image=item.image?.copy() as? NSImage {
       image.size=NSSize(width:16,height:16)
@@ -67,17 +67,20 @@ import SwiftUI
       "refreshContextNode":"arrow.triangle.2.circlepath","refreshContextParent":"arrow.triangle.2.circlepath",
       "goToDefinition:":"arrow.up.forward.square","revealExplorerObject:":"scope",
       "runSQLStatement:":"play","execute":"play","formatSQL":"text.alignleft","formatSQLText:":"text.alignleft",
-      "copy:":"doc.on.doc","paste:":"clipboard","cut:":"scissors",
+      "copy:":"doc.on.doc","paste:":"clipboard","cut:":"scissors","previewDataEditing":"eye",
       "showFavoritesAtNode":"star","showFavorites":"star","createExplorerGroup:":"folder.badge.plus"
     ]
-    if let symbol=symbols[selector] {
+    let title=item.title.lowercased()
+    let titleSymbols:[(String,String)]=[("sil","trash"),("delete","trash"),("drop","trash"),("kapat","xmark"),("close","xmark"),("kaydet","square.and.arrow.down"),("save","square.and.arrow.down"),("kopy","doc.on.doc"),("copy","doc.on.doc"),("yenile","arrow.clockwise"),("refresh","arrow.clockwise"),("aç","arrow.up.forward.square"),("open","arrow.up.forward.square"),("select","tablecells"),("script","doc.text"),("özellik","slider.horizontal.3"),("properties","slider.horizontal.3"),("ayar","gearshape"),("düzenle","pencil"),("edit","pencil"),("new","plus"),("yeni","plus"),("find","magnifyingglass"),("ara","magnifyingglass"),("undo","arrow.uturn.backward"),("redo","arrow.uturn.forward"),("dışa aktar","square.and.arrow.up"),("export","square.and.arrow.up"),("içe aktar","square.and.arrow.down"),("import","square.and.arrow.down"),("bağlantı","network"),("connection","network"),("bağlan","network"),("filtre","line.3.horizontal.decrease.circle"),("filter","line.3.horizontal.decrease.circle"),("taşı","folder"),("move","folder"),("sabitle","pin"),("pin","pin"),("rename","pencil"),("yeniden ad","pencil"),("geri","arrow.uturn.backward"),("seç","checkmark.circle"),("select all","checkmark.circle")]
+    let symbol=symbols[selector] ?? titleSymbols.first(where:{title.contains($0.0)})?.1 ?? (item.submenu != nil ? "folder":"ellipsis.circle")
+    do {
       item.image=NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?
         .withSymbolConfiguration(.init(pointSize:13,weight:.regular))?
         .withSymbolConfiguration(.init(paletteColors:[.secondaryLabelColor]))
       item.image?.size=NSSize(width:16,height:16)
       item.preferredImageVisibility = .visible
     }
-    // No generic fallback icon: secondary actions share the native text gutter.
+
 
   }
 }

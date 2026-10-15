@@ -11,7 +11,7 @@ struct SystemSQLCompletionTests {
       let sql="SELECT "+word
       let result=try analyze(sql)
       let suggestion=try #require(result.suggestions.first {$0.label == word})
-      #expect(suggestion.text==word+"()" && suggestion.caretOffset==word.utf16.count+1 && suggestion.kind == .function)
+      #expect(suggestion.text==word+"()" && suggestion.caretOffset==word.utf16.count+(TSQL.noArgumentFunctions.contains(word) ? 2:1) && suggestion.kind == .function)
       let existing="SELECT "+word+" (Amount)"
       let same=try #require(try analyze(existing,caret:sql.utf16.count).suggestions.first {$0.label == word})
       #expect(same.text==word && same.caretOffset==nil)

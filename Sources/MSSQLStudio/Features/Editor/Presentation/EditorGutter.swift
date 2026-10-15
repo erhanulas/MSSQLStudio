@@ -18,6 +18,8 @@ import SQLServerKit
 /// Native finder controls have their own layout area, outside the SQL viewport.
 @MainActor final class EditorFindContainer:NSView,@preconcurrency NSTextFinderBarContainer {
   let scroll:NSScrollView
+  // NSTextFinder also uses the protocol content view for its wrap indicator.
+  func contentView()->NSView? {scroll.contentView}
   var heightChanged:((CGFloat)->Void)?
   var findBarView:NSView? {didSet {
     if oldValue !== findBarView {oldValue?.removeFromSuperview();if let findBarView {addSubview(findBarView)}}
