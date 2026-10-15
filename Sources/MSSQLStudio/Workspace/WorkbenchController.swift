@@ -146,11 +146,12 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     tabs.edgeInsets = NSEdgeInsets(top: 3, left: 6, bottom: 3, right: 6)
     let tabScroll = QueryTabScrollView()
     tabScroll.documentView = tabs
-    tabScroll.hasHorizontalScroller = true
+    tabScroll.hasHorizontalScroller = false
     tabScroll.scrollerStyle = .overlay
     tabScroll.horizontalScroller?.controlSize = .small
     tabScroll.autohidesScrollers = true
-    tabScroll.drawsBackground = false
+    tabScroll.drawsBackground = true
+    tabs.frame=NSRect(x:0,y:0,width:12,height:36)
     tabs.translatesAutoresizingMaskIntoConstraints = true
     tabs.autoresizingMask=[]
     tabs.detachesHiddenViews=false
@@ -369,16 +370,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       group.primaryButton = button
       group.identifier = NSUserInterfaceItemIdentifier("connectionAccent")
       group.sourceColor=sourceColor(for:doc.server)
-      group.configure(active: state.active === doc)
-      button.contentTintColor = state.active === doc ? StudioTheme.accent : StudioTheme.muted
       button.font = .systemFont(ofSize: 12, weight: state.active === doc ? .medium : .regular)
-      button.attributedTitle = NSAttributedString(
-        string: button.title,
-        attributes: [
-          .font: button.font!,
-          .foregroundColor: state.active === doc ? StudioTheme.text : StudioTheme.muted,
-        ])
-      close.contentTintColor = StudioTheme.muted
+      group.configure(active:state.active === doc)
+      close.refreshStyle()
       let icon = NSImageView(image: NSImage(systemSymbolName: doc.pinned ? "pin.fill" : "externaldrive", accessibilityDescription: doc.pinned ? "Sabitlenmiş sekme" : nil)!)
       icon.contentTintColor = sourceColor(for:doc.server) ?? StudioTheme.accent
       icon.widthAnchor.constraint(equalToConstant: 14).isActive = true
@@ -394,10 +388,14 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
         "\(doc.server.profile.appearance?.badge ?? "") · \(doc.server.profile.name) · \(doc.database)"
       group.spacing = 6
       group.edgeInsets = NSEdgeInsets(top: 2, left: 8, bottom: 2, right: 4)
-      tabs.addArrangedSubview(group)
+      // Stable title sizing must not inherit a stretched frame from the previous selection.
+      let titleWidth=ceil((button.title as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:12,weight:.medium)]).width)+12
+      button.widthAnchor.constraint(equalToConstant:max(100,titleWidth)).isActive=true
+      group.widthAnchor.constraint(equalToConstant:max(100,titleWidth)+62).isActive=true
+      tabs.addView(group,in:.leading)
     }
     let plus = symbolButton("plus", tip: "Yeni Sorgu (\(GridShortcuts.binding(.newQuery).label))", action: #selector(newQuery))
-    tabs.addArrangedSubview(plus)
+    tabs.addView(plus,in:.leading)
     (tabs.enclosingScrollView as? QueryTabScrollView)?.revealActiveTab()
   }
   private func renderActive() {

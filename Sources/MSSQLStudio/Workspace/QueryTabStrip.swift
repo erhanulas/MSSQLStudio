@@ -16,16 +16,22 @@ import UniformTypeIdentifiers
   override init(frame:NSRect) {
     super.init(frame:frame)
     contentView=QueryTabClipView()
-    contentView.drawsBackground=false;drawsBackground=false
-    hasHorizontalScroller=true;scrollerStyle = .overlay
+    contentView.drawsBackground=false;drawsBackground=true
+    refreshBackground()
+    hasHorizontalScroller=false;scrollerStyle = .overlay
     horizontalScroller?.controlSize = .small;autohidesScrollers=true
     horizontalScrollElasticity = .none;verticalScrollElasticity = .none
   }
   required init?(coder:NSCoder) {fatalError()}
+  private func refreshBackground() {
+    effectiveAppearance.performAsCurrentDrawingAppearance {backgroundColor = .windowBackgroundColor}
+  }
+  override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance();refreshBackground()}
   override func layout() {
     super.layout()
     guard let tabs=documentView as? QueryTabStrip else {return}
-    let size=NSSize(width:max(contentView.bounds.width,tabs.fittingSize.width),height:contentView.bounds.height)
+    let width=tabs.arrangedSubviews.reduce(tabs.edgeInsets.left+tabs.edgeInsets.right) {$0+$1.fittingSize.width}+CGFloat(max(0,tabs.arrangedSubviews.count-1))*tabs.spacing
+    let size=NSSize(width:max(contentView.bounds.width,width),height:contentView.bounds.height)
     if tabs.frame != NSRect(origin:.zero,size:size) {tabs.frame=NSRect(origin:.zero,size:size)}
     tabs.layoutSubtreeIfNeeded()
     let bounds=contentView.constrainBoundsRect(contentView.bounds)
@@ -86,7 +92,11 @@ import UniformTypeIdentifiers
   }
   override func mouseEntered(with event:NSEvent) {hovered=true;refreshStyle()}
   override func mouseExited(with event:NSEvent) {hovered=false;refreshStyle()}
-  func refreshStyle() {contentTintColor=hovered ? StudioTheme.danger:StudioTheme.muted;needsDisplay=true}
+  func refreshStyle() {
+    effectiveAppearance.performAsCurrentDrawingAppearance {contentTintColor=hovered ? StudioTheme.danger:.labelColor}
+    needsDisplay=true
+  }
+  override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance();refreshStyle()}
   override func draw(_ dirtyRect:NSRect) {
     if hovered || isHighlighted {
       StudioTheme.danger.withAlphaComponent(isHighlighted ? 0.22:0.12).setFill()
@@ -114,13 +124,17 @@ import UniformTypeIdentifiers
   }
   private func refreshSurface() {
     CATransaction.begin(); CATransaction.setDisableActions(true)
-    let selected = sourceColor.map {StudioTheme.canvas.blended(withFraction:StudioTheme.dark ? 0.18:0.08,of:$0) ?? StudioTheme.selection} ?? (StudioTheme.selection.blended(withFraction:0.55,of:StudioTheme.canvas) ?? StudioTheme.selection)
-    layer?.borderWidth = isActiveTab ? 1:0
-    layer?.borderColor = StudioTheme.accent.withAlphaComponent(0.42).cgColor
-    layer?.backgroundColor = (isActiveTab ? selected : hovered ? StudioTheme.panel : StudioTheme.panel.withAlphaComponent(0.45)).cgColor
-    if let button=primaryButton {
-      button.contentTintColor=isActiveTab ? StudioTheme.accent:StudioTheme.muted
-      button.attributedTitle=NSAttributedString(string:button.title,attributes:[.font:button.font ?? StudioTheme.uiFont,.foregroundColor:isActiveTab ? StudioTheme.text:StudioTheme.muted])
+    // Resolve semantic colors in this view's appearance, including accessibility contrast.
+    // Opaque surfaces keep inactive tabs readable independently of window/titlebar materials.
+    effectiveAppearance.performAsCurrentDrawingAppearance {
+      let selected = NSColor.selectedContentBackgroundColor.blended(withFraction:0.82,of:.controlBackgroundColor) ?? .controlBackgroundColor
+      layer?.borderWidth = isActiveTab ? 1:0
+      layer?.borderColor = NSColor.controlAccentColor.cgColor
+      layer?.backgroundColor = (isActiveTab ? selected : hovered ? NSColor.controlBackgroundColor : NSColor.windowBackgroundColor).cgColor
+      if let button=primaryButton {
+        button.contentTintColor = .labelColor
+        button.attributedTitle=NSAttributedString(string:button.title,attributes:[.font:button.font ?? StudioTheme.uiFont,.foregroundColor:NSColor.labelColor])
+      }
     }
     CATransaction.commit()
   }

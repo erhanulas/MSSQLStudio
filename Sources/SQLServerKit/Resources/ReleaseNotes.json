@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.139",
+    "date": "2026-10-15",
+    "title": "Kararlı ve okunabilir sorgu sekmeleri",
+    "changes": [
+      "Sekmeler arasında tekrar tekrar geçişte genişliklerin büyümesi düzeltildi. Sekme başlıkları metin uzunluğuna göre yerleşir; çok sekmede sıkışmak yerine yatay kaydırma kullanılır.",
+      "Sekmelerin üzerine binerek tıklamayı zorlaştıran kaydırıcı kaldırıldı; yatay kaydırma ve aktif sekmeyi görünür alana getirme korunur.",
+      "Başlık ve kapatma simgeleri semantik sistem renklerini kullanır. Sekme yüzeyleri opak, aktif sekme ayrı zemin ve ince vurgu kenarlığıyla gösterilir; açık, koyu ve yüksek kontrast görünümleri desteklenir.",
+      "Sekme şeridinin başlangıç boyutu ve yeni sekme düğmesindeki çakışan yerleşim kısıtları giderildi."
+    ]
+  },
+  {
     "version": "0.2.138",
     "date": "2026-10-15",
     "title": "Sorgu sekmesi görünürlüğü",

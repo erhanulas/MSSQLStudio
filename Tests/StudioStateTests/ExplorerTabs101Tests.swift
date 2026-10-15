@@ -78,7 +78,7 @@ import Testing
     #expect(button.bounds.width>=24 && button.bounds.height>=24 && button.toolTip?.contains("Close fixture")==true)
     let event=try #require(NSEvent.enterExitEvent(with:.mouseEntered,location:.zero,modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,eventNumber:1,trackingNumber:1,userData:nil))
     button.mouseEntered(with:event);#expect(button.hovered && button.contentTintColor==StudioTheme.danger)
-    button.mouseExited(with:event);#expect(!button.hovered && button.contentTintColor==StudioTheme.muted)
+    button.mouseExited(with:event);#expect(!button.hovered && button.contentTintColor==NSColor.labelColor)
     var prompts=0;doc.sql+=" -- draft";doc.confirmDiscardResultEdits={prompts+=1;return false}
     button.performClick(nil)
     #expect(prompts==1 && state.documents.first === doc && doc.needsCloseConfirmation)
