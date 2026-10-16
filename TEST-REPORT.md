@@ -3289,3 +3289,14 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - İlk iki test koşusunda minimum content boyutu 0×0 olduğu için regresyon başarısız oldu; boyut kayıt/geri yükleme geçti. Hosting ilk gösteriminden sonra minimum uygulanınca `/tmp/mssql-switcher-click-resize-verified-tests.log`: 10 test / 1 suite geçti. Ayrı switcher instance üzerinden 880×480 yeniden açılış, kaynak odak/aktif sorgu korunması, Enter/Escape/oklar, uzun SQL kaydırma ve iki tema doğrulandı.
 - `/tmp/mssql-switcher-click-resize-verified-release.log`: Release BUILD SUCCEEDED; mimari/kaynak eşliği/diff kontrolleri geçti. Native açık/koyu screenshotlar `/tmp/mssql-tab-switcher-light.png`, `/tmp/mssql-tab-switcher-dark.png`; açık görünüm incelendi. Gerçek fareyle kenar sürükleme otomasyonu çalıştırılmadı; native resizable mask ve programatik resize/persistence doğrulandı.
 - Kullanıcı uygulaması/DB oturumları değiştirilmedi; yayın yapılmadı.
+
+## 2026-10-17 — v0.2.173 / build 174 public yayın
+
+- Kaynak/tag `587a4f8b3d8455960226b1056c6e82d956d3c1e9`; Actions `38980113606` başarılı; public latest `v0.2.173`.
+- Tamamlanan 10 native test ve Release derleme kanıtı kullanıldı; mevcut tekrar test etmeme tercihiyle exact tag CI suite adımı atlandı. Paket/imza/helper/feed kontrolleri tamamlandı.
+- ZIP/PKG GitHub digest ve manifest hashleriyle eşleşti; exact sürüm/build, ReleaseNotes, strict app/helper imzaları, frozen helper byte eşliği ve ikon görünümleri doğrulandı.
+- `MSSQLStudio-0.2.173.pkg` SHA-256: `10c90db9bd430728e1d5782c7273645bd9bc19b71afe2c167709f675f8828f17`.
+- `MSSQLStudio-0.2.173.zip` SHA-256: `404ebc9c34d0b210830ff8edf8e48aa51107a4e94f865e4131069401a3356f9f`.
+- `MSSQLStudio-CredentialAgent-v1.zip` SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json` SHA-256: `3c6fc5ece6638c4008665659e3fa3f2d45660482fc361889a499710ba6fb5b9e`.
+- İndirilen signed uygulama `--check-update-feed 0.2.173` başarılı; exact tag public notları kaynakla byte eşleşti. Kanıt `/tmp/MSSQLStudio-173-public-verification/`. Installer çalıştırılmadı; kurulu uygulama ve kullanıcı DB oturumları değiştirilmedi.
