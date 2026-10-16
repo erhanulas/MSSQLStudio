@@ -3270,3 +3270,14 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Nonactivating native panelde 600 satırlık SQL, 10 satırlık adımlarla 0→300 kaydırıldı; 210. satırda gecikmeli renklendirme uygulandı. Her adımda TextKit viewport kaynak aralığının görünür satırları kapsaması denetlendi. Açık/koyu temada metin alanı bitmap piksel kontrolü de eklendi.
 - Aynı test orijinal HEAD uygulamasıyla `/tmp/mssql-preview-line220-original-tests.log` içinde 60 viewport kapsam assertion’ı ile başarısız oldu. Kaynak dosya finally ile mevcut düzeltmeye geri alındı. `/tmp/mssql-preview-line220-confirmed-tests.log`: aynı test iki temada geçti. Böylece viewport yenileme eksikliği kontrollü karşılaştırmayla doğrulandı; kullanıcının birebir sorgusu/macOS koşulu yine ayrıca sınanmadı.
 - 300. satır sonrası bitmapler `/tmp/mssql-preview-line300-light.png` ve `/tmp/mssql-preview-line300-dark.png`; önceki 24 test ve Release kanıtı aynı ürün kaynağı için geçerlidir.
+
+## 2026-10-17 — v0.2.172 / build 173 public yayın
+
+- Kaynak/tag `a721dd3ce51d5c9c8abc53b9445a03509943a183`; Actions `38979056989` başarılı; public latest `v0.2.172`.
+- Tamamlanan 24 test + ek kademeli kaydırma regresyonu ve Release derleme kanıtı kullanıldı. Kullanıcı tekrar test istemediği için exact tag CI test adımı atlandı; paket/imza/feed kontrolleri tamamlandı.
+- İndirilen ZIP/PKG GitHub digest ve manifest hashleriyle eşleşti; exact sürüm/build, ReleaseNotes, strict app/helper imzaları, frozen helper byte eşliği ve ikon görünümleri doğrulandı.
+- `MSSQLStudio-0.2.172.pkg` SHA-256: `316afaa670be46f1547a338ac1ae0f71b1b29044902f264ff904c9d8bcdfe3e4`.
+- `MSSQLStudio-0.2.172.zip` SHA-256: `14cb1f0834186cb3838dbfb54f7db2e8e7f8bcea8d13028bb1d122c43a03519c`.
+- `MSSQLStudio-CredentialAgent-v1.zip` SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json` SHA-256: `4b69b2c719eca38f8cbb1c1d3df9936f881c58e6afecd60602dac16627f0899c`.
+- İndirilen signed app `--check-update-feed 0.2.172` başarılı; exact tag public notları kaynakla byte eşleşti. Kanıt `/tmp/MSSQLStudio-172-public-verification/`. Installer çalıştırılmadı, kullanıcı uygulaması/DB oturumları değiştirilmedi.
