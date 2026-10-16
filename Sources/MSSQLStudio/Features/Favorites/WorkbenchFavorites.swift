@@ -89,6 +89,7 @@ extension WorkbenchController {
       },manage:{[weak self] in self?.presentFavorites(server:server,database:database,target:document)})
     let window=StudioPanelWindow(contentViewController:controller)
     window.animationBehavior = .none
+    window.framePersistenceRole="favoritePicker"
     window.identifier = .init(identity);window.title="Favori Sorgular"
     window.styleMask=[.titled,.closable,.resizable]
     window.setContentSize(NSSize(width:840,height:540))

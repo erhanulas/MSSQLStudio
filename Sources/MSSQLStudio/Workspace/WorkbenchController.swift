@@ -753,6 +753,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     let sheet = ConnectionPanelWindow(contentViewController: controller)
     sheet.animationBehavior = .none
     sheet.cancelAction={ [weak self] in guard let self,!connectionSheetBusy else {return};finishSheet() }
+    sheet.framePersistenceRole="connections"
     sheet.title = "Bağlantılar"
     sheet.styleMask = [.titled,.closable,.resizable]
     controller.sizingOptions=[]
@@ -814,6 +815,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     controller.sizingOptions = []
     let window = StudioPanelWindow(contentViewController: controller)
     window.animationBehavior = .none
+    window.framePersistenceRole=String(reflecting:V.self)
     if let identity {window.identifier = .init(identity)}
     window.title = title
     window.styleMask = [.titled, .closable, .resizable]

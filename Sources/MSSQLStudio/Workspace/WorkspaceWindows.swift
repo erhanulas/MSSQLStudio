@@ -15,6 +15,7 @@ import AppKit
       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false
     )
     super.init(window: window)
+    window.framePersistenceRole="detachedQuery"
     window.title = query.document.title
     window.subtitle = "\(query.document.server.profile.name) — \(query.document.database)"
     window.minSize = NSSize(width: 800, height: 600)

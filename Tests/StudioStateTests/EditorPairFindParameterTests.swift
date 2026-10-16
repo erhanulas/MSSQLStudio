@@ -86,6 +86,31 @@ import Testing
     editor.sqlFinder.performAction(.hideFindInterface)
     #expect(!controller.findContainer.isFindBarVisible && editor.backgroundColor == StudioTheme.editorCanvas)
   }
+  @Test func commandFindReplacesExistingSearchWithNewEditorSelection() async throws {
+    _=NSApplication.shared
+    let server=ConnectedServer(profile:.init(),password:"");server.online=false
+    let doc=QueryDocument(server:server,database:"master",title:"Repeated find")
+    doc.sql="SELECT City FROM dbo.T WHERE City = N'City';"
+    let controller=EditorController(document:doc),editor=controller.editor
+    let window=NSWindow(contentRect:NSRect(x:100,y:100,width:900,height:600),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=controller.surface;window.orderFront(nil)
+    defer {editor.sqlFinder.performAction(.hideFindInterface);window.close()}
+    window.makeFirstResponder(editor);editor.setSelectedRange(NSRange(location:0,length:6));editor.showSelectionFind()
+    let bar=try #require(controller.findContainer.findBarView)
+    func fields(_ view:NSView)->[NSTextField] {(view as? NSTextField).map {[$0]} ?? view.subviews.flatMap(fields)}
+    let field=try #require(fields(bar).first {$0.isEditable})
+    #expect(field.stringValue=="SELECT")
+    window.makeFirstResponder(editor);editor.setSelectedRange(NSRange(location:7,length:4))
+    let event=try #require(NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:.command,timestamp:0,windowNumber:window.windowNumber,context:nil,characters:"f",charactersIgnoringModifiers:"f",isARepeat:false,keyCode:3))
+    #expect(editor.performKeyEquivalent(with:event))
+    #expect(controller.findContainer.findBarView === bar && controller.findContainer.isFindBarVisible)
+    #expect(field.stringValue=="City" && NSPasteboard(name:.find).string(forType:.string)=="City")
+    editor.sqlFinder.performAction(.nextMatch)
+    #expect((editor.string as NSString).substring(with:editor.selectedRange())=="City")
+    #expect(doc.sql=="SELECT City FROM dbo.T WHERE City = N'City';")
+    window.makeFirstResponder(editor);editor.setSelectedRange(NSRange(location:0,length:0));editor.showSelectionFind()
+    #expect(field.stringValue=="City")
+  }
   @Test func findBarReservesSpaceAndSearchFieldKeepsNativeHitAndFocus() throws {
     _=NSApplication.shared
     let server=ConnectedServer(profile:.init(),password:"");server.online=false

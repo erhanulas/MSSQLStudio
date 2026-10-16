@@ -4,6 +4,13 @@ import SQLServerKit
 import SwiftUI
 
 @MainActor class StudioAssociatedWindow:NSWindow {
+  var framePersistenceRole:String?
+  private var placementPrepared=false
+  private func preparePlacement() {
+    guard !placementPrepared,let framePersistenceRole else {return}
+    placementPrepared=true
+    StudioWindowPlacement.restore(self,role:framePersistenceRole,owner:associatedOwner)
+  }
   var didClose:(()->Void)?
   private(set) weak var associatedOwner:NSWindow?
   func associate(with owner:NSWindow?) {
@@ -21,6 +28,7 @@ import SwiftUI
     if place != .out {
       let focused=NSApp.keyWindow ?? NSApp.mainWindow
       associate(with:focused?.sheetParent ?? focused)
+      preparePlacement()
     }
     super.order(place,relativeTo:otherWin)
     if place != .out,!title.isEmpty {NSApp.addWindowsItem(self,title:title,filename:false)}
@@ -31,6 +39,10 @@ import SwiftUI
     super.makeKeyAndOrderFront(sender)
   }
   override func close() {
+    if placementPrepared,let framePersistenceRole {
+      StudioWindowPlacement.save(self,role:framePersistenceRole)
+      _ = setFrameAutosaveName("");placementPrepared=false
+    }
     let callback=didClose;didClose=nil
     parent?.removeChildWindow(self)
     associatedOwner=nil;NSApp.removeWindowsItem(self)
@@ -108,6 +120,7 @@ import SwiftUI
     NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:body.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:body.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:body.topAnchor,constant:16),stack.bottomAnchor.constraint(lessThanOrEqualTo:body.bottomAnchor,constant:-16),nameField.widthAnchor.constraint(equalTo:stack.widthAnchor),nameField.heightAnchor.constraint(equalToConstant:26),actions.widthAnchor.constraint(equalTo:stack.widthAnchor),icon.widthAnchor.constraint(equalToConstant:24),icon.heightAnchor.constraint(equalToConstant:24)])
     nameField.nextKeyView=saveButton;saveButton.nextKeyView=cancelButton;cancelButton.nextKeyView=nameField
     window.focusOrder=[nameField,saveButton,cancelButton]
+    window.framePersistenceRole="nameEntry"
     window.initialFirstResponder=nameField;window.center()
   }
   required init?(coder:NSCoder) {fatalError("init(coder:) has not been implemented")}
@@ -150,6 +163,7 @@ import SwiftUI
     self.decision=decision
     let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:540,height:198),styleMask:[.titled,.closable],backing:.buffered,defer:false)
     window.animationBehavior = .none
+    window.framePersistenceRole="bulkClose"
     window.title=title;window.identifier = .init("studio.bulkClose");window.isReleasedWhenClosed=false
     super.init(window:window);window.delegate=self
     let body=NSView();StudioTheme.surface(body,card:true);window.contentView=body
@@ -181,7 +195,7 @@ import SwiftUI
 @MainActor final class StudioNoticeWindowController:NSWindowController,NSWindowDelegate {
   var closed:(()->Void)?
   init(message:String) {
-    let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:520,height:300),styleMask:[.titled,.closable],backing:.buffered,defer:false);window.title="MSSQL Studio";window.animationBehavior = .none;window.isReleasedWhenClosed=false
+    let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:520,height:300),styleMask:[.titled,.closable],backing:.buffered,defer:false);window.title="MSSQL Studio";window.framePersistenceRole="notice";window.animationBehavior = .none;window.isReleasedWhenClosed=false
     super.init(window:window);window.delegate=self
     let body=NSView();StudioTheme.surface(body,card:true);window.contentView=body
     let heading=NSTextField(labelWithString:"İşlem tamamlanamadı");heading.font = .systemFont(ofSize:16,weight:.semibold);heading.textColor=StudioTheme.text

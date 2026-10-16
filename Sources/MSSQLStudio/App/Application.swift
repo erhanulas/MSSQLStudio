@@ -67,7 +67,7 @@ import SwiftUI
     window.minSize = NSSize(width: 1060, height: 680)
     window.contentViewController = workbench
     window.center()
-    window.setFrameAutosaveName("MSSQLStudio.workbench")
+    StudioWindowPlacement.restore(window,role:"workbench")
     let toolbar = NSToolbar(identifier: "studio.toolbar")
     toolbar.delegate = workbench
     toolbar.displayMode = .iconOnly

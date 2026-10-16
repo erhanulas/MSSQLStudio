@@ -617,6 +617,7 @@ struct SchemaComparisonPanel: View {
     let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:1280,height:850),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
     super.init(window:window)
     model.cancelOperation={[weak self] in self?.operation?.cancel()}
+    window.framePersistenceRole="schemaComparison"
     window.title="DDL Karşılaştırma";window.minSize=NSSize(width:1000,height:680);window.delegate=self
     let panel=SchemaComparisonPanel(model:model,preview:{[weak self] in self?.prepare()},openSQL:{[weak model] sql in if let target=model?.target {openSQL(target,sql)}})
     let hosting=NSHostingController(rootView:panel)

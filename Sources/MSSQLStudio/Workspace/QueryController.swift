@@ -565,7 +565,7 @@ import SwiftUI
           if document.resultGeneration == generation && document.database == db && document.canRefresh { refreshResults() }
         } catch { await connection.disconnect(); throw error }
       })
-      let window = StudioPanelWindow(contentViewController: NSHostingController(rootView: panel)); window.title = "Veri Değişiklikleri — SQL Önizlemesi"; window.setContentSize(NSSize(width: 1000, height: 720)); window.styleMask = [.titled, .closable, .resizable]; window.minSize = NSSize(width: 760, height: 520)
+      let window = StudioPanelWindow(contentViewController: NSHostingController(rootView: panel)); window.framePersistenceRole="dataChangesPreview"; window.title = "Veri Değişiklikleri — SQL Önizlemesi"; window.setContentSize(NSSize(width: 1000, height: 720)); window.styleMask = [.titled, .closable, .resizable]; window.minSize = NSSize(width: 760, height: 520)
       let controller = DataReviewWindowController(window: window); controller.canClose = { [weak self] in self?.submittingData != true }; window.delegate = controller; dataReview = controller; controller.showWindow(nil)
     } catch { dataError(error) }
   }

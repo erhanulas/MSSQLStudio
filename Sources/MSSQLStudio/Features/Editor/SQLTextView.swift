@@ -341,14 +341,29 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
   }
   override func performFindPanelAction(_ sender: Any?) {
     dismissSuggestions?()
+    var selectedSearch:String?
     if (sender as? NSValidatedUserInterfaceItem)?.tag == NSTextFinder.Action.showFindInterface.rawValue {
       prepareEdit?()
-      if selectedRange().length > 0 {sqlFinder.performAction(.setSearchString)}
+      let range=selectedRange(),source=string as NSString
+      if range.length>0,NSMaxRange(range)<=source.length,columnSelection.ranges.count<=1 {
+        selectedSearch=source.substring(with:range)
+        sqlFinder.performAction(.setSearchString)
+      }
     }
     if let item=sender as? NSValidatedUserInterfaceItem,let action=NSTextFinder.Action(rawValue:item.tag) {
       sqlFinder.performAction(action)
       if action == .showFindInterface || action == .showReplaceInterface {sqlFinder.findBarContainer?.isFindBarVisible=true}
-
+      if let selectedSearch,let bar=sqlFinder.findBarContainer?.findBarView {
+        func fields(_ view:NSView)->[NSTextField] {(view as? NSTextField).map {[$0]} ?? view.subviews.flatMap(fields)}
+        if let field=fields(bar).first(where:{$0.isEditable}),field.stringValue != selectedSearch {
+          // setSearchString updates the find pasteboard, but an already-open
+          // native bar can keep its old field value. Commit through its action.
+          field.stringValue=selectedSearch
+          if let editor=field.currentEditor() as? NSTextView {editor.string=selectedSearch}
+          if let action=field.action {_ = field.sendAction(action,to:field.target)}
+          else {field.delegate?.controlTextDidChange?(Notification(name:NSControl.textDidChangeNotification,object:field))}
+        }
+      }
     }
   }
   override func selectAll(_ sender: Any?) { dismissSuggestions?(); super.selectAll(sender) }

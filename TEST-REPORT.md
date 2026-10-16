@@ -1,3 +1,20 @@
+## 16 Ekim 2026 — v0.2.155 yayın hazırlığı
+
+- Mevcut 66 pencere ve 8 bulucu native testi ile Release derleme kanıtları kullanıldı. Kullanıcı tercihiyle yeni test koşusu yapılmadı; yalnız v0.2.155 için CI paket suite’i atlanır. Sabit imza/helper, manifest/hash ve Foundation feed kontrolleri korunur.
+
+## 16 Ekim 2026 — açık bulucuda yeni editör seçimini arama terimine aktarma, yerel
+
+- NSTextFinder.setSearchString find pasteboard’u güncellese de zaten açık bar eski field değerini koruyabiliyordu. ShowFindInterface yolunda tekil seçili SQL yakalanır; native bar açıldıktan sonra gerekliysa field/aktif field editor değeri eşitlenip mevcut kontrol action/delegate’i işletilir. Bar kapatılmaz/yeniden kurulmaz. Seçimsiz veya özel çoklu caret durumunda mevcut terim korunur; SQL ve undo değişmez.
+- **8 native test /1 suite geçti /0 issue**, 0.743 sn (`/tmp/mssql-find-selected-text.log`). Yeni regresyon açık barı SELECT’ten City’ye ikinci ⌘F ile günceller; aynı bar kimliği, find pasteboard/field, sonraki native match’in City olması, SQL korunması ve seçimsiz yeniden açmada terim korunmasını doğrular. Mevcut finder odak/yerleşim/replace/undo ve parametre yolları geçti.
+- Release BUILD SUCCEEDED (`/tmp/mssql-find-selected-text-release.log`); mimari ve diff kontrolü geçti. Gerçek kullanıcı uygulaması/SQL verileri değiştirilmedi; CUA/hardware klavye denenmedi. Henüz yayımlanmadı.
+
+## 16 Ekim 2026 — yardımcı pencere konum ve boyutunu kalıcı koruma, yerel
+
+- Çoğu yardımcı pencere yeni oluşturulduğunda varsayılan setContentSize/center uyguluyor, native frame kaydı kullanmıyordu. StudioWindowPlacement ortak adaptörü ve StudioAssociatedWindow.framePersistenceRole ilk gösterimde son native frame’i geri yükler; taşıma/resize native autosave ile izlenir. Close son frame’i kaydeder ve autosave adını serbest bırakır. Statik View türü/sabit rol kullanılır; SQL/nesne/DB başlıkları anahtara girmez. Ana pencerenin eski MSSQLStudio.workbench anahtarı korunur.
+- Genel present (ayarlar/geçmiş/Agent/izleme/tasarım vb.), bağlantı formu, favori picker, detached query, DDL karşılaştırma, sonuç değişikliği önizlemesi ve güncelleme pencereleri bağlandı. Name/close/notice diyaloglarında sabit başlangıç boyutu ve saklanan konum; native module-review sheet’inde boyut korunur. Ekran kesişimi ve minimum boyut denetimiyle kaybolmuş ekran konumları görünür frame’e sığdırılır. QA anahtarları process namespace kullanır; tooltip/native dosya panelleri etkilenmez.
+- **66 native test /6 suite geçti /0 issue**, 13.291 sn (`/tmp/mssql-window-placement.log`). Yeni native regresyon pencereyi taşıyıp büyütür, kapatıp yeni instance oluşturur; aynı frame’in geri yüklenmesini ve gizle/gösterde korunmasını doğrular. Saf geometri regresyonu ikinci ekran, kaldırılmış ekran, ekranı aşan boyut ve minimumları sınar. Mevcut yardımcı pencere/ayarlar/bağlantı/DDL/favori ve komut güvenliği testleri geçti.
+- Release BUILD SUCCEEDED (`/tmp/mssql-window-placement-release.log`); Xcode kaynak senkronu, mimari ve diff kontrolü geçti. Gerçek uygulama yeniden başlatma/CUA veya fiziksel monitör çıkarma denenmedi; native instance geri yükleme ve sentetik ekran geometrisi kullanıldı. Kurulu uygulama/oturum/veriler değiştirilmedi; henüz yayımlanmadı.
+
 ## 16 Ekim 2026 — v0.2.154 / build 155 public yayın doğrulaması
 
 - Public/latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.154 ; kaynak 78ac84c6cb26fa20903eaaa74f91860199a448ac. Actions 38905703529 başarılı. Kullanıcı tercihiyle paket suite’i bu tag’de atlandı; yeni test koşusu yapılmadı.

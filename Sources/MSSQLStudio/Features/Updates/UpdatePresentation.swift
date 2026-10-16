@@ -25,6 +25,7 @@ import SwiftUI
     let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:520,height:340),styleMask:[.titled,.resizable],backing:.buffered,defer:false)
     window.title="MSSQL Studio Güncellemesi";window.isReleasedWhenClosed=false
     window.contentMinSize=NSSize(width:440,height:320)
+    window.framePersistenceRole="updates"
     super.init(window:window)
     let body=window.contentView!
     StudioTheme.surface(body,card:true)

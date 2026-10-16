@@ -4,6 +4,34 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct WindowInteraction123Tests {
+  @Test func auxiliaryWindowRestoresMovedAndResizedFrameAfterRecreation() throws {
+    _=NSApplication.shared
+    let role="placement-test-\(UUID())"
+    defer {NSWindow.removeFrame(usingName:StudioWindowPlacement.name(role))}
+    func make()->StudioPanelWindow {
+      let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:440,height:300),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
+      window.isReleasedWhenClosed=false;window.framePersistenceRole=role;window.minSize=NSSize(width:400,height:260)
+      window.center();return window
+    }
+    let visible=try #require(NSScreen.main?.visibleFrame)
+    let target=NSRect(x:visible.minX+40,y:visible.minY+40,width:min(700,visible.width-80),height:min(500,visible.height-80))
+    let first=make();first.orderFront(nil);first.setFrame(target,display:false);first.close()
+    let second=make();defer {second.close()};second.orderFront(nil)
+    #expect(abs(second.frame.minX-target.minX)<1 && abs(second.frame.minY-target.minY)<1)
+    #expect(abs(second.frame.width-target.width)<1 && abs(second.frame.height-target.height)<1)
+    second.orderOut(nil);second.makeKeyAndOrderFront(nil)
+    #expect(second.frame == target)
+  }
+  @Test func storedFramesRespectSecondaryScreensMinimumsAndDisconnectedDisplays() {
+    let main=NSRect(x:0,y:0,width:1440,height:900),secondary=NSRect(x:-1920,y:0,width:1920,height:1080)
+    let moved=NSRect(x:-1700,y:120,width:900,height:650)
+    #expect(StudioWindowPlacement.fitted(moved,minimum:NSSize(width:500,height:400),screens:[main,secondary],preferred:main)==moved)
+    let missing=NSRect(x:5000,y:4000,width:1600,height:1200)
+    let fitted=StudioWindowPlacement.fitted(missing,minimum:NSSize(width:500,height:400),screens:[main],preferred:main)
+    #expect(main.contains(fitted) && fitted.size==main.size)
+    let small=StudioWindowPlacement.fitted(NSRect(x:100,y:100,width:100,height:80),minimum:NSSize(width:500,height:400),screens:[main],preferred:main)
+    #expect(small.size==NSSize(width:500,height:400) && main.contains(small))
+  }
   @Test func disclosureHeaderTracksEntireWidthAndLeavesContentControlsIndependent() throws {
     _=NSApplication.shared
     let button=StudioDisclosureButton(frame:NSRect(x:0,y:0,width:480,height:32))
