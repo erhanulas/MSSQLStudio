@@ -8,6 +8,19 @@ import Testing
     try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
       windowNumber: window.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: key == "f" ? 3 : 37))
   }
+  @Test func functionKeysSaveDisplayMatchAndKeepConflictValidation() throws {
+    let keys = GridShortcuts.Action.allCases.map { "shortcut." + $0.rawValue }
+    let old = keys.map { UserDefaults.standard.object(forKey: $0) }
+    defer { for (index, key) in keys.enumerated() {
+      if let value = old[index] { UserDefaults.standard.set(value, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) }
+    } }
+    for key in keys { UserDefaults.standard.removeObject(forKey: key) }
+    let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.option, .command, .function], timestamp: 0, windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 111))
+    #expect(GridShortcuts.save(event, action: .format) == nil)
+    #expect(GridShortcuts.binding(.format).label == "⌥⌘F12")
+    #expect(GridShortcuts.matches(.format, event))
+    #expect(GridShortcuts.save(event, action: .comment) != nil)
+  }
   @Test func configurableFormatUsesFocusedEditorSelectionAndOneUndoWithoutExecutingSQL() throws {
     _ = NSApplication.shared
     let keys = GridShortcuts.Action.allCases.map { "shortcut." + $0.rawValue }

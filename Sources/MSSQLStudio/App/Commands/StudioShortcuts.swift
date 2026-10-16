@@ -59,8 +59,21 @@ import SwiftUI
     var flags: NSEvent.ModifierFlags { NSEvent.ModifierFlags(rawValue: modifiers) }
     var label: String {
       (key.isEmpty ? "Atanmamış" : "") + (flags.contains(.control) ? "⌃" : "") + (flags.contains(.option) ? "⌥" : "")
-        + (flags.contains(.shift) ? "⇧" : "") + (flags.contains(.command) ? "⌘" : "") + (key == "\r" ? "↩":key == " " ? "␣":key.uppercased())
+        + (flags.contains(.shift) ? "⇧" : "") + (flags.contains(.command) ? "⌘" : "") + (key == "\r" ? "↩":key == " " ? "␣":GridShortcuts.keyLabel(key))
     }
+  }
+  private static let functionKeyCodes: [UInt16: Int] = [122:1,120:2,99:3,118:4,96:5,97:6,98:7,100:8,101:9,109:10,103:11,111:12,105:13,107:14,113:15,106:16,64:17,79:18,80:19,90:20]
+  static func eventKey(_ event: NSEvent) -> String? {
+    if let number = functionKeyCodes[event.keyCode], let scalar = UnicodeScalar(0xF703 + number) { return String(scalar) }
+    return event.charactersIgnoringModifiers?.lowercased()
+  }
+  nonisolated private static func functionNumber(_ key: String) -> Int? {
+    guard key.unicodeScalars.count == 1, let value = key.unicodeScalars.first?.value,
+      (0xF704...0xF726).contains(value) else { return nil }
+    return Int(value - 0xF703)
+  }
+  nonisolated static func keyLabel(_ key: String) -> String {
+    functionNumber(key).map { "F\($0)" } ?? key.uppercased()
   }
   static let changed = Notification.Name("MSSQLStudio.gridShortcutsChanged")
   static func binding(_ action: Action) -> Binding {
@@ -87,7 +100,7 @@ import SwiftUI
   static var headersLabel: String { binding(.headers).label }
   static func matches(_ action: Action, _ event: NSEvent) -> Bool {
     let binding = binding(action)
-    let key=event.charactersIgnoringModifiers?.lowercased()
+    let key=eventKey(event)
     var flags=event.modifierFlags.intersection([.command,.shift,.option,.control]),expected=binding.flags
     // Turkish / is Shift+7. Shift used to produce the symbol is part of the glyph.
     if key == "/",binding.key == "/" {flags.remove(.shift);expected.remove(.shift)}
@@ -98,9 +111,9 @@ import SwiftUI
   }
   static func save(_ event: NSEvent, action: Action) -> String? {
     var flags = event.modifierFlags.intersection([.command,.shift,.option,.control])
-    guard let key = event.charactersIgnoringModifiers?.lowercased(), key.count == 1,
-      ["/",",",".","[","]","\r"," "].contains(key) || key.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.contains($0) }), flags.contains(.command) || flags.contains(.control)
-    else { return "⌘ veya ⌃ ile harf, rakam, / , . [ ], Space veya Enter kullanın. Escape iptal eder." }
+    guard let key = eventKey(event), key.count == 1,
+      functionNumber(key) != nil || ["/",",",".","[","]","\r"," "].contains(key) || key.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.contains($0) }), flags.contains(.command) || flags.contains(.control)
+    else { return "⌘ veya ⌃ ile harf, rakam, / , . [ ], Space, Enter veya F1–F35 kullanın. Escape iptal eder." }
     if key == "/" {flags.remove(.shift)}
     // Existing application and standard editing commands remain reserved.
     let reserved: [(String,NSEvent.ModifierFlags)] = [("\r",.command),(" ",.control),("b",.command),(".",.command),(",",.command),("[",[.command,.option]),("]",[.command,.option]),("q",.command),("w",.command),("s",.command),("s",[.command,.shift]),("o",.command),("c",.command),("v",.command),("x",.command),("a",.command),("z",.command),("z",[.command,.shift]),("f",.command),("f",.control),("r",.command),("m",.command),("l",.command),("b",[.command,.option])]

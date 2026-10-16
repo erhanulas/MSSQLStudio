@@ -1,3 +1,14 @@
+## 16 Ekim 2026 — v0.2.147 için kullanıcı talebiyle test tekrarı istisnası
+
+- Kullanıcı açıkça “çok hızlı test olmadan yayımla” istedi. Mevcut 28 hedefli test ve Release kanıtı korunarak yalnız v0.2.147 tag’i için CI paket suite adımı atlanır; gelecekteki sürümlerin varsayılan test akışı değişmez. İmza/helper audit, paket/manifest ve public Foundation updater kontrolleri korunur. Yeni tam suite başarısı iddia edilmez.
+
+## 16 Ekim 2026 — query bağlantısından Explorer eşitleme ve F tuşu kısayolları, yerel
+
+- QueryDocument bağlantı başarısı daha önce yalnız kendi durumunu ready yapıyordu; StudioState tarafından açılan belgeye weak bağlantı callback’i eklendi. Kayıtlı aynı Explorer offline ve başka bağlantı işi yoksa mevcut reconnectExplorer yoluyla metadata oturumu arka planda kurulur. Explorer kendi bağlantısı başarılı olmadan online gösterilmez; sorgu oturumu/transaction paylaşılmaz, query odağı ve SQL korunur. Explorer’dan kaldırılan profil otomatik geri eklenmez. Başlangıç bağlantısı/reconnect tek uçuş koruması korunur.
+- GridShortcuts doğrulaması yalnız alfanümerik/birkaç noktalama karakterini kabul ettiği için F12’yi reddediyordu. Native F1–F35 karakterleri kabul edilir; F1–F20 keyCode normalizasyonu boş characters durumunda da çalışır. Fn yardımcı bayrağı eşleştirmeden çıkarılır; kalıcı Codable biçimi/native menu keyEquivalent korunur, yardım etiketi ⌥⌘F12 olarak gösterilir. Sistem tarafından uygulamaya gönderilmeyen medya tuşları bu yolla yakalanamaz.
+- **23 native +5 core =28 test geçti /0 issue**, 1.169 /0.008 sn (`/tmp/mssql-query-explorer-shortcuts-checked.log`). Yeni testler gerçek key event ile F12 kaydetme/gösterme/eşleştirme/çakışma; sentetik query bağlantısında tek Explorer reconnect, ready sorgu/odak ve kaldırılan profil korumasını doğrular. İlk derlemede Binding.label için actor izolasyon hatası saf keyLabel/functionNumber fonksiyonlarını nonisolated yaparak giderildi; başarısız derleme başarı sayılmaz.
+- Final Release BUILD SUCCEEDED (`/tmp/mssql-query-explorer-shortcuts-checked-release.log`); mimari ve diff kontrolü geçti. Canlı SQL Server/gerçek fiziksel klavyede Fn-macOS tuş teslimi veya CUA yapılmadı; kurulu uygulama/veri değiştirilmedi. Henüz yayımlanmadı.
+
 ## 16 Ekim 2026 — v0.2.146 / build 147 public yayın doğrulandı
 
 - [Public/latest v0.2.146](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.146), kaynak `c15f98986fecf10052c1e6a9e9d97d0c75d87b43`; [Actions 38822204509](https://github.com/erhanulas/MSSQLStudio/actions/runs/38822204509) üçüncü denemede bütün adımlarıyla başarılı. Tam paket testleri **471 app +375 core +8 text =854 test** için başarılı tamamlanmış özet verdi (192.080 /11.033 /0.003 sn; `/tmp/mssql146-ci-success.log`). Dış koşullu skip’ler canlı doğrulama sayılmaz.

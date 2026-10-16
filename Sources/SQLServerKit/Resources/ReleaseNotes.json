@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.147",
+    "date": "2026-10-16",
+    "title": "Explorer bağlantı eşitlemesi ve macOS F tuşları",
+    "changes": [
+      "Sorgu sekmesi başarıyla bağlandığında aynı profilin çevrimdışı Explorer bağlantısı arka planda kurulur. Sorgu oturumu ve aktif sekme korunur; Explorer kendi bağlantısı başarılı olduğunda bağlı görünür.",
+      "Kısayol ayarları Option–Command–F12 dahil macOS fonksiyon tuşlarını kabul eder. F tuşları okunabilir adlarla gösterilir; çakışma ve ayrılmış tuş kontrolleri korunur."
+    ]
+  },
+  {
     "version": "0.2.146",
     "date": "2026-10-16",
     "title": "Hızlı sorgu kurtarma ve geniş favori önizlemesi",

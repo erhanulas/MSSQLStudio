@@ -327,6 +327,14 @@ import UniformTypeIdentifiers
     let doc = QueryDocument(
       server: server, database: database ?? server.profile.database,
       title: title ?? "SQLQuery\(nextQueryNumber).sql")
+    doc.connected = { [weak self, weak server] in
+      guard let self, let server, self.servers.contains(where: { $0 === server }),
+        !server.online, !server.reconnecting, self.connectionActivities[server.id] == nil else { return }
+      Task { [weak self, weak server] in
+        guard let self, let server, self.servers.contains(where: { $0 === server }), !server.online else { return }
+        await self.reconnectExplorer(server)
+      }
+    }
     nextQueryNumber += 1
     doc.sql = text
     doc.savedText = text // Generated/opened text is the baseline, not a user edit.

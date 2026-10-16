@@ -150,6 +150,7 @@ struct ObjectEditorKey: Codable, Equatable {
     self.database = database
     self.title = title
   }
+  var connected: (() -> Void)?
   func connect(afterConnected: (() -> Void)? = nil) {
     guard !busy else { return }
     guard !server.updatingProfile else { state = .disconnected; changed?(); return }
@@ -169,6 +170,7 @@ struct ObjectEditorKey: Codable, Equatable {
           await connection.disconnect(); state = .disconnected; task=nil; runAfterConnect=false; connectionError=Task.isCancelled ? "Bağlantı iptal edildi." : "Bağlantı hedefi değişti; tekrar çalıştırın."; changed?(); return
         }
         state = .ready
+        connected?()
         messages = "Bağlandı: \(profile.host) / \(database)\n"
         changed?()
         Task { [weak self] in await self?.loadSymbols() }

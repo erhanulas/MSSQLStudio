@@ -5,6 +5,25 @@ import Testing
 
 @MainActor @Suite(.serialized) struct WorkflowImprovementsTests {
   private func views(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(views)}
+  @Test func queryConnectionStartsOneExplorerReconnectWithoutStealingQuery() async {
+    let state = StudioState(); state.historyEnabled = false; state.recoveryEnabled = false
+    let server = ConnectedServer(profile: .init(), password: ""); server.online = false
+    state.servers = [server]
+    var reconnects = 0
+    server.reconnectFixture = { reconnects += 1; try await Task.sleep(for: .milliseconds(20)) }
+    let doc = state.newQuery(server: server, text: "SELECT 1")
+    doc.connectionFixture = { _, _ in }
+    doc.connect(); await doc.task?.value
+    doc.connected?()
+    for _ in 0..<100 where !server.online { try? await Task.sleep(for: .milliseconds(5)) }
+    #expect(server.online && reconnects == 1 && server.startupError == nil)
+    #expect(state.active === doc && state.documents.count == 1 && doc.state == .ready && doc.lastExecutedSQL == nil)
+    server.online = false
+    state.servers = []
+    doc.connected?()
+    await Task.yield()
+    #expect(reconnects == 1 && !server.online)
+  }
   @Test func recoveryPublishesOnceBeforeConnectionsAndPreservesExistingFocus() {
     let state = StudioState(); state.historyEnabled = false; state.recoveryEnabled = true
     let first = ConnectedServer(profile: .init(), password: "")
