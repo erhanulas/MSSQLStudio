@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.165",
+    "date": "2026-10-16",
+    "title": "Enter ile sekme seçimi ve Profiler kullanım iyileştirmeleri",
+    "changes": [
+      "Option+Tab seçicisi tuş bırakıldığında açık kalır; sekmeye geçiş Enter ile yapılır. Sekmeler solda dikey listelenir, tıklama ve hover yalnız aday seçimini değiştirir.",
+      "Sağdaki geniş SQL önizlemesi ortak renklendirme, satır numaraları ve kaydırma kullanır. Metnin 7 satırda kesilmesi kaldırıldı; ayarlanabilir ayırıcıyla önizlemeye daha fazla alan ayrılabilir.",
+      "Profiler istemci alanları varsayılan elle girişte, SQL ve süre bölümü açık başlar. Yeni pencere öncesi Explorer bağlantısı kontrol edilir; gerekirse tek bağlantı denemesi yapılır ve başarısızlık nedeni gösterilir.",
+      "Profiler, Activity Monitor, History ve Favoriler pencereleri açıkken üst araç ikonları yeşil vurgulanır. Arka planda açık Profiler vurgusunu korur.",
+      "Profiler hata metni Mesaj sütununda gösterilir. Varsayılan işaretli Bilgi bildirimlerini gizle yalnız görünümü filtreler; hata/uyarı/bilinmeyen olaylar ve tüm kayıtların dışa aktarımı korunur. Hata ve tamamlanma olayları ayrı kaydedilir."
+    ]
+  },
+  {
     "version": "0.2.164",
     "date": "2026-10-16",
     "title": "Kompakt sekme seçici ve Profiler mesaj düzeyleri",

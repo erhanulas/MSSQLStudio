@@ -64,6 +64,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private var tabSignature: [String]?
   private var controllers: [UUID: QueryController] = [:]
   var auxiliaryWindows: [NSWindowController] = []
+  lazy var profilerLauncher=ProfilerLauncher(owner:self)
   var profilerWindows:[UUID:ProfilerWindowController]=[:]
   var contextNode: TreeNode?
   var sheet: NSWindow?
@@ -91,6 +92,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     NotificationCenter.default.addObserver(self,selector:#selector(schemaApplied(_:)),name:.init("studioSchemaComparedApplied"),object:nil)
     NotificationCenter.default.addObserver(self,selector:#selector(favoritesChanged),name:FavoriteQueriesModel.changed,object:state.favorites)
     NotificationCenter.default.addObserver(self,selector:#selector(favoriteWindowClosed(_:)),name:NSWindow.willCloseNotification,object:nil)
+    NotificationCenter.default.addObserver(self,selector:#selector(toolWindowVisibilityChanged(_:)),name:StudioAssociatedWindow.visibilityChanged,object:nil)
+    for name in [NSWindow.willCloseNotification,NSWindow.didMiniaturizeNotification,NSWindow.didDeminiaturizeNotification] {NotificationCenter.default.addObserver(self,selector:#selector(toolWindowVisibilityChanged(_:)),name:name,object:nil)}
     state.changed = { [weak self] in self?.reloadWorkspace() }
   }
   deinit {agentPolling?.cancel();explorerRevealTask?.cancel()}
@@ -838,7 +841,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     auxiliaryWindows.append(owner)
     window.didClose={ [weak self,weak window] in
       Task { @MainActor [weak self,weak window] in
-        guard let window else {return};self?.auxiliaryWindows.removeAll {$0.window === window};window.contentViewController=nil
+        guard let window else {return};self?.auxiliaryWindows.removeAll {$0.window === window};window.contentViewController=nil;self?.refreshToolWindowIndicators()
       }
     }
     window.associate(with:view.window)
@@ -922,6 +925,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     button.toolTip=help
     item.toolTip=nil
     item.view = button
+    configureToolWindowIndicator(button,id:id.rawValue,label:definition.0)
     return item
   }
 }

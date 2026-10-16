@@ -5,12 +5,16 @@ import SQLServerKit
 struct ProfilerFilters:View {
   @ObservedObject var model:ProfilerModel
   @ObservedObject private var choices:ProfilerChoicesModel
-  @State private var manualColumns:Set<SQLProfilerFiltering.Column>=[]
-  @State private var expanded:Set<String>=["scope","client"]
+  @State private var manualColumns:Set<SQLProfilerFiltering.Column>=[.application,.clientPID,.host,.session]
+  @State private var expanded:Set<String>=["scope","client","sql"]
   init(model:ProfilerModel,showClients:Binding<Bool>) {self.model=model;choices=model.choices}
   var body:some View {
     ScrollView {
       VStack(alignment:.leading,spacing:8) {
+        Toggle("Bilgi bildirimlerini gizle",isOn:$model.displayFilter.hideInformational)
+          .toggleStyle(.checkbox).accessibilityIdentifier("profilerHideInformational")
+          .studioHelp("Bilgi düzeyindeki error_reported olaylarını görünümden gizler. Hata, uyarı ve düzeyi bilinmeyen olaylar korunur; yakalama ve tüm olayları dışa aktarma değişmez.")
+        Divider()
         Text(model.hasSession ? "Yakalama · Düzenlemek için durdurun":"Yakalama · Sunucuda uygulanır")
           .font(.system(size:11)).foregroundStyle(.secondary)
         category("scope",title:"Veritabanı ve kimlik",symbol:"externaldrive") {

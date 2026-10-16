@@ -44,6 +44,39 @@ import Testing
     let old=try JSONDecoder().decode(SQLProfiler.Event.self,from:JSONSerialization.data(withJSONObject:legacy))
     #expect(old.messageLevel == .unknown && old.message==event.message)
   }
+  @Test func defaultHideOnlyRemovesInformationalNotificationsAndIsReversible() throws {
+    let info=try SQLProfiler.decode(Self.execution()).events[0]
+    let warning=try SQLProfiler.decode(Self.execution(number:8153)).events[0]
+    let error=try SQLProfiler.decode(Self.execution(number:50000,severity:"16",message:"Intentional failure")).events[0]
+    let unknown=try SQLProfiler.decode(Self.execution(severity:nil)).events[0]
+    let completed=try SQLProfiler.decode(SQLProfilerTests.execution()).events[0]
+    let source=[info,warning,error,unknown,completed]
+    var filter=SQLProfilerFiltering.Filter()
+    #expect(filter.hideInformational)
+    #expect(try SQLProfilerFiltering.project(source,filter:filter).events==[warning,error,unknown,completed])
+    filter.hideInformational=false
+    #expect(try SQLProfilerFiltering.project(source,filter:filter).events==source)
+    filter.rules=[.init(column:.message,comparison:.contains,value:"Intentional failure")]
+    #expect(try SQLProfilerFiltering.project(source,filter:filter).events==[error])
+    #expect(source.count==5 && SQLProfilerFiltering.Column.message.value(error)=="Intentional failure")
+  }
+  @Test func sameTimeErrorAndCompletionAreRetainedAsSeparateServerEvents() throws {
+    let errorExecution=Self.execution(number:50000,severity:"16",message:"Intentional failure",sql:"SELECT 1")
+    let errorXML=errorExecution.results[0].values[0][0]!
+    let completedXML=SQLProfilerTests.execution(sequence:1,text:"SELECT 1").results[0].values[0][0]!
+      .replacingOccurrences(of:"sql_batch_completed",with:"rpc_completed")
+      .replacingOccurrences(of:"2026-10-16T12:00:00.123Z",with:"2026-10-16T12:00:00Z")
+    let eventStart=completedXML.range(of:"<event")!.lowerBound
+    let eventEnd=completedXML.range(of:"</event>")!.upperBound
+    let combined=errorXML.replacingOccurrences(of:"totalEventsProcessed=\"1\"",with:"totalEventsProcessed=\"2\"")
+      .replacingOccurrences(of:"</RingBufferTarget>",with:String(completedXML[eventStart..<eventEnd])+"</RingBufferTarget>")
+    var execution=Execution();execution.results=[Rows(fields:errorExecution.results[0].fields,values:[[combined,"0"]])]
+    let snapshot=try SQLProfiler.decode(execution)
+    var buffer=SQLProfiler.Buffer();buffer.beginSession(name:"fixture");buffer.append(snapshot);buffer.append(snapshot)
+    #expect(buffer.events.count==2 && buffer.events.map(\.kind)==["error_reported","rpc_completed"])
+    #expect(buffer.events[0].timestamp==buffer.events[1].timestamp && buffer.events[0].sql==buffer.events[1].sql)
+    #expect(buffer.events[0].message=="Intentional failure" && buffer.events[1].message.isEmpty)
+  }
   @Test func messageColumnsUseExistingNumericAndTextFiltering() throws {
     let info=try SQLProfiler.decode(Self.execution()).events[0]
     let error=try SQLProfiler.decode(Self.execution(number:208,severity:"16")).events[0]

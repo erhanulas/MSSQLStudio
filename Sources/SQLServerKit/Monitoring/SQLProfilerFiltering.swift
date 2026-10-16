@@ -2,10 +2,11 @@ import Foundation
 
 public enum SQLProfilerFiltering {
   public enum Column:String,CaseIterable,Identifiable,Sendable {
-    case messageLevel,errorNumber,severity,clientPID,session,sql,host,application,login,database,kind,duration,cpu,reads,writes,timestamp
+    case message,messageLevel,errorNumber,severity,clientPID,session,sql,host,application,login,database,kind,duration,cpu,reads,writes,timestamp
     public var id:String {rawValue}
     public var title:String {
       switch self {
+      case .message:"Mesaj"
       case .messageLevel:"Bildirim"
       case .errorNumber:"Hata no"
       case .severity:"Önem derecesi"
@@ -28,6 +29,7 @@ public enum SQLProfilerFiltering {
     public var operators:[Comparison] {numeric ? [.equals,.notEquals,.atLeast,.atMost]:[.contains,.notContains,.equals,.notEquals]}
     public func value(_ event:SQLProfiler.Event)->String {
       switch self {
+      case .message:event.message
       case .messageLevel:event.messageLevel?.title ?? ""
       case .errorNumber:event.errorNumber.map(String.init) ?? ""
       case .severity:event.severity.map(String.init) ?? ""
@@ -62,6 +64,7 @@ public enum SQLProfilerFiltering {
     public init(column:Column = .clientPID,comparison:Comparison = .equals,value:String="") {id=UUID();self.column=column;self.comparison=comparison;self.value=value}
   }
   public struct Filter:Sendable,Equatable {
+    public var hideInformational=true
     public var sqlSearch=""
     public var rules:[Rule]=[]
     public var columnRules:[Column:ColumnRule]=[:]
@@ -108,6 +111,7 @@ public enum SQLProfilerFiltering {
       return (rule,numeric)
     }
     func matches(_ event:SQLProfiler.Event)->Bool {
+      if filter.hideInformational,event.messageLevel == .info {return false}
       if !filter.sqlSearch.isEmpty,event.sql.range(of:filter.sqlSearch,options:[.caseInsensitive,.literal])==nil {return false}
       return rules.allSatisfy {rule,numeric in
         let value=rule.column.value(event)

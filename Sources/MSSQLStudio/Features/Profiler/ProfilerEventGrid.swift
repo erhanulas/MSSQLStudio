@@ -87,7 +87,7 @@ struct ProfilerEventGrid:NSViewRepresentable {
   }
   @MainActor final class Coordinator:NSObject,NSTableViewDataSource,NSTableViewDelegate {
     static let columns:[(String,String,CGFloat)]=[
-      ("timestamp","Zaman (UTC)",185),("kind","Olay",150),("messageLevel","Bildirim",85),("errorNumber","Hata no",75),("severity","Önem derecesi",100),("clientPID","ClientProcessID",110),
+      ("timestamp","Zaman (UTC)",185),("kind","Olay",150),("messageLevel","Bildirim",85),("message","Mesaj",320),("errorNumber","Hata no",75),("severity","Önem derecesi",100),("clientPID","ClientProcessID",110),
       ("session","SPID",55),("database","Veritabanı",120),("duration","Süre (ms)",90),
       ("cpu","CPU (ham)",85),("reads","Okuma",80),("writes","Yazma",80),
       ("application","Uygulama",160),("host","Host",140),("login","Login",130),("sql","SQL metni",480)
@@ -145,7 +145,7 @@ struct ProfilerEventGrid:NSViewRepresentable {
       let event=events[row],key=column.identifier.rawValue
       if key=="timestamp" {cell.stringValue=ProfilerTimestamp.display(event.timestamp)}
       else if key=="duration" {cell.stringValue=event.durationMS.map {String(format:"%.3f",$0)} ?? "—"}
-      else if key=="sql" {cell.stringValue=String(event.sql.prefix(240)).replacingOccurrences(of:"\n",with:" ").replacingOccurrences(of:"\r",with:" ")}
+      else if key=="sql" || key=="message" {cell.stringValue=String((key=="sql" ? event.sql:event.message).prefix(240)).replacingOccurrences(of:"\n",with:" ").replacingOccurrences(of:"\r",with:" ")}
       else if let field=SQLProfilerFiltering.Column(rawValue:key) {cell.stringValue=field.value(event)}
       else {cell.stringValue=""}
       cell.alignment=["errorNumber","severity","clientPID","session","duration","cpu","reads","writes"].contains(key) ? .right:.left

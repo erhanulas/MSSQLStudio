@@ -17,8 +17,13 @@ import Testing
     let model=ProfilerModel(server:server,executor:{_ in Execution()},disconnect:{})
     let owner=ProfilerEventGrid.Coordinator(model:model,selection:.constant([]))
     owner.events=[source,warning,error]
+    #expect(ProfilerEventGrid.Coordinator.columns.contains {$0.0=="message"})
     let table=NSTableView(),column=NSTableColumn(identifier:.init("messageLevel"))
     table.addTableColumn(column)
+    let messageColumn=NSTableColumn(identifier:.init("message"))
+    table.addTableColumn(messageColumn)
+    let messageField=try #require(owner.tableView(table,viewFor:messageColumn,row:0) as? NSTextField)
+    #expect(messageField.stringValue==source.message)
     for row in 0..<3 {
       let field=try #require(owner.tableView(table,viewFor:column,row:row) as? NSTextField)
       #expect(field.stringValue==["Bilgi","Uyarı","Hata"][row])

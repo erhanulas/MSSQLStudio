@@ -75,6 +75,10 @@ struct ProfilerPanel:View {
               .buttonStyle(StudioSecondaryButton()).disabled(selectedEvents.isEmpty || openQuery==nil)
           }
           if let event=selectedEvent,!event.message.isEmpty {StudioFeedback(message:ProfilerMessagePresentation.details(event),tone:ProfilerMessagePresentation.tone(event.messageLevel))}
+          if let event=selectedEvent,["rpc_completed","sql_batch_completed"].contains(event.kind) {
+            Text("Tamamlanma olayı başarı garantisi değildir; SQL Server hata metnini error_reported olayında bildirir.")
+              .font(.system(size:StudioMetrics.detailFont)).foregroundStyle(.secondary)
+          }
           SQLReadOnlyPreview(sql:preview.sql,lexicalSnapshot:preview.tokens)
         }.padding(.top,8).frame(minHeight:90)
       }

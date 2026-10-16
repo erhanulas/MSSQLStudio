@@ -4,6 +4,7 @@ import SQLServerKit
 import SwiftUI
 
 @MainActor class StudioAssociatedWindow:NSWindow {
+  static let visibilityChanged=Notification.Name("studioAssociatedWindowVisibilityChanged")
   var framePersistenceRole:String?
   private var placementPrepared=false
   private func preparePlacement() {
@@ -31,6 +32,7 @@ import SwiftUI
       preparePlacement()
     }
     super.order(place,relativeTo:otherWin)
+    NotificationCenter.default.post(name:Self.visibilityChanged,object:self)
     if place != .out,!title.isEmpty {NSApp.addWindowsItem(self,title:title,filename:false)}
   }
   override func makeKeyAndOrderFront(_ sender:Any?) {

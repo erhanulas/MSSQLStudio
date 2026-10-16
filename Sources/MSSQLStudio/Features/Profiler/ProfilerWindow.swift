@@ -50,6 +50,10 @@ extension WorkbenchController {
   @objc func profiler() {
     guard let server=selectedServer else {return}
     if let owner=profilerWindows[server.id] {owner.model.choices.refresh(automatic:true);owner.model.sessions.refreshOnOpen();owner.showWindow(nil);owner.window?.makeKeyAndOrderFront(nil);return}
+    profilerLauncher.open(server)
+  }
+  func presentProfiler(_ server:ConnectedServer) {
+    guard profilerWindows[server.id]==nil else {return}
     let model=ProfilerModel(server:server,explorerChoices:{ [weak self,weak server] in
       guard let server else {return .init(databases:[],logins:nil)}
       let root=self?.roots.first {$0.server === server && $0.generation==server.generation}
@@ -62,7 +66,7 @@ extension WorkbenchController {
       openProfilerSQL(events,server:server)
     });profilerWindows[server.id]=owner
     (owner.window as? ProfilerWindow)?.didClose={ [weak self,weak owner] in
-      guard let owner else {return};owner.model.choices.cancel();self?.profilerWindows.removeValue(forKey:owner.model.serverID)
+      guard let owner else {return};owner.model.choices.cancel();self?.profilerWindows.removeValue(forKey:owner.model.serverID);self?.refreshToolWindowIndicators()
     }
     (owner.window as? StudioAssociatedWindow)?.associate(with:view.window)
     owner.showWindow(nil);owner.window?.makeKeyAndOrderFront(nil)
@@ -80,5 +84,38 @@ extension WorkbenchController {
       guard await owner.model.stop() else {owner.showWindow(nil);owner.window?.makeKeyAndOrderFront(nil);return false}
     }
     return true
+  }
+}
+
+/// Opening is serialized per Explorer connection; capture remains explicitly started later.
+@MainActor final class ProfilerLauncher {
+  private weak var owner:WorkbenchController?
+  private var tasks:[UUID:Task<Void,Never>]=[:]
+  var opening:Bool {!tasks.isEmpty}
+  init(owner:WorkbenchController) {self.owner=owner}
+  deinit {for task in tasks.values {task.cancel()}}
+  func cancel() {for task in tasks.values {task.cancel()}}
+  func open(_ server:ConnectedServer) {
+    guard tasks[server.id]==nil,!server.updatingProfile,let owner else {return}
+    owner.status.stringValue="Profiler için Explorer bağlantısı kontrol ediliyor…"
+    tasks[server.id]=Task { [weak self,weak owner,weak server] in
+      guard let self,let owner,let server else {return}
+      defer {tasks.removeValue(forKey:server.id);owner.updateControls()}
+      let alreadyConnecting=server.reconnecting
+      if alreadyConnecting {
+        let deadline=ContinuousClock.now.advanced(by:.seconds(20))
+        while server.reconnecting,ContinuousClock.now<deadline {
+          do {try await Task.sleep(for:.milliseconds(50))} catch {return}
+        }
+      } else {
+        if server.online {await server.checkExplorerHealth()}
+        if !server.online {await owner.state.reconnectExplorer(server)}
+      }
+      guard !Task.isCancelled,owner.state.servers.contains(where:{$0 === server}),!server.updatingProfile else {return}
+      guard server.online,!server.reconnecting else {
+        owner.state.showError("Profiler açılamadı. Explorer bağlantısı kurulamadı.\n"+(server.startupError ?? "Bağlantı işlemi tamamlanmadı; yeniden deneyin."));return
+      }
+      owner.presentProfiler(server)
+    }
   }
 }

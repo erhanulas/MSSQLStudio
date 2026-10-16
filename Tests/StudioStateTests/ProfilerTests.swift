@@ -114,10 +114,10 @@ private actor ProfilerProbe {
     await probe.setFailDrop(false)
     #expect(await model.stop());#expect(!model.hasSession)
   }
-  @Test func toolbarReopensTheSameHiddenToolWithoutCreatingOrExecutingQueries() throws {
+  @Test func toolbarReopensTheSameHiddenToolWithoutCreatingOrExecutingQueries() async throws {
     _=NSApplication.shared
     let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false
-    let server=server();state.servers=[server]
+    let server=server();server.reconnectFixture={};server.catalogFixture={_ in Execution()};state.servers=[server]
     let host=WorkbenchController(state:state)
     let main=NSWindow(contentViewController:host)
     main.isReleasedWhenClosed=false;defer {main.close()}
@@ -125,6 +125,7 @@ private actor ProfilerProbe {
     let ids=host.toolbarDefaultItemIdentifiers(NSToolbar(identifier:"fixture")).map(\.rawValue)
     #expect(ids.contains("profiler") && ids.firstIndex(of:"activity")!<ids.firstIndex(of:"profiler")!)
     host.profiler()
+    for _ in 0..<200 where host.profilerLauncher.opening {try await Task.sleep(for:.milliseconds(3))}
     let owner=try #require(host.profilerWindows[server.id]),window=try #require(owner.window)
     defer {window.close()}
     window.orderOut(nil);host.profiler()

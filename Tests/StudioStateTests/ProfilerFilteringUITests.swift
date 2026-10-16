@@ -112,6 +112,9 @@ private actor ProfilerFilteringProbe {
     try await Task.sleep(for:.milliseconds(80));host.view.layoutSubtreeIfNeeded()
     func children(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(children)}
     let split=try #require(children(host.view).compactMap {$0 as? NSSplitView}.first {$0.isVertical && $0.arrangedSubviews.count==2})
+    let modes=children(host.view).compactMap {$0 as? ProfilerInputModeButton.Button}
+    #expect(modes.filter {$0.title=="Liste"}.count==4 && modes.filter {$0.title=="Elle"}.count==2)
+    #expect(children(host.view).compactMap {$0 as? NSTextField}.filter {$0.isEditable}.count>=7)
     #expect(split.bounds.width>1200)
     #expect(split.arrangedSubviews[0].frame.width<320)
     split.adjustSubviews();split.setPosition(440,ofDividerAt:0)
