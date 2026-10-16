@@ -1,3 +1,9 @@
+## 16 Ekim 2026 — v0.2.152 / build 153 public yayın doğrulaması
+
+- Public/latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.152 ; kaynak 1cab59769b76e9b8308fab80ae3284b588c77b0c. Actions 38895454098 başarılı. Kullanıcının test tekrar etmeme tercihiyle CI paket suite’i bu tag’de atlandı; yeni test koşusu yapılmadı.
+- İndirilen ZIP/PKG/update.json/frozen archive SHA-256 değerleri GitHub digest ve manifest ile eşleşti. Exact version/build, kaynak sürüm notları/public yayın metni, app/helper strict imzaları, dondurulmuş helper byte eşliği ve Icon Composer varyantları doğrulandı. İndirilen signed app’in Foundation feed kontrolü exact 0.2.152 geçti.
+- Kanıt: /tmp/MSSQLStudio-152-public-verification/verification.json, verification.log, foundation-feed.log. Gerçek Installer kurulumu denenmedi; kurulu uygulama/oturumlar/gerçek kullanıcı verileri değiştirilmedi.
+
 ## 16 Ekim 2026 — v0.2.152 yayın hazırlığı
 
 - Kullanıcının test tekrar etmeden yayın tercihi korundu; yeni test koşusu başlatılmadı. Son geliştirme kayıtlarındaki 19/21/44/34 hedefli test ve Release derleme kanıtları kullanıldı. Yalnız v0.2.152 için CI paket suite’i atlanır; sabit imza/helper, paket/manifest/hash ve Foundation feed kontrolleri korunur.
