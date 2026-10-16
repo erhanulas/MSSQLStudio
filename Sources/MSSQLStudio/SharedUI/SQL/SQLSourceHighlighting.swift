@@ -7,9 +7,13 @@ import SwiftUI
   static func foreground(_ token:Lexeme,unused:Bool,undeclared:Bool=false) -> NSColor {
     undeclared ? StudioTheme.undeclaredVariable : unused ? StudioTheme.unusedVariable : StudioTheme.syntax(TSQL.syntaxStyle(token))
   }
-  static func attributed(_ source:String) -> NSAttributedString {
+  static func attributed(_ source:String,lexicalSnapshot:[Lexeme]?=nil) -> NSAttributedString {
     let result=NSMutableAttributedString(string:source,attributes:[.font:StudioTheme.codeFont,.foregroundColor:StudioTheme.editorText])
     guard source.utf16.count <= 1_000_000 else {return result}
+    if let lexicalSnapshot {
+      for token in lexicalSnapshot {result.addAttribute(.foregroundColor,value:foreground(token,unused:false),range:token.range)}
+      return result
+    }
     let analysis=TSQL.variableAnalysis(source)
     let unused=Set(analysis.unused.map(\.location)),undeclared=Set(analysis.undeclared.map(\.location))
     for token in TSQL.lex(source) {

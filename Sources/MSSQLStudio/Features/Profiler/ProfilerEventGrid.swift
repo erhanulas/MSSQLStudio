@@ -20,11 +20,11 @@ private final class ProfilerRowView:NSTableRowView {
 }
 
 private final class ProfilerTableView:NSTableView {
-  var contextMenu:((Int)->NSMenu)?
+  var contextMenu:((Int,Int)->NSMenu)?
   override func menu(for event:NSEvent)->NSMenu? {
     let row=row(at:convert(event.locationInWindow,from:nil))
     if row>=0 && !selectedRowIndexes.contains(row) {selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)}
-    return contextMenu?(row)
+    return contextMenu?(row,column(at:convert(event.locationInWindow,from:nil)))
   }
 }
 struct ProfilerEventGrid:NSViewRepresentable {
@@ -42,13 +42,20 @@ struct ProfilerEventGrid:NSViewRepresentable {
       table.addTableColumn(column)
     }
     table.dataSource=context.coordinator;table.delegate=context.coordinator
-    table.contextMenu={ [weak coordinator=context.coordinator] row in coordinator?.menu(row:row) ?? StudioMenu() }
+    table.contextMenu={ [weak coordinator=context.coordinator] row,column in coordinator?.menu(row:row,column:column) ?? StudioMenu() }
     table.setAccessibilityIdentifier("profilerEventGrid")
     return scroll
   }
   func updateNSView(_ scroll:NSScrollView,context:Context) {
     guard let table=scroll.documentView as? NSTableView else {return}
     let owner=context.coordinator;owner.selection=$selection
+    for (key,title,_) in Coordinator.columns {
+      if let column=table.tableColumns.first(where:{$0.identifier.rawValue==key}) {
+        let active=model.displayFilter.rules.contains {$0.column.rawValue==key && !$0.value.isEmpty}
+        column.title=title+(active ? " ·":"")
+        column.headerToolTip=active ? "Etkin filtre · Düzenlemek için tıklayın":"Filtrelemek için tıklayın"
+      }
+    }
     scroll.backgroundColor=StudioTheme.resultCanvas;table.backgroundColor=StudioTheme.resultCanvas
     if owner.revision != model.gridRevision {
       owner.revision=model.gridRevision;owner.events=model.visibleEvents
@@ -73,6 +80,17 @@ struct ProfilerEventGrid:NSViewRepresentable {
     var updating=false
     private var menuEvent:SQLProfiler.Event?
     private var menuSQL=""
+    private var menuColumn:SQLProfilerFiltering.Column?
+    private var filterPopover:NSPopover?
+    func tableView(_ tableView:NSTableView,didClick tableColumn:NSTableColumn) {
+      guard let column=SQLProfilerFiltering.Column(rawValue:tableColumn.identifier.rawValue),let header=tableView.headerView else {return}
+      filterPopover?.close()
+      let popup=NSPopover();popup.behavior = .transient
+      popup.contentViewController=NSHostingController(rootView:ProfilerColumnFilter(model:model,column:column,close:{ [weak popup] in popup?.close()}))
+      filterPopover=popup
+      let index=tableView.column(withIdentifier:tableColumn.identifier)
+      popup.show(relativeTo:header.headerRect(ofColumn:index),of:header,preferredEdge:.maxY)
+    }
     init(model:ProfilerModel,selection:Binding<Set<UInt64>>) {self.model=model;self.selection=selection}
     func tableView(_ tableView:NSTableView,rowViewForRow row:Int)->NSTableRowView? {ProfilerRowView()}
     func numberOfRows(in tableView:NSTableView)->Int {events.count}
@@ -97,7 +115,8 @@ struct ProfilerEventGrid:NSViewRepresentable {
       if cell.stringValue.isEmpty {cell.stringValue="—"}
       return cell
     }
-    func menu(row:Int)->NSMenu {
+    func menu(row:Int,column:Int = -1)->NSMenu {
+      menuColumn=Self.columns.indices.contains(column) ? SQLProfilerFiltering.Column(rawValue:Self.columns[column].0):nil
       menuEvent=events.indices.contains(row) ? events[row]:nil
       let chosen=events.filter {selection.wrappedValue.contains($0.id)}
       menuSQL=ProfilerExport.sql(chosen.isEmpty ? menuEvent.map {[$0]} ?? []:chosen)
@@ -107,11 +126,23 @@ struct ProfilerEventGrid:NSViewRepresentable {
         item.image=NSImage(systemSymbolName:symbol,accessibilityDescription:title);menu.addItem(item)
       }
       item("Bu İstemciyi Filtrele",#selector(filterClient),"line.3.horizontal.decrease.circle",menuEvent.map {!$0.host.isEmpty && !$0.clientPID.isEmpty} ?? false)
+      if let menuColumn {
+        item(menuColumn.title+" değerini filtrele",#selector(filterValue),"line.3.horizontal.decrease",menuEvent != nil && model.displayFilter.rules.count<20)
+      }
       item("SQL’i Kopyala",#selector(copySQL),"doc.on.doc",menuEvent != nil)
       menu.addItem(.separator())
       item("İzlemeyi Durdur",#selector(stop),"stop.fill",model.hasSession && !model.busy)
       item("Listeyi Temizle",#selector(clear),"clear",!model.events.isEmpty && !model.busy)
       return menu
+    }
+    @objc private func filterValue() {
+      guard let column=menuColumn,let event=menuEvent,model.displayFilter.rules.count<20 else {return}
+      let value=column.value(event)
+      guard !value.isEmpty else {return}
+      var filter=model.displayFilter
+      filter.rules.removeAll {$0.column==column}
+      filter.rules.append(.init(column:column,comparison:.equals,value:value))
+      model.displayFilter=filter
     }
     @objc private func filterClient() {
       guard let event=menuEvent,let client=model.clients.first(where:{$0.id.host==event.host && $0.id.pid==event.clientPID}) else {return}

@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.159",
+    "date": "2026-10-16",
+    "title": "Profiler filtre kategorileri ve akıcı SQL seçimi",
+    "changes": [
+      "Profiler sol paneli kompakt genişlikle açılır; ayırıcı her iki yönde taşınabilir. Liste ve elle değer girişi aynı yükseklikte tek satır kullanır.",
+      "Yakalama filtreleri Veritabanı ve kimlik, İstemci, SQL ve süre kategorilerine ayrıldı. Yakalama filtreleriyle canlı grid filtreleri daha açık ayrılır.",
+      "Grid kolon başlığına tıklayarak karşılaştırma/değer koşulu düzenlenebilir; hücre sağ tıkından ilgili değere göre filtre uygulanabilir. Etkin koşullar sol panelde düzenlenir veya kaldırılır.",
+      "Çoklu olay SQL önizlemesi ayrı iş parçacığında hazırlanır; yalnız son seçim gösterilir, aynı seçim tekrar hazırlanmaz. Büyük seçimler kod kaybı olmadan düz metin gösterilir; kopyalama ve dışa aktarma tam SQL’i korur."
+    ]
+  },
+  {
     "version": "0.2.158",
     "date": "2026-10-16",
     "title": "Kompakt SQL Profiler ve iz kaydı dışa aktarma",

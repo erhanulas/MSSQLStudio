@@ -10,6 +10,7 @@ struct ProfilerPanel:View {
   @State private var showClients=false
   @State private var validationError=""
   @State private var exporting=false
+  @StateObject private var preview=ProfilerPreviewPresentation()
   private var selectedEvents:[SQLProfiler.Event] {model.visibleEvents.filter {selected.contains($0.id)}}
   private var selectedEvent:SQLProfiler.Event? {selectedEvents.first}
   var body:some View {
@@ -18,7 +19,7 @@ struct ProfilerPanel:View {
       if !validationError.isEmpty {StudioFeedback(message:validationError)}
       if !model.error.isEmpty {StudioFeedback(message:model.error,tone:.error)}
       if !model.warning.isEmpty {StudioFeedback(message:model.warning,tone:.warning)}
-      HSplitView {
+      ProfilerSplitView {
         VStack(alignment:.leading,spacing:8) {
       HStack {
         Label(model.running ? "İzleniyor":model.hasSession ? "Temizlik gerekiyor":"Durduruldu",systemImage:model.running ? "record.circle":"stop.circle")
@@ -45,7 +46,8 @@ struct ProfilerPanel:View {
           .studioHelp("Pencereyi gizler. İzleme ve olay toplama devam eder; üstteki Profiler düğmesiyle geri açın.")
       }
           ProfilerFilters(model:model,showClients:$showClients)
-        }.padding(8).frame(minWidth:220,idealWidth:250,maxWidth:300)
+        }.padding(8).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
+      } content: {
         VStack(spacing:4) {
         HStack {
           Picker("Grid",selection:$showClients) {Text("Olaylar").tag(false);Text("Yoğun istemciler").tag(true)}.pickerStyle(.segmented).labelsHidden().frame(width:240)
@@ -65,20 +67,23 @@ struct ProfilerPanel:View {
           HStack {
             Text(selected.count>1 ? "\(selectedEvents.count) olay · GO ile ayrılmış SQL":"SQL").font(.headline)
             Spacer()
+            if preview.busy {ProgressView().controlSize(.small)}
             Button {NSPasteboard.general.clearContents();NSPasteboard.general.setString(ProfilerExport.sql(selectedEvents),forType:.string)} label:{Label("SQL’i Kopyala",systemImage:"doc.on.doc")}.buttonStyle(StudioSecondaryButton()).disabled(selectedEvents.isEmpty)
           }
           if let event=selectedEvent,!event.message.isEmpty {Text(event.message).foregroundStyle(Color(nsColor:StudioTheme.warning)).textSelection(.enabled).lineLimit(3)}
-          SQLReadOnlyPreview(sql:selectedEvents.isEmpty ? "-- SQL metnini görmek için olay seçin.":ProfilerExport.sql(selectedEvents))
+          SQLReadOnlyPreview(sql:preview.sql,lexicalSnapshot:preview.tokens)
         }.padding(.top,8).frame(minHeight:90)
       }
-        }.frame(minWidth:440)
-      }
+        }.frame(minWidth:440,maxWidth:.infinity,maxHeight:.infinity)
+      }.frame(maxWidth:.infinity,maxHeight:.infinity)
       HStack {
         Text("\(model.visibleEvents.count) / \(model.events.count) olay · Son 5.000 / 8 MB · 2 sn").foregroundStyle(.secondary)
         Spacer()
         if let last=model.lastRead {Text("Son okuma: "+last.formatted(date:.omitted,time:.standard)).foregroundStyle(.secondary)}
       }.font(.system(size:11))
-    }.padding(8).font(.system(size:12)).background(Color(nsColor:StudioTheme.panel))
+    }.onChange(of:selected) {_,_ in preview.request(selectedEvents)}
+      .onChange(of:model.gridRevision) {_,_ in preview.request(selectedEvents)}
+      .padding(8).font(.system(size:12)).background(Color(nsColor:StudioTheme.panel))
   }
   private func export(_ events:[SQLProfiler.Event],format:ProfilerExport.Format) {
     let panel=NSSavePanel();panel.nameFieldStringValue="Profiler."+format.suffix

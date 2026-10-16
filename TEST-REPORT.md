@@ -1,3 +1,16 @@
+## 16 Ekim 2026 — v0.2.159 / build 160 yayın hazırlığı
+
+- Aşağıdaki 29 ilgili test ve Release doğrulaması yeniden kullanılır. Kullanıcının mevcut tercihiyle tamamlanmış testler tekrarlanmaz; exact tag paket suite’i atlanır. Sabit imza/audit, paket/helper, hash/manifest ve public feed kontrolleri korunur.
+
+## 16 Ekim 2026 — Profiler filtre kategorileri, serbest panel genişliği ve seçim performansı, yerel
+
+- Sol panelin 300 pt maksimumu kaldırıldı. ProfilerSplitView native NSSplitView ile 280 pt başlangıç/260 pt minimum, sağ içerikte 440 pt minimum sunar; ayırıcı her iki yöne taşınır, resize sol genişliği korur. NSViewControllerRepresentable önerilen viewport’u kullanır; SwiftUI eşit dağılım veya NSSplitViewController hosting kısıtları paneli tekrar minimuma çekmez. Native regresyon 1380 pt pencerede başlangıcı, 440 pt’ye genişletmeyi ve input/list durumlarının eşit satır yüksekliğini doğrular.
+- Yakalama Veritabanı ve kimlik / İstemci / SQL ve süre kategorilerine ayrıldı. Ortak tam alan disclosure başlıkları, 28 pt tek satır etiket/seçim/elle giriş kullanır. Yakalama kilidi ve yerel grid filtresi ayrı açıklanır. Host/SPID ve LIKE/NOT LIKE/süre alanları kategoriler içinde korunur.
+- Kolon başlığında transient karşılaştırma/değer taslağı ve atomik Uygula/Kaldır; hücre sağ tık menüsünde ilgili kolon/değerle eşit koşulu vardır. Koşullar sol panelde düzenlenir/kaldırılır, başlık etkin filtreyi işaretler. Filtre 20 AND koşulu bütçesinde mevcut local projection yolunu kullanır; SQL/DDL gönderilmez.
+- ProfilerPreviewPresentation birleşik tam SQL/lex snapshot’ını tek utility worker’da hazırlar; en son seçim revizyonu kazanır, aynı seçim yeniden çalışmaz. 100.000 UTF-16 üzeri metin tam ve düz gösterilir; SQL kesilmez. Ortak önizlemenin varsayılan analiz yolu korunarak yalnız Profiler hazırlanmış lexical snapshot kullanır. Böylece birleşik SQL üretimi ve variableAnalysis seçim/render ana yolunda tekrarlanmaz.
+- **29 ilgili test geçti /0 issue:** 21 native /6 suite,3.432 sn +8 core /2 suite,0.457 sn (`/tmp/mssql-profiler-refine-final-pass.log`). Kapsam Profiler, metadata seçenekleri, local filtre, son seçim/large tam SQL, native split/input geometry, DefinitionClick, uzun CR/wide source ve readonly ruler/tema regresyonlarıdır. Minimum/geniş açık-koyu native bitmaps üretildi; koyu minimum incelendi (`/tmp/mssql-profiler-dark-960.png`). İlk başarısız ayırıcı testleri son native yerleşim düzeltmesiyle çözüldü; final suite tümü geçti.
+- Release BUILD SUCCEEDED (`/tmp/mssql-profiler-refine-release-verified.log`); kaynak eşliği/mimari/diff geçti. Canlı SQL Server ve fiziksel fare/kolon popover’ı uçtan uca denenmedi; executor/serializer/native fixture kanıtıdır. Kurulu app/oturumlar değiştirilmedi. Henüz yayımlanmadı.
+
 ## 16 Ekim 2026 — v0.2.158 / build 159 public yayın doğrulaması
 
 - Public/latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.158 ; kaynak `52b8358deea4442f10f40f804ba42c615b22807c`. Actions `38933009227` başarılı. Tamamlanmış geliştirme testleri yeniden çalıştırılmadı; mevcut kullanıcı tercihiyle exact tag paket suite’i atlandı.

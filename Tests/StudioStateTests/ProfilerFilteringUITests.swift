@@ -71,6 +71,68 @@ private actor ProfilerFilteringProbe {
     #expect(selected==Set([0,1]))
     #expect(await model.stop())
   }
+  @Test func clickedCellFilterIsLocalAndPreviewKeepsOnlyLatestSelection() async throws {
+    let (model,probe)=try await fixture()
+    let coordinator=ProfilerEventGrid.Coordinator(model:model,selection:.constant([]))
+    coordinator.events=model.events
+    let column=try #require(ProfilerEventGrid.Coordinator.columns.firstIndex {$0.0=="host"})
+    let menu=coordinator.menu(row:0,column:column)
+    let action=try #require(menu.items.first {$0.title=="Host değerini filtrele"})
+    #expect(NSApp.sendAction(try #require(action.action),to:action.target,from:action))
+    try await wait {!model.filtering && model.visibleEvents.count==3}
+    #expect(model.visibleEvents.allSatisfy {$0.host=="HOST-A"})
+    let preview=ProfilerPreviewPresentation()
+    preview.request(model.events)
+    preview.request([model.events[1]])
+    preview.request([model.events[3]])
+    try await wait {!preview.busy}
+    #expect(preview.sql==model.events[3].sql && !preview.tokens.isEmpty)
+    preview.request([model.events[3]])
+    #expect(!preview.busy)
+    var object=try #require(JSONSerialization.jsonObject(with:JSONEncoder().encode(model.events[0])) as? [String:Any])
+    let largeSQL=String(repeating:"SELECT 1;\n",count:12000)+"-- END_MARKER"
+    object["sql"]=largeSQL
+    let large=try JSONDecoder().decode(SQLProfiler.Event.self,from:JSONSerialization.data(withJSONObject:object))
+    preview.request([large]);try await wait {!preview.busy}
+    #expect(preview.sql==largeSQL && preview.tokens.isEmpty)
+    preview.request([model.events[3]]);try await wait {!preview.busy}
+    let view=SQLPreviewView(frame:NSRect(x:0,y:0,width:420,height:180))
+    view.display(preview.sql,lexicalSnapshot:preview.tokens)
+    #expect(view.textView.string==model.events[3].sql)
+    #expect((await probe.statements()).filter {$0.contains("CREATE EVENT SESSION")}.count==1)
+    #expect(await model.stop())
+  }
+  @Test func sidebarCanExpandPastOldLimitAndInputModeKeepsHeight() async throws {
+    let (model,_)=try await fixture()
+    let host=NSHostingController(rootView:ProfilerPanel(model:model,background:{}));host.sizingOptions=[]
+    let window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false
+    window.setFrameOrigin(NSPoint(x:-20000,y:0));window.setContentSize(NSSize(width:1380,height:900));window.orderFront(nil)
+    defer {window.close()}
+    try await Task.sleep(for:.milliseconds(80));host.view.layoutSubtreeIfNeeded()
+    func children(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(children)}
+    let split=try #require(children(host.view).compactMap {$0 as? NSSplitView}.first {$0.isVertical && $0.arrangedSubviews.count==2})
+    #expect(split.bounds.width>1200)
+    #expect(split.arrangedSubviews[0].frame.width<320)
+    split.adjustSubviews();split.setPosition(440,ofDividerAt:0)
+    try await Task.sleep(for:.milliseconds(50));host.view.layoutSubtreeIfNeeded()
+    #expect(split.arrangedSubviews[0].frame.width>350)
+    #expect(await model.stop())
+    var manual=false
+    let choice=NSHostingController(rootView:ProfilerCaptureChoice(title:"Veritabanı",values:["","Demo"],text:.constant("Demo"),manual:Binding(get:{manual},set:{manual=$0})))
+    choice.sizingOptions=[];choice.view.frame=NSRect(x:0,y:0,width:300,height:28)
+    let choiceWindow=NSWindow(contentViewController:choice);choiceWindow.isReleasedWhenClosed=false
+    choiceWindow.setFrameOrigin(NSPoint(x:-20000,y:0));choiceWindow.orderFront(nil);defer {choiceWindow.close()}
+    try await Task.sleep(for:.milliseconds(40));choice.view.layoutSubtreeIfNeeded()
+    let picker=try #require(children(choice.view).compactMap {$0 as? StudioSearchablePopUpButton}.first)
+    let before=picker.convert(picker.bounds,to:choice.view)
+    manual=true
+    choice.rootView=ProfilerCaptureChoice(title:"Veritabanı",values:["","Demo"],text:.constant("Demo"),manual:Binding(get:{manual},set:{manual=$0}))
+    try await Task.sleep(for:.milliseconds(40));choice.view.layoutSubtreeIfNeeded()
+    let input=try #require(children(choice.view).compactMap {$0 as? NSTextField}.first {$0.isEditable})
+    let after=input.convert(input.bounds,to:choice.view)
+    #expect(abs(after.midY-before.midY)<1 && abs(after.height-before.height)<=2)
+
+  }
   @Test func nativeGridContextActionsFilterClearAndStopItsOwnCapture() async throws {
     let (model,probe)=try await fixture()
     var selected:Set<UInt64>=[]

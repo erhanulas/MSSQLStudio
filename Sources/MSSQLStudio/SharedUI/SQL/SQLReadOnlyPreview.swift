@@ -51,6 +51,7 @@ import SwiftUI
   var textView:NSTextView {preview}
   var navigateDefinition: (([String])->Void)? {didSet {preview.navigateDefinition=navigateDefinition}}
   var revealInExplorer: (([String])->Void)? {didSet {preview.revealInExplorer=revealInExplorer}}
+  private var lexicalSnapshot:[Lexeme]?
   private var lastSQL:String?
   private var lastDark:Bool?
   private var lineStarts=[0]
@@ -89,7 +90,7 @@ import SwiftUI
   }
   required init?(coder:NSCoder) {fatalError()}
   @objc private func scrolled() {ruler.needsDisplay=true}
-  @objc private func themeChanged() {if let lastSQL {display(lastSQL)}}
+  @objc private func themeChanged() {if let lastSQL {display(lastSQL,lexicalSnapshot:lexicalSnapshot)}}
   override func layout() {super.layout();updateGeometry();ruler.needsDisplay=true}
   private func updateGeometry() {
     scroll.tile()
@@ -100,12 +101,13 @@ import SwiftUI
       preview.needsLayout=true;preview.layoutSubtreeIfNeeded()
     }
   }
-  func display(_ sql:String) {
+  func display(_ sql:String,lexicalSnapshot:[Lexeme]?=nil) {
     guard lastSQL != sql || lastDark != StudioTheme.dark else {return}
     let same=lastSQL==sql,selection=preview.selectedRanges,origin=scroll.contentView.bounds.origin
+    self.lexicalSnapshot=lexicalSnapshot
     lastSQL=sql;lastDark=StudioTheme.dark
     preview.backgroundColor=StudioTheme.editorCanvas;scroll.backgroundColor=StudioTheme.editorCanvas
-    let attributed=NSMutableAttributedString(attributedString:SQLSourceHighlighting.attributed(sql))
+    let attributed=NSMutableAttributedString(attributedString:SQLSourceHighlighting.attributed(sql,lexicalSnapshot:lexicalSnapshot))
     let paragraph=NSMutableParagraphStyle();paragraph.minimumLineHeight=20;paragraph.maximumLineHeight=20
     attributed.addAttribute(.paragraphStyle,value:paragraph,range:NSRange(location:0,length:attributed.length))
     preview.textContentStorage?.textStorage?.setAttributedString(attributed)
@@ -125,8 +127,9 @@ import SwiftUI
 }
 struct SQLReadOnlyPreview:NSViewRepresentable {
   let sql:String
+  var lexicalSnapshot:[Lexeme]?=nil
   var navigateDefinition:(([String])->Void)?=nil
   var revealInExplorer:(([String])->Void)?=nil
   func makeNSView(context:Context)->SQLPreviewView {SQLPreviewView(frame:.zero)}
-  func updateNSView(_ view:SQLPreviewView,context:Context) {view.navigateDefinition=navigateDefinition;view.revealInExplorer=revealInExplorer;view.display(sql)}
+  func updateNSView(_ view:SQLPreviewView,context:Context) {view.navigateDefinition=navigateDefinition;view.revealInExplorer=revealInExplorer;view.display(sql,lexicalSnapshot:lexicalSnapshot)}
 }
