@@ -1,3 +1,13 @@
+## 16 Ekim 2026 — v0.2.153 yayın hazırlığı
+
+- Önceki 26 native test ve Release derleme kanıtı kullanıldı; kullanıcı tercihi doğrultusunda yeni test koşusu yapılmadı. Yalnız v0.2.153 CI paket suite’i atlanır; sabit imza/helper, manifest/hash ve Foundation feed kontrolleri korunur.
+
+## 16 Ekim 2026 — parametre popup’ında simetrik native kenar payı, yerel
+
+- StudioPopover yeniden kullanılan hosting view’ın frame origin’ini sıfırlıyor; native içerik inset’i kaybolup solda kırpılma/sağda boş şerit oluşturuyordu. setFrameSize ile AppKit’in yerleştirdiği origin korunur. SQLParameterHelp üst-sol hizalı esneyen içerik, tek 12 pt padding ve tüm alanı dolduran panel yüzeyi kullanır. Panel kimliği/semantik renk/caret güncellemesi korunur.
+- **26 native test /3 suite geçti /0 issue**, 5.327 sn (`/tmp/mssql-parameter-popup-insets.log`). Güncellenen regresyon üç açık popup güncellemesinde hosting controller kimliğini, 480×118 içerik boyutunu ve yatay/dikey simetrik native inset’leri doğrular. Mevcut completion geometrisi, ortak popup yerleşimi ve parametre/cache/stale testleri geçti.
+- Release BUILD SUCCEEDED (`/tmp/mssql-parameter-popup-insets-release.log`); mimari ve diff kontrolü geçti. Gerçek kullanıcı ekranında CUA denenmedi; native geometri kontrolü kullanıldı. Kurulu uygulama/veri değiştirilmedi; henüz yayımlanmadı.
+
 ## 16 Ekim 2026 — v0.2.152 / build 153 public yayın doğrulaması
 
 - Public/latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.152 ; kaynak 1cab59769b76e9b8308fab80ae3284b588c77b0c. Actions 38895454098 başarılı. Kullanıcının test tekrar etmeme tercihiyle CI paket suite’i bu tag’de atlandı; yeni test koşusu yapılmadı.

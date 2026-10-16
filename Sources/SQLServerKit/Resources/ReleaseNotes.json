@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.153",
+    "date": "2026-10-16",
+    "title": "Dengeli procedure parametre önizlemesi",
+    "changes": [
+      "Procedure parametre önizlemesi güncellenirken native popup kenar payları korunur; soldaki kırpılma ve sağdaki fazla boşluk giderildi.",
+      "Parametre paneli tek ve eşit iç boşlukla alanı doldurur; açık panel kapanıp yeniden açılmadan güncellenmeye devam eder."
+    ]
+  },
+  {
     "version": "0.2.152",
     "date": "2026-10-16",
     "title": "Kalıcı çoklu imleç ve güncel IntelliSense",

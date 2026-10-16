@@ -36,6 +36,6 @@ struct SQLParameterHelp:View {
             .onChange(of:active) {_,value in if let value {proxy.scrollTo(value,anchor:.center)}}
         }
       }
-    }.padding(12).background(Color(nsColor:StudioTheme.panel)).accessibilityIdentifier("sqlParameterInfo")
+    }.frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading).padding(12).background(Color(nsColor:StudioTheme.panel)).accessibilityIdentifier("sqlParameterInfo")
   }
 }

@@ -26,7 +26,9 @@ import SwiftUI
     } else {
       let fresh=NSHostingController(rootView:framed);fresh.sizingOptions=[];controller=fresh
     }
-    controller.view.frame=NSRect(origin:.zero,size:placement.size)
+    // AppKit owns the hosting view origin inside the native popover chrome.
+    // Resetting it while reusing the controller shifts content into its insets.
+    controller.view.setFrameSize(placement.size)
     popup.animates=false;popup.behavior=behavior
     if popup.contentViewController !== controller {popup.contentViewController=controller}
     popup.contentSize=placement.size

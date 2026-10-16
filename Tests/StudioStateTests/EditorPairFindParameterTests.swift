@@ -20,6 +20,12 @@ import Testing
       StudioPopover.show(popup,content:Text(name),from:host,rect:anchor,size:NSSize(width:480,height:118),updatingExisting:true,behavior:.semitransient)
       #expect(popup.isShown && popup.contentViewController === original)
       #expect(popup.behavior == .semitransient)
+      let parent=try #require(original.view.superview)
+      parent.layoutSubtreeIfNeeded()
+      let frame=original.view.frame
+      #expect(abs(frame.minX-(parent.bounds.maxX-frame.maxX))<1)
+      #expect(abs(frame.minY-(parent.bounds.maxY-frame.maxY))<1)
+      #expect(frame.size == NSSize(width:480,height:118))
     }
   }
   @Test func shortcutJumpsBothDirectionsPreservingTextColorsAndUndo() throws {
