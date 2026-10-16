@@ -3339,3 +3339,14 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Initial stronger absolute token-color comparison failed because captured HDR raster colors differ from direct NSColor components; test now compares mounted raster against a newly mounted same-theme reference in the same capture/color space. Both direction changes and round-trip equality remain asserted.
 - /tmp/mssql-shared-tab-theme-final-tests.log: 7 tests / 3 suites passed (SharedTabTheme, ExplorerTabs101, ActivityApplicationLocksUI shared tab layout). /tmp/mssql-shared-tab-theme-release.log: Release BUILD SUCCEEDED with identical product source. Architecture/source sync/diff passed. Mounted light/dark screenshots /tmp/mssql-mounted-tabs-light.png and dark.png inspected.
 - Actual system theme scheduling/user physical hover was not exercised; explicit application theme transitions and native mounted rendering verified. Installed app/user DB untouched; not published.
+
+## 2026-10-17 - v0.2.175 / build 176 public release
+
+- Source/tag `e73cf252f6c39eef4c1937359d1b2c9a3164cda3`; Actions `38983474836` succeeded; public latest `v0.2.175`.
+- Existing picker/Explorer tests and 7 shared-theme/Explorer/Activity native tests plus Release builds reused. Exact-tag CI suite skipped under user no-retest preference; required package/signature/helper/feed verification completed.
+- Downloaded ZIP/PKG matched GitHub digests and manifest; exact version/build, release notes, strict app/helper signatures, frozen helper byte identity and icon appearances verified.
+- `MSSQLStudio-0.2.175.pkg` SHA-256: `c40bf1bf166c9dc3eda15f92b0fd9732da411ac42248c24d0e980765233b59e9`.
+- `MSSQLStudio-0.2.175.zip` SHA-256: `025cd315e1ec6de0af6bbc3550465e4c11267f9838a8f831a1ba5b551e2bd7b4`.
+- `MSSQLStudio-CredentialAgent-v1.zip` SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json` SHA-256: `8ffbc6f20a36adc1641e588bb5d2ffec8ff5017dc0efde58852434eb8025bb48`.
+- Downloaded signed app --check-update-feed 0.2.175 succeeded; public exact-tag notes matched source bytes. Evidence /tmp/MSSQLStudio-175-public-verification/. Installer not run; installed app and user DB sessions untouched.
