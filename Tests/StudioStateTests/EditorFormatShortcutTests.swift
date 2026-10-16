@@ -29,6 +29,26 @@ import Testing
     #expect(destination.section == .shortcuts && ShortcutCatalog.target(destination.id) == .format)
     #expect(GridShortcuts.assign(try event("g",.option,window:window),action:.comment).target == nil)
   }
+  @Test func movedExplorerShortcutReleasesItsOldDefaultAndNamesItsCurrentOwner() throws {
+    _=NSApplication.shared
+    let keys=GridShortcuts.Action.allCases.map {"shortcut."+$0.rawValue}
+    let old=keys.map {UserDefaults.standard.object(forKey:$0)}
+    defer {for (key,value) in zip(keys,old) {UserDefaults.standard.set(value,forKey:key)}}
+    for key in keys {UserDefaults.standard.removeObject(forKey:key)}
+    let window=NSWindow();window.isReleasedWhenClosed=false;defer {window.close()}
+    let replacement=try event("1",.command,window:window)
+    #expect(GridShortcuts.assign(replacement,action:.explorer).tone == .success)
+    let released=try event("b",[.command,.option],window:window)
+    #expect(GridShortcuts.assign(released,action:.format).tone == .success)
+    #expect(GridShortcuts.matches(.format,released) && !GridShortcuts.matches(.explorer,released))
+    let conflict=GridShortcuts.assign(replacement,action:.comment)
+    #expect(conflict.tone == .warning && conflict.target == .explorer)
+    GridShortcuts.clear(.explorer)
+    #expect(GridShortcuts.assign(replacement,action:.comment).tone == .success)
+    #expect(GridShortcuts.assign(try event("c",.command,window:window),action:.newQuery).tone == .warning)
+    GridShortcuts.clear(.undo)
+    #expect(GridShortcuts.assign(try event("z",.command,window:window),action:.newQuery).target == .undo)
+  }
   @Test func functionKeysSaveDisplayMatchAndKeepConflictValidation() throws {
     let keys = GridShortcuts.Action.allCases.map { "shortcut." + $0.rawValue }
     let old = keys.map { UserDefaults.standard.object(forKey: $0) }

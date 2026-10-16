@@ -18,6 +18,28 @@ import Testing
     value.results=(0..<2).map {_ in Rows(fields:[Field("n")],values:(0..<rows).map {[String($0)]})}
     return value
   }
+  @Test func changedReadLimitReexecutesLastSelectWithNewBudgetAndPreservesEditorSQL() async throws {
+    _=NSApplication.shared
+    let doc=readDocument();doc.limits=ResultReadPreferences.limits(rows:10)
+    let original=doc.sql
+    var runs:[(String,Int)]=[]
+    doc.executionFixture={sql,limits in runs.append((sql,limits.rows));return output(rows:min(30,limits.rows))}
+    doc.sessionProbeFixture={_,_ in var result=Execution();result.results=[Rows(values:[["0","master"]])];return result}
+    doc.execute();await doc.task?.value
+    #expect(doc.canRefresh)
+    let query=QueryController(document:doc);_=query.view
+    doc.sql="DELETE dbo.DoNotExecute;";doc.selectedRange=NSRange(location:0,length:6)
+    query.applyLoadingPreferences(rows:20,refresh:0,save:false);await doc.task?.value
+    #expect(runs.count==2 && runs.last?.0==original && runs.last?.1==20)
+    #expect(doc.sql=="DELETE dbo.DoNotExecute;" && doc.selectedRange==NSRange(location:0,length:6))
+    query.applyLoadingPreferences(rows:20,refresh:0,save:false)
+    #expect(runs.count==2)
+    query.applyLoadingPreferences(rows:0,refresh:0,save:false);await doc.task?.value
+    #expect(runs.count==3 && runs.last?.1==Int.max)
+    doc.transactionCount=1
+    query.applyLoadingPreferences(rows:100,refresh:0,save:false)
+    #expect(runs.count==3 && !doc.busy)
+  }
   @Test func insertSelectAndExecIgnoreChosenReadLimitAndKeepTheirCompleteOutput() async throws {
     _=NSApplication.shared
     for sql in ["INSERT dbo.Target(Code, Total) SELECT Code, SUM(Amount) FROM dbo.Source GROUP BY Code HAVING SUM(Amount)>0;", "EXEC dbo.GenerateRows;"] {
@@ -76,7 +98,7 @@ import Testing
     #expect(budgets.map(\.rows) == [100,10])
     #expect(doc.results.map { $0.values.count } == [10,10] && doc.lastExecutedReadLimit == 10)
   }
-  @Test func lowerReadLimitAppliesToRefreshAndRunAndExplainsTheExistingSnapshot() async throws {
+  @Test func limitMenuAndCustomReloadSelectWhileManualRunStillUsesNewLimit() async throws {
     _=NSApplication.shared
     let doc=readDocument();doc.limits=ResultReadPreferences.limits(rows:100)
     var requests:[Int]=[]
@@ -86,18 +108,14 @@ import Testing
     let popup=try #require(descendants(controller.view).compactMap {$0 as? NSPopUpButton}.first {$0.accessibilityIdentifier() == "gridRowOptions"})
     let limit=try #require(popup.itemArray.first {$0.identifier?.rawValue == "gridReadChoices" && $0.tag == 10})
     #expect(NSApp.sendAction(try #require(limit.action),to:limit.target,from:limit))
-    #expect(requests == [100] && doc.results.map {$0.values.count} == [100,100])
-    #expect(doc.limits.rows == 10 && popup.toolTip?.contains("Son okuma sınırı: 100") == true)
-    #expect(popup.accessibilityHelp() == popup.toolTip)
-    let refresh=try #require(descendants(controller.view).compactMap {$0 as? NSButton}.first {$0.accessibilityIdentifier() == "refreshResults"})
-    let action=try #require(refresh.action)
-    #expect(refresh.isEnabled && NSApp.sendAction(action,to:refresh.target,from:refresh))
     await doc.task?.value;controller.update()
     #expect(requests == [100,10] && doc.results.map {$0.values.count} == [10,10])
-    #expect(popup.toolTip?.contains("Son okuma sınırı:") == false)
+    #expect(doc.limits.rows == 10 && popup.accessibilityHelp() == popup.toolTip)
     controller.applyLoadingPreferences(rows:5,refresh:0,save:false)
-    doc.execute();await doc.task?.value;controller.update()
+    await doc.task?.value;controller.update()
     #expect(requests == [100,10,5] && doc.results.map {$0.values.count} == [5,5])
     #expect(doc.rowCount == 10 && doc.lastExecutedReadLimit == 5 && doc.sql.contains("OtherNumbers"))
+    doc.execute();await doc.task?.value
+    #expect(requests == [100,10,5,5])
   }
 }

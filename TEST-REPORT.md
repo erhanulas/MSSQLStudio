@@ -1,3 +1,19 @@
+## 16 Ekim 2026 — v0.2.154 yayın hazırlığı
+
+- Mevcut 34 sonuç/yenileme ve 27 kısayol testinin başarılı sonuçları ile Release derlemeleri kullanıldı. Kullanıcı tercihi doğrultusunda yeni test koşusu yapılmadı; yalnız v0.2.154 için CI paket suite’i atlanır. Sabit imza/helper, manifest/hash ve Foundation feed kontrolleri korunur.
+
+## 16 Ekim 2026 — kısayol çakışmasında eski varsayılanın serbest bırakılması, yerel
+
+- reservedShortcuts uygulama komutlarının eski varsayılanını mevcut binding’e bakmadan koruyordu. Atanabilir komut için rezervasyon artık yalnız mevcut binding aynı tuşsa geçerlidir; gerçek aktif atamalar mevcut owner taramasıyla bulunur. Sabit native komutlar ve undo/redo alias korumaları değişmez. Kalıcı binding biçimi/menü yönlendirmesi korunur.
+- **27 native test /4 suite geçti /0 issue**, 3.759 sn (`/tmp/mssql-shortcut-current-owner.log`). Yeni regresyon Explorer’ı ⌘1’e taşıyıp ⌥⌘B’yi Formatla’ya atar, aktif eşleştirme/⌘1 çakışma sahibini doğrular; kaldırılmış atamanın serbest kalmasını ve sabit Kopyala/undo alias korumasını sınar. Mevcut F-key/format/history/menü/komut yönlendirme testleri geçti.
+- Release BUILD SUCCEEDED (`/tmp/mssql-shortcut-current-owner-release.log`); mimari ve diff kontrolleri geçti. Gerçek kullanıcı tercihleri kalıcı değiştirilmedi; testler kendi eski değerlerini geri yükler. Gerçek CUA klavye denenmedi; henüz yayımlanmadı.
+
+## 16 Ekim 2026 — satır sınırı değişince son SELECT’i yeniden okuma, yerel
+
+- Hazır limit menüsü ve Özel satır sınırı aynı applyLoadingPreferences yoluna taşındı. Normalize edilmiş değer değişmişse ve son yürütme limit uygulanan SELECT ise mevcut refreshResults/canRefresh kapısı son başarılı SQL’i yeni Limits snapshot’ıyla repeatRead çalıştırır. Editördeki sonraki SQL/seçim kullanılmaz. Aynı değer/Varsayılan Yap yeni sorgu başlatmaz. Busy/edit/export/transaction/DB/source güvenlik sınırları ve DML/EXEC ayrımı korunur; yenileme uygun değilse yerel prefix davranışı devam eder. Tooltip ve sözleşme güncellendi.
+- **34 native test /4 suite geçti /0 issue**, 6.417 sn (`/tmp/mssql-read-limit-refresh-final.log`). Yeni regresyon son SELECT’e 10→20→Tümü sınırlarını, editördeki DELETE metninin/seçimin korunmasını, aynı değerde tekrar olmamasını ve açık transaction’da yürütme olmamasını doğrular. Menü/Özel limit, manuel tekrar, filtre snapshot’ı, düzenleme engeli, DML/EXEC ve CTE/DB güvenlik yolları geçti. İlk koşudaki 5 issue eski yerel-only/no-execute beklentilerine aitti; yeni otomatik yeniden okuma ve manuel tekrar sayılarıyla güncellendi.
+- Release BUILD SUCCEEDED (`/tmp/mssql-read-limit-refresh-release.log`); mimari/diff kontrolleri geçti. Canlı kullanıcı DB’si/CUA denenmedi; sentetik yürütme/session-probe kullanıldı. Kurulu uygulama/veriler değiştirilmedi; henüz yayımlanmadı.
+
 ## 16 Ekim 2026 — v0.2.153 / build 154 public yayın doğrulaması
 
 - Public/latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.153 ; kaynak c88e6793c28fc9090189c5d9114f75da2320ca66. Actions 38897770884 başarılı. Kullanıcı tercihiyle paket suite’i bu tag’de atlandı; yeni test koşusu yapılmadı.

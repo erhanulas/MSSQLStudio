@@ -117,12 +117,14 @@ import Testing
     #expect(grid.visibleCount == 0 && grid.visibleIndices == [])
     search.stringValue=""
     #expect(NSApp.sendAction(try #require(search.action),to:search.target,from:search))
-    try await wait(grid)
+    await doc.task?.value;controller.update();try await wait(grid)
+    #expect(calls == [100,10])
     let refresh=try #require(descendants(controller.view).compactMap {$0 as? NSButton}.first {$0.accessibilityIdentifier() == "refreshResults"})
     #expect(NSApp.sendAction(try #require(refresh.action),to:refresh.target,from:refresh))
     await doc.task?.value;controller.update()
-    #expect(calls == [100,10] && doc.results.first?.values.count == 10 && grid.loadedRowCount == 10)
+    #expect(calls == [100,10,10] && doc.results.first?.values.count == 10 && grid.loadedRowCount == 10)
     controller.applyLoadingPreferences(rows:1000,refresh:0,save:false)
-    #expect(grid.result.values.count == 10 && !grid.isReadLimited && calls == [100,10])
+    await doc.task?.value;controller.update()
+    #expect(grid.result.values.count == 1000 && !grid.isReadLimited && calls == [100,10,10,1000])
   }
 }

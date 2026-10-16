@@ -164,9 +164,12 @@ import SwiftUI
       functionNumber(key) != nil || ["/",",",".","[","]","\r"," "].contains(key) || key.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.contains($0) }), flags.contains(.command) || flags.contains(.control)
     else { return AssignmentFeedback(message:"⌘ veya ⌃ ile harf, rakam, / , . [ ], Space, Enter veya F1–F35 kullanın. Escape iptal eder.") }
     if key == "/" {flags.remove(.shift)}
-    // Existing application and standard editing commands remain reserved.
+    // Configurable defaults are reserved only while still assigned to their
+    // owner. Fixed native commands and history aliases keep their protection.
     let value = Binding(key:key,modifiers:flags.rawValue)
-    let reserved=reservedShortcuts.first {$0.binding == value}
+    let reserved=reservedShortcuts.first {
+      $0.binding == value && ($0.action.map {binding($0) == value} ?? true)
+    }
     let historyOwner:Action? = key == "z" && (flags == .command || flags == .control) ? .undo
       : (key == "z" && (flags == [.command,.shift] || flags == [.control,.shift])) || (key == "y" && flags == .control) ? .redo : nil
     if let historyOwner,historyOwner != action {

@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.154",
+    "date": "2026-10-16",
+    "title": "Satır sınırında SELECT yenileme ve doğru kısayol çakışmaları",
+    "changes": [
+      "Sonuç satır sınırı değiştiğinde güvenle yenilenebilen son başarılı SELECT yeni sınırla tekrar çalışır. Hazır seçenekler, Özel ve Tümü aynı yolu kullanır; editörde sonradan yazılan SQL çalıştırılmaz.",
+      "Aynı satır sınırını seçmek veya yalnız varsayılanı kaydetmek yeni sorgu başlatmaz. Düzenleme, transaction ve DML/EXEC korumaları sürer.",
+      "Kısayol değiştirildiğinde eski varsayılan tuş artık yanlışlıkla ayrılmış sayılmaz. Çakışma uyarıları mevcut atamaya göre gösterilir; sabit native ve undo/redo tuşları korunur."
+    ]
+  },
+  {
     "version": "0.2.153",
     "date": "2026-10-16",
     "title": "Dengeli procedure parametre önizlemesi",

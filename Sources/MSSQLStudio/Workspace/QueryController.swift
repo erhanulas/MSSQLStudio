@@ -929,15 +929,18 @@ import SwiftUI
   private var effectiveRefreshSeconds:Int {defaultRefreshApplied ? selectedRefreshSeconds : document.initialRefreshSeconds ?? ResultReadPreferences.refreshSeconds}
   func applyLoadingPreferences(rows:Int,refresh:Int,save:Bool) {
     guard !document.busy,!submittingData,(0...5_000_000).contains(rows),(0...3600).contains(refresh) else {return}
-    guard rows == document.limits.rows || canChangeReadLimit else {return}
+    let newLimits=ResultReadPreferences.limits(rows:rows)
+    let limitChanged=newLimits.rows != document.limits.rows
+    guard !limitChanged || canChangeReadLimit else {return}
     let seconds=tables.values.contains {$0.editDefinition != nil} ? 0:refresh
-    document.limits=ResultReadPreferences.limits(rows:rows)
+    document.limits=newLimits
     document.initialRefreshSeconds=seconds
     defaultRefreshApplied=document.canRefresh
     applyPageSize(0);applyRefreshSeconds(seconds)
     if save {ResultReadPreferences.save(rows:rows,refresh:seconds)}
     syncPageMenu()
     update();changed?()
+    if limitChanged,document.lastExecutedReadLimit != nil {refreshResults()}
   }
   private func syncReadOptions() {
     let seconds=effectiveRefreshSeconds
@@ -984,9 +987,9 @@ import SwiftUI
     syncReadOptionsHelp()
   }
   private func syncReadOptionsHelp() {
-    rowLimit.toolTip="Satır sınırı: \(document.limits.rows == Int.max ? "Tümü":document.limits.rows.formatted()) / sonuç · Yalnız doğrulanmış SELECT sorgularında uygulanır. INSERT/UPDATE/DELETE/EXEC yürütmesini veya çıktısını sınırlamaz. Mevcut SELECT önbelleğine anında uygulanır; artırmak yeni SQL çalıştırmaz."
+    rowLimit.toolTip="Satır sınırı: \(document.limits.rows == Int.max ? "Tümü":document.limits.rows.formatted()) / sonuç · Yalnız doğrulanmış SELECT sorgularında uygulanır. INSERT/UPDATE/DELETE/EXEC yürütmesini veya çıktısını sınırlamaz. Değiştirildiğinde güvenle yenilenebilen son SELECT yeni sınırla tekrar çalışır."
     if let previous=document.lastExecutedReadLimit,previous != document.limits.rows,!document.results.isEmpty {
-      rowLimit.toolTip! += "\nSon okuma sınırı: \(previous == Int.max ? "Tümü":previous.formatted()). Sınırı büyütmek yalnızca önbellekteki satırları geri gösterir; ek satır okumak için Sonuçları yenile veya Çalıştır’a basın."
+      rowLimit.toolTip! += "\nSon okuma sınırı: \(previous == Int.max ? "Tümü":previous.formatted()). Yenileme uygun değilse mevcut önbelleğe uygulanır; ek satır okumak için Çalıştır’ı kullanın."
     }
     if !canChangeReadLimit {rowLimit.toolTip! += "\nSatır sınırını değiştirmek için düzenleme modunu ve devam eden dışa aktarmayı tamamlayın."}
     for item in rowLimit.menu?.items ?? [] where item.identifier?.rawValue == "gridReadChoices" {item.isEnabled=canChangeReadLimit}
@@ -995,9 +998,7 @@ import SwiftUI
   }
   @objc private func changeReadLimit(_ item:NSMenuItem) {
     guard !document.busy,!submittingData,canChangeReadLimit,(0...5_000_000).contains(item.tag) else {return}
-    document.limits=ResultReadPreferences.limits(rows:item.tag)
-    syncPageMenu()
-    update();changed?()
+    applyLoadingPreferences(rows:item.tag,refresh:effectiveRefreshSeconds,save:false)
   }
   @objc private func saveLoadingDefaults() {
     guard !document.busy,!submittingData else {return}
