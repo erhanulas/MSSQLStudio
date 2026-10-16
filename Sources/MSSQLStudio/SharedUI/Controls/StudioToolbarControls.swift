@@ -165,16 +165,23 @@ import SwiftUI
     if let hoverArea { removeTrackingArea(hoverArea) }
     let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
     addTrackingArea(area); hoverArea = area
+    reconcileHover()
+  }
+  private func reconcileHover() {
+    hovered = window.map { $0.isKeyWindow && !isHiddenOrHasHiddenAncestor && visibleRect.contains(convert($0.mouseLocationOutsideOfEventStream,from:nil)) } ?? false
+    if !hovered {StudioHoverHelp.shared.hide(for:self)}
+    refreshStyle()
   }
   override func mouseEntered(with event: NSEvent) { hovered = true; refreshStyle(); StudioHoverHelp.shared.schedule(for: self,title:toolTip) }
   override func mouseExited(with event: NSEvent) { hovered = false; refreshStyle(); StudioHoverHelp.shared.hide(for: self) }
   override func viewWillMove(toWindow newWindow: NSWindow?) {
+    hovered=false;pressed=false;refreshStyle()
     StudioHoverHelp.shared.hide(for: self); super.viewWillMove(toWindow: newWindow)
   }
   override func mouseDown(with event: NSEvent) {
     StudioHoverHelp.shared.hide()
     pressed = true; refreshStyle()
-    defer { pressed = false; refreshStyle() }
+    defer { pressed = false; reconcileHover() }
     super.mouseDown(with: event)
   }
 }

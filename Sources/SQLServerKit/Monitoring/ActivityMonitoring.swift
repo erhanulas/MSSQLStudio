@@ -142,11 +142,13 @@ public enum ActivityMonitoring {
   \(diagnosticSection(category:0,title:"Bloklanan istekler",condition:"r.blocking_session_id>0",order:"r.wait_time DESC,r.total_elapsed_time DESC,r.session_id,r.request_id"))
   \(diagnosticSection(category:1,title:"Uzun süren istekler",condition:"r.total_elapsed_time>=30000 AND r.command NOT IN (N'BACKUP DATABASE',N'BACKUP LOG')",order:"r.total_elapsed_time DESC,r.session_id,r.request_id"))
   \(diagnosticSection(category:2,title:"Yedeklemeler",condition:"r.command IN (N'BACKUP DATABASE',N'BACKUP LOG')",order:"r.total_elapsed_time DESC,r.session_id,r.request_id"))
+  \(diagnosticSection(category:3,title:"Aktif sorgular",condition:"1=1",order:"r.total_elapsed_time DESC,r.session_id,r.request_id"))
   \(blockingContextSQL)
   SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text,login_name,host_name,program_name,logical_reads,wait_ms,wait_resource,session_login_time,request_start_time FROM @requests WHERE category=0 ORDER BY elapsed_ms DESC,session_id,request_id;
   SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text,login_name,host_name,program_name,logical_reads,wait_ms,wait_resource,session_login_time,request_start_time FROM @requests WHERE category=1 ORDER BY elapsed_ms DESC,session_id,request_id;
   SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text,login_name,host_name,program_name,logical_reads,wait_ms,wait_resource,session_login_time,request_start_time FROM @requests WHERE category=2 ORDER BY elapsed_ms DESC,session_id,request_id;
   SELECT session_id,request_id,request_count,database_name,status,command,blocker,wait_type,wait_ms,wait_resource,open_transactions,login_name,host_name,program_name,sql_source,sql_text FROM @blockingContext ORDER BY session_id,request_id;
+  SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text,login_name,host_name,program_name,logical_reads,wait_ms,wait_resource,session_login_time,request_start_time FROM @requests WHERE category=3 ORDER BY elapsed_ms DESC,session_id,request_id;
   SELECT metric,message FROM @issues;
   """
   // Walk only ancestors of the bounded blocked list. TOP(4) text rows per
@@ -192,7 +194,7 @@ public enum ActivityMonitoring {
       IF @canMonitor=0 THROW 51000,@permissionMessage,1;
       INSERT @requests
       SELECT \(category),r.session_id,r.request_id,DB_NAME(r.database_id),r.status,r.command,CONVERT(bigint,r.total_elapsed_time),CONVERT(bigint,r.cpu_time),r.reads,r.writes,CASE WHEN r.blocking_session_id>0 THEN r.blocking_session_id ELSE NULL END,ISNULL(r.wait_type,N''),CONVERT(bigint,r.open_transaction_count),CASE WHEN r.command IN (N'BACKUP DATABASE',N'BACKUP LOG') THEN r.percent_complete ELSE NULL END,CONVERT(bigint,NULL),LEFT(CONVERT(nvarchar(max),SUBSTRING(CONVERT(varbinary(max),t.text),r.statement_start_offset+1,CASE WHEN r.statement_end_offset=-1 OR r.statement_end_offset-r.statement_start_offset>=7998 THEN 8000 ELSE r.statement_end_offset-r.statement_start_offset+2 END)) COLLATE Latin1_General_100_CI_AS_SC,2000),s.login_name,s.host_name,s.program_name,r.logical_reads,CONVERT(bigint,r.wait_time),r.wait_resource,CONVERT(varchar(23),s.login_time,121),CONVERT(varchar(23),r.start_time,121)
-      FROM (SELECT TOP(30) r.* FROM sys.dm_exec_requests r JOIN sys.dm_exec_sessions s ON s.session_id=r.session_id WHERE \(requestPredicate) AND \(condition) ORDER BY \(order)) r
+      FROM (SELECT TOP(30) r.* FROM sys.dm_exec_requests r JOIN sys.dm_exec_sessions s ON s.session_id=r.session_id WHERE \(category==3 ? "s.is_user_process=1 AND r.session_id<>@@SPID":requestPredicate) AND \(condition) ORDER BY \(order)) r
       JOIN sys.dm_exec_sessions s ON s.session_id=r.session_id
       OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) t;
     END TRY BEGIN CATCH INSERT @issues VALUES(N'\(title)',ERROR_MESSAGE()); END CATCH;
@@ -252,9 +254,10 @@ public enum ActivityMonitoring {
   }
   public struct Diagnostics: Sendable, Equatable {
     public var blocked,longRunning,backups:[Request]
+    public var active:[Request]
     public var blockingContexts:[BlockingContext]
     public var issues:[String]
-    public init(blocked:[Request]=[],longRunning:[Request]=[],backups:[Request]=[],blockingContexts:[BlockingContext]=[],issues:[String]=[]) {self.blocked=blocked;self.longRunning=longRunning;self.backups=backups;self.blockingContexts=blockingContexts;self.issues=issues}
+    public init(blocked:[Request]=[],longRunning:[Request]=[],backups:[Request]=[],active:[Request]=[],blockingContexts:[BlockingContext]=[],issues:[String]=[]) {self.blocked=blocked;self.longRunning=longRunning;self.backups=backups;self.active=active;self.blockingContexts=blockingContexts;self.issues=issues}
     public func blockingChain(for request:Request) -> BlockingChain {
       var ids=[request.sessionID],seen=Set(ids),next=request.blocker
       var termination=BlockingChain.Termination.root
@@ -337,7 +340,7 @@ public enum ActivityMonitoring {
   }
   public static func decodeDiagnostics(_ execution:Execution) throws -> Diagnostics {
     try validate(execution)
-    guard execution.results.count == 5 else {throw SQLFailure("Activity Monitor DBA sonucu eksik; üç istek listesi, bloklayan oturumlar ve tanı sonucu gerekli.")}
+    guard execution.results.count == 5 || execution.results.count == 6 else {throw SQLFailure("Activity Monitor DBA sonucu eksik; istek listeleri, bloklayan oturumlar ve tanı sonucu gerekli.")}
     func requests(_ rows:Rows) throws -> [Request] {
       let hasIdentity=rows.values.first?.count==23 || rows.fields.count==23
       try schema(rows,hasIdentity ? requestColumns+["session_login_time","request_start_time"]:requestColumns)
@@ -364,7 +367,7 @@ public enum ActivityMonitoring {
     }
     let grouped=Dictionary(grouping:contexts,by:\.sessionID)
     guard grouped.count<=60,grouped.values.allSatisfy({group in group.count<=4 && Set(group.map(\.requestCount)).count == 1 && (group.first!.requestCount == 0 ? group.count == 1:group.count == min(4,Int(group.first!.requestCount)))}) else {throw SQLFailure("Activity Monitor bloklayan oturum sonucu eksik veya sınırı aşıldı.")}
-    return try Diagnostics(blocked:requests(execution.results[0]),longRunning:requests(execution.results[1]),backups:requests(execution.results[2]),blockingContexts:contexts,issues:issues(execution.results[4]))
+    return try Diagnostics(blocked:requests(execution.results[0]),longRunning:requests(execution.results[1]),backups:requests(execution.results[2]),active:execution.results.count==6 ? requests(execution.results[4]):[],blockingContexts:contexts,issues:issues(execution.results.last!))
   }
   public static func sample(_ current:Snapshot,previous:Snapshot?) -> Sample {
     let seconds=previous.map {current.time.timeIntervalSince($0.time)}

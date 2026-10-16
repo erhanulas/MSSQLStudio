@@ -80,6 +80,20 @@ import Testing
     #expect(state.active===original && scroll.contentView.bounds.origin==origin)
     #expect(owner.tabs.arrangedSubviews.compactMap {$0 as? QueryTabSurface}.allSatisfy {!$0.isSwitchPreview})
   }
+  @Test func lateLexicalSnapshotRecolorsSameSourceWithoutMovingSelection() throws {
+    let view=SQLPreviewView(frame:NSRect(x:0,y:0,width:600,height:300))
+    let source=String(repeating:"SELECT 1;\n",count:1000)
+    view.display(source,lexicalSnapshot:[])
+    view.textView.setSelectedRange(NSRange(location:12,length:3))
+    view.scroll.contentView.scroll(to:NSPoint(x:0,y:100))
+    let origin=view.scroll.contentView.bounds.origin
+    let storage=try #require(view.textView.textContentStorage?.textStorage)
+    let plain=storage.attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor
+    view.display(source,lexicalSnapshot:TSQL.lex(source))
+    #expect(storage.attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor != plain)
+    #expect(view.textView.selectedRange()==NSRange(location:12,length:3))
+    #expect(view.scroll.contentView.bounds.origin==origin && view.textView.string==source)
+  }
   @Test func fullLongSourceAndLatestColoredPreviewRemainConsistent() async throws {
     let (state,owner,window)=fixture();defer {owner.tabSwitcher.dismiss(commit:false);window.close()}
     let long=String(repeating:"SELECT 1 AS n;\n",count:12000)+"-- LAST_LINE_MARKER"
@@ -91,7 +105,7 @@ import Testing
     #expect(owner.tabSwitcher.previewSQL==state.documents[0].sql && !owner.tabSwitcher.previewTokens.isEmpty)
     owner.tabSwitcher.preview(state.documents[1].id)
     for _ in 0..<300 where owner.tabSwitcher.previewBusy {try await Task.sleep(for:.milliseconds(3))}
-    #expect(owner.tabSwitcher.previewSQL.hasSuffix("-- LAST_LINE_MARKER") && owner.tabSwitcher.previewTokens.isEmpty)
+    #expect(owner.tabSwitcher.previewSQL.hasSuffix("-- LAST_LINE_MARKER") && !owner.tabSwitcher.previewTokens.isEmpty)
   }
   @Test func previewFitsBothThemesAndShortcutIsDiscoverable() throws {
     let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}

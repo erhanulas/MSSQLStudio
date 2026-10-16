@@ -40,12 +40,16 @@ public enum ActivityRequestTermination {
     KILL \(lock.sessionID);
     """
   }
-  public static func sql(for request:ActivityMonitoring.Request) throws -> String {
+  public static func canTerminate(_ request:ActivityMonitoring.Request)->Bool {
     guard (51...32767).contains(request.sessionID),(0...Int64(Int32.max)).contains(request.requestID),
       !request.command.uppercased().hasPrefix("BACKUP"),
       !request.command.uppercased().contains("ROLLBACK"),
       let login=request.sessionLoginTime,let start=request.requestStartTime,
-      validTimestamp(login),validTimestamp(start) else {
+      validTimestamp(login),validTimestamp(start) else {return false}
+    return true
+  }
+  public static func sql(for request:ActivityMonitoring.Request) throws -> String {
+    guard canTerminate(request),let login=request.sessionLoginTime,let start=request.requestStartTime else {
       throw SQLFailure("Sonlandırma için güncel kullanıcı oturumu ve istek kimliği gerekli. DBA listesini yenileyin.")
     }
     return """
@@ -59,6 +63,8 @@ public enum ActivityRequestTermination {
         AND r.start_time=CONVERT(datetime,\(SQL.literal(start)),121)
         AND r.command NOT LIKE N'BACKUP%' AND r.command NOT LIKE N'%ROLLBACK%'
     ) THROW 51081,N'Seçili oturum veya sorgu değişmiş ya da tamamlanmış. DBA listesini yenileyin.',1;
+    IF EXISTS (SELECT 1 FROM sys.dm_exec_requests WHERE session_id=\(request.sessionID) AND (command LIKE N'BACKUP%' OR command LIKE N'%ROLLBACK%'))
+      THROW 51082,N'Yedekleme veya geri alma yapan oturum bu işlemle sonlandırılamaz.',1;
     KILL \(request.sessionID);
     """
   }

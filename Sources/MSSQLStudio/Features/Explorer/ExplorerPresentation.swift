@@ -94,7 +94,6 @@ extension WorkbenchController {
     searchScopePicker.target = self; searchScopePicker.action = #selector(changeSearchScope)
     searchScopePicker.setAccessibilityLabel("Nesne arama kapsamı")
     searchScopePicker.toolTip = "Arama bu bağlantı ve veritabanında kalır; metni temizlemek kapsamı değiştirmez."
-    explorerTabs.segmentStyle = .texturedRounded
     explorerTabs.controlSize = .small
     explorerTabs.selectedSegment = 0
     explorerTabs.target = self; explorerTabs.action = #selector(changeExplorerTab)

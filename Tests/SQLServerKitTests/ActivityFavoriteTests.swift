@@ -179,7 +179,7 @@ struct ActivityFavoriteTests {
     e=base;e.stoppedEarly=true;variants.append(e)
     e=base;e.results[2].truncated=true;variants.append(e)
     e=base;e.results.removeLast();variants.append(e)
-    e=base;e.results.append(Rows());variants.append(e)
+    e=base;e.results.append(contentsOf:[Rows(),Rows()]);variants.append(e)
     e=base;e.results[0].fields=[Field("wrong")];variants.append(e)
     e=base;e.results[0]=Rows(values:[["1","0"]]);variants.append(e)
     e=base;var row=e.results[0].values[0];row[0]="0";e.results[0]=Rows(values:[row]);variants.append(e)
@@ -189,7 +189,7 @@ struct ActivityFavoriteTests {
   }
   @Test func diagnosticsSQLUsesBoundedCurrentStatementReadsAndIndependentCategories() {
     let sql=ActivityMonitoring.diagnosticsSQL
-    #expect(sql.components(separatedBy:"SELECT TOP(30)").count == 4 && sql.components(separatedBy:"BEGIN CATCH").count == 5)
+    #expect(sql.components(separatedBy:"SELECT TOP(30)").count == 5 && sql.components(separatedBy:"BEGIN CATCH").count == 6)
     #expect(sql.contains("r.total_elapsed_time>=30000") && sql.contains("r.blocking_session_id>0"))
     #expect(sql.contains("IF @canMonitor=0 THROW") && !sql.contains("last_wait_type"))
     #expect(sql.contains("SUBSTRING(CONVERT(varbinary(max),t.text),r.statement_start_offset+1") && sql.contains("r.statement_end_offset-r.statement_start_offset+2"))
@@ -297,4 +297,18 @@ struct ActivityFavoriteTests {
     await #expect(throws:(any Error).self) {try await FavoriteQueryStore(url:url).save(f)}
     #expect(try Data(contentsOf:url) == data)
   }
+  @Test func activeRequestsDecodeIncludesBackupsWithSeparateIdentityAndReadBudget() throws {
+    var execution=diagnosticExecution()
+    let active=Array(execution.results[1].values)+Array(execution.results[2].values)
+    execution.results.insert(Rows(values:active.map {$0+["2026-10-16 12:00:00.000","2026-10-16 12:01:00.000"]}),at:4)
+    let decoded=try ActivityMonitoring.decodeDiagnostics(execution)
+    #expect(decoded.active.count==2 && decoded.backups.count==1)
+    let query=try #require(decoded.active.first {$0.command=="SELECT"})
+    let backup=try #require(decoded.active.first {$0.command=="BACKUP DATABASE"})
+    #expect(ActivityRequestTermination.canTerminate(query) && !ActivityRequestTermination.canTerminate(backup))
+    #expect(throws:SQLFailure.self) {try ActivityRequestTermination.sql(for:backup)}
+    #expect(ActivityMonitoring.diagnosticsSQL.contains("Aktif sorgular") && ActivityMonitoring.diagnosticsSQL.contains("category=3"))
+    #expect(try ActivityMonitoring.decodeDiagnostics(diagnosticExecution()).active.isEmpty)
+  }
+
 }

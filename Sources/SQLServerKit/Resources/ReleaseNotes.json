@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.2.167",
+    "date": "2026-10-17",
+    "title": "Uzun SQL önizlemeleri ve izleme iyileştirmeleri",
+    "changes": [
+      "Option+Tab önizlemesinde uzun SQL kodlarının renklendirilmesi düzeltildi.",
+      "Activity Monitor’de aktif sorguları görebilir ve onayınızla sonlandırabilirsiniz; yedekleme sorguları korunur.",
+      "Activity Monitor yenilemesinde iptal edilen işlemlerin gereksiz uyarı göstermesi düzeltildi.",
+      "Uygulama kilitlerinde bazı kimlik değerlerinin listeyi engellemesi giderildi.",
+      "Explorer, Profiler, History ve Ayarlar seçenekleri ortak sekme görünümüne kavuştu.",
+      "Sekme kapatma uyarıları taşıdığınız konumu hatırlar.",
+      "Explorer’ı gösterip gizledikten sonra düğmede kalan vurgu düzeltildi."
+    ]
+  },
+  {
     "version": "0.2.166",
     "date": "2026-10-16",
     "title": "Gelişmiş izleme ve daha anlaşılır güncellemeler",

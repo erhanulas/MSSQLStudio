@@ -4,6 +4,17 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct GridToolbarTests {
+  @Test func geometryRefreshClearsHoverWithoutMouseExit() throws {
+    _=NSApplication.shared
+    let button=StudioToolbarButton(symbol:"sidebar.left",label:"Explorer")
+    button.flat=true
+    let event=try #require(NSEvent.enterExitEvent(with:.mouseEntered,location:.zero,modifierFlags:[],timestamp:0,windowNumber:0,context:nil,eventNumber:0,trackingNumber:0,userData:nil))
+    button.mouseEntered(with:event)
+    let hover=button.layer?.backgroundColor
+    button.updateTrackingAreas()
+    #expect(button.layer?.backgroundColor != hover)
+    #expect(button.layer?.borderWidth == 0 && button.state == .off)
+  }
   @Test func toolbarHoverStaysInsideControlAndUsesOneCustomHelp() async throws {
     _=NSApplication.shared
     let button=StudioToolbarButton(symbol:"play",label:"Çalıştır",tone:.success)

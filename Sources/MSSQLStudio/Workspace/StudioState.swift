@@ -501,6 +501,7 @@ import UniformTypeIdentifiers
     guard doc.confirmDiscardResultEdits?() != false else { return false }
     guard requiresCloseConfirmation(doc) else { return true }
     let alert = StudioAlert()
+    alert.framePersistenceRole="queryCloseConfirmation"
     alert.messageText = "\(doc.title) kaydedilsin mi?"
     if doc.hasPendingDatabaseChanges {alert.informativeText="Bu nesnede veritabanına uygulanmamış düzenlemeler var. Dosyaya kaydetmek veritabanına uygulamaz."}
     alert.addButton(withTitle: "Kaydet")
@@ -558,7 +559,7 @@ import UniformTypeIdentifiers
     let choice:BulkCloseChoice
     if let fixture=bulkCloseChoiceFixture {choice=fixture()}
     else {
-      let alert=StudioAlert();alert.messageText="Açık sorgulardaki değişiklikler kaydedilsin mi?"
+      let alert=StudioAlert();alert.framePersistenceRole="bulkCloseConfirmation";alert.messageText="Açık sorgulardaki değişiklikler kaydedilsin mi?"
       alert.informativeText="SQL dosyaları kaydedilebilir. Sonuç düzenlemeleri ve uygulanmamış DDL, dosya kaydıyla veritabanına gönderilmez."
       alert.addButton(withTitle:"Tümünü Kaydet");alert.addButton(withTitle:"Tümünü Kaydetmeden Kapat");alert.addButton(withTitle:"Vazgeç")
       alert.buttons[2].keyEquivalent="\u{1b}"

@@ -60,7 +60,7 @@ struct ProfilerPanel:View {
       } content: {
         VStack(spacing:4) {
         HStack {
-          Picker("Grid",selection:$showClients) {Text("Olaylar").tag(false);Text("Yoğun istemciler").tag(true)}.pickerStyle(.segmented).labelsHidden().frame(width:240)
+          StudioTabBar(items:[.init(id:0,title:"Olaylar",icon:"list.bullet"),.init(id:1,title:"Yoğun istemciler",icon:"desktopcomputer")],selection:Binding(get:{showClients ? 1:0},set:{showClients=$0==1})).frame(width:280)
           Spacer()
           Menu {
             ForEach(ProfilerExport.Format.allCases) {format in

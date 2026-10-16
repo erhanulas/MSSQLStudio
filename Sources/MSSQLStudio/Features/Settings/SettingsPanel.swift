@@ -90,11 +90,7 @@ struct SettingsPanel: View {
         settingsPage(.appearance, subtitle: "Sakin yüzeyler, net ayrımlar ve tema uyumlu SQL renkleri.") {
           settingsCard("Renk teması", icon: "circle.lefthalf.filled") {
             StudioFormField("Çalışma ortamı") {
-              Picker("Renk teması", selection: $theme) {
-                Text("Sistem").tag("system")
-                Text("Studio Açık").tag("light")
-                Text("Studio Koyu").tag("dark")
-              }.labelsHidden().pickerStyle(.segmented).accessibilityIdentifier("settingsTheme").id("theme")
+              StudioChoiceTabs(choices:[("system","Sistem","circle.lefthalf.filled"),("light","Studio Açık","sun.max"),("dark","Studio Koyu","moon")],selection:$theme).accessibilityIdentifier("settingsTheme").id("theme")
             }
             if theme == "system" {
               HStack(spacing: 14) {
@@ -121,9 +117,7 @@ struct SettingsPanel: View {
               fontDetail("Arayüz", value: "Sistem · 12 pt", icon: "textformat.size")
             }
             StudioFormField("Explorer satırları") {
-              Picker("Explorer satır yoğunluğu",selection:$explorerDensity) {
-                ForEach(ExplorerDensity.allCases,id:\.self) {Text($0.title).tag($0)}
-              }.labelsHidden().pickerStyle(.segmented).frame(maxWidth:240).id("explorerDensity")
+              StudioChoiceTabs(choices:ExplorerDensity.allCases.map {($0,$0.title,"list.bullet")},selection:$explorerDensity).frame(maxWidth:260).id("explorerDensity")
                 .accessibilityIdentifier("settingsExplorerDensity")
             }
             settingsNote("Satır yoğunluğu Uygula ile değişir; ağaç seçimi ve açık dallar korunur.", icon: "list.bullet")
@@ -151,11 +145,7 @@ struct SettingsPanel: View {
           }
           settingsCard("SQL biçimlendirme", icon: "text.alignleft") {
             StudioFormField("Anahtar kelimeler") {
-              Picker("Anahtar kelime harfleri", selection: $formatting.keywordCase) {
-                Text("BÜYÜK").tag(SQLFormattingOptions.KeywordCase.upper)
-                Text("küçük").tag(SQLFormattingOptions.KeywordCase.lower)
-                Text("Koru").tag(SQLFormattingOptions.KeywordCase.preserve)
-              }.labelsHidden().pickerStyle(.segmented)
+              StudioChoiceTabs(choices:[(.upper,"BÜYÜK","textformat"),(.lower,"küçük","textformat"),(.preserve,"Koru","textformat")],selection:$formatting.keywordCase)
             }.id("formatCase")
             StudioFormField("Girinti") {
               Picker("Girinti boşluk sayısı", selection: $formatting.indentWidth) {
@@ -168,10 +158,7 @@ struct SettingsPanel: View {
               }
             }.id("formatWidth")
             StudioFormField("Virgül") {
-              Picker("Virgül yerleşimi", selection: $formatting.commaStyle) {
-                Text("Satır sonunda").tag(SQLFormattingOptions.CommaStyle.trailing)
-                Text("Satır başında").tag(SQLFormattingOptions.CommaStyle.leading)
-              }.labelsHidden().pickerStyle(.segmented)
+              StudioChoiceTabs(choices:[(.trailing,"Satır sonunda","text.alignright"),(.leading,"Satır başında","text.alignleft")],selection:$formatting.commaStyle)
             }.id("formatComma")
             settingsToggle("Kolon listelerini satırlara ayır", detail: "SELECT, SET, INSERT ve CTE listelerinde okunabilir satır kırma.", value: $formatting.multilineLists)
             settingsToggle("Koşulları satırlara ayır", detail: "WHERE / ON / HAVING içinde AND / OR ifadelerini hizalar.", value: $formatting.breakConditions)

@@ -141,7 +141,7 @@ private final class TabSwitcherMonitor {
     guard let (revision,sql)=pendingPreview else {return}
     pendingPreview=nil
     previewTask=Task { [weak self] in
-      let tokens=await Task.detached(priority:.utility) {sql.utf16.count<=100_000 ? TSQL.lex(sql):[]}.value
+      let tokens=await Task.detached(priority:.utility) {TSQL.lex(String(sql.prefix(1_000_000)))}.value
       guard let self else {return}
       previewTask=nil
       if revision==previewRevision {previewTokens=tokens;previewBusy=false}

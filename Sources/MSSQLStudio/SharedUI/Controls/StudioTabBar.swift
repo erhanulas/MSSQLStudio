@@ -37,3 +37,33 @@ struct StudioTabBar:View {
       .background(Color(nsColor:StudioTheme.panel),in:RoundedRectangle(cornerRadius:StudioMetrics.cardRadius))
   }
 }
+
+/// AppKit adapter uses the same surface and selection presentation as SwiftUI tabs.
+@MainActor final class StudioTabControl:NSControl {
+  var selectedSegment:Int=0 {didSet {updateContent()}}
+  private var host:NSHostingView<StudioTabBar>?
+  private let items:[StudioTabBar.Item]
+  init(items:[StudioTabBar.Item]) {
+    self.items=items
+    super.init(frame:.zero)
+    let host=NSHostingView(rootView:content())
+    self.host=host;host.translatesAutoresizingMaskIntoConstraints=false;addSubview(host)
+    NSLayoutConstraint.activate([host.leadingAnchor.constraint(equalTo:leadingAnchor),host.trailingAnchor.constraint(equalTo:trailingAnchor),host.topAnchor.constraint(equalTo:topAnchor),host.bottomAnchor.constraint(equalTo:bottomAnchor),heightAnchor.constraint(equalToConstant:38)])
+  }
+  required init?(coder:NSCoder) {fatalError()}
+  private func content()->StudioTabBar {
+    StudioTabBar(items:items,selection:Binding(get:{[weak self] in self?.selectedSegment ?? 0},set:{[weak self] value in
+      guard let self else {return}
+      selectedSegment=value;sendAction(action,to:target)
+    }))
+  }
+  private func updateContent() {host?.rootView=content()}
+}
+
+struct StudioChoiceTabs<Value:Equatable>:View {
+  let choices:[(Value,String,String)]
+  @Binding var selection:Value
+  var body:some View {
+    StudioTabBar(items:choices.enumerated().map {.init(id:$0.offset,title:$0.element.1,icon:$0.element.2)},selection:Binding(get:{choices.firstIndex(where:{$0.0==selection}) ?? 0},set:{if choices.indices.contains($0) {selection=choices[$0].0}}))
+  }
+}

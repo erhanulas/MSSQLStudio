@@ -49,12 +49,12 @@ public enum ActivityApplicationLocks {
       (issues.fields.isEmpty || issues.fields.map(\.name)==["metric","message"]),issues.values.allSatisfy({$0.count==2}) else {throw SQLFailure("Uygulama kilitleri sonuç şeması geçersiz.")}
     var ids=Set<[String]>()
     let locks=try rows.values.map {row -> Lock in
-      guard let address=row[0],!address.isEmpty,let session=row[1].flatMap(Int64.init),session != 0,
-        row[2]==nil || row[2].flatMap(Int64.init).map({$0>=0})==true,
+      guard let session=row[1].flatMap(Int32.init),
+        row[2]==nil || row[2].flatMap(Int32.init) != nil,
         let source=row[12],["current","recent","unavailable"].contains(source) else {throw SQLFailure("Uygulama kilidi kimliği geçersiz.")}
       let id=Array(row.prefix(9)).map {$0 ?? ""}
       guard ids.insert(id).inserted else {throw SQLFailure("Uygulama kilidi kimliği yinelendi.")}
-      return Lock(id:id,sessionLoginTime:hasIdentity ? row[14]:nil,databaseID:hasIdentity ? row[15].flatMap(Int.init):nil,sessionID:session,requestID:row[2].flatMap(Int64.init),database:row[3] ?? "",resource:row[4] ?? "",mode:row[5] ?? "",status:row[6] ?? "",ownerType:row[7] ?? "",ownerID:row[8] ?? "",login:row[9] ?? "",host:row[10] ?? "",program:row[11] ?? "",sqlSource:source,sql:String((row[13] ?? "").prefix(2000)))
+      return Lock(id:id,sessionLoginTime:hasIdentity ? row[14]:nil,databaseID:hasIdentity ? row[15].flatMap(Int.init):nil,sessionID:Int64(session),requestID:row[2].flatMap(Int64.init),database:row[3] ?? "",resource:row[4] ?? "",mode:row[5] ?? "",status:row[6] ?? "",ownerType:row[7] ?? "",ownerID:row[8] ?? "",login:row[9] ?? "",host:row[10] ?? "",program:row[11] ?? "",sqlSource:source,sql:String((row[13] ?? "").prefix(2000)))
     }
     return Snapshot(locks:locks,issues:issues.values.map {$0.compactMap {$0}.joined(separator:": ")})
   }

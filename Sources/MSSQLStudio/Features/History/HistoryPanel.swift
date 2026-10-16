@@ -37,9 +37,7 @@ struct HistoryPanel: View {
     VStack(alignment: .leading, spacing: StudioMetrics.small) {
       HStack {
         StudioPanelHeading(title: "History", icon: "clock.arrow.circlepath", subtitle: "Sorgu ve kapatılan sekme geçmişi")
-        Picker("History kapsamı", selection: $tab) {
-          Text("Sorgular").tag(0); Text("Kapatılan Sekmeler").tag(1)
-        }.pickerStyle(.segmented).labelsHidden().frame(width: 270)
+        StudioTabBar(items:[.init(id:0,title:"Sorgular",icon:"text.alignleft"),.init(id:1,title:"Kapatılan Sekmeler",icon:"rectangle.stack")],selection:$tab).frame(width:300)
       }.fixedSize(horizontal: false, vertical: true)
       TextField("SQL, sunucu veya veritabanında ara", text: $search)
         .accessibilityIdentifier("historySearch")

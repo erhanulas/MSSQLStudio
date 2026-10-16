@@ -68,9 +68,12 @@ struct ActivityRequestTerminationAction:View {
     if let applicationLock {return .applicationLock(applicationLock)}
     return request.map { .request($0) }
   }
-  private var hasIdentity:Bool {
-    if let applicationLock {return applicationLock.sessionLoginTime != nil && applicationLock.databaseID != nil && (51...32767).contains(applicationLock.sessionID) && ["SESSION","TRANSACTION"].contains(applicationLock.ownerType)}
-    return request?.sessionLoginTime != nil && request?.requestStartTime != nil
+  private var canTerminateTarget:Bool {
+    if let applicationLock {return (try? ActivityRequestTermination.sql(for:.applicationLock(applicationLock))) != nil}
+    guard let request else {return false}
+    return ActivityRequestTermination.canTerminate(request)
+      && !monitor.diagnostics.backups.contains {$0.sessionID==request.sessionID}
+      && !monitor.diagnostics.active.contains {$0.sessionID==request.sessionID && $0.command.uppercased().hasPrefix("BACKUP")}
   }
   var body:some View {
     VStack(alignment:.leading,spacing:8) {
@@ -79,9 +82,9 @@ struct ActivityRequestTerminationAction:View {
         if model.busy {ProgressView().controlSize(.small)}
         StudioActionButton(!isApplicationLockAction ? "Sorguyu Sonlandır":"Oturumu Sonlandır",icon:"stop.circle",tint:Color(nsColor:StudioTheme.danger)) {
           target=candidate;generation=monitor.server.generation;confirming=true
-        }.disabled(candidate==nil || !hasIdentity || !monitor.server.online || model.busy || monitor.loading)
+        }.disabled(candidate==nil || !canTerminateTarget || !monitor.server.online || model.busy || monitor.loading)
           .accessibilityIdentifier(!isApplicationLockAction ? "activityTerminateRequest":"activityTerminateApplicationLock")
-          .studioHelp(!isApplicationLockAction ? "Seçili sorgunun oturumunu sonlandırır; bloklayan başka oturumu hedeflemez. Aynı oturumdaki tüm sorgular etkilenir.":"Seçili application lock sahibinin tüm oturumunu sonlandırır. Boşta oturumlar da sonlandırılabilir; diğer sorgu ve kilitler de etkilenir.")
+          .studioHelp(!isApplicationLockAction ? (request?.command.uppercased().hasPrefix("BACKUP")==true ? "Yedekleme sorguları bu ekrandan sonlandırılamaz.":"Seçili sorgunun oturumunu sonlandırır; bloklayan başka oturumu hedeflemez. Aynı oturumdaki tüm sorgular etkilenir."):"Seçili application lock sahibinin tüm oturumunu sonlandırır. Boşta oturumlar da sonlandırılabilir; diğer sorgu ve kilitler de etkilenir.")
       }
       if !model.message.isEmpty {StudioFeedback(message:model.message,tone:model.failed ? .error:.info)}
     }.onAppear {presented=true}.onDisappear {presented=false}

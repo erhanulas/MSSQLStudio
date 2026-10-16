@@ -60,7 +60,7 @@ import Testing
       sqls.append(sql)
       #expect(limits.timeout == 10 && limits.totalBytes <= 4_000_000)
       if sql == ActivityMonitoring.overviewSQL {tick+=5;#expect(limits.rows == 30 && limits.resultSets == 2);return overview(tick)}
-      #expect(sql == ActivityMonitoring.diagnosticsSQL && limits.rows == 400 && limits.resultSets == 5)
+      #expect(sql == ActivityMonitoring.diagnosticsSQL && limits.rows == 400 && limits.resultSets == 6)
       if failDiagnostics {throw SQLFailure("DBA permission denied")}
       return ObjectManagementUIFixture.catalog(sql)
     })
@@ -281,4 +281,60 @@ import Testing
       }
     }
   }
+  @Test func driverCancellationFromAnAbandonedTaskNeverBecomesAStaleDataWarning() async throws {
+    for phase in 0..<3 {
+      let server=ConnectedServer(profile:.init(),password:"")
+      var pending:CheckedContinuation<Execution,any Error>?
+      let model=ActivityMonitorModel(server:server,reader:{sql,_ in
+        if phase==0 || sql != ActivityMonitoring.overviewSQL {
+          return try await withCheckedThrowingContinuation {pending=$0}
+        }
+        return self.overview(5)
+      })
+      let task=Task {await model.load(includeDiagnostics:true,includeApplicationLocks:phase==2)}
+      await waitUntil {pending != nil}
+      task.cancel()
+      pending?.resume(throwing:SQLFailure("SQL Server işlemi tamamlanamadı.",diagnostics:[.init(state:"HY008",code:0,message:"Operation canceled")]))
+      pending=nil;await task.value
+      #expect(model.error.isEmpty && model.diagnosticsError.isEmpty && model.applicationLockError.isEmpty && !model.loading)
+    }
+    let server=ConnectedServer(profile:.init(),password:"")
+    let live=ActivityMonitorModel(server:server,reader:{sql,_ in
+      if sql==ActivityMonitoring.overviewSQL {return self.overview(5)}
+      throw SQLFailure("Operation canceled",diagnostics:[.init(state:"HY008",code:0,message:"Operation canceled")])
+    })
+    await live.load(includeDiagnostics:true)
+    #expect(live.diagnosticsError.contains("HY008"))
+  }
+  @Test func activeQueryCategoryShowsBackupSQLButDisallowsItsTermination() async throws {
+    let server=ConnectedServer(profile:.init(),password:"")
+    let model=ActivityMonitorModel(server:server,reader:{sql,_ in
+      if sql==ActivityMonitoring.overviewSQL {return self.overview(5)}
+      var result=ObjectManagementUIFixture.catalog(sql)
+      let active=Array(result.results[1].values)+Array(result.results[2].values)
+      result.results.insert(Rows(values:active.map {$0+["2026-10-16 12:00:00.000","2026-10-16 12:01:00.000"]}),at:4)
+      return result
+    })
+    await model.load(includeDiagnostics:true)
+    let backup=try #require(model.diagnostics.active.first {$0.command.hasPrefix("BACKUP")})
+    #expect(!ActivityRequestTermination.canTerminate(backup))
+    let query=try #require(model.diagnostics.active.first {$0.command=="SELECT"})
+    #expect(ActivityRequestTermination.canTerminate(query))
+    let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      let panel=ActivityMonitorPanel(model:model,initialMode:2,initialDiagnosticKind:4,initialSelectedRequest:backup.id,openTable:{})
+      let host=NSHostingController(rootView:panel);host.sizingOptions=[]
+      let window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false
+      window.setContentSize(NSSize(width:920,height:700));window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
+      try await Task.sleep(for:.milliseconds(80));host.view.layoutSubtreeIfNeeded()
+      func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+      let preview=try #require(descendants(host.view).compactMap {$0 as? SQLPreviewView}.first)
+      #expect((preview.textView as? NSTextView)?.string==backup.sql)
+      let image=try #require(host.view.bitmapImageRepForCachingDisplay(in:host.view.bounds));host.view.cacheDisplay(in:host.view.bounds,to:image)
+      try image.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-activity-active-"+theme+".png"))
+      window.close()
+    }
+  }
+
 }

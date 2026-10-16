@@ -102,7 +102,13 @@ import SwiftUI
     }
   }
   func display(_ sql:String,lexicalSnapshot:[Lexeme]?=nil) {
-    guard lastSQL != sql || lastDark != StudioTheme.dark else {return}
+    let sameTokens:Bool
+    switch (self.lexicalSnapshot,lexicalSnapshot) {
+    case (nil,nil):sameTokens=true
+    case (let old?,let new?):sameTokens=old.count==new.count && zip(old,new).allSatisfy {$0.range==$1.range && $0.kind==$1.kind && $0.text==$1.text}
+    default:sameTokens=false
+    }
+    guard lastSQL != sql || lastDark != StudioTheme.dark || !sameTokens else {return}
     let same=lastSQL==sql,selection=preview.selectedRanges,origin=scroll.contentView.bounds.origin
     self.lexicalSnapshot=lexicalSnapshot
     lastSQL=sql;lastDark=StudioTheme.dark

@@ -17,6 +17,15 @@ import Testing
     #expect(sql.contains("LEFT JOIN sys.dm_exec_sessions") && sql.contains("most_recent_sql_handle"))
     #expect(!sql.contains("KILL ") && !sql.contains("EXEC sys.sp_getapplock") && !sql.contains("sp_releaseapplock"))
   }
+  @Test func retainsSignedRequestAndMissingAddressWithoutAllowingTermination() throws {
+    var execution=Self.execution()
+    var row=execution.results[0].values[0]
+    row[0]=nil;row[2]="-1"
+    execution.results[0]=Rows(values:[row])
+    let lock=try #require(ActivityApplicationLocks.decode(execution).locks.first)
+    #expect(lock.requestID == -1)
+    #expect(throws:SQLFailure.self) {try ActivityRequestTermination.sql(for:.applicationLock(lock))}
+  }
   @Test func rejectsPartialDuplicateAndMalformedCapturesButRetainsPermissionIssues() throws {
     var partial=Self.execution();partial.partial=true
     #expect(throws:SQLFailure.self) {try ActivityApplicationLocks.decode(partial)}

@@ -60,7 +60,7 @@ import SQLServerKit
     let diagnosticRevision=diagnosticsRevision
     let lockRevision=applicationRevision
     loading=true;defer {loading=false}
-    func currentContext() -> Bool {revision == activityRevision && generation == server.generation && visible && (!automatic || !paused)}
+    func currentContext() -> Bool {!Task.isCancelled && revision == activityRevision && generation == server.generation && visible && (!automatic || !paused)}
     func current() -> Bool {currentContext() && canRead}
     func discardChangedGeneration() {if generation != server.generation {connectionChanged()}}
     var limits=Limits();limits.rows=30;limits.resultSets=2;limits.totalBytes=1_000_000;limits.timeout=10
@@ -98,7 +98,7 @@ import SQLServerKit
       }
       return
     }
-    limits.rows=400;limits.resultSets=5;limits.totalBytes=4_000_000;limits.timeout=10
+    limits.rows=400;limits.resultSets=6;limits.totalBytes=4_000_000;limits.timeout=10
     do {
       let result=try await reader(ActivityMonitoring.diagnosticsSQL,limits)
       try Task.checkCancellation()
@@ -139,9 +139,10 @@ struct ActivityMonitorPanel:View {
     _selectedBlockingContext=State(initialValue:initialSelectedBlockingContext)
   }
   private var latest:ActivityMonitoring.Sample? {model.samples.last}
+  private var displayedTimestamp:Date? {mode==2 ? (diagnosticKind==3 ? model.applicationLocksTime:model.diagnosticsTime):latest?.time}
   private var displayedSamples:[ActivityMonitoring.Sample] {ActivityChartPoint.window(model.samples,minutes:range)}
   private var diagnosticRows:[ActivityMonitoring.Request] {
-    switch diagnosticKind {case 1:model.diagnostics.longRunning;case 2:model.diagnostics.backups;default:model.diagnostics.blocked}
+    switch diagnosticKind {case 1:model.diagnostics.longRunning;case 2:model.diagnostics.backups;case 4:model.diagnostics.active;default:model.diagnostics.blocked}
   }
   private var selected:ActivityMonitoring.Request? {diagnosticRows.first {$0.id == selectedRequest}}
   private var notices:[String] {
@@ -275,10 +276,9 @@ struct ActivityMonitorPanel:View {
           .init(id:0,title:"Bloklanan",icon:"lock",count:model.diagnostics.blocked.count),
           .init(id:1,title:"Uzun süren",icon:"clock",count:model.diagnostics.longRunning.count),
           .init(id:2,title:"Yedekleme",icon:"externaldrive",count:model.diagnostics.backups.count),
-          .init(id:3,title:"Uygulama kilitleri",icon:"app.badge",count:model.applicationLocksTime==nil || !model.applicationLockIssues.isEmpty || !model.applicationLockError.isEmpty ? nil:model.applicationLocks.count)
-        ],selection:$diagnosticKind).frame(maxWidth:700).accessibilityIdentifier("activityDiagnosticKind")
-        Spacer(minLength:0)
-        Text((diagnosticKind==3 ? model.applicationLocksTime:model.diagnosticsTime).map {$0.formatted(date:.omitted,time:.standard)} ?? "Henüz okunmadı").font(.caption).foregroundStyle(.secondary)
+          .init(id:3,title:"Uygulama kilitleri",icon:"app.badge",count:model.applicationLocksTime==nil || !model.applicationLockIssues.isEmpty || !model.applicationLockError.isEmpty ? nil:model.applicationLocks.count),
+          .init(id:4,title:"Aktif sorgular",icon:"bolt",count:model.diagnostics.active.count)
+        ],selection:$diagnosticKind).frame(maxWidth:.infinity).accessibilityIdentifier("activityDiagnosticKind")
       }
       if diagnosticKind==3 {ActivityApplicationLocksPanel(model:model)}
       else {
@@ -430,7 +430,7 @@ struct ActivityMonitorPanel:View {
           }.menuStyle(.borderlessButton).fixedSize().studioHelp("Salt okunur tanı sorgusunu yeni sekmede açar; otomatik çalıştırmaz.").accessibilityIdentifier("activityDBATools")
         }
         Spacer(minLength:10)
-        Text(latest.map {"Son örnek "+$0.time.formatted(date:.omitted,time:.standard)} ?? "Örnek bekleniyor…").font(.caption).foregroundStyle(.secondary)
+        Text(displayedTimestamp.map {"Son örnek "+$0.formatted(date:.omitted,time:.standard)} ?? "Örnek bekleniyor…").font(.caption).foregroundStyle(.secondary)
         Text("\(model.samples.count) örnek").font(.caption).foregroundStyle(.secondary)
           .studioHelp("Son 1 saat, en çok 721 örnek. Eksik ölçüm — ile gösterilir; ilk örnekte ve kesinti sonrası hızlar hesaplanmaz.")
       }
