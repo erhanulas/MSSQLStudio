@@ -33,6 +33,8 @@ private actor ProfilerFilteringProbe {
   @Test func liveGridFiltersLatestSearchAndClientSelectionWithoutAdditionalDDLOrChangingCapturedRows() async throws {
     let (model,probe)=try await fixture()
     #expect(model.clients.count==3 && model.clients[0].id.pid=="123" && model.clients[0].count==2)
+    #expect(Set(model.choices.values(for:.clientPID))==Set(["","123","71"]))
+    #expect(Set(model.choices.values(for:.host))==Set(["","HOST-A","HOST-B"]))
     model.focusClient(model.clients[0])
     model.displayFilter.sqlSearch="stale";model.displayFilter.sqlSearch="bar";model.displayFilter.sqlSearch="foo"
     try await wait {!model.filtering && model.visibleEvents.map(\.id)==[0]}
@@ -48,9 +50,30 @@ private actor ProfilerFilteringProbe {
     #expect(!statements.contains {$0.contains("not a number")})
     #expect(await model.stop())
   }
+  @Test func multiSelectionAndPortableExportPreserveOrderAndFullSQL() async throws {
+    let (model,_)=try await fixture()
+    let events=Array(model.events.prefix(2))
+    #expect(ProfilerExport.sql(events)=="SELECT foo\nGO\nUPDATE bar")
+    let json=try ProfilerExport.data(events,format:.trace)
+    let root=try #require(JSONSerialization.jsonObject(with:json) as? [String:Any])
+    #expect(root["format"] as? String == "MSSQLStudio.Profiler")
+    let decoded=try #require(root["events"] as? [[String:Any]])
+    #expect(decoded.count==2 && decoded[1]["sql"] as? String == "UPDATE bar")
+    #expect(String(data:try ProfilerExport.data(events,format:.sql),encoding:.utf8)==ProfilerExport.sql(events))
+    var selected:Set<UInt64>=[]
+    let coordinator=ProfilerEventGrid.Coordinator(model:model,selection:Binding(get:{selected},set:{selected=$0}))
+    coordinator.events=model.events
+    let table=NSTableView();table.allowsMultipleSelection=true
+    for _ in 0..<1 {table.addTableColumn(NSTableColumn(identifier:.init("sql")))}
+    table.dataSource=coordinator;table.reloadData()
+    table.selectRowIndexes(IndexSet([0,1]),byExtendingSelection:false)
+    coordinator.tableViewSelectionDidChange(Notification(name:NSTableView.selectionDidChangeNotification,object:table))
+    #expect(selected==Set([0,1]))
+    #expect(await model.stop())
+  }
   @Test func nativeGridContextActionsFilterClearAndStopItsOwnCapture() async throws {
     let (model,probe)=try await fixture()
-    var selected:UInt64?
+    var selected:Set<UInt64>=[]
     let coordinator=ProfilerEventGrid.Coordinator(model:model,selection:Binding(get:{selected},set:{selected=$0}))
     coordinator.events=model.visibleEvents
     let menu=coordinator.menu(row:0)
@@ -65,7 +88,8 @@ private actor ProfilerFilteringProbe {
     try await wait {!model.filtering && model.visibleEvents.isEmpty}
     let count=await probe.statements().count
     for _ in 0..<100 where await probe.statements().count<=count {try await Task.sleep(for:.milliseconds(3))}
-    #expect(model.events.isEmpty && selected==nil && model.running)
+    #expect(model.events.isEmpty && selected.isEmpty && model.running)
+    #expect(model.choices.values(for:.host)==[""])
     let stop=try #require(menu.items.first {$0.title=="İzlemeyi Durdur"})
     #expect(NSApp.sendAction(try #require(stop.action),to:stop.target,from:stop))
     try await wait {!model.hasSession && !model.busy}

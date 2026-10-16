@@ -83,7 +83,7 @@ public enum SQLProfiler {
       DROP EVENT SESSION \(identifier) ON SERVER;
     """
   }
-  public struct Event:Sendable,Identifiable,Equatable {
+  public struct Event:Sendable,Identifiable,Equatable,Codable {
     public let id:UInt64
     public let timestamp:String
     public let kind:String

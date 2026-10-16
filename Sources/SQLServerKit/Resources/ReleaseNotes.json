@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.158",
+    "date": "2026-10-16",
+    "title": "Kompakt SQL Profiler ve iz kaydı dışa aktarma",
+    "changes": [
+      "SQL Profiler kontrolleri ve filtreleri ayarlanabilir sol panele taşındı; olay gridine ve SQL önizlemesine daha fazla alan ayrıldı. SQL kopyalama önizlemenin sağ üstündedir.",
+      "Veritabanı, login, uygulama, Host, ClientProcessID ve SPID için aramalı seçim ve elle giriş eklendi. Seçenekler Explorer ve yakalanan olaylardan alınır; eksik login listesi sınırlı, bağımsız metadata okumasıyla yenilenir.",
+      "Çoklu olay seçiminde tam SQL metinleri olay sırasıyla GO satırlarıyla birleştirilir. Seçili satırların metin rengi native seçim ve pencere odağına uyarlanır.",
+      "Seçili veya bellekte tutulan tüm olaylar JSON iz kaydı ya da SQL betiği olarak dışa aktarılabilir. JSON formatı SSMS’in ikili trc/xel formatı değildir.",
+      "İzlemeyi Başlat mevcut filtrelerle ek SQL onay ekranı açmadan başlar; oturum sahipliği, izin kontrolleri ve durdururken temizlik korunur."
+    ]
+  },
+  {
     "version": "0.2.157",
     "date": "2026-10-16",
     "title": "SQL Profiler, istemci filtreleri ve akıcı editör geçmişi",

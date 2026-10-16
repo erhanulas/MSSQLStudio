@@ -21,8 +21,10 @@ import SQLServerKit
     let host=NSHostingController(rootView:ProfilerPanel(model:model,background:{[weak window] in window?.orderOut(nil)}))
     host.sizingOptions=[];window.contentViewController=host
     window.tabbingMode = .disallowed
+    model.choices.refresh(automatic:true)
   }
   required init?(coder:NSCoder) {fatalError()}
+  func windowWillClose(_ notification:Notification) {model.choices.cancel()}
   func windowShouldClose(_ sender:NSWindow)->Bool {
     guard !closing,!model.busy else {return false}
     guard model.hasSession else {return true}
@@ -47,10 +49,17 @@ import SQLServerKit
 extension WorkbenchController {
   @objc func profiler() {
     guard let server=selectedServer else {return}
-    if let owner=profilerWindows[server.id] {owner.showWindow(nil);owner.window?.makeKeyAndOrderFront(nil);return}
-    let owner=ProfilerWindowController(server:server);profilerWindows[server.id]=owner
+    if let owner=profilerWindows[server.id] {owner.model.choices.refresh(automatic:true);owner.showWindow(nil);owner.window?.makeKeyAndOrderFront(nil);return}
+    let model=ProfilerModel(server:server,explorerChoices:{ [weak self,weak server] in
+      guard let server else {return .init(databases:[],logins:nil)}
+      let root=self?.roots.first {$0.server === server && $0.generation==server.generation}
+      let security=root?.children.first {if case .group=$0.kind {return $0.title=="Security"};return false}
+      let branch=security?.children.first {if case .folder(.logins)=$0.kind {return true};return false}
+      return .init(databases:server.databases.map(\.name),logins:branch?.loaded == true && branch?.error == nil ? branch?.children.map {$0.item?.name ?? $0.title}:nil)
+    })
+    let owner=ProfilerWindowController(server:server,model:model);profilerWindows[server.id]=owner
     (owner.window as? ProfilerWindow)?.didClose={ [weak self,weak owner] in
-      guard let owner else {return};self?.profilerWindows.removeValue(forKey:owner.model.serverID)
+      guard let owner else {return};owner.model.choices.cancel();self?.profilerWindows.removeValue(forKey:owner.model.serverID)
     }
     (owner.window as? StudioAssociatedWindow)?.associate(with:view.window)
     owner.showWindow(nil);owner.window?.makeKeyAndOrderFront(nil)

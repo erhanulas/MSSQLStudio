@@ -2,24 +2,41 @@ import AppKit
 import SwiftUI
 import SQLServerKit
 
+private final class ProfilerTextCell:NSTextFieldCell {
+  override var backgroundStyle:NSView.BackgroundStyle {
+    didSet {textColor = backgroundStyle == .emphasized ? .selectedControlTextColor:.labelColor}
+  }
+}
+
+private final class ProfilerRowView:NSTableRowView {
+  override var isSelected:Bool {didSet {updateInk()}}
+  override var isEmphasized:Bool {didSet {updateInk()}}
+  override func didAddSubview(_ subview:NSView) {super.didAddSubview(subview);updateInk()}
+  private func updateInk() {
+    for field in subviews.compactMap({$0 as? NSTextField}) {
+      field.cell?.backgroundStyle = isSelected && isEmphasized ? .emphasized:.normal
+    }
+  }
+}
+
 private final class ProfilerTableView:NSTableView {
   var contextMenu:((Int)->NSMenu)?
   override func menu(for event:NSEvent)->NSMenu? {
     let row=row(at:convert(event.locationInWindow,from:nil))
-    if row>=0 {selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)}
+    if row>=0 && !selectedRowIndexes.contains(row) {selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)}
     return contextMenu?(row)
   }
 }
 struct ProfilerEventGrid:NSViewRepresentable {
   @ObservedObject var model:ProfilerModel
-  @Binding var selection:UInt64?
+  @Binding var selection:Set<UInt64>
   func makeCoordinator()->Coordinator {Coordinator(model:model,selection:$selection)}
   func makeNSView(context:Context)->NSScrollView {
     let scroll=NSScrollView(),table=ProfilerTableView()
     scroll.documentView=table;scroll.hasVerticalScroller=true;scroll.hasHorizontalScroller=true
     scroll.autohidesScrollers=true;scroll.scrollerStyle = .overlay
     table.usesAlternatingRowBackgroundColors=true;table.rowHeight=24;table.intercellSpacing=NSSize(width:8,height:0)
-    table.columnAutoresizingStyle = .noColumnAutoresizing;table.allowsMultipleSelection=false
+    table.columnAutoresizingStyle = .noColumnAutoresizing;table.allowsMultipleSelection=true
     for (key,title,width) in Coordinator.columns {
       let column=NSTableColumn(identifier:.init(key));column.title=title;column.width=width;column.minWidth=44
       table.addTableColumn(column)
@@ -37,8 +54,8 @@ struct ProfilerEventGrid:NSViewRepresentable {
       owner.revision=model.gridRevision;owner.events=model.visibleEvents
       owner.updating=true
       table.reloadData()
-      let index=owner.events.firstIndex {$0.id==selection}
-      if let index {table.selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false)} else {table.deselectAll(nil)}
+      let indexes=IndexSet(owner.events.indices.filter {selection.contains(owner.events[$0].id)})
+      table.selectRowIndexes(indexes,byExtendingSelection:false)
       owner.updating=false
     }
   }
@@ -50,21 +67,25 @@ struct ProfilerEventGrid:NSViewRepresentable {
       ("application","Uygulama",160),("host","Host",140),("login","Login",130),("sql","SQL metni",480)
     ]
     let model:ProfilerModel
-    var selection:Binding<UInt64?>
+    var selection:Binding<Set<UInt64>>
     var events:[SQLProfiler.Event]=[]
     var revision:UUID?
     var updating=false
     private var menuEvent:SQLProfiler.Event?
-    init(model:ProfilerModel,selection:Binding<UInt64?>) {self.model=model;self.selection=selection}
+    private var menuSQL=""
+    init(model:ProfilerModel,selection:Binding<Set<UInt64>>) {self.model=model;self.selection=selection}
+    func tableView(_ tableView:NSTableView,rowViewForRow row:Int)->NSTableRowView? {ProfilerRowView()}
     func numberOfRows(in tableView:NSTableView)->Int {events.count}
     func tableViewSelectionDidChange(_ notification:Notification) {
       guard !updating,let table=notification.object as? NSTableView else {return}
-      selection.wrappedValue=events.indices.contains(table.selectedRow) ? events[table.selectedRow].id:nil
+      selection.wrappedValue=Set(table.selectedRowIndexes.compactMap {events.indices.contains($0) ? events[$0].id:nil})
     }
     func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int)->NSView? {
       guard events.indices.contains(row),let column=tableColumn else {return nil}
       let cell=(tableView.makeView(withIdentifier:column.identifier,owner:self) as? NSTextField) ?? NSTextField(labelWithString:"")
-      cell.identifier=column.identifier;cell.font=StudioTheme.uiFont;cell.textColor=StudioTheme.text
+      if !(cell.cell is ProfilerTextCell) {cell.cell=ProfilerTextCell(textCell:"")}
+      cell.identifier=column.identifier;cell.font=StudioTheme.uiFont;cell.textColor = .labelColor;cell.drawsBackground=false;cell.isBordered=false;cell.isEditable=false;cell.isSelectable=false
+      cell.cell?.backgroundStyle = tableView.selectedRowIndexes.contains(row) ? .emphasized:.normal
       cell.lineBreakMode = .byTruncatingTail;cell.maximumNumberOfLines=1
       let event=events[row],key=column.identifier.rawValue
       if key=="timestamp" {cell.stringValue=event.timestamp}
@@ -78,6 +99,8 @@ struct ProfilerEventGrid:NSViewRepresentable {
     }
     func menu(row:Int)->NSMenu {
       menuEvent=events.indices.contains(row) ? events[row]:nil
+      let chosen=events.filter {selection.wrappedValue.contains($0.id)}
+      menuSQL=ProfilerExport.sql(chosen.isEmpty ? menuEvent.map {[$0]} ?? []:chosen)
       let menu=StudioMenu(title:"Profiler");menu.autoenablesItems=false
       func item(_ title:String,_ selector:Selector,_ symbol:String,_ enabled:Bool) {
         let item=NSMenuItem(title:title,action:selector,keyEquivalent:"");item.target=self;item.isEnabled=enabled
@@ -94,8 +117,8 @@ struct ProfilerEventGrid:NSViewRepresentable {
       guard let event=menuEvent,let client=model.clients.first(where:{$0.id.host==event.host && $0.id.pid==event.clientPID}) else {return}
       model.focusClient(client)
     }
-    @objc private func copySQL() {guard let event=menuEvent else {return};NSPasteboard.general.clearContents();NSPasteboard.general.setString(event.sql,forType:.string)}
+    @objc private func copySQL() {guard !menuSQL.isEmpty else {return};NSPasteboard.general.clearContents();NSPasteboard.general.setString(menuSQL,forType:.string)}
     @objc private func stop() {Task {await model.stop()}}
-    @objc private func clear() {selection.wrappedValue=nil;model.clearDisplay()}
+    @objc private func clear() {selection.wrappedValue=[];model.clearDisplay()}
   }
 }

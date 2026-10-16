@@ -23,6 +23,7 @@ private actor ProfilerConnection {
   typealias Executor=@Sendable (String) async throws -> Execution
   let serverName:String
   let serverID:UUID
+  let choices:ProfilerChoicesModel
   @Published var configuration=SQLProfiler.Configuration()
   @Published private(set) var events:[SQLProfiler.Event]=[]
   @Published var displayFilter=SQLProfilerFiltering.Filter() {didSet {scheduleProjection(debounce:true)}}
@@ -48,8 +49,9 @@ private actor ProfilerConnection {
   private let executor:Executor
   private let disconnect:@Sendable () async -> Void
   private let interval:Duration
-  init(server:ConnectedServer,executor:Executor?=nil,disconnect:(@Sendable () async -> Void)?=nil,interval:Duration = .seconds(2)) {
+  init(server:ConnectedServer,executor:Executor?=nil,disconnect:(@Sendable () async -> Void)?=nil,interval:Duration = .seconds(2),explorerChoices:(()->ProfilerChoicesModel.ExplorerSnapshot)?=nil) {
     serverName=server.profile.name;serverID=server.id;self.interval=interval
+    choices=ProfilerChoicesModel(server:server,explorer:explorerChoices)
     let connection=ProfilerConnection(profile:server.profile,password:server.password)
     self.executor=executor ?? {sql in try await connection.execute(sql)}
     self.disconnect=disconnect ?? {await connection.disconnect()}
@@ -61,7 +63,7 @@ private actor ProfilerConnection {
     guard !busy,!hasSession else {return}
     do {guard try preview(name:name)==confirmedSQL else {throw SQLFailure("Profiler ayarları değişti; yeni SQL’i onaylayın.")}}
     catch {self.error=error.localizedDescription;return}
-    busy=true;error="";warning="";buffer = .init();events=[];scheduleProjection(debounce:false);lastRead=nil
+    busy=true;error="";warning="";buffer = .init();events=[];choices.updateCaptured([]);scheduleProjection(debounce:false);lastRead=nil
     sessionName=name
     do {
       let result=try await executor(confirmedSQL)
@@ -89,7 +91,7 @@ private actor ProfilerConnection {
       let execution=try await executor(SQLProfiler.readSQL(name:name))
       let snapshot=try await Task.detached(priority:.utility) {try SQLProfiler.decode(execution)}.value
       guard !Task.isCancelled,running,sessionName==name else {return}
-      buffer.append(snapshot);events=buffer.events;scheduleProjection(debounce:false);lastRead=Date()
+      buffer.append(snapshot);events=buffer.events;choices.updateCaptured(events);scheduleProjection(debounce:false);lastRead=Date()
       warning=[(buffer.possibleLoss ? "Sunucu arabelleği olay kaybetmiş/kesilmiş olabilir; bu kayıt eksiksiz denetim izi değildir. ":"")
         ,(buffer.discarded>0 ? "Yerel sınır nedeniyle \(buffer.discarded) eski olay kaldırıldı. ":"")
         ,(buffer.serverDropped>0 ? "Sunucuda düşen olay: \(buffer.serverDropped).":"")].joined()
@@ -114,7 +116,7 @@ private actor ProfilerConnection {
       return false
     }
   }
-  func clearDisplay() {buffer.clearDisplay();events=[];scheduleProjection(debounce:false)}
+  func clearDisplay() {buffer.clearDisplay();events=[];choices.updateCaptured([]);scheduleProjection(debounce:false)}
   func focusClient(_ client:SQLProfilerFiltering.Client) {
     var filter=displayFilter
     filter.rules.removeAll {$0.column == .clientPID || $0.column == .host}
