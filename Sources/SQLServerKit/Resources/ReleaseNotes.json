@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.148",
+    "date": "2026-10-16",
+    "title": "SQL blok seçimi ve toplu girinti",
+    "changes": [
+      "Option ile oluşturulan çok satırlı blok seçimlerde Command–Shift–Sol/Sağ ve kelime gezinmesi her seçim aralığına uygulanır.",
+      "Tab ve Shift–Tab seçili satırları birlikte girintiler; ayrık seçimler arasındaki satırlar değişmez. Toplu girinti tek undo ile geri alınabilir."
+    ]
+  },
+  {
     "version": "0.2.147",
     "date": "2026-10-16",
     "title": "Explorer bağlantı eşitlemesi ve macOS F tuşları",

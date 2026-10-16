@@ -19,6 +19,32 @@ import Testing
     let event=try #require(NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:flags,timestamp:0,windowNumber:editor.window?.windowNumber ?? 0,context:nil,characters:key,charactersIgnoringModifiers:key,isARepeat:false,keyCode:right ? 124:123))
     editor.keyDown(with:event)
   }
+  @Test func rectangularSelectionExtendsEveryLineAndIndentsWithOneUndo() throws {
+    let sql="    AA\n    BB\n    CC"
+    let (controller,document,window)=fixture(sql);defer {window.close()}
+    let editor=controller.editor
+    editor.setSelectedRanges([5,12,19].map {NSValue(range:NSRange(location:$0,length:1))},affinity:.upstream,stillSelecting:false)
+    #expect(editor.selectedRanges.count == 3)
+    try arrow(editor,right:false,flags:[.command,.shift])
+    #expect(editor.selectedRanges.map(\.rangeValue) == [4,11,18].map {NSRange(location:$0,length:2)})
+    try arrow(editor,right:false,flags:[.command,.shift])
+    #expect(editor.selectedRanges.map(\.rangeValue) == [0,7,14].map {NSRange(location:$0,length:6)})
+    #expect(document.sql == sql)
+    let undo=try #require(editor.undoManager);undo.groupsByEvent=false
+    editor.insertTab(nil)
+    #expect(editor.string == "\t    AA\n\t    BB\n\t    CC" && document.sql == editor.string)
+    undo.undo();#expect(editor.string == sql && document.sql == sql)
+  }
+  @Test func disjointSelectionsUnindentOnlySelectedLines() throws {
+    let sql="    AA\n    BB\n    CC"
+    let (controller,document,window)=fixture(sql);defer {window.close()}
+    let editor=controller.editor,undo=try #require(controller.editor.undoManager)
+    undo.groupsByEvent=false
+    editor.setSelectedRanges([4,18].map {NSValue(range:NSRange(location:$0,length:1))},affinity:.downstream,stillSelecting:false)
+    editor.insertBacktab(nil)
+    #expect(editor.string == "AA\n    BB\nCC" && document.sql == editor.string)
+    undo.undo();#expect(editor.string == sql)
+  }
   @Test func wordNavigationStopsAtSQLPrefixesAndOperators() throws {
     let (controller,document,window)=fixture("    @PARAM >= @OTHER + 12;")
     defer {window.close()}

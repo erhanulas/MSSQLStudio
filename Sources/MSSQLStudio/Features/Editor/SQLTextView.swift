@@ -188,28 +188,35 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
   }
   private enum CaretMovement { case word, line }
   @discardableResult private func navigateSQL(_ movement:CaretMovement,_ direction:SQLCaretNavigation.Direction,extending:Bool=false)->Bool {
-    guard isSelectable,!hasMarkedText(),selectedRanges.count == 1 else {return false}
-    let range=selectedRange(),length=(string as NSString).length
-    guard range.location != NSNotFound,range.location <= length,range.length <= length-range.location else {return false}
-    // TextKit 2 affinity describes the non-anchored edge of a nonempty
-    // selection. Preserve it when Shift reverses or crosses the anchor.
+    guard isSelectable,!hasMarkedText(),!selectedRanges.isEmpty else {return false}
+    let ranges=selectedRanges.map(\.rangeValue)
+    let length=(string as NSString).length
+    guard ranges.allSatisfy({$0.location != NSNotFound && $0.location <= length && $0.length <= length-$0.location}) else {return false}
     let upstream=selectionAffinity == .upstream
-    let anchor=upstream ? NSMaxRange(range):range.location
-    let head=extending ? (upstream ? range.location:NSMaxRange(range))
-      : (direction == .backward ? range.location:NSMaxRange(range))
-    let destination:Int
-    if !extending,movement == .word,range.length > 0 {
-      destination=head
-    } else if movement == .word {
-      destination=SQLCaretNavigation.wordBoundary(in:string,from:head,direction:direction)
-    } else {
-      destination=SQLCaretNavigation.lineBoundary(in:string,from:head,direction:direction)
+    var heads:[Int]=[]
+    let selections=ranges.map { range -> NSValue in
+      // TextKit 2 affinity describes the non-anchored edge of a nonempty
+      // selection. Preserve it when Shift reverses or crosses the anchor.
+      let anchor=upstream ? NSMaxRange(range):range.location
+      let head=extending ? (upstream ? range.location:NSMaxRange(range))
+        : (direction == .backward ? range.location:NSMaxRange(range))
+      let destination:Int
+      if !extending,movement == .word,range.length > 0 {
+        destination=head
+      } else if movement == .word {
+        destination=SQLCaretNavigation.wordBoundary(in:string,from:head,direction:direction)
+      } else {
+        destination=SQLCaretNavigation.lineBoundary(in:string,from:head,direction:direction)
+      }
+      let selection=extending ? NSRange(location:min(anchor,destination),length:abs(destination-anchor))
+        : NSRange(location:destination,length:0)
+      heads.append(destination)
+      return NSValue(range:selection)
     }
     dismissSuggestions?();finishUndoInput()
-    let selection=extending ? NSRange(location:min(anchor,destination),length:abs(destination-anchor))
-      : NSRange(location:destination,length:0)
-    setSelectedRange(selection,affinity:extending && destination < anchor ? .upstream:.downstream,stillSelecting:false)
-    scrollRangeToVisible(NSRange(location:destination,length:0))
+    let backwards=extending && zip(ranges,heads).contains { range,head in head < (upstream ? NSMaxRange(range):range.location) }
+    setSelectedRanges(selections,affinity:backwards ? .upstream:.downstream,stillSelecting:false)
+    if let head=heads.first {scrollRangeToVisible(NSRange(location:head,length:0))}
     return true
   }
   private func handleSQLNavigationKey(_ event:NSEvent)->Bool {
@@ -497,26 +504,44 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
   override func insertTab(_ sender: Any?) {
     prepareEdit?()
     let range = selectedRange()
-    if range.length == 0 { insertText("\t",replacementRange:range); return }
+    if selectedRanges.count == 1 && range.length == 0 { insertText("\t",replacementRange:range); return }
     indentLines(removing:false)
   }
   override func insertBacktab(_ sender: Any?) { prepareEdit?(); indentLines(removing:true) }
   private func indentLines(removing: Bool) {
-    let source = string as NSString, selection = selectedRange()
-    var selected = selection
-    if selected.length > 0 && NSMaxRange(selected) <= source.length && source.substring(with:NSRange(location:NSMaxRange(selected)-1,length:1)) == "\n" { selected.length -= 1 }
-    let lines = source.lineRange(for:selected)
-    let original = source.substring(with:lines)
-    let parts = original.components(separatedBy:"\n")
-    let changed = parts.enumerated().map { index, line -> String in
-      if index == parts.count-1 && line.isEmpty && original.hasSuffix("\n") { return line }
-      if !removing { return "\t" + line }
-      if line.hasPrefix("\t") { return String(line.dropFirst()) }
-      return String(line.dropFirst(line.prefix(4).prefix(while: { $0 == " " }).count))
-    }.joined(separator:"\n")
-    guard changed != original else { return }
-    insertText(changed,replacementRange:lines)
-    setSelectedRange(NSRange(location:lines.location,length:(changed as NSString).length))
+    guard isEditable,!hasMarkedText() else {return}
+    let source=string as NSString
+    var blocks:[NSRange]=[]
+    for value in selectedRanges.sorted(by:{$0.rangeValue.location < $1.rangeValue.location}) {
+      var range=value.rangeValue
+      guard range.location != NSNotFound,range.location <= source.length,range.length <= source.length-range.location else {return}
+      if range.length>0,source.substring(with:NSRange(location:NSMaxRange(range)-1,length:1)) == "\n" {range.length-=1}
+      let lines=source.lineRange(for:range)
+      if let last=blocks.last,lines.location <= NSMaxRange(last) {blocks[blocks.count-1]=NSUnionRange(last,lines)}
+      else {blocks.append(lines)}
+    }
+    let edits=blocks.map { lines -> (NSRange,String) in
+      let original=source.substring(with:lines),parts=original.components(separatedBy:"\n")
+      let changed=parts.enumerated().map { index,line -> String in
+        if index == parts.count-1 && line.isEmpty && original.hasSuffix("\n") {return line}
+        if !removing {return "\t"+line}
+        if line.hasPrefix("\t") {return String(line.dropFirst())}
+        return String(line.dropFirst(line.prefix(4).prefix(while:{$0 == " "}).count))
+      }.joined(separator:"\n")
+      return (lines,changed)
+    }
+    guard edits.contains(where:{source.substring(with:$0.0) != $0.1}) else {return}
+    finishUndoInput();undoManager?.beginUndoGrouping()
+    for (range,text) in edits.reversed() {insertText(text,replacementRange:range)}
+    undoManager?.endUndoGrouping();finishUndoInput()
+    var delta=0
+    let selections=edits.map { range,text -> NSValue in
+      let count=(text as NSString).length
+      let selection=NSRange(location:range.location+delta,length:count)
+      delta+=count-range.length
+      return NSValue(range:selection)
+    }
+    setSelectedRanges(selections,affinity:.downstream,stillSelecting:false)
   }
   override func insertNewline(_ sender: Any?) {
     prepareEdit?()

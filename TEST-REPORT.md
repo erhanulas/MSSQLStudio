@@ -1,3 +1,13 @@
+## 16 Ekim 2026 — v0.2.148 test tekrarı istisnası
+
+- Önceki “test olmadan yayımla” tercihi bu yayın için de uygulanır; 15 native test ve Release kanıtı yeniden kullanılır. Yalnız v0.2.148 için CI paket suite’i atlanır; imza/helper, manifest ve updater kontrolleri korunur. Yeni tam suite başarısı iddia edilmez.
+
+## 16 Ekim 2026 — Option blok seçiminde yatay gezinme ve toplu girinti, yerel
+
+- SQLTextView özel yatay gezinmesi selectedRanges.count==1 şartıyla çoklu blok seçimini dışlıyordu. Aynı SQL word/line sınırı artık her seçime uygulanır; ⌘⇧←/→ boş olmayan blok seçimlerini her satırda uzatır. Tab/Shift+Tab hedef satırları birleştirip tek undo grubu içinde değiştirir; ayrık seçimler arasındaki satırlar değişmez. Tek caret, smart code/physical line sınırı ve IME koruması sürer.
+- **15 native test /2 suite geçti /0 issue**, 1.819 sn (`/tmp/mssql-multi-selection-checked.log`); yeni native testler üç satırlı dikdörtgen seçimde code/physical başlangıca uzatma, toplu Tab/tek undo ve ayrık satırlarda Shift+Tab davranışını doğrular. Mevcut Unicode/CRLF/satır/kelime yönü ve undo regresyonları geçti. İlk test taslağı sıfır uzunluklu çoklu caret kullanıyordu; AppKit NSTextView.h selectedRanges sözleşmesi bunları tek caret’e indirgediği için bu koşu 5 issue verdi. Test gerçek boş olmayan native blok seçimine düzeltildi; önceki koşu başarı sayılmaz. Ayrı çoklu boş caret desteği eklenmedi.
+- Release BUILD SUCCEEDED (`/tmp/mssql-multi-caret-release.log`); mimari/diff kontrolü geçti. Option ile gerçek fare sürükleme/başka cihaz CUA doğrulaması yapılmadı; native seçim ve key event yolları test edildi. Kurulu uygulama/veri değiştirilmedi; henüz yayımlanmadı.
+
 ## 16 Ekim 2026 — v0.2.147 / build 148 public yayın doğrulandı
 
 - [Public/latest v0.2.147](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.147), kaynak `7be627f2d56cfbdd20a27ccdf5d5232518f43f4a`; [Actions 38872242952](https://github.com/erhanulas/MSSQLStudio/actions/runs/38872242952) başarılı. Kullanıcının açık isteğiyle yerel test/build ve CI paket test suite’i tekrarlanmadı; yalnız bu tag için test adımı skipped. Önceki 28 hedefli test kanıtı aşağıdadır; bu yayında tam suite çalıştı iddiası yoktur.
