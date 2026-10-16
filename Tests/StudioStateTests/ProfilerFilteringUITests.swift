@@ -201,6 +201,20 @@ private actor ProfilerFilteringProbe {
     }
     #expect(await model.stop())
   }
+  @Test func repeatedSnapshotDoesNotRebuildGridButLocalFilterStillWorks() async throws {
+    let (model,probe)=try await fixture()
+    let revision=model.gridRevision,count=await probe.statements().count
+    for _ in 0..<200 {
+      if await probe.statements().count>=count+3 {break}
+      try await Task.sleep(for:.milliseconds(3))
+    }
+    #expect(await probe.statements().count>=count+3)
+    #expect(model.gridRevision==revision && model.events.count==4 && !model.filtering)
+    model.displayFilter.sqlSearch="bar"
+    try await wait {!model.filtering && model.visibleEvents.map(\.id)==[1]}
+    #expect(model.gridRevision != revision)
+    #expect(await model.stop())
+  }
   @Test func nativeGridContextActionsFilterClearAndStopItsOwnCapture() async throws {
     let (model,probe)=try await fixture()
     var selected:Set<UInt64>=[]

@@ -29,7 +29,7 @@ struct ProfilerFilters:View {
           HStack(spacing:8) {
             Text("En az ms").foregroundStyle(.secondary).frame(width:90,alignment:.leading)
             TextField("0",value:$model.configuration.minimumDurationMS,format:.number).textFieldStyle(.roundedBorder)
-          }.frame(height:28).disabled(model.hasSession || model.busy)
+          }.frame(height:28).modifier(ProfilerFilterEmphasis(active:model.configuration.minimumDurationMS>0)).disabled(model.hasSession || model.busy)
           Text("LIKE: % metin, _ tek karakter. Örnek: %STOK%.").font(.system(size:11)).foregroundStyle(.secondary)
         }
         Button {choices.refresh()} label:{Label("Seçenekleri Yenile",systemImage:"arrow.clockwise")}
@@ -41,6 +41,7 @@ struct ProfilerFilters:View {
           Image(systemName:"magnifyingglass").foregroundStyle(.secondary)
           TextField("Yakalanan SQL’de ara…",text:$model.displayFilter.sqlSearch).textFieldStyle(.roundedBorder)
             .accessibilityIdentifier("profilerSQLSearch")
+            .modifier(ProfilerFilterEmphasis(active:!model.displayFilter.sqlSearch.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty))
           if model.filtering {ProgressView().controlSize(.small)}
         }
         HStack {
@@ -73,6 +74,7 @@ struct ProfilerFilters:View {
             HStack(spacing:4) {
               Picker("Karşılaştırma",selection:$rule.comparison) {ForEach(rule.column.operators) {Text($0.title).tag($0)}}.labelsHidden().frame(width:110)
               TextField("Değer",text:$rule.value).textFieldStyle(.roundedBorder)
+                .modifier(ProfilerFilterEmphasis(active:!rule.value.isEmpty))
             }
           }.padding(8).background(Color(nsColor:StudioTheme.controlSurface)).clipShape(RoundedRectangle(cornerRadius:6))
         }
@@ -96,7 +98,7 @@ struct ProfilerFilters:View {
     HStack(spacing:8) {
       Text(title).foregroundStyle(.secondary).frame(width:90,alignment:.leading)
       TextField("Tümü",text:text).textFieldStyle(.roundedBorder)
-    }.frame(height:28).disabled(model.hasSession || model.busy)
+    }.frame(height:28).modifier(ProfilerFilterEmphasis(active:!text.wrappedValue.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)).disabled(model.hasSession || model.busy)
   }
 }
 
@@ -113,7 +115,15 @@ struct ProfilerCaptureChoice:View {
         else {StudioSearchablePicker(title:title,values:values,emptyTitle:"Tümü",selection:$text)}
       }.frame(maxWidth:.infinity)
       ProfilerInputModeButton(manual:$manual,title:title).frame(width:52,height:26)
-    }.frame(height:28)
+    }.frame(height:28).modifier(ProfilerFilterEmphasis(active:!text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty))
+  }
+}
+
+private struct ProfilerFilterEmphasis:ViewModifier {
+  let active:Bool
+  func body(content:Content)->some View {
+    content.background(RoundedRectangle(cornerRadius:6).fill(Color(nsColor:StudioTheme.selection).opacity(active ? 1:0)))
+      .overlay(RoundedRectangle(cornerRadius:6).stroke(Color(nsColor:StudioTheme.accent).opacity(active ? 0.65:0),lineWidth:1).allowsHitTesting(false))
   }
 }
 

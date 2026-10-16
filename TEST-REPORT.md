@@ -1,3 +1,23 @@
+## v0.2.161 yayın hazırlığı — 16 Ekim 2026
+
+- Derleme 162; Profiler hızlandırma, liste koruma ve dolu filtre vurguları. Tamamlanan 21 native + 10 core Profiler testi ve Release derlemesi yeniden çalıştırılmadı. Kullanıcının tekrar test yapmadan yayın tercihi doğrultusunda yalnız v0.2.161 için paket test adımı atlanır; imza/helper/hash/manifest/feed kontrolleri zorunludur.
+
+## 16 Ekim 2026 — Profiler listesini yeniden başlatmada koruma (yerel)
+
+- Kök neden: ProfilerModel.start her başlangıçta Buffer, events ve istemci seçeneklerini sıfırlıyordu. Başarılı yeni oturum yalnız sunucu sequence/processed takibini sıfırlar; mevcut olaylar, yerel filtreler ve seçim kimlikleri korunur. Yeni oturumdaki sıfır tabanlı sequence eski satırlarla çakışmaz; JSON export özgün sourceSequence/captureSession bilgisini de saklar. Açık Listeyi Temizle mevcut oturumun highwater değerini korur; temizlenen kayıtlar tekrar gelmez. 5.000 olay/8 MB retention korunur.
+- Sol panelde dolu seçim/metin alanları ve sıfırdan büyük süre semantik seçim zemini/ince accent kenarlıkla vurgulanır; dekorasyon tıklama almaz ve satır ölçüsü değişmez.
+- `/tmp/mssql-profiler-retain-tests.log`: seri Profiler filtreli doğrulama **21 native test/3 suite + 10 core test/2 suite geçti**, sıfır hata. Yeni core/native regresyonlar durdur/başlat, sıfırlanan sunucu sequence, filtre koruma, açık temizleme ve export round-trip davranışını sınadı. Mevcut açık/koyu minimum/geniş native layout kontrolleri geçti; canlı SQL Server bağlantısı yapılmadı.
+- Mimari/kaynak eşliği ve diff kontrolü geçti. `/tmp/mssql-profiler-retain-release.log`: izole imzasız Release BUILD SUCCEEDED. Yayın yapılmadı.
+
+## 16 Ekim 2026 — Dosyasız Profiler için daha sık okuma ve sınırlı arabellek artışı, yerel
+
+- Okuma hedefi 2 sn’den 500 ms’ye düşürüldü. ContinuousClock deadline okuma başlamadan belirlenir; bekleme yalnız kalan süredir, yavaş okuma üzerine ayrıca tam interval eklenmez. Bir fiziksel okuma bitmeden yenisi başlamaz, stop/cleanup aynı seri yaşam döngüsünü korur. Durum satırı gerçek hedef interval’i gösterir.
+- ring_buffer 512 KB/2.000 olaydan 1.024 KB/5.000 olaya, session buffer 2 MB’den 4 MB’ye çıkarıldı. MAX_DISPATCH_LATENCY=1 SECONDS, ALLOW_SINGLE_EVENT_LOSS, UUID sahipliği, kullanıcı filtreleri ve completed/error olay kapsamı korunur. event_file veya NO_EVENT_LOSS eklenmedi; yeni limitler yalnız yeni Başlat eyleminde uygulanır. 4 MB XML okuma ve yerel 5.000/8 MB sınırı değiştirilmedi.
+- Buffer high-water sequence değişmeyince events/choices/projection/grid revision yeniden yayımlanmaz. Son okuma zamanı ve kayıp uyarıları yine güncellenir. Capture seçeneklerinde iki kez yapılan Set/sort yerine tek rebuild sort kullanılır. Boş tekrarlarda grid kararlı kalırken yerel filtre editi çalışır; yeni veri olmasa da serverDropped uyarısı testlidir.
+- Microsoft ring_buffer için <=1.024 KB önerir (https://learn.microsoft.com/en-us/sql/relational-databases/extended-events/targets-for-extended-events-in-sql-server). target DMV okuması flush davranışı taşır; 1 sn dispatch latency sabit ek 1 sn kullanıcı gecikmesi garantisi gibi yorumlanmaz (https://learn.microsoft.com/en-us/sql/relational-databases/system-dynamic-management-views/sys-dm-xe-session-targets-transact-sql). Polling’in XML/network yükü devam eder, sıfır kayıp garantisi yoktur.
+- İlk **19 native /3 suite +9 core /2 suite geçti,0 issue**,4.313/0.448 sn (`/tmp/mssql-profiler-fast-poll-tests.log`). Yeni idle-drop regresyonundan sonra **8 native /1 suite +4 core /1 suite geçti,0 issue**,1.927/0.475 sn (`/tmp/mssql-profiler-fast-poll-final.log`); değişmemiş başarılı kanıtlar yeniden kullanıldı. Birleşik 20 farklı native +9 core =29 test. Default 500 ms/no-file SQL, repeated snapshot no-grid-reload, local filtre, idle loss warning ve fiziksel read-stop beklemesi doğrulandı.
+- Release BUILD SUCCEEDED (`/tmp/mssql-profiler-fast-poll-release.log`); mimari/kaynak eşliği/diff geçti. Canlı SQL Server yoğunluk/gecikme/kayıp oranı ölçülmedi; native executor/fixture kanıtıdır. Kurulu app/oturumlar/Keychain değiştirilmedi. Henüz yayımlanmadı.
+
 ## 16 Ekim 2026 — v0.2.160 / build 161 public yayın doğrulaması
 
 - Public/latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.160 ; kaynak `d371292cfc0bd6d27573d67c97ec3dd5ffb51846`. Actions `38941653032` başarılı. Tamamlanmış geliştirme testleri yeniden çalıştırılmadı; mevcut kullanıcı tercihiyle exact tag paket suite’i atlandı.

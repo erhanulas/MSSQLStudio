@@ -53,8 +53,8 @@ public enum SQLProfiler {
     \(event("sql_batch_completed",completed:true)),
     \(event("rpc_completed",completed:true)),
     \(event("error_reported",completed:false))
-    ADD TARGET package0.ring_buffer(SET max_memory=512,max_events_limit=2000)
-    WITH (MAX_MEMORY=2048 KB,EVENT_RETENTION_MODE=ALLOW_SINGLE_EVENT_LOSS,MAX_DISPATCH_LATENCY=1 SECONDS,TRACK_CAUSALITY=OFF,STARTUP_STATE=OFF);
+    ADD TARGET package0.ring_buffer(SET max_memory=1024,max_events_limit=5000)
+    WITH (MAX_MEMORY=4096 KB,EVENT_RETENTION_MODE=ALLOW_SINGLE_EVENT_LOSS,MAX_DISPATCH_LATENCY=1 SECONDS,TRACK_CAUSALITY=OFF,STARTUP_STATE=OFF);
     ALTER EVENT SESSION \(identifier) ON SERVER STATE=START;
     """
     return """
@@ -84,7 +84,9 @@ public enum SQLProfiler {
     """
   }
   public struct Event:Sendable,Identifiable,Equatable,Codable {
-    public let id:UInt64
+    public fileprivate(set) var id:UInt64
+    public fileprivate(set) var sourceSequence:UInt64?=nil
+    public fileprivate(set) var captureSession:String?=nil
     public let timestamp:String
     public let kind:String
     public let database:String
@@ -129,13 +131,30 @@ public enum SQLProfiler {
     public private(set) var serverDropped:UInt64=0
     private var bytes=0
     private var lastProcessed:UInt64=0
+    private var captureSession:String?
+    private var displaySequence:UInt64=0
+    /// A new server session restarts event_sequence; retained display identities must not restart.
+    public mutating func beginSession(name:String) {
+      captureSession=name;lastSequence=nil;lastProcessed=0
+    }
     public init() {}
     public mutating func append(_ snapshot:Snapshot) {
       let incoming=snapshot.events.filter {event in lastSequence.map {event.id>$0} ?? true}.sorted {$0.id<$1.id}
       let delta=snapshot.processed>=lastProcessed ? snapshot.processed-lastProcessed:0
       if delta>UInt64(incoming.count) || snapshot.truncated || snapshot.dropped>0 {possibleLoss=true}
       lastProcessed=snapshot.processed;serverDropped=max(serverDropped,snapshot.dropped)
-      for event in incoming {events.append(event);bytes+=event.retainedBytes;lastSequence=max(lastSequence ?? event.id,event.id)}
+      var retainedIDs=captureSession == nil ? Set<UInt64>():Set(events.map(\.id))
+      for var event in incoming {
+        let sourceSequence=event.id
+        if let captureSession {
+          // At most 5,000 retained identities; wrapping cannot exhaust the identity space.
+          while retainedIDs.contains(displaySequence) {displaySequence &+= 1}
+          event.id=displaySequence;retainedIDs.insert(displaySequence);displaySequence &+= 1
+          event.sourceSequence=sourceSequence;event.captureSession=captureSession
+        }
+        events.append(event);bytes+=event.retainedBytes
+        lastSequence=max(lastSequence ?? sourceSequence,sourceSequence)
+      }
       var count=0
       while events.count-count>5000 || bytes>8_388_608,count<events.count {bytes-=events[count].retainedBytes;count+=1}
       if count>0 {events.removeFirst(count);discarded+=count}
@@ -173,7 +192,7 @@ private final class ProfilerXMLDecoder:NSObject,XMLParserDelegate {
   func parser(_ parser:XMLParser,didEndElement element:String,namespaceURI:String?,qualifiedName:String?) {
     if element=="value" {values[field]=value;inValue=false}
     if element=="event" {
-      guard events.count<2000,let sequence=values["event_sequence"].flatMap(UInt64.init),!timestamp.isEmpty,
+      guard events.count<5000,let sequence=values["event_sequence"].flatMap(UInt64.init),!timestamp.isEmpty,
         ["sql_batch_completed","rpc_completed","error_reported"].contains(kind) else {invalid=true;return}
       events.append(.init(id:sequence,timestamp:timestamp,kind:kind,database:values["database_name"] ?? "",application:values["client_app_name"] ?? "",host:values["client_hostname"] ?? "",login:values["server_principal_name"] ?? "",session:values["session_id"] ?? "",clientPID:values["client_pid"].flatMap(UInt32.init).flatMap {$0>0 ? String($0):nil} ?? "",durationMS:values["duration"].flatMap(UInt64.init).map {Double($0)/1000},cpu:values["cpu_time"] ?? "",reads:values["logical_reads"] ?? "",writes:values["writes"] ?? "",sql:values["batch_text"] ?? values["statement"] ?? values["sql_text"] ?? "",message:values["message"] ?? ""))
     }

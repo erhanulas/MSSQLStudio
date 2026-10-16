@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.161",
+    "date": "2026-10-16",
+    "title": "Profiler listesini koruma ve daha hızlı izleme",
+    "changes": [
+      "İzlemeyi başlatıp durdurmak mevcut olay listesini ve yerel filtreleri temizlemez. Yeni oturumdaki olaylar eski kayıtlarla karışmadan listeye eklenir; Listeyi Temizle ayrı eylem olarak korunur.",
+      "Sol panelde seçilmiş veya yazılmış filtre değerleri hafif seçim zemini ve ince vurgu kenarlığıyla belirginleştirilir.",
+      "Dosyasız Profiler okuma hedefi 500 ms oldu. Sunucu ring buffer sınırı 1 MB / 5.000 olay, oturum tamponu 4 MB olarak güncellendi; olay gelmediğinde grid ve istemci seçenekleri yeniden hazırlanmaz.",
+      "Yerel 5.000 olay / 8 MB bellek sınırı ve kayıp uyarıları korunur. Daha sık okuma eksiksiz kayıt garantisi vermez; sunucuda iz dosyası oluşturulmaz."
+    ]
+  },
+  {
     "version": "0.2.160",
     "date": "2026-10-16",
     "title": "Profiler filtre deneyimi ve indirmeden önce sürüm notları",

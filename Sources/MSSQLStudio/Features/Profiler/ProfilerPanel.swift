@@ -77,7 +77,7 @@ struct ProfilerPanel:View {
         }.frame(minWidth:440,maxWidth:.infinity,maxHeight:.infinity)
       }.frame(maxWidth:.infinity,maxHeight:.infinity)
       HStack {
-        Text("\(model.visibleEvents.count) / \(model.events.count) olay · Son 5.000 / 8 MB · 2 sn").foregroundStyle(.secondary)
+        Text("\(model.visibleEvents.count) / \(model.events.count) olay · Son 5.000 / 8 MB · Hedef \(model.pollingCaption)").foregroundStyle(.secondary)
         Spacer()
         if let last=model.lastRead {Text("Son okuma: "+last.formatted(date:.omitted,time:.standard)).foregroundStyle(.secondary)}
       }.font(.system(size:11))

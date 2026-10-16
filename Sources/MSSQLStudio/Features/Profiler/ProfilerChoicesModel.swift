@@ -46,7 +46,7 @@ import SQLServerKit
         if !value.isEmpty {sets[column,default:[]].insert(value)}
       }
     }
-    captured=sets.mapValues {Self.sorted(Array($0))};rebuildOptions()
+    captured=sets.mapValues {Array($0)};rebuildOptions()
   }
   /// Existing Explorer lists are instant; only missing/explicitly refreshed login metadata is read.
   func refresh(automatic:Bool=false) {

@@ -9,6 +9,10 @@ private actor ProfilerProbe {
   var failDrop=false
   var held:CheckedContinuation<Void,Never>?
   var holdRead=false
+  var dropped:UInt64=0
+  var emitEvent=false
+  func setEmitEvent() {emitEvent=true}
+  func setDropped(_ value:UInt64) {dropped=value}
   func setFailDrop(_ value:Bool) {failDrop=value}
   func setHoldRead() {holdRead=true}
   func release() {held?.resume();held=nil;holdRead=false}
@@ -19,7 +23,13 @@ private actor ProfilerProbe {
     if sql.contains("DROP EVENT SESSION"),failDrop {throw SQLFailure("cleanup denied")}
     if sql.contains("SELECT t.target_data") {
       if holdRead {await withCheckedContinuation {held=$0}}
-      var result=Execution();result.results=[Rows(fields:[Field("profiler_xml"),Field("dropped_events")],values:[["<RingBufferTarget totalEventsProcessed=\"0\" droppedCount=\"0\"/>","0"]])];return result
+      if emitEvent {
+        var result=Execution()
+        let xml="<RingBufferTarget totalEventsProcessed=\"1\" droppedCount=\"0\"><event name=\"sql_batch_completed\" timestamp=\"2026-10-16T12:00:00Z\"><data name=\"batch_text\"><value>SELECT 1</value></data><action name=\"event_sequence\"><value>0</value></action></event></RingBufferTarget>"
+        result.results=[Rows(fields:[Field("profiler_xml"),Field("dropped_events")],values:[[xml,"0"]])]
+        return result
+      }
+      var result=Execution();result.results=[Rows(fields:[Field("profiler_xml"),Field("dropped_events")],values:[["<RingBufferTarget totalEventsProcessed=\"0\" droppedCount=\"0\"/>",String(dropped)]])];return result
     }
     return Execution()
   }
@@ -27,6 +37,42 @@ private actor ProfilerProbe {
 }
 @MainActor @Suite(.serialized) struct ProfilerTests {
   private func server()->ConnectedServer {let server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false;return server}
+  @Test func restartPreservesListFiltersAndNewSessionEvents() async throws {
+    let probe=ProfilerProbe()
+    await probe.setEmitEvent()
+    let model=ProfilerModel(server:server(),executor:{try await probe.execute($0)},disconnect:{},interval:.milliseconds(10))
+    for expectedCount in 1...2 {
+      let name=SQLProfiler.sessionName(UUID())
+      await model.start(name:name,confirmedSQL:try model.preview(name:name))
+      for _ in 0..<200 where model.events.count<expectedCount || model.filtering {try await Task.sleep(for:.milliseconds(3))}
+      #expect(model.events.count==expectedCount)
+      model.displayFilter.sqlSearch="SELECT"
+      #expect(await model.stop())
+      #expect(model.events.count==expectedCount && model.displayFilter.sqlSearch=="SELECT")
+    }
+    #expect(model.events.map(\.id)==[0,1])
+    #expect(model.events.map(\.sourceSequence)==[0,0])
+    model.clearDisplay();#expect(model.events.isEmpty)
+  }
+  @Test func defaultReadTargetIsHalfSecondWithoutFileCapture() throws {
+    let model=ProfilerModel(server:server(),executor:{_ in Execution()},disconnect:{})
+    #expect(model.pollingCaption=="500 ms")
+    let sql=try model.preview(name:SQLProfiler.sessionName(UUID()))
+    #expect(sql.contains("max_memory=1024,max_events_limit=5000") && sql.contains("MAX_MEMORY=4096 KB"))
+    #expect(!sql.contains("event_file") && !model.hasSession)
+  }
+  @Test func idleReadsStillShowDroppedEventWarningWithoutGridReload() async throws {
+    let probe=ProfilerProbe(),model=ProfilerModel(server:server(),executor:{try await probe.execute($0)},disconnect:{},interval:.milliseconds(10))
+    let name=SQLProfiler.sessionName(UUID())
+    await model.start(name:name,confirmedSQL:try model.preview(name:name))
+    for _ in 0..<200 where model.lastRead==nil || model.filtering {try await Task.sleep(for:.milliseconds(3))}
+    #expect(model.lastRead != nil && !model.filtering)
+    let revision=model.gridRevision
+    await probe.setDropped(2)
+    for _ in 0..<200 where !model.warning.contains("Sunucuda düşen olay: 2") {try await Task.sleep(for:.milliseconds(3))}
+    #expect(model.warning.contains("Sunucuda düşen olay: 2") && model.gridRevision==revision)
+    #expect(await model.stop())
+  }
   @Test func openingAndEscapeDoNotConnectAndHiddenWindowContinuesCapture() async throws {
     _=NSApplication.shared
     let server=server(),probe=ProfilerProbe()

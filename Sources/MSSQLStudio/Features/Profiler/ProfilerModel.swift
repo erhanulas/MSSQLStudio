@@ -48,8 +48,13 @@ private actor ProfilerConnection {
   private var task:Task<Void,Never>?
   private let executor:Executor
   private let disconnect:@Sendable () async -> Void
+  static let defaultReadIntervalMilliseconds=500
   private let interval:Duration
-  init(server:ConnectedServer,executor:Executor?=nil,disconnect:(@Sendable () async -> Void)?=nil,interval:Duration = .seconds(2),explorerChoices:(()->ProfilerChoicesModel.ExplorerSnapshot)?=nil) {
+  var pollingCaption:String {
+    let parts=interval.components
+    return String(format:"%.0f ms",Double(parts.seconds)*1000+Double(parts.attoseconds)/1e15)
+  }
+  init(server:ConnectedServer,executor:Executor?=nil,disconnect:(@Sendable () async -> Void)?=nil,interval:Duration = .milliseconds(ProfilerModel.defaultReadIntervalMilliseconds),explorerChoices:(()->ProfilerChoicesModel.ExplorerSnapshot)?=nil) {
     serverName=server.profile.name;serverID=server.id;self.interval=interval
     choices=ProfilerChoicesModel(server:server,explorer:explorerChoices)
     let connection=ProfilerConnection(profile:server.profile,password:server.password)
@@ -58,23 +63,26 @@ private actor ProfilerConnection {
   }
   var hasSession:Bool {sessionName != nil}
   func preview(name:String) throws -> String {try SQLProfiler.createSQL(name:name,configuration:configuration)}
-  /// Only the confirmation sheet calls this; opening/hiding never creates a session.
+  /// Only the explicit Start action calls this; opening/hiding never creates a session.
   func start(name:String,confirmedSQL:String) async {
     guard !busy,!hasSession else {return}
-    do {guard try preview(name:name)==confirmedSQL else {throw SQLFailure("Profiler ayarları değişti; yeni SQL’i onaylayın.")}}
+    do {guard try preview(name:name)==confirmedSQL else {throw SQLFailure("Profiler ayarları değişti; güncel ayarlarla yeniden başlatın.")}}
     catch {self.error=error.localizedDescription;return}
-    busy=true;error="";warning="";buffer = .init();events=[];choices.updateCaptured([]);scheduleProjection(debounce:false);lastRead=nil
+    busy=true;error=""
     sessionName=name
     do {
       let result=try await executor(confirmedSQL)
       guard !result.partial,!result.stoppedEarly else {throw SQLFailure("İzleme kurulumu eksik; oturum durumunu temizleyin.")}
+      buffer.beginSession(name:name)
       running=true;busy=false
       task=Task { [weak self] in
         guard let self else {return}
+        let clock=ContinuousClock()
         while !Task.isCancelled,running {
+          let deadline=clock.now.advanced(by:interval)
           await poll()
           guard running,!Task.isCancelled else {break}
-          do {try await Task.sleep(for:interval)} catch {break}
+          do {try await clock.sleep(until:deadline)} catch {break}
         }
       }
     } catch {
@@ -91,10 +99,16 @@ private actor ProfilerConnection {
       let execution=try await executor(SQLProfiler.readSQL(name:name))
       let snapshot=try await Task.detached(priority:.utility) {try SQLProfiler.decode(execution)}.value
       guard !Task.isCancelled,running,sessionName==name else {return}
-      buffer.append(snapshot);events=buffer.events;choices.updateCaptured(events);scheduleProjection(debounce:false);lastRead=Date()
-      warning=[(buffer.possibleLoss ? "Sunucu arabelleği olay kaybetmiş/kesilmiş olabilir; bu kayıt eksiksiz denetim izi değildir. ":"")
+      let previous=buffer.lastSequence
+      buffer.append(snapshot)
+      if buffer.lastSequence != previous {
+        events=buffer.events;choices.updateCaptured(events);scheduleProjection(debounce:false)
+      }
+      lastRead=Date()
+      let nextWarning=[(buffer.possibleLoss ? "Sunucu arabelleği olay kaybetmiş/kesilmiş olabilir; bu kayıt eksiksiz denetim izi değildir. ":"")
         ,(buffer.discarded>0 ? "Yerel sınır nedeniyle \(buffer.discarded) eski olay kaldırıldı. ":"")
         ,(buffer.serverDropped>0 ? "Sunucuda düşen olay: \(buffer.serverDropped).":"")].joined()
+      if warning != nextWarning {warning=nextWarning}
     } catch {
       guard !Task.isCancelled else {return}
       self.error=error.localizedDescription;running=false
