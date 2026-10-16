@@ -15,7 +15,14 @@ import SQLServerKit
   func request(_ events:[SQLProfiler.Event]) {
     guard requested != events else {return}
     requested=events
-    revision+=1;pending=(revision,events);busy=true
+    revision+=1
+    if events.isEmpty || events.count==1 && events[0].sql.utf8.count<=8192 {
+      // A small, bounded single event must not queue behind an older multi-selection worker.
+      pending=nil;sql=events.first?.sql ?? "-- SQL metnini görmek için olay seçin."
+      tokens=events.isEmpty ? []:TSQL.lex(sql);busy=false
+      return
+    }
+    pending=(revision,events);busy=true
     if task==nil {startNext()}
   }
   private func startNext() {

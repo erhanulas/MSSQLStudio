@@ -18,6 +18,9 @@ import SwiftUI
   let version=NSTextField(labelWithString:"")
   let icon=NSImageView()
   let done=NSButton(title:"Kapat",target:nil,action:nil)
+  let download=NSButton(title:"Son Sürümü İndir",target:nil,action:nil)
+  private var downloadAction:(()->Void)?
+  var hasOffer:Bool {downloadAction != nil}
   private var stage=Stage.checking
   private var finished=false
   private let steps=["Kontrol","İndirme","Doğrulama"].map {NSTextField(labelWithString:$0)}
@@ -57,7 +60,10 @@ import SwiftUI
     let document=UpdateDetailsView();scroll.documentView=document
     document.translatesAutoresizingMaskIntoConstraints=false;status.translatesAutoresizingMaskIntoConstraints=false;document.addSubview(status)
     NSLayoutConstraint.activate([document.widthAnchor.constraint(equalTo:scroll.contentView.widthAnchor),status.leadingAnchor.constraint(equalTo:document.leadingAnchor),status.trailingAnchor.constraint(equalTo:document.trailingAnchor),status.topAnchor.constraint(equalTo:document.topAnchor),status.bottomAnchor.constraint(equalTo:document.bottomAnchor)])
-    let actions=NSStackView(views:[NSView(),done])
+    download.target=self;download.action=#selector(downloadSelected);download.bezelStyle = .rounded
+    download.image=NSImage(systemSymbolName:"arrow.down.circle",accessibilityDescription:nil);download.imagePosition = .imageLeading
+    download.isHidden=true;download.setAccessibilityIdentifier("updateDownloadLatest")
+    let actions=NSStackView(views:[NSView(),done,download])
     let stack=NSStackView(views:[header,stages,progressBar,counters,scroll,actions]);stack.orientation = .vertical;stack.spacing=12
     stack.translatesAutoresizingMaskIntoConstraints=false;body.addSubview(stack)
     NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:body.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:body.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:body.topAnchor,constant:16),stack.bottomAnchor.constraint(equalTo:body.bottomAnchor,constant:-16),scroll.heightAnchor.constraint(greaterThanOrEqualToConstant:60)])
@@ -80,8 +86,44 @@ import SwiftUI
     status.enclosingScrollView?.documentView?.scroll(.zero)
   }
   func beginDownload(version:String) {
+    downloadAction=nil;download.isHidden=true;done.isEnabled=false;done.keyEquivalent=""
+    window?.styleMask.remove(.closable);spinner.isHidden=false;spinner.startAnimation(nil)
+    progressBar.isHidden=false
     phase("MSSQL Studio \(version) güncelleme paketi indiriliyor.",stage:.downloading)
-    self.version.stringValue += "  →  "+version
+    if !self.version.stringValue.hasSuffix(" → "+version) {self.version.stringValue += " → "+version}
+  }
+  func offer(version latest:String,current:String,notes:[ReleaseNote],notesError:String="",download action:@escaping ()->Void) {
+    guard !finished else {return}
+    heading.stringValue="Yeni sürüm mevcut"
+    version.stringValue="Yüklü "+current+" → "+latest
+    transfer.stringValue="Notları inceleyin; indirme seçiminizi bekliyor"
+    progressBar.stopAnimation(nil);progressBar.isHidden=true;percentage.stringValue=""
+    spinner.stopAnimation(nil);spinner.isHidden=true
+    done.isEnabled=true;done.keyEquivalent="";window?.styleMask.insert(.closable)
+    download.title="\(latest) Sürümünü İndir";download.isHidden=false;download.isEnabled=true;download.keyEquivalent="\r"
+    downloadAction=action
+    let text=NSMutableAttributedString(string:"")
+    func append(_ value:String,bold:Bool=false,color:NSColor=StudioTheme.text) {
+      let paragraph=NSMutableParagraphStyle();paragraph.paragraphSpacing=8
+      text.append(NSAttributedString(string:value,attributes:[.font:bold ? NSFont.systemFont(ofSize:StudioMetrics.bodyFont,weight:.semibold):StudioTheme.uiFont,.foregroundColor:color,.paragraphStyle:paragraph]))
+    }
+    if !notesError.isEmpty {append("Sürüm notları alınamadı. "+notesError+"\n\n",color:StudioTheme.warning)}
+    for note in notes {
+      append(note.version+" · "+note.title+"\n",bold:true)
+      append(note.date+"\n",color:StudioTheme.muted)
+      for change in note.changes {append("• "+change+"\n")}
+      append("\n")
+    }
+    if notes.isEmpty && notesError.isEmpty {append("Bu sürüm aralığı için değişiklik notu bulunamadı.")}
+    status.attributedStringValue=text
+    if let window,window.contentView!.bounds.height<480 {
+      window.setContentSize(NSSize(width:max(560,window.contentView!.bounds.width),height:480))
+    }
+    window?.contentView?.layoutSubtreeIfNeeded();status.enclosingScrollView?.documentView?.scroll(.zero)
+  }
+  @objc private func downloadSelected() {
+    guard let action=downloadAction else {return}
+    downloadAction=nil;download.isEnabled=false;action()
   }
   func updateTransfer(_ value:UpdateDownloadProgress) {
     guard !finished,stage == .downloading else {return}
@@ -96,6 +138,7 @@ import SwiftUI
   }
   func finish(_ text:String,failed:Bool=false) {
     guard !finished else {return}
+    downloadAction=nil;download.isHidden=true
     status.stringValue=text;finished=true
     heading.stringValue=failed ? "Güncelleme tamamlanamadı":"Güncelleme kontrolü tamamlandı"
     icon.image=NSImage(systemSymbolName:failed ? "exclamationmark.circle":"checkmark.circle",accessibilityDescription:nil)
@@ -105,11 +148,12 @@ import SwiftUI
     spinner.stopAnimation(nil);spinner.isHidden=true;done.isEnabled=true;window?.styleMask.insert(.closable);done.keyEquivalent="\r"
     window?.contentView?.layoutSubtreeIfNeeded();status.enclosingScrollView?.documentView?.scroll(.zero)
   }
-  @objc private func closeProgress() {close()}
+  @objc private func closeProgress() {downloadAction=nil;close()}
 }
 
 extension WorkbenchController {
   @objc func installUpdate() {
+    if updateProgress?.hasOffer==true,updateProgress?.window?.isVisible==true {updateProgress?.showWindow(nil);return}
     guard !updateInProgress else {updateProgress?.showWindow(nil);return}
     let feed:URL
     do {
@@ -130,7 +174,22 @@ extension WorkbenchController {
         guard let release = try await updater.check(feed:feed,currentVersion:version) else {
           progress.finish("MSSQL Studio güncel. Yeni bir sürüm bulunamadı.");return
         }
-        progress.beginDownload(version:release.version)
+        progress.phase("MSSQL Studio "+release.version+" bulundu. Sürüm notları alınıyor…")
+        var notes:[ReleaseNote]=[],notesError=""
+        do {notes=try await updater.releaseNotes(feed:feed,release:release,currentVersion:version)}
+        catch {try Task.checkCancellation();notesError=error.localizedDescription}
+        progress.offer(version:release.version,current:version,notes:notes,notesError:notesError) { [weak self=self,weak progress=progress] in
+          guard let self,let progress,!self.updateInProgress else {return}
+          self.updateInProgress=true
+          progress.beginDownload(version:release.version)
+          Task {await self.downloadUpdate(release,updater:updater,progress:progress,currentVersion:version)}
+        }
+      } catch {progress.finish("Güncelleme kontrolü tamamlanamadı.\n"+error.localizedDescription,failed:true)}
+    }
+  }
+  private func downloadUpdate(_ release:ApplicationUpdate.Release,updater:ApplicationUpdate,progress:UpdateProgressController,currentVersion version:String) async {
+    defer {updateInProgress=false}
+    do {
         let package = try await updater.downloadInstaller(release) {value in
           Task { @MainActor in progress.updateTransfer(value) }
         }
@@ -160,8 +219,7 @@ extension WorkbenchController {
         }
         Application.updateTerminationApproved=true
         NSApp.terminate(nil)
-      } catch {progress.showWindow(nil);progress.finish("Güncelleme kontrolü tamamlanamadı.\n"+error.localizedDescription,failed:true)}
-    }
+    } catch {progress.showWindow(nil);progress.finish("Güncelleme indirilemedi veya hazırlanamadı.\n"+error.localizedDescription,failed:true)}
   }
 }
 

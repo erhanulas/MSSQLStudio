@@ -85,6 +85,7 @@ private actor ProfilerFilteringProbe {
     preview.request(model.events)
     preview.request([model.events[1]])
     preview.request([model.events[3]])
+    #expect(!preview.busy && preview.sql==model.events[3].sql)
     try await wait {!preview.busy}
     #expect(preview.sql==model.events[3].sql && !preview.tokens.isEmpty)
     preview.request([model.events[3]])
@@ -132,6 +133,73 @@ private actor ProfilerFilteringProbe {
     let after=input.convert(input.bounds,to:choice.view)
     #expect(abs(after.midY-before.midY)<1 && abs(after.height-before.height)<=2)
 
+  }
+  @Test func largePreviewSwitchBackMeasuresNativeTextReplacement() {
+    let preview=SQLPreviewView(frame:NSRect(x:0,y:0,width:700,height:300))
+    let window=NSWindow(contentRect:preview.bounds,styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=preview;window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
+    defer {window.close()}
+    let sql=String(repeating:"SELECT N'Large multi-selection SQL';\nGO\n",count:20000)
+    preview.display(sql,lexicalSnapshot:[]);preview.layoutSubtreeIfNeeded()
+    preview.scroll.contentView.scroll(to:NSPoint(x:0,y:200000));preview.scroll.reflectScrolledClipView(preview.scroll.contentView)
+    let clock=ContinuousClock(),start=clock.now
+    preview.display("SELECT 1;",lexicalSnapshot:[]);preview.layoutSubtreeIfNeeded()
+    let elapsed=start.duration(to:clock.now)
+    print("PROFILER-LARGE-TO-SINGLE",elapsed)
+    #expect(preview.textView.string=="SELECT 1;" && preview.scroll.contentView.bounds.minY==0)
+    #expect(elapsed < .seconds(1))
+  }
+  @Test func profilerTimestampAndSymbolAspectStayReadable() {
+    #expect(ProfilerTimestamp.display("2026-10-16T17:23:17.010Z")=="16.10.2026 17:23:17.010")
+    #expect(ProfilerTimestamp.display("2026-10-16T17:23:17Z")=="16.10.2026 17:23:17.000")
+    #expect(ProfilerTimestamp.display("2026-10-16T17:23:17.1Z")=="16.10.2026 17:23:17.100")
+    #expect(ProfilerTimestamp.display("2026-10-16T17:23:17.1234567Z")=="16.10.2026 17:23:17.123")
+    #expect(ProfilerTimestamp.display("2026-10-16T17:23:17+02:00")=="2026-10-16T17:23:17+02:00")
+    let image=NSImage(size:NSSize(width:20,height:10))
+    #expect(StudioSymbolDrawing.rect(for:image,in:NSRect(x:0,y:0,width:16,height:16))==NSRect(x:0,y:4,width:16,height:8))
+  }
+  @Test func inputModeUsesFullNativeHitAreaAndFilterAnchorsToScrolledHeader() async throws {
+    let (model,_)=try await fixture()
+    var manual=false
+    let modeHost=NSHostingController(rootView:ProfilerInputModeButton(manual:Binding(get:{manual},set:{manual=$0}),title:"Veritabanı"))
+    modeHost.sizingOptions=[]
+    let modeWindow=NSWindow(contentViewController:modeHost);modeWindow.isReleasedWhenClosed=false
+    modeWindow.setContentSize(NSSize(width:80,height:40));modeWindow.setFrameOrigin(NSPoint(x:-20000,y:0));modeWindow.orderFront(nil)
+    defer {modeWindow.close()}
+    try await Task.sleep(for:.milliseconds(40));modeHost.view.layoutSubtreeIfNeeded()
+    func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+    let mode=try #require(descendants(modeHost.view).compactMap {$0 as? ProfilerInputModeButton.Button}.first)
+    mode.frame=NSRect(x:0,y:0,width:52,height:26)
+    #expect(mode.hitTest(NSPoint(x:2,y:13)) === mode)
+    #expect(NSApp.sendAction(try #require(mode.action),to:mode.target,from:mode) && manual)
+    mode.isEnabled=false
+    _=NSApp.sendAction(try #require(mode.action),to:mode.target,from:mode)
+    #expect(manual)
+    let host=NSHostingController(rootView:ProfilerEventGrid(model:model,selection:.constant([])));host.sizingOptions=[]
+    let window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false
+    window.setContentSize(NSSize(width:960,height:700));window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
+    defer {window.close()}
+    try await Task.sleep(for:.milliseconds(80));host.view.layoutSubtreeIfNeeded()
+    func children(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(children)}
+    let table=try #require(children(host.view).compactMap {$0 as? NSTableView}.first)
+    let owner=try #require(table.delegate as? ProfilerEventGrid.Coordinator)
+    let position=table.column(withIdentifier:.init("application"));table.scrollColumnToVisible(position)
+    host.view.layoutSubtreeIfNeeded()
+    owner.tableView(table,didClick:table.tableColumns[position])
+    let popup=try #require(owner.filterPopover);defer {popup.close()}
+    let header=try #require(table.headerView),body=try #require(window.contentView)
+    let visible=header.headerRect(ofColumn:position).intersection(header.visibleRect)
+    let anchor=body.convert(visible,from:header)
+    #expect(popup.isShown && !popup.animates && abs(popup.positioningRect.midX-anchor.midX)<1)
+    var rule=ColumnRule();rule.choices=[.text("HOST-B")]
+    try model.setColumnFilter(rule,column:.host)
+    try await wait {!model.filtering && model.visibleEvents.count==1}
+    #expect(model.visibleEvents[0].host=="HOST-B")
+    if let view=popup.contentViewController?.view,let image=view.bitmapImageRepForCachingDisplay(in:view.bounds) {
+      view.cacheDisplay(in:view.bounds,to:image)
+      try image.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-profiler-column-filter.png"))
+    }
+    #expect(await model.stop())
   }
   @Test func nativeGridContextActionsFilterClearAndStopItsOwnCapture() async throws {
     let (model,probe)=try await fixture()

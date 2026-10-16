@@ -14,6 +14,9 @@ public enum CellChoice: Hashable, Sendable {
 public enum ColumnOperation: String, CaseIterable, Sendable {
   case any = "Koşul yok"
   case contains = "İçerir"
+  case notContains = "İçermez"
+  case atLeast = "En az / Sonra veya eşit"
+  case atMost = "En çok / Önce veya eşit"
   case starts = "İle başlar"
   case equal = "Eşittir"
   case unequal = "Eşit değildir"
@@ -25,7 +28,7 @@ public enum ColumnOperation: String, CaseIterable, Sendable {
   case empty = "Boş metin"
   case notEmpty = "Boş metin değil"
   public var needsValue: Bool {
-    [.contains, .starts, .equal, .unequal, .greater, .less, .between].contains(self)
+    [.contains, .notContains, .starts, .equal, .unequal, .greater, .less, .atLeast, .atMost, .between].contains(self)
   }
 }
 public struct ColumnRule: Equatable, Sendable {
@@ -142,9 +145,14 @@ public enum ResultFiltering {
           matches = false
           break
         }
-        let comparison =
-          [.equal, .unequal, .greater, .less, .between].contains(rule.operation)
-          ? compare(key(value, field: rows.fields[i]), lower) : .orderedSame
+        let compares=[ColumnOperation.equal,.unequal,.greater,.less,.atLeast,.atMost,.between].contains(rule.operation)
+        let actual=compares ? key(value,field:rows.fields[i]):.null
+        let comparison=compares ? compare(actual,lower):.orderedSame
+        let compatible:Bool
+        switch (actual,lower) {
+        case (.number,.number),(.date,.date),(.text,.text):compatible=true
+        default:compatible=false
+        }
         let yes: Bool
         switch rule.operation {
         case .any: yes = true
@@ -153,6 +161,9 @@ public enum ResultFiltering {
         case .empty: yes = value == ""
         case .notEmpty: yes = value != nil && value != ""
         case .contains: yes = value?.localizedCaseInsensitiveContains(rule.first) ?? false
+        case .notContains: yes = !(value?.localizedCaseInsensitiveContains(rule.first) ?? false)
+        case .atLeast: yes = value != nil && compatible && comparison != .orderedAscending
+        case .atMost: yes = value != nil && compatible && comparison != .orderedDescending
         case .starts: yes = value?.lowercased().hasPrefix(rule.first.lowercased()) ?? false
         case .equal: yes = value != nil && comparison == .orderedSame
         case .unequal: yes = value != nil && comparison != .orderedSame

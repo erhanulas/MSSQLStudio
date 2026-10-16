@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SQLServerKit
 
@@ -43,13 +44,24 @@ struct ProfilerFilters:View {
           if model.filtering {ProgressView().controlSize(.small)}
         }
         HStack {
-          Text("Grid filtreleri · \(model.displayFilter.rules.count)").foregroundStyle(.secondary)
+          Text("Grid filtreleri · \(model.displayFilter.rules.count+model.displayFilter.columnRules.count)").foregroundStyle(.secondary)
           Spacer(minLength:0)
           Button {model.displayFilter = .init()} label:{Image(systemName:"arrow.counterclockwise")}
             .buttonStyle(StudioSecondaryButton()).accessibilityLabel("Grid filtrelerini sıfırla").studioHelp("Grid filtrelerini ve SQL aramasını sıfırla; yakalamayı değiştirmez")
         }
         Text("Kolon başlığına tıklayarak koşul ekleyin. Hücreye sağ tıklayarak değerini filtreleyin.")
           .font(.system(size:11)).foregroundStyle(.secondary)
+        ForEach(SQLProfilerFiltering.Column.allCases.filter {model.displayFilter.columnRules[$0]?.active==true}) {column in
+          HStack {
+            VStack(alignment:.leading,spacing:4) {
+              Text(column.title).fontWeight(.medium)
+              Text(model.displayFilter.columnRules[column]?.summary ?? "").font(.system(size:11)).lineLimit(2)
+            }
+            Spacer(minLength:0)
+            Button {model.displayFilter.columnRules.removeValue(forKey:column)} label:{Image(systemName:"xmark")}
+              .buttonStyle(StudioSecondaryButton()).accessibilityLabel(column.title+" filtresini kaldır").studioHelp("Bu kolon filtresini kaldır")
+          }
+        }
         ForEach($model.displayFilter.rules) {$rule in
           VStack(alignment:.leading,spacing:4) {
             HStack {
@@ -100,10 +112,31 @@ struct ProfilerCaptureChoice:View {
         if manual {TextField("Tümü",text:$text).textFieldStyle(.roundedBorder)}
         else {StudioSearchablePicker(title:title,values:values,emptyTitle:"Tümü",selection:$text)}
       }.frame(maxWidth:.infinity)
-      Button {manual.toggle()} label:{Image(systemName:manual ? "list.bullet":"pencil")}
-        .buttonStyle(.plain).frame(width:20)
-        .accessibilityLabel(title+(manual ? " · Listeden seç":" · Elle değer gir"))
-        .studioHelp(manual ? "Aramalı listeden seç":"Listede olmayan değeri elle gir")
+      ProfilerInputModeButton(manual:$manual,title:title).frame(width:52,height:26)
     }.frame(height:28)
+  }
+}
+
+struct ProfilerInputModeButton:NSViewRepresentable {
+  @Environment(\.isEnabled) private var enabled
+  @Binding var manual:Bool
+  let title:String
+  func makeNSView(context:Context)->Button {Button(frame:.zero)}
+  func updateNSView(_ button:Button,context:Context) {
+    button.isEnabled=enabled
+    button.title=manual ? "Liste":"Elle"
+    button.image=NSImage(systemSymbolName:manual ? "list.bullet":"square.and.pencil",accessibilityDescription:nil)
+    button.setAccessibilityLabel(title+(manual ? " · Listeden seç":" · Elle değer gir"))
+    StudioHoverHelp.shared.configureText(manual ? "Aramalı listeden seç":"Listede olmayan değeri elle gir",for:button)
+    button.activate={manual.toggle()}
+  }
+  @MainActor final class Button:StudioFullAreaButton {
+    var activate:(()->Void)?
+    override init(frame:NSRect) {
+      super.init(frame:frame);setButtonType(.momentaryPushIn);bezelStyle = .rounded;isBordered=false
+      imagePosition = .imageLeading;font=StudioTheme.uiFont;target=self;action=#selector(toggleMode)
+    }
+    required init?(coder:NSCoder) {fatalError()}
+    @objc private func toggleMode() {if isEnabled {activate?()}}
   }
 }

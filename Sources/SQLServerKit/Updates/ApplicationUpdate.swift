@@ -16,6 +16,15 @@ public enum GitHubUpdateSource {
     guard parts.count == 2,parts.allSatisfy({!$0.isEmpty && $0.count<=100 && $0 != "." && $0 != ".." && $0.unicodeScalars.allSatisfy(allowed.contains)}) else {throw SQLFailure("Geçerli bir GitHub kullanıcı/depo adresi girin.")}
     return value
   }
+  public static func releaseNotesURL(feed:URL,version:String)throws->URL {
+    let parts=feed.path.split(separator:"/").map(String.init)
+    guard feed.scheme=="https",feed.host?.lowercased()=="github.com",feed.user==nil,feed.password==nil,feed.port==nil,
+      parts.count==6,Array(parts.dropFirst(2))==["releases","latest","download","update.json"],
+      version.split(separator:".",omittingEmptySubsequences:false).allSatisfy({!$0.isEmpty && $0.allSatisfy {$0.isASCII && $0.isNumber}}),
+      (2...4).contains(version.split(separator:".").count) else {throw SQLFailure("Bu güncelleme kaynağı için sürüm notları adresi bulunamadı.")}
+    let repo=try repository(parts[0]+"/"+parts[1])
+    return URL(string:"https://raw.githubusercontent.com/"+repo+"/v"+version+"/Sources/SQLServerKit/Resources/ReleaseNotes.json")!
+  }
   public static func feed(_ input:String) throws -> URL {
     URL(string:"https://github.com/"+(try repository(input))+"/releases/latest/download/update.json")!
   }
@@ -35,8 +44,9 @@ public actor ApplicationUpdate {
     public let installerSHA256: String?
   }
   typealias ManifestTransport = @Sendable (URLRequest) async throws -> (Data,URLResponse)
+  private let notesTransport:ManifestTransport
   private let manifestTransport:ManifestTransport
-  init(manifestTransport:@escaping ManifestTransport) {self.manifestTransport=manifestTransport}
+  init(manifestTransport:@escaping ManifestTransport) {self.manifestTransport=manifestTransport;notesTransport=manifestTransport}
   public func check(feed: URL, currentVersion: String) async throws -> Release? {
     guard feed.scheme == "https",feed.user == nil,feed.password == nil else {throw SQLFailure("Güncelleme adresi HTTPS olmalı.")}
     for attempt in 0..<3 {
@@ -89,6 +99,19 @@ public actor ApplicationUpdate {
       return Self.isNewer(release.version,than:currentVersion) ? release:nil
     }
     throw SQLFailure("Güncelleme kontrolü tamamlanamadı.")
+  }
+  public func releaseNotes(feed:URL,release:Release,currentVersion:String) async throws -> [ReleaseNote] {
+    let url=try GitHubUpdateSource.releaseNotesURL(feed:feed,version:release.version)
+    var request=URLRequest(url:url,cachePolicy:.reloadIgnoringLocalCacheData,timeoutInterval:10)
+    request.setValue("application/json",forHTTPHeaderField:"Accept")
+    request.setValue("MSSQLStudio-Updater",forHTTPHeaderField:"User-Agent")
+    let (data,response)=try await notesTransport(request)
+    try Task.checkCancellation()
+    guard let http=response as? HTTPURLResponse,http.statusCode==200,response.url==url else {throw SQLFailure("Sürüm notları alınamadı; GitHub yayınlarından inceleyebilirsiniz.")}
+    guard !data.isEmpty,data.count<=512*1024 else {throw SQLFailure("Sürüm notları boyut sınırını aşıyor veya boş.")}
+    let notes=try ReleaseHistory.decode(data)
+    guard notes.count<=2000,notes.allSatisfy({$0.title.count<=1024 && $0.changes.count<=100 && $0.changes.allSatisfy {$0.count<=8192}}) else {throw SQLFailure("Sürüm notları içerik sınırlarını aşıyor.")}
+    return try ReleaseHistory.updates(notes,after:currentVersion,through:release.version)
   }
   public func download(_ release: Release,progress:(@Sendable (UpdateDownloadProgress)->Void)?=nil) async throws -> URL {
     guard release.downloadURL.scheme == "https" else { throw SQLFailure("Paket adresi HTTPS olmalı.") }
@@ -147,7 +170,19 @@ public actor ApplicationUpdate {
     guard actual == "designated => " + identity else {return false}
     return true
   }
-  public init() {manifestTransport={request in try await URLSession.shared.data(for:request)}}
+  public init() {
+    manifestTransport={request in try await URLSession.shared.data(for:request)}
+    notesTransport={request in
+      let (bytes,response)=try await URLSession.shared.bytes(for:request)
+      guard response.expectedContentLength<=512*1024 else {throw SQLFailure("Sürüm notları boyut sınırını aşıyor.")}
+      var data=Data()
+      for try await byte in bytes {
+        guard data.count<512*1024 else {throw SQLFailure("Sürüm notları boyut sınırını aşıyor.")}
+        data.append(byte)
+      }
+      return (data,response)
+    }
+  }
   public nonisolated static func isNewer(_ candidate: String, than current: String) -> Bool {
     let allowed = CharacterSet(charactersIn:"0123456789.")
     guard !candidate.isEmpty, candidate.unicodeScalars.allSatisfy(allowed.contains), !candidate.contains("..") else { return false }

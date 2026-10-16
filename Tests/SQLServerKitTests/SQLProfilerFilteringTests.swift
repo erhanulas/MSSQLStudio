@@ -36,6 +36,27 @@ import Testing
     filter.rules=[.init(column:.cpu,comparison:.equals,value:"9007199254740993")]
     #expect(try SQLProfilerFiltering.project(source,filter:filter).events.count==5)
   }
+  @Test func resultColumnRulesSupportChoicesRangesAndLegacyRulesTogether() throws {
+    let events=[event(0,host:"A",duration:10),event(1,host:"B",duration:20),event(2,host:"C",duration:30)]
+    var filter=SQLProfilerFiltering.Filter(),hosts=ColumnRule(),duration=ColumnRule()
+    hosts.choices=[.text("A"),.text("C")];duration.operation = .atLeast;duration.first="20"
+    filter.columnRules=[.host:hosts,.duration:duration]
+    #expect(try SQLProfilerFiltering.project(events,filter:filter).events.map(\.id)==[2])
+    duration.operation = .atMost;duration.first="10";filter.columnRules[.duration]=duration
+    #expect(try SQLProfilerFiltering.project(events,filter:filter).events.map(\.id)==[0])
+    filter.columnRules[.duration]=nil;hosts.choices=[];filter.columnRules[.host]=hosts
+    #expect(try SQLProfilerFiltering.project(events,filter:filter).events.isEmpty)
+    hosts.choices=nil;hosts.operation = .notContains;hosts.first="C";filter.columnRules[.host]=hosts
+    filter.rules=[.init(column:.duration,comparison:.atLeast,value:"15")]
+    #expect(try SQLProfilerFiltering.project(events,filter:filter).events.map(\.id)==[1])
+    var missing=ColumnRule();missing.operation = .atLeast;missing.first="0"
+    filter.columnRules=[.duration:missing];filter.rules=[]
+    #expect(try SQLProfilerFiltering.project([event(9,duration:nil)],filter:filter).events.isEmpty)
+    filter.columnRules=[.reads:missing]
+    #expect(try SQLProfilerFiltering.project([event(9,reads:"not a number")],filter:filter).events.isEmpty)
+    filter.rules=Array(repeating:.init(value:"1"),count:20)
+    #expect(throws:(any Error).self) {try SQLProfilerFiltering.project(events,filter:filter)}
+  }
   @Test func busiestClientsSeparateSamePidOnDifferentHostsAndDoNotInventMissingIdentity() throws {
     let projection=try SQLProfilerFiltering.project([event(0),event(1),event(2,host:"HOST-B"),event(3,pid:""),event(4,host:"")],filter:.init())
     #expect(projection.events.count==5 && projection.clients.count==2 && projection.unknownClientEvents==2)

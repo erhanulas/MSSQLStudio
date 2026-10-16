@@ -119,9 +119,17 @@ private actor ProfilerConnection {
   func clearDisplay() {buffer.clearDisplay();events=[];choices.updateCaptured([]);scheduleProjection(debounce:false)}
   func focusClient(_ client:SQLProfilerFiltering.Client) {
     var filter=displayFilter
+    filter.columnRules.removeValue(forKey:.clientPID);filter.columnRules.removeValue(forKey:.host)
     filter.rules.removeAll {$0.column == .clientPID || $0.column == .host}
     filter.rules.append(.init(column:.clientPID,comparison:.equals,value:client.id.pid))
     filter.rules.append(.init(column:.host,comparison:.equals,value:client.id.host))
+    displayFilter=filter
+  }
+  func setColumnFilter(_ rule:ColumnRule,column:SQLProfilerFiltering.Column)throws {
+    var filter=displayFilter
+    filter.rules.removeAll {$0.column==column}
+    filter.columnRules[column]=rule.active ? rule:nil
+    guard filter.columnRules.count+filter.rules.count<=20 else {throw SQLFailure("En fazla 20 kolon filtresi kullanılabilir.")}
     displayFilter=filter
   }
   private func scheduleProjection(debounce:Bool) {

@@ -67,7 +67,7 @@ struct ColumnFilterPanel: View {
         VStack(alignment: .leading, spacing: 8) {
           Picker("Karşılaştırma", selection: $rule.operation) {
             ForEach(ColumnOperation.allCases, id: \.self) { operation in
-              if !rows.fields[column].numeric && !ResultFiltering.isDate(rows.fields[column]) || ![.contains, .starts, .empty, .notEmpty].contains(operation) {
+              if !rows.fields[column].numeric && !ResultFiltering.isDate(rows.fields[column]) || ![.contains, .notContains, .starts, .empty, .notEmpty].contains(operation) {
                 Text(operation.rawValue).tag(operation)
               }
             }

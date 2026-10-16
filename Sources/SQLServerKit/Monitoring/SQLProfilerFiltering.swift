@@ -2,10 +2,11 @@ import Foundation
 
 public enum SQLProfilerFiltering {
   public enum Column:String,CaseIterable,Identifiable,Sendable {
-    case clientPID,session,sql,host,application,login,database,kind,duration,cpu,reads,writes
+    case clientPID,session,sql,host,application,login,database,kind,duration,cpu,reads,writes,timestamp
     public var id:String {rawValue}
     public var title:String {
       switch self {
+      case .timestamp:"Zaman (UTC)"
       case .clientPID:"ClientProcessID"
       case .session:"SPID"
       case .sql:"SQL metni"
@@ -24,6 +25,7 @@ public enum SQLProfilerFiltering {
     public var operators:[Comparison] {numeric ? [.equals,.notEquals,.atLeast,.atMost]:[.contains,.notContains,.equals,.notEquals]}
     public func value(_ event:SQLProfiler.Event)->String {
       switch self {
+      case .timestamp:event.timestamp
       case .clientPID:event.clientPID
       case .session:event.session
       case .sql:event.sql
@@ -56,6 +58,7 @@ public enum SQLProfilerFiltering {
   public struct Filter:Sendable,Equatable {
     public var sqlSearch=""
     public var rules:[Rule]=[]
+    public var columnRules:[Column:ColumnRule]=[:]
     public init() {}
   }
   public struct Client:Identifiable,Sendable {
@@ -80,8 +83,17 @@ public enum SQLProfilerFiltering {
     guard digits>0,!text.hasPrefix("."),!text.hasSuffix("."),let value=Decimal(string:text,locale:Locale(identifier:"en_US_POSIX")),!value.isNaN else {return nil}
     return value
   }
+  public static func rows(_ events:[SQLProfiler.Event],columns:[Column])throws->Rows {
+    let fields=columns.map {Field($0.title,type:$0 == .timestamp ? -155:$0.numeric ? 3:-9)}
+    var values:[[String?]]=[];values.reserveCapacity(events.count)
+    for (index,event) in events.enumerated() {
+      if index%64==0 {try Task.checkCancellation()}
+      values.append(columns.map {$0.value(event)})
+    }
+    return Rows(fields:fields,values:values)
+  }
   public static func project(_ events:[SQLProfiler.Event],filter:Filter) throws -> Projection {
-    guard filter.rules.count<=20,filter.sqlSearch.utf16.count<=2048 else {throw SQLFailure("En fazla 20 kolon filtresi ve 2.048 karakter arama kullanılabilir.")}
+    guard filter.rules.count+filter.columnRules.count<=20,filter.sqlSearch.utf16.count<=2048 else {throw SQLFailure("En fazla 20 kolon filtresi ve 2.048 karakter arama kullanılabilir.")}
     let rules=try filter.rules.filter {!$0.value.isEmpty}.map {rule -> (Rule,Decimal?) in
       guard rule.value.utf16.count<=1024,rule.column.operators.contains(rule.comparison) else {throw SQLFailure("\(rule.column.title) filtresinin işlemi veya değeri geçersiz.")}
       let numeric=rule.column.numeric ? number(rule.value):nil
@@ -102,12 +114,23 @@ public enum SQLProfilerFiltering {
         switch rule.comparison {case .contains:return contains;case .notContains:return !contains;case .equals:return equal;case .notEquals:return !equal;default:return false}
       }
     }
+    let columns=Column.allCases.filter {filter.columnRules[$0]?.active==true}
+    var visible:Set<Int>?
+    if !columns.isEmpty {
+      for column in columns {
+        let rule=filter.columnRules[column]!
+        guard rule.first.utf16.count<=1024,rule.second.utf16.count<=1024,(rule.choices?.count ?? 0)<=5000 else {throw SQLFailure("Kolon filtresi boyut sınırını aşıyor.")}
+      }
+      let rows=try rows(events,columns:columns)
+      let mapped=Dictionary(uniqueKeysWithValues:columns.enumerated().map {($0.offset,filter.columnRules[$0.element]!)})
+      if let indices=try ResultFiltering.projection(rows,search:"",rules:mapped,sortColumn:nil,ascending:true) {visible=Set(indices)}
+    }
     var filtered:[SQLProfiler.Event]=[]
     var groups:[Client.Key:(count:Int,duration:Double,measured:Int,apps:Set<String>)]=[:]
     var unknown=0
     for (index,event) in events.enumerated() {
       if index%64==0 {try Task.checkCancellation()}
-      guard matches(event) else {continue}
+      guard visible?.contains(index) ?? true,matches(event) else {continue}
       filtered.append(event)
       guard !event.clientPID.isEmpty,!event.host.isEmpty else {unknown+=1;continue}
       let key=Client.Key(host:event.host,pid:event.clientPID)

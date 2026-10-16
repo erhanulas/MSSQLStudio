@@ -89,6 +89,50 @@ import Testing
     editor.setSelectedRange(NSRange(location:15,length:0));controller.updateOccurrences()
     #expect(controller.occurrenceHighlights.blockRanges.isEmpty)
   }
+  @Test func checkingOffersNotesWithoutDownloadingAndClickIsSingleFlight() throws {
+    _=NSApplication.shared
+    let progress=UpdateProgressController();defer {progress.close()}
+    let notes=try ReleaseHistory.decode(Data(#"[{"version":"0.2.31","date":"2026-10-10","title":"Latest","changes":["Latest change"]},{"version":"0.2.30","date":"2026-10-10","title":"Between","changes":["Middle change"]}]"#.utf8))
+    var downloads=0
+    progress.offer(version:"0.2.31",current:"0.2.29",notes:notes) {downloads+=1;progress.beginDownload(version:"0.2.31")}
+    #expect(downloads==0 && progress.hasOffer && progress.done.isEnabled && progress.progressBar.isHidden && !progress.download.isHidden)
+    #expect(progress.status.stringValue.contains("Latest change") && progress.status.stringValue.contains("Middle change"))
+    #expect(NSApp.sendAction(try #require(progress.download.action),to:progress.download.target,from:progress.download))
+    #expect(downloads==1 && !progress.hasOffer && !progress.done.isEnabled && !progress.progressBar.isHidden)
+    _=NSApp.sendAction(try #require(progress.download.action),to:progress.download.target,from:progress.download)
+    #expect(downloads==1)
+  }
+  @Test func availableUpdateNotesScrollAndActionsFitBothThemes() throws {
+    let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}
+    let notes=try ReleaseHistory.decode(Data(#"[{"version":"0.2.31","date":"2026-10-10","title":"Latest","changes":["Latest change with useful details"]}]"#.utf8))
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      let controller=UpdateProgressController();defer {controller.close()}
+      controller.offer(version:"0.2.31",current:"0.2.29",notes:Array(repeating:notes[0],count:12),download:{})
+      let window=try #require(controller.window),body=try #require(window.contentView)
+      window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
+      for size in [NSSize(width:440,height:320),NSSize(width:640,height:520)] {
+        window.setContentSize(size);body.layoutSubtreeIfNeeded()
+        for button in [controller.done,controller.download] {
+          #expect(body.bounds.contains(body.convert(button.bounds,from:button)) && button.isEnabled)
+        }
+        let scroll=try #require(controller.status.enclosingScrollView)
+        #expect(scroll.documentView!.bounds.height>scroll.contentSize.height)
+        if size.width==640,let image=body.bitmapImageRepForCachingDisplay(in:body.bounds) {
+          body.cacheDisplay(in:body.bounds,to:image)
+          try image.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-update-offer-"+theme+".png"))
+        }
+      }
+    }
+  }
+  @Test func missingNotesStayVisibleAndClosingOfferDoesNotDownload() {
+    let progress=UpdateProgressController();defer {progress.close()}
+    var downloads=0
+    progress.offer(version:"0.2.31",current:"0.2.29",notes:[],notesError:"HTTP 404") {downloads+=1}
+    #expect(progress.status.stringValue.contains("HTTP 404") && progress.done.isEnabled && !progress.download.isHidden)
+    _=NSApp.sendAction(progress.done.action!,to:progress.done.target,from:progress.done)
+    #expect(downloads==0 && !progress.hasOffer)
+  }
   @Test func downloadProgressUsesRealCountsAndIgnoresLateCallbacks() {
     _=NSApplication.shared
     let progress=UpdateProgressController();defer {progress.close()}

@@ -1,32 +1,29 @@
 import SwiftUI
 import SQLServerKit
 
+/// Uses the result viewer's value checklist, comparison editor and validation unchanged.
 struct ProfilerColumnFilter:View {
   @ObservedObject var model:ProfilerModel
   let column:SQLProfilerFiltering.Column
+  let events:[SQLProfiler.Event]
+  let initial:ColumnRule
   let close:()->Void
-  @State private var value=""
-  @State private var comparison:SQLProfilerFiltering.Comparison = .contains
+  @State private var rows:Rows?
+  @State private var error=""
   var body:some View {
-    VStack(alignment:.leading,spacing:8) {
-      Text(column.title).fontWeight(.medium)
-      Picker("Koşul",selection:$comparison) {ForEach(column.operators) {Text($0.title).tag($0)}}
-      TextField("Filtre değeri",text:$value).textFieldStyle(.roundedBorder).onSubmit(apply)
-      HStack {
-        Button("Kaldır") {model.displayFilter.rules.removeAll {$0.column==column};close()}.buttonStyle(StudioSecondaryButton())
-        Spacer()
-        Button("Uygula",action:apply).buttonStyle(StudioPrimaryButton()).disabled(value.isEmpty || (model.displayFilter.rules.count>=20 && !model.displayFilter.rules.contains {$0.column==column}))
-      }
-    }.padding(12).frame(width:280).onAppear {
-      let rule=model.displayFilter.rules.first {$0.column==column}
-      value=rule?.value ?? "";comparison=rule?.comparison ?? column.operators[0]
+    Group {
+      if let rows {
+        ColumnFilterPanel(rows:rows,column:0,initial:initial) {rule in
+          try model.setColumnFilter(rule,column:column);close()
+        }
+      } else if !error.isEmpty {StudioFeedback(message:error,tone:.error).padding(12)}
+      else {ProgressView("Değerler hazırlanıyor…")}
+    }.task {
+      let worker=Task.detached(priority:.utility) {try SQLProfilerFiltering.rows(events,columns:[column])}
+      do {
+        let snapshot=try await withTaskCancellationHandler {try await worker.value} onCancel:{worker.cancel()}
+        try Task.checkCancellation();rows=snapshot
+      } catch is CancellationError {} catch {self.error=error.localizedDescription}
     }
-  }
-  private func apply() {
-    guard !value.isEmpty else {return}
-    var filter=model.displayFilter
-    if let index=filter.rules.firstIndex(where:{$0.column==column}) {filter.rules[index].comparison=comparison;filter.rules[index].value=value}
-    else {guard filter.rules.count<20 else {return};filter.rules.append(.init(column:column,comparison:comparison,value:value))}
-    model.displayFilter=filter;close()
   }
 }

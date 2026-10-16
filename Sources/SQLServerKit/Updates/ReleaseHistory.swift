@@ -24,6 +24,11 @@ public enum ReleaseHistory {
     }
     return try decode(Data(contentsOf: url))
   }
+  public static func updates(_ notes:[ReleaseNote],after current:String,through latest:String)throws->[ReleaseNote] {
+    guard notes.contains(where:{$0.version==latest}) else {throw SQLFailure("Son sürümün değişiklik notları bulunamadı.")}
+    return notes.filter {ApplicationUpdate.isNewer($0.version,than:current) && !ApplicationUpdate.isNewer($0.version,than:latest)}
+      .sorted {$0.version.compare($1.version,options:.numeric) == .orderedDescending}
+  }
   public static func decode(_ data: Data) throws -> [ReleaseNote] {
     let notes = try JSONDecoder().decode([ReleaseNote].self, from: data)
     var versions = Set<String>()

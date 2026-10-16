@@ -42,12 +42,13 @@ import SwiftUI
     let paragraph=NSMutableParagraphStyle();paragraph.lineBreakMode = .byTruncatingMiddle
     let left:CGFloat=leadingSymbol == nil ? 8:28
     if let leadingSymbol,let image=NSImage(systemSymbolName:leadingSymbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(paletteColors:[StudioTheme.accent])) {
-      image.draw(in:NSRect(x:7,y:(bounds.height-16)/2,width:16,height:16))
+      StudioSymbolDrawing.draw(image,in:NSRect(x:7,y:(bounds.height-16)/2,width:16,height:16))
     }
     NSAttributedString(string:titleOfSelectedItem ?? "",attributes:[.font:NSFont.systemFont(ofSize:StudioMetrics.bodyFont),.foregroundColor:color,.paragraphStyle:paragraph])
       .draw(in:NSRect(x:left,y:(bounds.height-17)/2,width:max(0,bounds.width-left-24),height:17))
-    NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:9,weight:.medium))?
-      .withSymbolConfiguration(.init(paletteColors:[StudioTheme.muted]))?.draw(in:NSRect(x:bounds.width-18,y:(bounds.height-10)/2,width:10,height:10))
+    if let arrow=NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:9,weight:.medium))?.withSymbolConfiguration(.init(paletteColors:[StudioTheme.muted])) {
+      StudioSymbolDrawing.draw(arrow,in:NSRect(x:bounds.width-18,y:(bounds.height-10)/2,width:10,height:10))
+    }
     if window?.firstResponder === self {StudioTheme.accent.withAlphaComponent(0.6).setStroke();let path=NSBezierPath(roundedRect:bounds.insetBy(dx:1,dy:1),xRadius:5,yRadius:5);path.stroke()}
   }
 

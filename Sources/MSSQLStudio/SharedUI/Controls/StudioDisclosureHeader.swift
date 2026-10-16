@@ -47,8 +47,9 @@ struct StudioDisclosureHeader:NSViewRepresentable {
     }
     let config=NSImage.SymbolConfiguration(pointSize:12,weight:.semibold)
     for (name,x,color) in [(symbol,CGFloat(8),tint),(expanded ? "chevron.down":"chevron.right",bounds.maxX-24,StudioTheme.muted)] {
-      NSImage(systemSymbolName:name,accessibilityDescription:nil)?.withSymbolConfiguration(config)?
-        .withSymbolConfiguration(.init(paletteColors:[color]))?.draw(in:NSRect(x:x,y:(bounds.height-16)/2,width:16,height:16))
+      if let image=NSImage(systemSymbolName:name,accessibilityDescription:nil)?.withSymbolConfiguration(config)?.withSymbolConfiguration(.init(paletteColors:[color])) {
+        StudioSymbolDrawing.draw(image,in:NSRect(x:x,y:(bounds.height-16)/2,width:16,height:16))
+      }
     }
     let text=NSAttributedString(string:title,attributes:[.font:NSFont.systemFont(ofSize:12,weight:.semibold),.foregroundColor:StudioTheme.text])
     text.draw(in:NSRect(x:32,y:(bounds.height-text.size().height)/2,width:max(0,bounds.width-64),height:text.size().height))

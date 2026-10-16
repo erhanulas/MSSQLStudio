@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.160",
+    "date": "2026-10-16",
+    "title": "Profiler filtre deneyimi ve indirmeden önce sürüm notları",
+    "changes": [
+      "Güncelleme kontrolü artık paketi otomatik indirmez. Kurulu sürümden son sürüme kadar olan değişiklik notları gösterilir; indirme yalnız sürüme özel İndir düğmesiyle başlar.",
+      "Profiler kolon filtreleri sonuç editöründeki değer arama, çoklu değer seçimi ve koşul panelini kullanır. Açılan panel yatay kaydırılmış kolonun görünür başlığına bağlanır.",
+      "Sol paneldeki Elle/Liste düğmeleri metinli ve tüm alanı tıklanabilir hale getirildi. Özel çizilen ok ve SF Symbols ikonlarının en-boy oranları korundu.",
+      "Küçük tek SQL seçimleri eski çoklu seçim hazırlığını beklemeden gösterilir. Normal tıklama çoklu seçimi hemen tek satıra düşürür; Command ve Shift ile seçim korunur.",
+      "Profiler zamanları UTC korunarak gün.ay.yıl saat:dakika:saniye.milisaniye biçiminde gösterilir. Ortak sonuç filtrelerine İçermez, En az ve En çok koşulları eklendi."
+    ]
+  },
+  {
     "version": "0.2.159",
     "date": "2026-10-16",
     "title": "Profiler filtre kategorileri ve akıcı SQL seçimi",
