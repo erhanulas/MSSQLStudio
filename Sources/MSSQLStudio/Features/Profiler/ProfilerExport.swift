@@ -22,7 +22,7 @@ enum ProfilerExport {
     guard events.count<=5000,events.reduce(0,{$0+$1.retainedBytes})<=8*1024*1024 else {
       throw SQLFailure("Dışa aktarma olay bütçesini aşıyor.")
     }
-    if format == .sql {return Data(sql(events).utf8)}
+    if format == .sql {return Data(sql(events.filter {!$0.isCallStart}).utf8)}
     let encoder=JSONEncoder();encoder.outputFormatting=[.prettyPrinted,.sortedKeys]
     return try encoder.encode(Capture(events:events))
   }

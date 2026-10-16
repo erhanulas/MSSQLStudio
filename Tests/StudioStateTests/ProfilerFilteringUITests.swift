@@ -30,6 +30,40 @@ private actor ProfilerFilteringProbe {
     try await wait {model.events.count==4 && model.visibleEvents.count==4 && !model.filtering}
     return (model,probe)
   }
+  @Test func correlatedPreviewUsesHiddenStartAndPreservesRawExport() async throws {
+    let xmlEvents=["rpc_starting","error_reported","rpc_completed"].enumerated().map {index,kind in
+      """
+      <event name="\(kind)" timestamp="2026-10-16T12:00:00Z">
+      <data name="statement"><value>\(index==0 ? "EXEC dbo.Fail;":"")</value></data>
+      <data name="message"><value>Failure message</value></data>
+      <data name="severity"><value>16</value></data>
+      <action name="event_sequence"><value>\(index)</value></action>
+      <action name="session_id"><value>71</value></action>
+      <action name="client_connection_id"><value>11111111-1111-1111-1111-111111111111</value></action>
+      <action name="attach_activity_id"><value>22222222-2222-2222-2222-222222222222-\(index)</value></action>
+      </event>
+      """
+    }.joined()
+    var execution=Execution()
+    execution.results=[Rows(fields:[Field("profiler_xml"),Field("dropped_events")],values:[["<RingBufferTarget totalEventsProcessed=\"3\">"+xmlEvents+"</RingBufferTarget>","0"]])]
+    let snapshot=execution
+    let server=ConnectedServer(profile:.init(),password:"")
+    let model=ProfilerModel(server:server,executor:{$0.contains("SELECT t.target_data") ? snapshot:Execution()},disconnect:{},interval:.milliseconds(20))
+    let name=SQLProfiler.sessionName(UUID())
+    await model.start(name:name,confirmedSQL:try model.preview(name:name))
+    try await wait {model.visibleEvents.count==2 && !model.filtering}
+    let error=try #require(model.visibleEvents.first {$0.kind=="error_reported"})
+    let completed=try #require(model.visibleEvents.first {$0.kind=="rpc_completed"})
+    #expect(model.relations[completed.id]?.messages.first?.message=="Failure message")
+    let preview=ProfilerPreviewPresentation()
+    let resolved=model.previewEvents([error]);preview.request(resolved)
+    #expect(preview.sql=="EXEC dbo.Fail;" && ProfilerExport.sql(resolved)==preview.sql)
+    #expect(error.sql.isEmpty && model.events.count==3)
+    let raw=try ProfilerExport.data(model.events,format:.trace)
+    #expect(String(decoding:raw,as:UTF8.self).contains("rpc_starting"))
+    #expect(!String(decoding:try ProfilerExport.data(model.events,format:.sql),as:UTF8.self).contains("EXEC dbo.Fail;"))
+    #expect(await model.stop())
+  }
   @Test func liveGridFiltersLatestSearchAndClientSelectionWithoutAdditionalDDLOrChangingCapturedRows() async throws {
     let (model,probe)=try await fixture()
     #expect(model.clients.count==3 && model.clients[0].id.pid=="123" && model.clients[0].count==2)

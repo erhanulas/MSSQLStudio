@@ -74,7 +74,6 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   init(state: StudioState) {
     self.state = state
     explorerTree.expansionState=state.explorerTreeDefaults.dictionary(forKey:"explorerExpansionState") as? [String:Bool] ?? [:]
-    explorerToggle.tracksActiveState=true
     super.init(nibName: nil, bundle: nil)
     NotificationCenter.default.addObserver(self,selector:#selector(updateExplorerDensity),name:ExplorerDensity.changed,object:nil)
     NotificationCenter.default.addObserver(self,selector:#selector(explorerConnectionChanged(_:)),name:ConnectedServer.explorerConnectionChanged,object:nil)

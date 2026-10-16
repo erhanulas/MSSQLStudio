@@ -96,7 +96,7 @@ import Testing
     var downloads=0
     progress.offer(version:"0.2.31",current:"0.2.29",notes:notes) {downloads+=1;progress.beginDownload(version:"0.2.31")}
     #expect(downloads==0 && progress.hasOffer && progress.done.isEnabled && progress.progressBar.isHidden && !progress.download.isHidden)
-    #expect(progress.status.stringValue.contains("Latest change") && progress.status.stringValue.contains("Middle change"))
+    #expect(progress.offeredNotes.flatMap(\.changes)==["Latest change","Middle change"] && !progress.notesHost.isHidden)
     #expect(NSApp.sendAction(try #require(progress.download.action),to:progress.download.target,from:progress.download))
     #expect(downloads==1 && !progress.hasOffer && !progress.done.isEnabled && !progress.progressBar.isHidden)
     _=NSApp.sendAction(try #require(progress.download.action),to:progress.download.target,from:progress.download)
@@ -116,7 +116,8 @@ import Testing
         for button in [controller.done,controller.download] {
           #expect(body.bounds.contains(body.convert(button.bounds,from:button)) && button.isEnabled)
         }
-        let scroll=try #require(controller.status.enclosingScrollView)
+        func views(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(views)}
+        let scroll=try #require(views(controller.notesHost).compactMap {$0 as? NSScrollView}.first)
         #expect(scroll.documentView!.bounds.height>scroll.contentSize.height)
         if size.width==640,let image=body.bitmapImageRepForCachingDisplay(in:body.bounds) {
           body.cacheDisplay(in:body.bounds,to:image)
@@ -129,7 +130,7 @@ import Testing
     let progress=UpdateProgressController();defer {progress.close()}
     var downloads=0
     progress.offer(version:"0.2.31",current:"0.2.29",notes:[],notesError:"HTTP 404") {downloads+=1}
-    #expect(progress.status.stringValue.contains("HTTP 404") && progress.done.isEnabled && !progress.download.isHidden)
+    #expect(progress.notesError.contains("HTTP 404") && !progress.notesHost.isHidden && progress.done.isEnabled && !progress.download.isHidden)
     _=NSApp.sendAction(progress.done.action!,to:progress.done.target,from:progress.done)
     #expect(downloads==0 && !progress.hasOffer)
   }
@@ -159,4 +160,36 @@ import Testing
     #expect(progress.status.stringValue == "Güncel" && progress.done.isEnabled && progress.spinner.isHidden)
     progress.close()
   }
+  @Test func premiumTransferShowsRealFractionAndClearsHiddenAnimations() throws {
+    let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      let controller=UpdateProgressController();defer {controller.close()}
+      let window=try #require(controller.window),body=try #require(window.contentView)
+      let notes=try ReleaseHistory.decode(Data(#"[{"version":"9.0.0","date":"2026-10-16","title":"Veritabanıyla çalışmak daha kolay","changes":["Activity Monitor’de uygulama kilitlerini görebilir, seçtiğiniz oturumu sonlandırabilirsiniz.","Güncelleme ekranında yenilikleri daha kolay inceleyebilirsiniz."]}]"#.utf8))
+      controller.offer(version:"9.0.0",current:"8.0.0",notes:notes,download:{})
+      controller.beginDownload(version:"9.0.0")
+      #expect(!controller.notesHost.isHidden)
+      window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
+      window.setContentSize(NSSize(width:640,height:480))
+      controller.updateTransfer(.init(receivedBytes:4_200_000,expectedBytes:10_000_000))
+      body.layoutSubtreeIfNeeded();controller.progressBar.layoutSubtreeIfNeeded()
+      let track=try #require(controller.progressBar.layer?.sublayers?.first)
+      let fill=try #require(track.sublayers?.first)
+      #expect(abs(fill.frame.width-controller.progressBar.bounds.width*0.42)<1)
+      #expect(track.masksToBounds && track.cornerRadius==4 && controller.percentage.stringValue=="%42")
+      #expect(window.contentMinSize.height==440)
+      #expect(body.bounds.contains(body.convert(controller.progressBar.bounds,from:controller.progressBar)))
+      let image=try #require(body.bitmapImageRepForCachingDisplay(in:body.bounds));body.cacheDisplay(in:body.bounds,to:image)
+      try image.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-update-transfer-"+theme+".png"))
+      controller.updateTransfer(.init(receivedBytes:5_000_000,expectedBytes:-1))
+      controller.progressBar.layoutSubtreeIfNeeded()
+      #expect(controller.progressBar.isIndeterminate && controller.percentage.stringValue.isEmpty)
+      controller.progressBar.isHidden=true
+      #expect(fill.animationKeys()?.isEmpty ?? true)
+      controller.finish("Hazır")
+      #expect(window.contentMinSize.height==320)
+    }
+  }
+
 }

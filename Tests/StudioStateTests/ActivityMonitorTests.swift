@@ -133,17 +133,18 @@ import Testing
     pending?.resume(returning:overview(10));pending=nil;await task.value
     #expect(model.samples.isEmpty && model.diagnosticsTime == nil && model.diagnostics.blocked.isEmpty && model.error.isEmpty && !model.loading)
   }
-  @Test func fullFifteenMinuteWindowRetainsFiveSecondSamplesAndMissingHealth() async throws {
+  @Test func fullHourWindowRetainsFiveSecondSamplesAndMissingHealth() async throws {
     let server=ConnectedServer(profile:ServerProfile(),password:"")
     var second=0
     let model=ActivityMonitorModel(server:server,reader:{sql,_ in
-      #expect(sql == ActivityMonitoring.overviewSQL);second+=5;return overview(second,health:second != 1000)
+      #expect(sql == ActivityMonitoring.overviewSQL);second+=5;return overview(second,health:second != 3650)
     })
-    for _ in 0..<200 {await model.load()}
-    #expect(model.samples.count == 181)
-    #expect(model.samples.last!.time.timeIntervalSince(model.samples.first!.time) == 900)
+    for _ in 0..<730 {await model.load()}
+    #expect(model.samples.count == 721)
+    #expect(model.samples.last!.time.timeIntervalSince(model.samples.first!.time) == 3600)
     #expect(ActivityChartPoint.window(model.samples,minutes:5).count == 61)
     #expect(ActivityChartPoint.window(model.samples,minutes:15).count == 181)
+    #expect(ActivityChartPoint.window(model.samples,minutes:60).count == 721)
     #expect(model.samples.last?.health.openTransactions == nil && ActivityFormat.count(model.samples.last?.health.openTransactions) == "—")
     #expect(model.samples.last?.readLatencyMS == 2 && model.samples.last?.writeLatencyMS == 5)
     #expect(ActivityFormat.memory(nil) == "—" && ActivityFormat.memory(2048) == "2 GiB")

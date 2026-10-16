@@ -13,12 +13,15 @@ import SQLServerKit
     default:StudioTheme.muted
     }
   }
-  static func details(_ event:SQLProfiler.Event)->String {
+  static func heading(_ event:SQLProfiler.Event)->String {
     var parts=[event.messageLevel?.title ?? "Sunucu mesajı"]
     if let number=event.errorNumber {parts.append("SQL Server \(number)")}
     if let severity=event.severity {parts.append("Önem derecesi \(severity)")}
     else if event.kind=="error_reported" {parts.append("Önem derecesi alınamadı")}
     if let state=event.errorState {parts.append("Durum \(state)")}
-    return parts.joined(separator:" · ")+"\n"+event.message
+    return parts.joined(separator:" · ")
+  }
+  static func details(_ event:SQLProfiler.Event)->String {
+    heading(event)+"\n"+event.message
   }
 }

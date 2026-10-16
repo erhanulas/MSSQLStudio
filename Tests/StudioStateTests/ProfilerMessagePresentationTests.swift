@@ -46,7 +46,7 @@ import Testing
     let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}
     for theme in ["light","dark"] {
       StudioTheme.apply(theme)
-      let host=NSHostingController(rootView:StudioFeedback(message:details,tone:ProfilerMessagePresentation.tone(event.messageLevel)).padding(12).background(Color(nsColor:StudioTheme.panel)))
+      let host=NSHostingController(rootView:StudioFeedback(message:"\r\n"+event.message,tone:ProfilerMessagePresentation.tone(event.messageLevel),heading:ProfilerMessagePresentation.heading(event)).padding(12).background(Color(nsColor:StudioTheme.panel)))
       host.sizingOptions=[]
       let window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false
       window.setContentSize(NSSize(width:640,height:100));window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)

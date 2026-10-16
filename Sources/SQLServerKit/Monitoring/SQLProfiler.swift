@@ -43,18 +43,21 @@ public enum SQLProfiler {
       let expression="[sqlserver].[like_i_sql_unicode_string]([sqlserver].[sql_text],\(SQL.literal(pattern)))"
       predicates.append(negative ? "NOT (\(expression))":expression)
     }
-    let actions="package0.event_sequence,sqlserver.session_id,sqlserver.client_pid,sqlserver.database_name,sqlserver.client_app_name,sqlserver.client_hostname,sqlserver.server_principal_name,sqlserver.sql_text"
+    let actions="package0.event_sequence,sqlserver.client_connection_id,sqlserver.session_id,sqlserver.client_pid,sqlserver.database_name,sqlserver.client_app_name,sqlserver.client_hostname,sqlserver.server_principal_name,sqlserver.sql_text"
     func event(_ name:String,completed:Bool)->String {
       let filter=predicates+(completed && configuration.minimumDurationMS>0 ? ["[duration]>=(\(Int64(configuration.minimumDurationMS)*1000))"]:[])
-      return "ADD EVENT sqlserver.\(name)(ACTION(\(actions)) WHERE (\(filter.joined(separator:" AND "))))"
+      let options = name.hasPrefix("rpc_") ? "SET collect_statement=(1) " : ""
+      return "ADD EVENT sqlserver.\(name)(\(options)ACTION(\(actions)) WHERE (\(filter.joined(separator:" AND "))))"
     }
     let ddl="""
     CREATE EVENT SESSION \(identifier) ON SERVER
+    \(event("sql_batch_starting",completed:false)),
+    \(event("rpc_starting",completed:false)),
     \(event("sql_batch_completed",completed:true)),
     \(event("rpc_completed",completed:true)),
     \(event("error_reported",completed:false))
     ADD TARGET package0.ring_buffer(SET max_memory=1024,max_events_limit=5000)
-    WITH (MAX_MEMORY=4096 KB,EVENT_RETENTION_MODE=ALLOW_SINGLE_EVENT_LOSS,MAX_DISPATCH_LATENCY=1 SECONDS,TRACK_CAUSALITY=OFF,STARTUP_STATE=OFF);
+    WITH (MAX_MEMORY=4096 KB,EVENT_RETENTION_MODE=ALLOW_SINGLE_EVENT_LOSS,MAX_DISPATCH_LATENCY=1 SECONDS,TRACK_CAUSALITY=ON,STARTUP_STATE=OFF);
     ALTER EVENT SESSION \(identifier) ON SERVER STATE=START;
     """
     return """
@@ -87,6 +90,9 @@ public enum SQLProfiler {
     public fileprivate(set) var id:UInt64
     public fileprivate(set) var sourceSequence:UInt64?=nil
     public fileprivate(set) var captureSession:String?=nil
+    public var connectionID:String?=nil
+    public var activityID:String?=nil
+    public var isCallStart:Bool {kind=="rpc_starting" || kind=="sql_batch_starting"}
     public let timestamp:String
     public let kind:String
     public let database:String
@@ -111,7 +117,7 @@ public enum SQLProfiler {
       // SQL Server assigns severity 10 to this documented aggregate warning.
       return errorNumber==8153 ? .warning:.info
     }
-    public var retainedBytes:Int {[timestamp,kind,database,application,host,login,session,clientPID,cpu,reads,writes,sql,message].reduce(128) {$0+$1.utf8.count}}
+    public var retainedBytes:Int {[timestamp,kind,database,application,host,login,session,clientPID,cpu,reads,writes,sql,message,connectionID ?? "",activityID ?? ""].reduce(128) {$0+$1.utf8.count}}
   }
   public enum MessageLevel:String,Sendable {
     case info,warning,error,unknown
@@ -209,7 +215,7 @@ private final class ProfilerXMLDecoder:NSObject,XMLParserDelegate {
     if element=="value" {values[field]=value;inValue=false}
     if element=="event" {
       guard events.count<5000,let sequence=values["event_sequence"].flatMap(UInt64.init),!timestamp.isEmpty,
-        ["sql_batch_completed","rpc_completed","error_reported"].contains(kind) else {invalid=true;return}
+        ["sql_batch_starting","rpc_starting","sql_batch_completed","rpc_completed","error_reported"].contains(kind) else {invalid=true;return}
       func number(_ name:String,in range:ClosedRange<Int>)->Int? {
         guard let raw=values[name] else {return nil}
         guard let value=Int(raw),range.contains(value) else {invalid=true;return nil}
@@ -220,13 +226,13 @@ private final class ProfilerXMLDecoder:NSObject,XMLParserDelegate {
       let errorState=number("state",in:0...255)
       guard !invalid else {return}
       events.append(.init(
-        id:sequence,timestamp:timestamp,kind:kind,database:values["database_name"] ?? "",
+        id:sequence,connectionID:values["client_connection_id"],activityID:values["attach_activity_id"],timestamp:timestamp,kind:kind,database:values["database_name"] ?? "",
         application:values["client_app_name"] ?? "",host:values["client_hostname"] ?? "",
         login:values["server_principal_name"] ?? "",session:values["session_id"] ?? "",
         clientPID:values["client_pid"].flatMap(UInt32.init).flatMap {$0>0 ? String($0):nil} ?? "",
         durationMS:values["duration"].flatMap(UInt64.init).map {Double($0)/1000},
         cpu:values["cpu_time"] ?? "",reads:values["logical_reads"] ?? "",writes:values["writes"] ?? "",
-        sql:values["batch_text"] ?? values["statement"] ?? values["sql_text"] ?? "",
+        sql:[values["batch_text"],values["statement"],values["sql_text"]].compactMap {$0}.first {!$0.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty} ?? "",
         message:values["message"] ?? "",errorNumber:errorNumber,severity:severity,errorState:errorState))
     }
   }

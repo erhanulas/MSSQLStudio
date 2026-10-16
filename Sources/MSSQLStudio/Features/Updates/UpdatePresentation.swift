@@ -11,7 +11,10 @@ import SwiftUI
   enum Stage:Int {case checking,downloading,verifying}
   let status=NSTextField(wrappingLabelWithString:"Yeni sürüm bilgisi alınıyor…")
   let spinner=NSProgressIndicator()
-  let progressBar=NSProgressIndicator()
+  let progressBar=StudioTransferProgressView(frame:.zero)
+  let notesHost=NSHostingView(rootView:UpdateReleaseNotesView(notes:[],error:""))
+  private(set) var offeredNotes:[ReleaseNote]=[]
+  private(set) var notesError=""
   let transfer=NSTextField(labelWithString:"Güvenli bağlantı kuruluyor")
   let percentage=NSTextField(labelWithString:"")
   let heading=NSTextField(labelWithString:"Güncellemeler kontrol ediliyor")
@@ -59,7 +62,8 @@ import SwiftUI
       label.stringValue="\(index+1)  \(label.stringValue)";label.font=StudioTheme.uiFont
       label.setAccessibilityIdentifier("updateStage_\(index)")
     }
-    progressBar.style = .bar;progressBar.isIndeterminate=true;progressBar.minValue=0;progressBar.maxValue=1;progressBar.startAnimation(nil)
+    progressBar.isIndeterminate=true;progressBar.startAnimation(nil)
+    progressBar.heightAnchor.constraint(equalToConstant:8).isActive=true
     progressBar.setAccessibilityIdentifier("updateDownloadProgress")
     transfer.font=StudioTheme.uiFont;transfer.textColor=StudioTheme.muted
     percentage.font = .monospacedDigitSystemFont(ofSize:12,weight:.medium);percentage.textColor=StudioTheme.text
@@ -83,9 +87,11 @@ import SwiftUI
     let actions=NSStackView(views:[NSView(),done,download]);actions.spacing=8
     notesHeading.font = .systemFont(ofSize:StudioMetrics.bodyFont,weight:.semibold);notesHeading.textColor=StudioTheme.text
     let details=NSView();StudioTheme.surface(details,card:true)
-    let detailsStack=NSStackView(views:[notesHeading,scroll]);detailsStack.orientation = .vertical;detailsStack.spacing=8
+    notesHost.isHidden=true;notesHost.sizingOptions=[]
+    notesHost.heightAnchor.constraint(greaterThanOrEqualToConstant:60).isActive=true
+    let detailsStack=NSStackView(views:[notesHeading,scroll,notesHost]);detailsStack.orientation = .vertical;detailsStack.spacing=8
     detailsStack.translatesAutoresizingMaskIntoConstraints=false;details.addSubview(detailsStack)
-    NSLayoutConstraint.activate([detailsStack.leadingAnchor.constraint(equalTo:details.leadingAnchor,constant:12),detailsStack.trailingAnchor.constraint(equalTo:details.trailingAnchor,constant:-12),detailsStack.topAnchor.constraint(equalTo:details.topAnchor,constant:12),detailsStack.bottomAnchor.constraint(equalTo:details.bottomAnchor,constant:-12),scroll.widthAnchor.constraint(equalTo:detailsStack.widthAnchor),notesHeading.widthAnchor.constraint(equalTo:detailsStack.widthAnchor)])
+    NSLayoutConstraint.activate([detailsStack.leadingAnchor.constraint(equalTo:details.leadingAnchor,constant:12),detailsStack.trailingAnchor.constraint(equalTo:details.trailingAnchor,constant:-12),detailsStack.topAnchor.constraint(equalTo:details.topAnchor,constant:12),detailsStack.bottomAnchor.constraint(equalTo:details.bottomAnchor,constant:-12),scroll.widthAnchor.constraint(equalTo:detailsStack.widthAnchor),notesHeading.widthAnchor.constraint(equalTo:detailsStack.widthAnchor),notesHost.widthAnchor.constraint(equalTo:detailsStack.widthAnchor)])
     let stack=NSStackView(views:[header,stages,progressBar,counters,details,actions]);stack.orientation = .vertical;stack.spacing=12
     stack.translatesAutoresizingMaskIntoConstraints=false;body.addSubview(stack)
     NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:body.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:body.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:body.topAnchor,constant:16),stack.bottomAnchor.constraint(equalTo:body.bottomAnchor,constant:-16),scroll.heightAnchor.constraint(greaterThanOrEqualToConstant:60)])
@@ -98,8 +104,15 @@ import SwiftUI
   func phase(_ text:String,stage:Stage = .checking) {
     guard !finished else {return}
     self.stage=stage
+    window?.contentMinSize=NSSize(width:440,height:440)
+    if let window,let body=window.contentView,body.bounds.height<440 {window.setContentSize(NSSize(width:max(440,body.bounds.width),height:440))}
     stages.isHidden=false;notesHeading.stringValue="Güncelleme durumu"
+    notesHost.isHidden=true;status.enclosingScrollView?.isHidden=false
     status.stringValue=text
+    if stage != .checking, !offeredNotes.isEmpty || !notesError.isEmpty {
+      notesHost.isHidden=false;status.enclosingScrollView?.isHidden=true
+      notesHeading.stringValue="Bu güncellemedeki yenilikler"
+    }
     heading.stringValue=stage == .checking ? "Güncellemeler kontrol ediliyor":stage == .downloading ? "Yeni sürüm indiriliyor":"Paket doğrulanıyor"
     transfer.stringValue=stage == .checking ? "Güvenli bağlantı kuruluyor":stage == .downloading ? "İndirme başlatılıyor":"Paket bütünlüğü ve imza denetleniyor"
     percentage.stringValue=""
@@ -117,31 +130,21 @@ import SwiftUI
   }
   func offer(version latest:String,current:String,notes:[ReleaseNote],notesError:String="",download action:@escaping ()->Void) {
     guard !finished else {return}
+    window?.contentMinSize=NSSize(width:440,height:320)
     heading.stringValue="Yeni sürüm hazır"
     stages.isHidden=true;notesHeading.stringValue="Bu güncellemedeki yenilikler"
     icon.image=NSImage(systemSymbolName:"sparkles",accessibilityDescription:nil)
     version.stringValue="Yüklü "+current+" → "+latest
-    transfer.stringValue="Notları inceleyin; indirme seçiminizi bekliyor"
+    transfer.stringValue="Yenilikleri inceleyin, ardından son sürümü indirin."
     progressBar.stopAnimation(nil);progressBar.isHidden=true;percentage.stringValue=""
     spinner.stopAnimation(nil);spinner.isHidden=true
     done.isEnabled=true;done.keyEquivalent="";window?.styleMask.insert(.closable)
     download.title="\(latest) Sürümünü İndir";download.isHidden=false;download.isEnabled=true;download.keyEquivalent="\r"
     downloadWidth?.constant=(download.title as NSString).size(withAttributes:[.font:download.font!]).width+44
     downloadAction=action
-    let text=NSMutableAttributedString(string:"")
-    func append(_ value:String,bold:Bool=false,color:NSColor=StudioTheme.text) {
-      let paragraph=NSMutableParagraphStyle();paragraph.paragraphSpacing=8;paragraph.lineSpacing=3
-      text.append(NSAttributedString(string:value,attributes:[.font:bold ? NSFont.systemFont(ofSize:StudioMetrics.bodyFont,weight:.semibold):StudioTheme.uiFont,.foregroundColor:color,.paragraphStyle:paragraph]))
-    }
-    if !notesError.isEmpty {append("Sürüm notları alınamadı. "+notesError+"\n\n",color:StudioTheme.warning)}
-    for note in notes {
-      append(note.version+" · "+note.title+"\n",bold:true)
-      append(note.date+"\n",color:StudioTheme.muted)
-      for change in note.changes {append("• "+change+"\n")}
-      append("\n")
-    }
-    if notes.isEmpty && notesError.isEmpty {append("Bu sürüm aralığı için değişiklik notu bulunamadı.")}
-    status.attributedStringValue=text
+    offeredNotes=notes;self.notesError=notesError
+    notesHost.rootView=UpdateReleaseNotesView(notes:notes,error:notesError)
+    status.enclosingScrollView?.isHidden=true;notesHost.isHidden=false
     if let window,window.contentView!.bounds.height<480 {
       window.setContentSize(NSSize(width:max(560,window.contentView!.bounds.width),height:480))
     }
@@ -164,7 +167,9 @@ import SwiftUI
   }
   func finish(_ text:String,failed:Bool=false) {
     guard !finished else {return}
+    window?.contentMinSize=NSSize(width:440,height:320)
     downloadAction=nil;download.isHidden=true
+    notesHost.isHidden=true;status.enclosingScrollView?.isHidden=false
     status.stringValue=text;finished=true
     stages.isHidden=true;notesHeading.stringValue=failed ? "Hata ayrıntıları":"Durum"
     heading.stringValue=failed ? "Güncelleme tamamlanamadı":"Güncelleme kontrolü tamamlandı"

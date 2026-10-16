@@ -141,7 +141,7 @@ extension WorkbenchController {
   @objc func toggleExplorer() {
     sidebar.isCollapsed.toggle()
     UserDefaults.standard.set(sidebar.isCollapsed,forKey:"explorerCollapsed")
-    explorerToggle.state = sidebar.isCollapsed ? .on : .off
+    explorerToggle.setAccessibilityValue(sidebar.isCollapsed ? "Explorer gizli":"Explorer görünür")
   }
   @objc func schemaApplied(_ notification:Notification) {
     guard let server=notification.object as? ConnectedServer,let db=notification.userInfo?["database"] as? String,

@@ -25,12 +25,16 @@ struct StudioFeedback: View {
   }
   let message: String
   var tone: Tone = .error
+  var heading: String? = nil
   var body: some View {
     if !message.isEmpty {
       HStack(alignment: .top, spacing: StudioMetrics.small) {
         Image(systemName: tone.symbol).frame(width: StudioMetrics.icon)
-        Text(message).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
-        StudioFeedbackDetailsButton(message: message, color: tone.color)
+        VStack(alignment: .leading, spacing: 4) {
+          if let heading { Text(heading).fontWeight(.medium) }
+          Text(heading == nil ? message : message.trimmingCharacters(in: .whitespacesAndNewlines)).lineLimit(2)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+        StudioFeedbackDetailsButton(message: heading.map { $0 + "\n" + message } ?? message, color: tone.color)
           .frame(width: 24, height: 22)
       }.font(.system(size: StudioMetrics.detailFont))
         .foregroundStyle(Color(nsColor: tone.color))

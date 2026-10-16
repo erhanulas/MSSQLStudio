@@ -25,6 +25,9 @@ import Testing
     #expect(sql.contains("STARTUP_STATE=OFF") && sql.contains("max_memory=1024,max_events_limit=5000"))
     #expect(sql.contains("MAX_MEMORY=4096 KB") && sql.contains("MAX_DISPATCH_LATENCY=1 SECONDS") && !sql.contains("event_file"))
     #expect(sql.contains("ALLOW_SINGLE_EVENT_LOSS") && !sql.contains("NO_EVENT_LOSS"))
+    #expect(sql.contains("rpc_completed(SET collect_statement=(1) ACTION"))
+    #expect(sql.contains("rpc_starting(SET collect_statement=(1) ACTION") && sql.contains("sql_batch_starting"))
+    #expect(sql.contains("client_connection_id") && sql.contains("TRACK_CAUSALITY=ON"))
     #expect(sql.contains("event_sequence") && sql.contains("@@SPID"))
     #expect(throws:(any Error).self) {try SQLProfiler.dropSQL(name:"system_health")}
     #expect(throws:(any Error).self) {try SQLProfiler.readSQL(name:name+"];DROP TABLE x")}
@@ -46,6 +49,13 @@ import Testing
     var bad=Self.execution();bad.results[0]=Rows(fields:[Field("profiler_xml"),Field("dropped_events")],values:[["<bad>","0"]])
     #expect(throws:(any Error).self) {try SQLProfiler.decode(bad)}
     #expect(throws:(any Error).self) {try SQLProfiler.decode(Self.execution(text:String(repeating:"a",count:4_194_305)))}
+  }
+  @Test func emptyStatementFallsBackToCapturedSQLWithoutChangingSource() throws {
+    var execution=Self.execution(text:"")
+    let xml=try #require(execution.results[0].values[0][0])
+      .replacingOccurrences(of:"</event>",with:"<data name=\"statement\"><value> </value></data><action name=\"sql_text\"><value>EXEC dbo.Fail;</value></action></event>")
+    execution.results[0]=Rows(fields:[Field("profiler_xml"),Field("dropped_events")],values:[[xml,"0"]])
+    #expect(try SQLProfiler.decode(execution).events[0].sql=="EXEC dbo.Fail;")
   }
   @Test func retentionDeduplicatesZeroBasedSequenceAndReportsGapsWithoutReplayingClearedRows() throws {
     var buffer=SQLProfiler.Buffer()

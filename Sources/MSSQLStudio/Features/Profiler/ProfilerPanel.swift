@@ -14,6 +14,14 @@ struct ProfilerPanel:View {
   @StateObject private var preview=ProfilerPreviewPresentation()
   private var selectedEvents:[SQLProfiler.Event] {model.visibleEvents.filter {selected.contains($0.id)}}
   private var selectedEvent:SQLProfiler.Event? {selectedEvents.first}
+  private var previewEvents:[SQLProfiler.Event] {
+    model.previewEvents(selectedEvents)
+  }
+  private var relatedMessages:[SQLProfiler.Event] {
+    guard let event=selectedEvent else {return []}
+    if event.kind=="error_reported" {return [event]}
+    return model.relations[event.id]?.messages ?? []
+  }
   var body:some View {
     VStack(spacing:8) {
       if !model.filterError.isEmpty {StudioFeedback(message:model.filterError)}
@@ -70,11 +78,19 @@ struct ProfilerPanel:View {
             Text(selected.count>1 ? "\(selectedEvents.count) olay · GO ile ayrılmış SQL":"SQL").font(.headline)
             Spacer()
             if preview.busy {ProgressView().controlSize(.small)}
-            Button {NSPasteboard.general.clearContents();NSPasteboard.general.setString(ProfilerExport.sql(selectedEvents),forType:.string)} label:{Label("SQL’i Kopyala",systemImage:"doc.on.doc")}.buttonStyle(StudioSecondaryButton()).disabled(selectedEvents.isEmpty)
-            Button {openQuery?(selectedEvents)} label:{Label("Yeni Sekmede Aç",systemImage:"plus.rectangle.on.rectangle")}
+            Button {NSPasteboard.general.clearContents();NSPasteboard.general.setString(ProfilerExport.sql(previewEvents),forType:.string)} label:{Label("SQL’i Kopyala",systemImage:"doc.on.doc")}.buttonStyle(StudioSecondaryButton()).disabled(selectedEvents.isEmpty)
+            Button {openQuery?(previewEvents)} label:{Label("Yeni Sekmede Aç",systemImage:"plus.rectangle.on.rectangle")}
               .buttonStyle(StudioSecondaryButton()).disabled(selectedEvents.isEmpty || openQuery==nil)
           }
-          if let event=selectedEvent,!event.message.isEmpty {StudioFeedback(message:ProfilerMessagePresentation.details(event),tone:ProfilerMessagePresentation.tone(event.messageLevel))}
+          ForEach(Array(relatedMessages.prefix(3))) { event in StudioFeedback(message:event.message,tone:ProfilerMessagePresentation.tone(event.messageLevel),heading:ProfilerMessagePresentation.heading(event))}
+          if relatedMessages.count>3 {
+            Text("Bu çağrıda \(relatedMessages.count) bildirim var; tümü olay listesinde korunur.")
+              .font(.system(size:StudioMetrics.detailFont)).foregroundStyle(.secondary)
+          }
+          if let event=selectedEvent,event.sql.isEmpty,let relation=model.relations[event.id] {
+            Text(relation.source.sql.isEmpty ? "Sunucu bu çağrı için SQL metni sağlamadı.":"SQL, aynı çağrının nedensellik kimliğiyle ilişkilendirildi.")
+              .font(.system(size:StudioMetrics.detailFont)).foregroundStyle(.secondary)
+          }
           if let event=selectedEvent,["rpc_completed","sql_batch_completed"].contains(event.kind) {
             Text("Tamamlanma olayı başarı garantisi değildir; SQL Server hata metnini error_reported olayında bildirir.")
               .font(.system(size:StudioMetrics.detailFont)).foregroundStyle(.secondary)
@@ -89,8 +105,8 @@ struct ProfilerPanel:View {
         Spacer()
         if let last=model.lastRead {Text("Son okuma: "+last.formatted(date:.omitted,time:.standard)).foregroundStyle(.secondary)}
       }.font(.system(size:11))
-    }.onChange(of:selected) {_,_ in preview.request(selectedEvents)}
-      .onChange(of:model.gridRevision) {_,_ in preview.request(selectedEvents)}
+    }.onChange(of:selected) {_,_ in preview.request(previewEvents)}
+      .onChange(of:model.gridRevision) {_,_ in preview.request(previewEvents)}
       .padding(8).font(.system(size:12)).background(Color(nsColor:StudioTheme.panel))
   }
   private func export(_ events:[SQLProfiler.Event],format:ProfilerExport.Format) {

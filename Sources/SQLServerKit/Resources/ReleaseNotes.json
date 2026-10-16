@@ -1,5 +1,21 @@
 [
   {
+    "version": "0.2.166",
+    "date": "2026-10-16",
+    "title": "Gelişmiş izleme ve daha anlaşılır güncellemeler",
+    "changes": [
+      "Profiler açılırken yapılan işlem ve bekleme durumu ekranda gösterilir.",
+      "Yeni başlatılan Profiler izlemelerinde hata mesajını ve ilgili SQL komutunu birlikte inceleyebilirsiniz.",
+      "Profiler sütunları, bağlantı ve sorgu bilgilerini daha kolay takip edeceğiniz sıraya getirildi.",
+      "Activity Monitor’de uygulama kilitlerini oturum ve SQL bilgileriyle görebilirsiniz.",
+      "Bloklanan, uzun süren ve uygulama kilidi tutan oturumları onayınızla sonlandırabilirsiniz.",
+      "Activity Monitor’de bir saate kadar geçmişi inceleyebilir, daha fazla yenileme aralığı seçebilirsiniz.",
+      "Activity Monitor sekmeleri daha belirgin ve kolay okunur hale getirildi.",
+      "Explorer’ı gösterip gizledikten sonra düğmede kalan vurgu düzeltildi.",
+      "Güncelleme ekranında yenilikler daha okunabilir kartlarla sunulur; indirme ilerlemesi daha akıcı gösterilir."
+    ]
+  },
+  {
     "version": "0.2.165",
     "date": "2026-10-16",
     "title": "Enter ile sekme seçimi ve Profiler kullanım iyileştirmeleri",

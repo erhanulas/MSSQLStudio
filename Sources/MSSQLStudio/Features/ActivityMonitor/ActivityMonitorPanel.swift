@@ -10,23 +10,31 @@ import SQLServerKit
   @Published private(set) var error=""
   @Published private(set) var loading=false
   @Published private(set) var diagnostics=ActivityMonitoring.Diagnostics()
+  @Published private(set) var applicationLocks:[ActivityApplicationLocks.Lock]=[]
+  @Published private(set) var applicationLockIssues:[String]=[]
+  @Published private(set) var applicationLockError=""
+  @Published private(set) var applicationLocksTime:Date?
   @Published private(set) var diagnosticsTime:Date?
   @Published private(set) var diagnosticsError=""
   private var previous:ActivityMonitoring.Snapshot?
   private let reader:Reader
   private var activityRevision=UUID()
   private var diagnosticsRevision=UUID()
+  private var applicationRevision=UUID()
   private var dataGeneration:UUID?
   private(set) var visible=true
   private(set) var paused=false
   let server:ConnectedServer
+  let termination:ActivityRequestTerminationModel
   init(server:ConnectedServer,reader:Reader?=nil) {
     self.server=server
+    termination=ActivityRequestTerminationModel(server:server)
     self.reader=reader ?? {sql,limits in try await server.catalog(sql,database:"master",limits:limits)}
   }
   private var canRead:Bool {server.online || server.catalogFixture != nil || server.asyncCatalogFixture != nil}
   func breakSequence() {previous=nil}
-  func clearDiagnostics() {diagnosticsRevision=UUID();diagnostics = .init();diagnosticsTime=nil;diagnosticsError=""}
+  func clearDiagnostics() {clearApplicationLocks();diagnosticsRevision=UUID();diagnostics = .init();diagnosticsTime=nil;diagnosticsError=""}
+  func clearApplicationLocks() {applicationRevision=UUID();applicationLocks=[];applicationLockIssues=[];applicationLockError="";applicationLocksTime=nil}
   private func markOffline(_ detail:String="") {
     error="Bağlantı çevrimdışı. Son örnek güncel değil; Explorer’dan yeniden bağlanın."+(detail.isEmpty ? "":" "+detail)
     previous=nil;clearDiagnostics()
@@ -44,12 +52,13 @@ import SQLServerKit
     self.visible=visible;self.paused=paused;activityRevision=UUID();previous=nil
   }
   /// Pause stops automatic sampling. An explicit refresh is still permitted while visible.
-  func load(includeDiagnostics:Bool=false,automatic:Bool=false) async {
+  func load(includeDiagnostics:Bool=false,includeApplicationLocks:Bool=false,automatic:Bool=false) async {
     guard !loading,visible,!automatic || !paused else {return}
     connectionChanged()
     let revision=activityRevision,generation=server.generation
     guard canRead else {markOffline();return}
     let diagnosticRevision=diagnosticsRevision
+    let lockRevision=applicationRevision
     loading=true;defer {loading=false}
     func currentContext() -> Bool {revision == activityRevision && generation == server.generation && visible && (!automatic || !paused)}
     func current() -> Bool {currentContext() && canRead}
@@ -63,7 +72,7 @@ import SQLServerKit
       let snapshot=try ActivityMonitoring.decode(result)
       if samples.last.map({snapshot.time>$0.time}) ?? true {
         samples.append(ActivityMonitoring.sample(snapshot,previous:previous));previous=snapshot
-        samples=Array(samples.filter {$0.time>=snapshot.time.addingTimeInterval(-900)}.suffix(181))
+        samples=Array(samples.filter {$0.time>=snapshot.time.addingTimeInterval(-3600)}.suffix(721))
       }
       issues=snapshot.issues;error=""
     } catch is CancellationError {discardChangedGeneration();previous=nil;return}
@@ -73,6 +82,22 @@ import SQLServerKit
       self.error=error.localizedDescription;previous=nil;return
     }
     guard includeDiagnostics,current(),diagnosticRevision == diagnosticsRevision,!Task.isCancelled else {return}
+    if includeApplicationLocks {
+      limits.rows=101;limits.resultSets=2;limits.totalBytes=1_000_000;limits.timeout=10
+      do {
+        let result=try await reader(ActivityApplicationLocks.sql,limits)
+        try Task.checkCancellation()
+        guard current(),lockRevision==applicationRevision else {discardChangedGeneration();return}
+        let snapshot=try ActivityApplicationLocks.decode(result)
+        applicationLocks=snapshot.locks;applicationLockIssues=snapshot.issues;applicationLockError=""
+        applicationLocksTime=samples.last?.time ?? Date()
+      } catch is CancellationError {discardChangedGeneration()}
+      catch {
+        guard currentContext(),lockRevision==applicationRevision else {discardChangedGeneration();return}
+        if !canRead {markOffline(error.localizedDescription)} else {applicationLockError=error.localizedDescription}
+      }
+      return
+    }
     limits.rows=400;limits.resultSets=5;limits.totalBytes=4_000_000;limits.timeout=10
     do {
       let result=try await reader(ActivityMonitoring.diagnosticsSQL,limits)
@@ -125,11 +150,12 @@ struct ActivityMonitorPanel:View {
     if mode == 2 {
       if !model.diagnosticsError.isEmpty {values.append("DBA verisi güncellenemedi; son örnek eski olabilir: "+model.diagnosticsError)}
       values+=model.diagnostics.issues
+      if diagnosticKind==3 {values+=model.applicationLockIssues;if !model.applicationLockError.isEmpty {values.append("Uygulama kilitleri güncellenemedi: "+model.applicationLockError)}}
     }
     return values
   }
   var body:some View {
-    VStack(alignment:.leading,spacing:mode == 2 ? 8:12) {
+    VStack(alignment:.leading,spacing:mode == 2 ? 4:12) {
       HStack {
         StudioPanelHeading(title:"Activity Monitor",icon:"waveform.path.ecg",subtitle:model.server.profile.name+" · Sunucu sağlığı ve DBA")
         samplingStatus
@@ -149,14 +175,14 @@ struct ActivityMonitorPanel:View {
     }.padding(StudioMetrics.gap).studioPanel()
       .background(MonitorVisibilityProbe {visible=$0;model.setActivity(visible:$0,paused:paused)})
       .onChange(of:paused) {_,value in model.setActivity(visible:visible,paused:value)}
-      .onChange(of:diagnosticKind) {_,_ in selectedRequest=nil}
+      .onChange(of:diagnosticKind) {_,value in selectedRequest=nil;if value != 3 {model.clearApplicationLocks()}}
       .onChange(of:selectedRequest) {_,_ in selectedBlockingContext=nil;selectedBlockingSession=nil}
       .onChange(of:mode) {_,value in if value != 2 {model.clearDiagnostics();selectedRequest=nil}}
       .onReceive(NotificationCenter.default.publisher(for:ConnectedServer.explorerConnectionChanged)) {notification in
         if notification.object as? ConnectedServer === model.server {model.connectionChanged()}
       }
       .onDisappear {model.setActivity(visible:false,paused:paused)}
-      .task(id:"\(paused)|\(visible)|\(interval)|\(mode)") {
+      .task(id:"\(paused)|\(visible)|\(interval)|\(mode)|\(diagnosticKind)") {
         guard visible,!paused else {return}
         repeat {
           // A mode/interval task may replace a cancelled request before its defer runs.
@@ -165,23 +191,23 @@ struct ActivityMonitorPanel:View {
             do {try await Task.sleep(for:.milliseconds(25))} catch {return}
           }
           guard !Task.isCancelled else {return}
-          await model.load(includeDiagnostics:mode == 2,automatic:true)
+          await model.load(includeDiagnostics:mode == 2,includeApplicationLocks:diagnosticKind == 3,automatic:true)
           do {try await Task.sleep(for:.seconds(interval))} catch {return}
         } while !Task.isCancelled
       }
   }
   private var controls:some View {
     HStack(spacing:10) {
-      Picker("Görünüm",selection:$mode) {Text("Grafikler").tag(0);Text("Örnek tablosu").tag(1);Text("DBA").tag(2)}
-        .pickerStyle(.segmented).labelsHidden().frame(width:340).studioHelp("Performans grafikleri, geçmiş örnekler veya DBA tanıları").accessibilityIdentifier("activityMode")
+      StudioTabBar(items:[.init(id:0,title:"Grafikler",icon:"chart.xyaxis.line"),.init(id:1,title:"Örnek tablosu",icon:"tablecells"),.init(id:2,title:"DBA",icon:"server.rack")],selection:$mode)
+        .frame(width:400).accessibilityIdentifier("activityMode")
       Spacer(minLength:8)
-      Picker("Aralık",selection:$range) {Text("Son 5 dakika").tag(5);Text("Son 15 dakika").tag(15)}
+      Picker("Aralık",selection:$range) {ForEach([5,10,15,30,45,60],id:\.self) {Text($0==60 ? "Son 1 saat":"Son \($0) dakika").tag($0)}}
         .labelsHidden().frame(width:140).studioHelp("Grafik ve örnek tablosunun zaman aralığı").accessibilityLabel("Zaman aralığı")
-      Picker("Yenileme",selection:$interval) {ForEach([5,10,30,60],id:\.self) {Text("\($0) sn").tag($0)}}
+      Picker("Yenileme",selection:$interval) {ForEach([5,10,15,20,30,45,60],id:\.self) {Text("\($0) sn").tag($0)}}
         .labelsHidden().frame(width:78).studioHelp("Otomatik yenileme sıklığı").accessibilityLabel("Yenileme sıklığı")
       StudioActionButton(paused ? "Sürdür":"Duraklat",icon:paused ? "play.fill":"pause.fill",tint:Color(nsColor:StudioTheme.warning)) {paused.toggle()}
         .accessibilityIdentifier("activityPause")
-      StudioActionButton("Yenile",icon:"arrow.clockwise") {Task {await model.load(includeDiagnostics:mode == 2)}}
+      StudioActionButton("Yenile",icon:"arrow.clockwise") {Task {await model.load(includeDiagnostics:mode == 2,includeApplicationLocks:diagnosticKind == 3)}}
         .disabled(model.loading || !visible).accessibilityIdentifier("activityRefresh")
     }
   }
@@ -245,15 +271,18 @@ struct ActivityMonitorPanel:View {
   private var diagnosticsPanel:some View {
     VStack(alignment:.leading,spacing:8) {
       HStack {
-        Picker("Tanı",selection:$diagnosticKind) {
-          Text("Bloklanan · \(model.diagnostics.blocked.count)").tag(0)
-          Text("Uzun süren · \(model.diagnostics.longRunning.count)").tag(1)
-          Text("Yedekleme · \(model.diagnostics.backups.count)").tag(2)
-        }.pickerStyle(.segmented).labelsHidden().frame(maxWidth:570)
-          .studioHelp("Her grupta ilk 30 istek: bloklanan istekler, 30 saniyeyi aşan istekler veya devam eden yedeklemeler. Bloklayan zincirinde en çok 8 üst seviye / 60 oturum okunur.").accessibilityIdentifier("activityDiagnosticKind")
+        StudioTabBar(items:[
+          .init(id:0,title:"Bloklanan",icon:"lock",count:model.diagnostics.blocked.count),
+          .init(id:1,title:"Uzun süren",icon:"clock",count:model.diagnostics.longRunning.count),
+          .init(id:2,title:"Yedekleme",icon:"externaldrive",count:model.diagnostics.backups.count),
+          .init(id:3,title:"Uygulama kilitleri",icon:"app.badge",count:model.applicationLocksTime==nil || !model.applicationLockIssues.isEmpty || !model.applicationLockError.isEmpty ? nil:model.applicationLocks.count)
+        ],selection:$diagnosticKind).frame(maxWidth:700).accessibilityIdentifier("activityDiagnosticKind")
         Spacer(minLength:0)
-        Text(model.diagnosticsTime.map {$0.formatted(date:.omitted,time:.standard)} ?? "Henüz okunmadı").font(.caption).foregroundStyle(.secondary)
+        Text((diagnosticKind==3 ? model.applicationLocksTime:model.diagnosticsTime).map {$0.formatted(date:.omitted,time:.standard)} ?? "Henüz okunmadı").font(.caption).foregroundStyle(.secondary)
       }
+      if diagnosticKind==3 {ActivityApplicationLocksPanel(model:model)}
+      else {
+      if diagnosticKind != 2 {ActivityRequestTerminationAction(monitor:model,model:model.termination,request:selected)}
       if diagnosticRows.isEmpty {
         StudioEmptyState(title:model.diagnosticsTime == nil ? "DBA verisi bekleniyor":!model.diagnosticsError.isEmpty || !model.diagnostics.issues.isEmpty ? "Tanı verisi doğrulanamadı":"Bu grupta istek yok",icon:diagnosticKind == 2 ? "externaldrive.badge.checkmark":"checkmark.shield",detail:model.diagnosticsTime == nil ? "DBA görünümü açıkken sınırlı, salt okunur örnek alınır.":"Yetki ve filtre kapsamı yukarıdaki uyarılarla birlikte değerlendirilmelidir.")
       } else {
@@ -273,6 +302,7 @@ struct ActivityMonitorPanel:View {
           }
         }.frame(minHeight:120).accessibilityIdentifier("activityRequests")
         requestDetail
+      }
       }
     }.accessibilityIdentifier("activityDBA")
   }
@@ -402,7 +432,7 @@ struct ActivityMonitorPanel:View {
         Spacer(minLength:10)
         Text(latest.map {"Son örnek "+$0.time.formatted(date:.omitted,time:.standard)} ?? "Örnek bekleniyor…").font(.caption).foregroundStyle(.secondary)
         Text("\(model.samples.count) örnek").font(.caption).foregroundStyle(.secondary)
-          .studioHelp("Son 15 dakika, en çok 181 örnek. Eksik ölçüm — ile gösterilir; ilk örnekte ve kesinti sonrası hızlar hesaplanmaz.")
+          .studioHelp("Son 1 saat, en çok 721 örnek. Eksik ölçüm — ile gösterilir; ilk örnekte ve kesinti sonrası hızlar hesaplanmaz.")
       }
     }
   }

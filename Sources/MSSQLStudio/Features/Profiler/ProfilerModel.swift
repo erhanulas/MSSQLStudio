@@ -29,6 +29,7 @@ private actor ProfilerConnection {
   @Published private(set) var events:[SQLProfiler.Event]=[]
   @Published var displayFilter=SQLProfilerFiltering.Filter() {didSet {scheduleProjection(debounce:true)}}
   @Published private(set) var gridRevision=UUID()
+  private(set) var relations:[UInt64:SQLProfilerCorrelation.Relation]=[:]
   @Published private(set) var visibleEvents:[SQLProfiler.Event]=[]
   @Published private(set) var clients:[SQLProfilerFiltering.Client]=[]
   @Published private(set) var unknownClientEvents=0
@@ -148,6 +149,9 @@ private actor ProfilerConnection {
     guard filter.columnRules.count+filter.rules.count<=20 else {throw SQLFailure("En fazla 20 kolon filtresi kullanılabilir.")}
     displayFilter=filter
   }
+  func previewEvents(_ selected:[SQLProfiler.Event])->[SQLProfiler.Event] {
+    selected.map {event in event.sql.isEmpty ? relations[event.id]?.source ?? event:event}
+  }
   private func scheduleProjection(debounce:Bool) {
     projectionRevision=UUID();projectionDebounce?.cancel();pendingProjection=nil;filtering=true
     let request=ProjectionRequest(revision:projectionRevision,events:events,filter:displayFilter)
@@ -168,8 +172,8 @@ private actor ProfilerConnection {
       projectionTask=nil
       if request.revision==projectionRevision {
         switch result {
-        case .success(let value):visibleEvents=value.events;clients=value.clients;unknownClientEvents=value.unknownClientEvents;filterError=""
-        case .failure(let error):visibleEvents=[];clients=[];unknownClientEvents=0;filterError=error.localizedDescription
+        case .success(let value):relations=value.relations;visibleEvents=value.events;clients=value.clients;unknownClientEvents=value.unknownClientEvents;filterError=""
+        case .failure(let error):relations=[:];visibleEvents=[];clients=[];unknownClientEvents=0;filterError=error.localizedDescription
         }
         gridRevision=UUID();filtering=false
       }

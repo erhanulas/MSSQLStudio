@@ -64,16 +64,7 @@ struct AboutPanel: View {
         ScrollView {
           VStack(alignment: .leading, spacing: StudioMetrics.gap) {
             if let note = history.first(where: { $0.version == selection }) {
-              VStack(alignment: .leading, spacing: 6) {
-                Text(note.title).font(.system(size: StudioMetrics.headingFont, weight: .semibold))
-                Text("\(note.version) · \(note.date)").foregroundStyle(.secondary)
-              }
-              ForEach(Array(note.changes.enumerated()), id: \.offset) { _, change in
-                HStack(alignment: .top, spacing: 10) {
-                  Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.accentColor).padding(.top, 2)
-                  Text(change).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-                }
-              }
+              ReleaseNoteContent(note:note)
             } else {
               Text("Bu sürümün değişiklik notları bulunamadı.").font(.headline)
               Text(loadError ?? "Tam sürüm geçmişini GitHub yayınlarından inceleyebilirsiniz.").foregroundStyle(.secondary)

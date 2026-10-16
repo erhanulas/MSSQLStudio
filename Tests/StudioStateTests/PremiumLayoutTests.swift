@@ -25,8 +25,12 @@ import Testing
     #expect(!split.splitView(split.splitView,canCollapseSubview:sidebar.viewController.view))
     #expect(NSApp.sendAction(NSSelectorFromString("toggleExplorer"),to:controller,from:nil))
     #expect(sidebar.isCollapsed)
+    #expect(!controller.explorerToggle.tracksActiveState && controller.explorerToggle.state == .off)
+    #expect(controller.explorerToggle.layer?.borderWidth==0)
+    #expect(controller.explorerToggle.accessibilityValue() as? String == "Explorer gizli")
     #expect(NSApp.sendAction(NSSelectorFromString("toggleExplorer"),to:controller,from:nil))
     #expect(!sidebar.isCollapsed)
+    #expect(controller.explorerToggle.state == .off && controller.explorerToggle.layer?.borderWidth==0)
   }
   @Test func switchingThemeKeepsSemanticTypographyAndGridState() async throws {
     _ = NSApplication.shared

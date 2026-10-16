@@ -78,6 +78,7 @@ public enum SQLProfilerFiltering {
     public let applications:String
   }
   public struct Projection:Sendable {
+    public let relations:[UInt64:SQLProfilerCorrelation.Relation]
     public let events:[SQLProfiler.Event]
     public let clients:[Client]
     public let unknownClientEvents:Int
@@ -111,6 +112,7 @@ public enum SQLProfilerFiltering {
       return (rule,numeric)
     }
     func matches(_ event:SQLProfiler.Event)->Bool {
+      if event.isCallStart {return false}
       if filter.hideInformational,event.messageLevel == .info {return false}
       if !filter.sqlSearch.isEmpty,event.sql.range(of:filter.sqlSearch,options:[.caseInsensitive,.literal])==nil {return false}
       return rules.allSatisfy {rule,numeric in
@@ -156,6 +158,6 @@ public enum SQLProfilerFiltering {
       if $0.id.host != $1.id.host {return $0.id.host<$1.id.host}
       return $0.id.pid<$1.id.pid
     }
-    return Projection(events:filtered,clients:clients,unknownClientEvents:unknown)
+    return Projection(relations:SQLProfilerCorrelation.relations(events),events:filtered,clients:clients,unknownClientEvents:unknown)
   }
 }

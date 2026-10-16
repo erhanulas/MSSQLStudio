@@ -87,10 +87,12 @@ struct ProfilerEventGrid:NSViewRepresentable {
   }
   @MainActor final class Coordinator:NSObject,NSTableViewDataSource,NSTableViewDelegate {
     static let columns:[(String,String,CGFloat)]=[
-      ("timestamp","Zaman (UTC)",185),("kind","Olay",150),("messageLevel","Bildirim",85),("message","Mesaj",320),("errorNumber","Hata no",75),("severity","Önem derecesi",100),("clientPID","ClientProcessID",110),
-      ("session","SPID",55),("database","Veritabanı",120),("duration","Süre (ms)",90),
-      ("cpu","CPU (ham)",85),("reads","Okuma",80),("writes","Yazma",80),
-      ("application","Uygulama",160),("host","Host",140),("login","Login",130),("sql","SQL metni",480)
+      ("timestamp","Zaman (UTC)",185),("kind","Olay",150),("database","Veritabanı",120),
+      ("application","Uygulama",160),("host","Host",140),("login","Login",130),
+      ("duration","Süre (ms)",90),("reads","Okuma",80),("writes","Yazma",80),
+      ("messageLevel","Bildirim",85),("message","Mesaj",320),("errorNumber","Hata no",75),
+      ("severity","Önem derecesi",100),("clientPID","ClientProcessID",110),("session","SPID",55),
+      ("cpu","CPU (ham)",85),("sql","SQL metni",480)
     ]
     let model:ProfilerModel
     var selection:Binding<Set<UInt64>>
