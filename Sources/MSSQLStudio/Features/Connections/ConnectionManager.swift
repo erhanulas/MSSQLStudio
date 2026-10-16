@@ -10,6 +10,7 @@ struct ConnectionManager: View {
   let loadingChanged: (Bool) -> Void
   let cancel: () -> Void
   @State private var search=""
+  @State private var searchFocused=false
   @State private var selected: UUID?
   @State private var pending: UUID?
   @State private var switching = false
@@ -27,7 +28,8 @@ struct ConnectionManager: View {
     HSplitView {
       VStack(alignment:.leading,spacing:10) {
         Label("Bağlantılar",systemImage:"server.rack").font(.headline)
-        TextField("Bağlantı ara…",text:$search).textFieldStyle(.roundedBorder)
+        StudioSearchInput(placeholder:"Bağlantı ara…",text:$search,focused:$searchFocused,
+          accessibilityLabel:"Bağlantı ara",accessibilityID:"connectionSearch")
         Button {choose(nil)} label: {Label("Yeni bağlantı",systemImage:"plus.circle").frame(maxWidth:.infinity,alignment:.leading).padding(8).contentShape(Rectangle())}.buttonStyle(.plain)
         Divider()
         ScrollView {

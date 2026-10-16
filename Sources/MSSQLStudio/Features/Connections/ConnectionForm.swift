@@ -11,7 +11,7 @@ private struct DatabaseChoices: View {
   @State private var search = ""
   @State private var scope = DatabaseListScope.all
   @State private var selectedOnly = false
-  @FocusState private var searchFocused: Bool
+  @State private var searchFocused=false
   private var filtered: [CatalogItem] {
     DatabaseSelection.filtered(
       items, search: search, scope: scope, selectedOnly: selectedOnly, chosen: chosen)
@@ -21,36 +21,16 @@ private struct DatabaseChoices: View {
       HStack {
         Text("\(chosen.count) seçili / \(items.count) veritabanı").fontWeight(.semibold)
         Spacer()
-        Menu("Toplu seçim") {
-          Button("Tüm veritabanlarını seç (\(items.count))") { chosen = Set(items.map(\.name)) }
-          Button("Bütün seçimi temizle") { chosen = [] }
-        }.fixedSize()
       }
-      HStack(spacing: 6) {
-        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-        TextField("Veritabanı ara — ör. satış 2026", text: $search)
-          .textFieldStyle(.roundedBorder).focused($searchFocused)
-          .accessibilityIdentifier("databaseSearch")
-          .onSubmit {
-            if filtered.count == 1, let item = filtered.first { chosen.insert(item.name) }
-          }
-          .onExitCommand { search = "" }
-        if !search.isEmpty {
-          Button {
-            search = ""
-            searchFocused = true
-          } label: {
-            Image(systemName: "xmark.circle.fill").frame(width: 24, height: 24).contentShape(Rectangle())
-          }
-          .buttonStyle(.plain).studioHelp("Aramayı temizle").accessibilityLabel("Aramayı temizle")
-        }
-      }
+      StudioSearchInput(placeholder:"Veritabanı ara — ör. satış 2026",text:$search,focused:$searchFocused,
+        accessibilityLabel:"Veritabanı ara",accessibilityID:"databaseSearch",submit:{
+          if filtered.count==1,let item=filtered.first {chosen.insert(item.name)}
+        })
+        .onExitCommand {search=""}
+
       HStack {
-        Picker("Veritabanı türü", selection: $scope) {
-          Text("Tümü").tag(DatabaseListScope.all)
-          Text("Kullanıcı").tag(DatabaseListScope.user)
-          Text("Sistem").tag(DatabaseListScope.system)
-        }.labelsHidden().pickerStyle(.segmented)
+        StudioChoiceTabs(choices:[(.all,"Tümü","externaldrive"),(.user,"Kullanıcı","person"),(.system,"Sistem","gearshape")],selection:$scope)
+          .accessibilityLabel("Veritabanı türü")
         Toggle("Yalnızca seçilenler", isOn: $selectedOnly).toggleStyle(.checkbox).fixedSize()
       }
       HStack(spacing: 10) {
@@ -203,7 +183,8 @@ struct ConnectionForm: View {
       HStack(alignment: .top, spacing: 12) {
         VStack(alignment: .leading, spacing: 12) {
           Text("Sunucu bilgileri").font(.system(size:12,weight:.semibold))
-          Picker("Bağlantı seçenekleri",selection:$connectionPage) {Text("Genel").tag("Genel");Text("Gelişmiş").tag("Gelişmiş")}.pickerStyle(.segmented)
+          StudioChoiceTabs(choices:[("Genel","Genel","server.rack"),("Gelişmiş","Gelişmiş","slider.horizontal.3")],selection:$connectionPage)
+            .accessibilityLabel("Bağlantı seçenekleri")
           ScrollView {
           VStack(alignment:.leading,spacing:14) {
           if connectionPage == "Genel" {

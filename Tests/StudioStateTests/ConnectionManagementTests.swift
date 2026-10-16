@@ -91,6 +91,8 @@ import Testing
     host.layoutSubtreeIfNeeded()
     #expect(host.fittingSize.width <= 1030 && host.fittingSize.height <= 700)
     #expect(actions == 0 && !server.online && server.profile.name == "Synthetic saved")
+    func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+    #expect(descendants(host).compactMap {$0 as? StudioSearchField}.contains {$0.accessibilityIdentifier()=="connectionSearch"})
     let old=StudioTheme.mode;defer {StudioTheme.apply(old)}
     for mode in ["light","dark"] {
       StudioTheme.apply(mode);window.orderFront(nil)

@@ -75,9 +75,8 @@ struct ShortcutSettings:View {
       HStack(spacing:10) {
         TextField("Tüm kısayollarda ara…",text:$query).textFieldStyle(.roundedBorder)
           .accessibilityLabel("Tüm kısayollarda ara").accessibilityIdentifier("shortcutSearch")
-        Picker("Atama",selection:$assignment) {
-          ForEach(ShortcutCatalog.Assignment.allCases,id:\.self) {Text($0.title).tag($0)}
-        }.labelsHidden().frame(width:142).accessibilityLabel("Kısayol atama filtresi")
+        StudioSelectionPicker(title:"Kısayol atama filtresi",selection:$assignment,
+          options:ShortcutCatalog.Assignment.allCases,label:{$0.title}).frame(width:142)
       }
       if !query.isEmpty {Text("Tüm kategorilerde arama yapılıyor").font(.caption).foregroundStyle(.secondary)}
       if let feedback {

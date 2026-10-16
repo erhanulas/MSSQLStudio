@@ -111,6 +111,9 @@ import Testing
     host.view.frame = NSRect(x: 0, y: 0, width: 940, height: 620); window.orderFront(nil)
     try await Task.sleep(for: .milliseconds(100)); host.view.layoutSubtreeIfNeeded()
     #expect(host.sizeThatFits(in: NSSize(width: 940, height: 620)) == NSSize(width: 940, height: 620))
+    func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+    let search=try #require(descendants(host.view).compactMap {$0 as? StudioSearchField}.first {$0.accessibilityIdentifier()=="databaseSearch"})
+    #expect(search.frame.width>100 && search.frame.height==search.intrinsicContentSize.height)
     let rep = try #require(host.view.bitmapImageRepForCachingDisplay(in: host.view.bounds))
     host.view.cacheDisplay(in: host.view.bounds, to: rep)
     try #require(rep.representation(using: .png, properties: [:])).write(to: URL(fileURLWithPath: "/tmp/MSSQLStudio-112-connection-choices.png"))

@@ -3300,3 +3300,17 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - `MSSQLStudio-CredentialAgent-v1.zip` SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
 - `update.json` SHA-256: `3c6fc5ece6638c4008665659e3fa3f2d45660482fc361889a499710ba6fb5b9e`.
 - İndirilen signed uygulama `--check-update-feed 0.2.173` başarılı; exact tag public notları kaynakla byte eşleşti. Kanıt `/tmp/MSSQLStudio-173-public-verification/`. Installer çalıştırılmadı; kurulu uygulama ve kullanıcı DB oturumları değiştirilmedi.
+
+## 2026-10-17 - Shared compact selection picker (unpublished)
+
+- StudioSelectionPicker.swift provides a native rounded regular popup and SwiftUI binding adapter (12 pt, StudioMetrics.controlHeight). Explorer operator/object type and Settings shortcut assignment filter now use it. Option order, native target/action and accessibility labels remain intact.
+- /tmp/mssql-shared-selection-tests.log: 7 tests / 2 suites passed. /tmp/mssql-shared-selection-render-final-tests.log: the same 2 picker tests passed with stronger native height/render checks. Binding updates, Explorer options/defaults and both themes verified.
+- /tmp/mssql-shared-selection-release.log: Release BUILD SUCCEEDED. Source sync, architecture and diff checks passed.
+- SwiftUI host bitmap was blank and was not accepted as visual evidence. Native cells were rendered separately in flipped contexts; /tmp/mssql-shared-selection-light.png and dark.png inspected. Physical mouse/menu tracking and live SQL search were not exercised. No installed app/user data changes; not published.
+
+## 2026-10-17 - Connections shared tabs and search (unpublished)
+
+- ConnectionForm General/Advanced and database All/User/System navigation now use StudioChoiceTabs. ConnectionManager profile search and database search use StudioSearchInput with existing databaseSearch and new connectionSearch AX identifiers. Shared native intrinsic search height retained.
+- Removed the named bulk-selection menu from Object Explorer database choices. Individual checkboxes, visible-selection actions, default database and definition-index preferences retain the existing draft owner. Database Enter acceptance, search clear and filtering remain in their existing owner.
+- /tmp/mssql-connections-shared-ui-final-tests.log: 7 native tests / 3 suites and 3 core DatabaseSelection tests / 1 suite passed. Added native shared-field identity and geometry assertions. A prior strict 26 pt assertion failed because shared search intrinsic height is 28 pt; removed the unnecessary local height override and verified native intrinsic geometry.
+- /tmp/mssql-connections-shared-ui-final-release.log: Release BUILD SUCCEEDED; architecture/source sync/diff passed. Native 940x620 connection form bitmap /tmp/MSSQLStudio-112-connection-choices.png inspected. Existing manager tests exercise both themes and confirm zero connect/save actions during presentation. Physical mouse/real network/Keychain operations were not tested. User app/data unchanged; not published.
