@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.151",
+    "date": "2026-10-16",
+    "title": "Checkbox düzenleme ve güncellemede çalışma alanını koruma",
+    "changes": [
+      "Bit hücreleri düzenleme modunda checkbox olarak kalır; çift tıklama veya Enter ile değişiklik hazırlanır.",
+      "Güncelleme kapanışı, kurtarma açıkken sorgu sekmelerini ve SQL taslaklarını korur. Kaydetme uyarısı ayardaki tercihe uyar ve tekrar sorulmaz.",
+      "Kısayol atama uyarıları renkli gösterilir ve çakışan işlemin adını belirtir. Atamaya git ilgili kategori ve kısayol satırını açar."
+    ]
+  },
+  {
     "version": "0.2.150",
     "date": "2026-10-16",
     "title": "Net SQL blok önizlemesi ve kararlı editör etkileşimleri",

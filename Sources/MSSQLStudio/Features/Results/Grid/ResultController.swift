@@ -814,7 +814,16 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   private func sourceIndex(_ row: Int) -> Int { row >= basePageCount ? newRowOrder[row - basePageCount] : (visibleIndices?[pageStart + row] ?? (pageStart + row)) }
   func tableView(_ tableView: NSTableView, shouldEdit column: NSTableColumn?, row: Int) -> Bool {
     guard let ordinal = column.flatMap({ Int($0.identifier.rawValue) }) else { return false }
+    if toggleBitValue(row:row,column:ordinal) {return false}
     return canEdit(row: row, column: ordinal)
+  }
+  /// Boolean edits use the same validated draft path as text; no database write occurs here.
+  @discardableResult private func toggleBitValue(row:Int,column:Int)->Bool {
+    guard result.fields.indices.contains(column),result.fields[column].type == -7,
+      canEdit(row:row,column:column) else {return false}
+    let current=values(at:sourceIndex(row))[column]
+    setEditValue(current == "1" ? "0":"1",row:row,column:column)
+    return true
   }
   func control(_ control: NSControl, didFailToFormatString string: String, errorDescription error: String?) -> Bool { false }
   func tableView(_ tableView: NSTableView, setObjectValue value: Any?, for column: NSTableColumn?, row: Int) {
@@ -847,7 +856,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     let missing = ordinal.map { !values.indices.contains($0) || values[$0] == nil } ?? false
     let changed = ordinal.map { pendingEdits[index]?.values[$0] != pendingEdits[index]?.original?[$0] } ?? (pendingEdits[index] != nil)
     cell.placeholderString = index < 0 && ordinal.map({ pendingEdits[index]?.touched.contains($0) != true }) == true ? "DEFAULT" : nil
-    cell.isEditable = ordinal.map { canEdit(row: row, column: $0) } ?? false
+    cell.isEditable = !cell.isBit && (ordinal.map { canEdit(row: row, column: $0) } ?? false)
     cell.isSelectable = cell.isEditable
     cell.formatter = ordinal.flatMap { editFormatters[$0] }
     cell.textColor = pendingEdits[index]?.deleted == true ? .systemRed : index < 0 ? .systemGreen : changed ? .systemOrange : missing ? .secondaryLabelColor : StudioTheme.text
@@ -904,6 +913,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       let i = Int(table.tableColumns[c].identifier.rawValue)
     else { return }
     if editDefinition == nil, requestEditing?(r, c) == true { return }
+    if toggleBitValue(row:r,column:i) {return}
     if canEdit(row:r,column:i), let (target,position)=presentationColumn(i) {target.editColumn(position,row:r,with:nil,select:true);return}
     let values = values(at: sourceIndex(r))
     guard values.indices.contains(i) else { return }

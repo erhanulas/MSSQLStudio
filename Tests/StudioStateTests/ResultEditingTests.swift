@@ -5,6 +5,29 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct ResultEditingTests {
+  @Test func bitEditingKeepsCheckboxAndStagesToggleWithoutTextEditor() throws {
+    _=NSApplication.shared
+    let grid=ResultController()
+    grid.update(Rows(fields:[Field("Id",type:4),Field("Enabled",type:-7)],values:[["1","0"],["2",nil]]),generation:1)
+    grid.editDefinition=TableDefinition(schema:"dbo",name:"T",columns:[.init(id:1,name:"Id",type:"int"),.init(id:2,name:"Enabled",type:"bit")],primaryKey:["Id"])
+    grid.editingAllowed={true}
+    let column=grid.table.tableColumns[2]
+    let cell=try #require(column.dataCell as? GridDataCell)
+    grid.tableView(grid.table,willDisplayCell:cell,for:column,row:0)
+    #expect(cell.isBit && !cell.isEditable)
+    grid.table.editCell?(0,2)
+    #expect(grid.pendingEdits[0]?.values[1] == "1")
+    #expect(grid.result.values[0][1] == "0" && grid.table.currentEditor() == nil)
+    #expect(try grid.pendingSQL().contains("[Enabled] = 1"))
+    grid.table.editCell?(0,2)
+    #expect(grid.pendingEdits.isEmpty)
+    #expect(!grid.tableView(grid.table,shouldEdit:column,row:1))
+    #expect(grid.pendingEdits[1]?.values[1] == "1")
+    grid.editingAllowed={false}
+    #expect(!grid.tableView(grid.table,shouldEdit:column,row:0))
+    #expect(grid.pendingEdits[0] == nil)
+  }
+
   @Test func numericAliasGridCopyAndNativeEditorPreserveExactValues() async throws {
     _ = NSApplication.shared
     let grid = ResultController()

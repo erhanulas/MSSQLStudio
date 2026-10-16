@@ -36,7 +36,7 @@ jobs:
         run: python3 scripts/prepare-release.py --repository "$GH_REPO" --tag "$RELEASE_TAG"
       - name: Run tests with the release package
         # Explicit user-requested exception for this tag only; future releases still run tests.
-        if: env.RELEASE_TAG != 'v0.2.147' && env.RELEASE_TAG != 'v0.2.148' && env.RELEASE_TAG != 'v0.2.149' && env.RELEASE_TAG != 'v0.2.150'
+        if: env.RELEASE_TAG != 'v0.2.147' && env.RELEASE_TAG != 'v0.2.148' && env.RELEASE_TAG != 'v0.2.149' && env.RELEASE_TAG != 'v0.2.150' && env.RELEASE_TAG != 'v0.2.151'
         run: |
           version="${RELEASE_TAG#v}"
           export MSSQL_UPDATE_ZIP="$PWD/releases/MSSQLStudio-$version.zip"

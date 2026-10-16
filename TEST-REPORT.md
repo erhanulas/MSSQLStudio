@@ -1,3 +1,20 @@
+## 16 Ekim 2026 — v0.2.151 yayın hazırlığı
+
+- Kullanıcı açıkça test çalıştırılmadan yayın istedi; yeni test koşusu yapılmadı. Önceki 15 kısayol ve 38 grid/kapanış testi ile Release derlemeleri yukarıdaki yerel kayıtlardadır. Yalnız v0.2.151 için CI paket suite’i atlanır; sabit kimlik/helper, signed paket, manifest/hash ve Foundation feed kontrolleri korunur.
+
+## 16 Ekim 2026 — bit checkbox düzenleme ve güncellemede çalışma alanını koruma, yerel
+
+- ResultController bit düzenlemesinde text field açmak yerine çift tıklama/Enter veya native edit isteğini ortak toggle yoluna yönlendirir. 0/1 ve NULL→1 doğrulanmış setEditValue üzerinden draft’a gider; canEdit/metadata/generated/busy kontrolleri korunur. GridDataCell checkbox çizer, NULL ayrı eylemle verilebilir; kaynak Rows ve gönderim onayı değişmez.
+- Güncelleme önce normal canQuit yoluyla kirli belgeleri boşaltıyor, kapanış hazırlığı aynı yolu tekrar çağırıyordu. Güncelleme canQuit(preservingWorkspace:true) ile ilk onayı ve kurtarma snapshot’ını alır; son hazırlık aynı onayı tekrar açmadan güncel busy/transaction/DDL ve snapshot kaydını denetler. Kaydetme uyarısı kapalıyken SQL için soru sorulmaz; açık transaction/veritabanı düzenlemesi korumaları sürer. Kurtarma tercihi kapalıysa tercih değiştirilmez. Açık DB transaction’ı veya staged sonuç değişikliği kurtarma dosyasına eklenmez.
+- **38 native test /10 suite geçti /0 issue**, 5.245 sn (`/tmp/mssql-bit-update-recovery.log`). Yeni testler checkbox’ın text editor açmadan geri alınabilir draft üretmesini, ham kaynak/SQL tipini, kilitli edit reddini; güncelleme kapanışında kirli sekmelerin korunmasını, uyarı tercihinin açık/kapalı davranışını ve transaction engelini doğrular. Mevcut grid/edit/close/termination testleri geçti.
+- Release BUILD SUCCEEDED (`/tmp/mssql-bit-update-release.log`); test betiğinin mimari kontrolü ve diff kontrolü geçti. Gerçek Installer ile güncelleme/yeniden açılış ve canlı SQL denenmedi; kurulu uygulama/veri değiştirilmedi. Henüz yayımlanmadı.
+
+## 16 Ekim 2026 — kısayol atama geri bildirimi ve çakışma hedefine gezinme, yerel
+
+- GridShortcuts yapılandırılmış başarı/uyarı/hata ve çakışan eylem kimliği döndürür; mevcut save API ve kalıcı binding biçimi korunur. Ayrılmış tuşlar işlem adıyla açıklanır; değiştirilemeyen native komutlarda ayar bağlantısı sunulmaz. ShortcutSettings ortak StudioFeedback renklerini kullanır. Atamaya git kategori/filtreleri açar, mevcut SettingsSearch anchor yolu üzerinden hedef satırı işaretleyip kaydırır. Tek denemeden sonra capture kapanır; kaldır/sıfırla eski uyarıyı başarı durumuyla değiştirir.
+- **15 native test /3 suite geçti /0 issue**, 6.078 sn (`/tmp/mssql-shortcut-feedback-final.log`). Yeni regresyon ayrılmış/atanmış tuş sahibini, native komut açıklamasını, başarısız atamada binding korunmasını ve hedef SettingsSearch kaydını doğrular; mevcut editör kısayol/geçmiş ve ayarlar gezinme/tema/taslak testleri geçti. Ön koşu yeni test eklenmeden 14 test içeriyordu; son koşu yeni testi de çalıştırdı.
+- Release BUILD SUCCEEDED (`/tmp/mssql-shortcut-feedback-release.log`); mimari ve diff kontrolleri geçti. Gerçek fareyle Atamaya git/CUA denenmedi; native ayarlar ve model regresyonları kullanıldı. Kurulu uygulama/veri değiştirilmedi; henüz yayımlanmadı.
+
 ## 16 Ekim 2026 — v0.2.150 / build 151 public yayın doğrulandı
 
 - [Public/latest v0.2.150](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.150), kaynak `3404075e73e8dde146c60dcce93b5c0116749806`; [Actions 38887283088](https://github.com/erhanulas/MSSQLStudio/actions/runs/38887283088) başarılı. Önceki kullanıcı tercihiyle yerel test/build ve CI paket suite’i tekrarlanmadı; bu tag’de test adımı skipped. Yerel regresyon kanıtları aşağıdadır; yeni tam suite iddiası yoktur.

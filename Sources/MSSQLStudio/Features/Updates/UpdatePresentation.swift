@@ -145,7 +145,7 @@ extension WorkbenchController {
         alert.addButton(withTitle:"Güncelle ve Kapat")
         alert.addButton(withTitle:"Vazgeç")
         let response=alert.runModal()
-        guard response == .alertFirstButtonReturn || response == .alertSecondButtonReturn,state.canQuit() else {return}
+        guard response == .alertFirstButtonReturn || response == .alertSecondButtonReturn,state.canQuit(preservingWorkspace:true) else {return}
         _ = try await NSWorkspace.shared.open([prepared.package],withApplicationAt:URL(fileURLWithPath:"/System/Library/CoreServices/Installer.app"),configuration:NSWorkspace.OpenConfiguration())
         installerOpened=true
         UserDefaults.standard.set(prepared.version,forKey:"pendingInstallerVersion")

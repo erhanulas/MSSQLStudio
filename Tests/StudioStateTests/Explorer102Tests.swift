@@ -91,6 +91,27 @@ import Testing
     #expect(tab.sourceColor==host.sourceColor(for:server) && tab.sourceColor != nil)
     if !StudioTheme.dark {let color=try #require(StudioTheme.explorerCanvas.usingColorSpace(.sRGB));#expect(color.redComponent==1 && color.greenComponent==1 && color.blueComponent==1)}
   }
+  @Test func updateQuitPreservesDirtyTabsAndRespectsDisabledSaveWarning() throws {
+    let state=state(),server=ConnectedServer(profile:ServerProfile(),password:"")
+    server.online=false;state.servers=[server]
+    let doc=state.newQuery(server:server,text:"SELECT 1",title:"Draft")
+    doc.sql+=" -- keep"
+    state.warnOnTabClose=false
+    var prompts=0
+    state.bulkCloseChoiceFixture={prompts+=1;return .cancel}
+    #expect(state.canQuit(preservingWorkspace:true))
+    #expect(prompts==0 && state.documents.count==1 && state.active === doc)
+    #expect(doc.sql == "SELECT 1 -- keep" && doc.dirty)
+    state.warnOnTabClose=true
+    #expect(!state.canQuit(preservingWorkspace:true) && prompts==1)
+    state.bulkCloseChoiceFixture={prompts+=1;return .discard}
+    #expect(state.canQuit(preservingWorkspace:true))
+    #expect(state.documents.count==1 && doc.dirty)
+    doc.transactionCount=1
+    state.closeErrorFixture={_ in}
+    #expect(!state.canQuit(preservingWorkspace:true))
+  }
+
   @Test func bulkQuitChoiceCancelsOrDiscardsAllWithoutPerTabQuestionsAndSaveWritesFiles() throws {
     let state=state(),server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false;state.servers=[server]
     let first=state.newQuery(server:server,text:"SELECT 1",title:"First"),second=state.newQuery(server:server,text:"SELECT 2",title:"Second")

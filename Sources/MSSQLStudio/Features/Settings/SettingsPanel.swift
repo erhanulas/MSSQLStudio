@@ -189,7 +189,9 @@ struct SettingsPanel: View {
           }
         }
         settingsPage(.shortcuts, subtitle: "Sık kullandığınız işlemlere tek bir tuş birleşimiyle ulaşın.") {
-          ShortcutSettings(target: searchTarget?.id) { message = $0 }
+          ShortcutSettings(target: searchTarget?.id,navigate:{action in
+            searchTarget=SettingsSearch.entries.first {$0.id == "shortcut."+action.rawValue}
+          }) { message = $0 }
         }
         settingsPage(.workspace, subtitle: "Bu Mac’te tutulan sorgu geçmişini ve oturum kurtarmayı yönetin.") {
           settingsCard("Nesne tanım indeksi",icon:"externaldrive") {

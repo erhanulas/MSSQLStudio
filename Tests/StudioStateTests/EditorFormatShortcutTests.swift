@@ -8,6 +8,27 @@ import Testing
     try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
       windowNumber: window.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: key == "f" ? 3 : 37))
   }
+  @Test func assignmentFeedbackNamesTheOwnerAndProvidesANavigableSettingsTarget() throws {
+    _=NSApplication.shared
+    let keys=GridShortcuts.Action.allCases.map {"shortcut."+$0.rawValue},old=GridShortcuts.Action.allCases.map {UserDefaults.standard.object(forKey:"shortcut."+$0.rawValue)}
+    defer {for (key,value) in zip(keys,old) {UserDefaults.standard.set(value,forKey:key)}}
+    for key in keys {UserDefaults.standard.removeObject(forKey:key)}
+    let window=NSWindow();window.isReleasedWhenClosed=false;defer {window.close()}
+    let reserved=GridShortcuts.assign(try event("b",.command,window:window),action:.format)
+    #expect(reserved.tone == .warning && reserved.target == .definition && reserved.message.contains(GridShortcuts.title(.definition)))
+    let native=GridShortcuts.assign(try event("c",.command,window:window),action:.format)
+    #expect(native.tone == .warning && native.target == nil && native.message.contains("Kopyala"))
+    let chosen=try event("g",[.control,.shift],window:window)
+    #expect(GridShortcuts.assign(chosen,action:.format).tone == .success)
+    let original=GridShortcuts.binding(.comment)
+    let conflict=GridShortcuts.assign(chosen,action:.comment)
+    #expect(conflict.tone == .warning && conflict.target == .format && conflict.message.contains(GridShortcuts.title(.format)))
+    #expect(GridShortcuts.binding(.comment) == original)
+    let target=try #require(conflict.target)
+    let destination=try #require(SettingsSearch.entries.first {$0.id == "shortcut."+target.rawValue})
+    #expect(destination.section == .shortcuts && ShortcutCatalog.target(destination.id) == .format)
+    #expect(GridShortcuts.assign(try event("g",.option,window:window),action:.comment).target == nil)
+  }
   @Test func functionKeysSaveDisplayMatchAndKeepConflictValidation() throws {
     let keys = GridShortcuts.Action.allCases.map { "shortcut." + $0.rawValue }
     let old = keys.map { UserDefaults.standard.object(forKey: $0) }

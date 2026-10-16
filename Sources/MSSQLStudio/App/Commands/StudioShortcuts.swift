@@ -109,24 +109,80 @@ import SwiftUI
   static func matchesHeaders(_ event: NSEvent) -> Bool {
     matches(.headers,event)
   }
-  static func save(_ event: NSEvent, action: Action) -> String? {
+  struct AssignmentFeedback {
+    enum Tone {case success,warning,error}
+    let message:String
+    var tone:Tone = .warning
+    var target:Action? = nil
+  }
+  private struct ReservedShortcut {
+    let binding:Binding
+    let title:String
+    let action:Action?
+  }
+  private static var reservedShortcuts:[ReservedShortcut] {
+    func command(_ key:String,_ flags:NSEvent.ModifierFlags,_ action:Action)->ReservedShortcut {
+      ReservedShortcut(binding:Binding(key:key,modifiers:flags.rawValue),title:title(action),action:action)
+    }
+    func native(_ key:String,_ flags:NSEvent.ModifierFlags,_ title:String)->ReservedShortcut {
+      ReservedShortcut(binding:Binding(key:key,modifiers:flags.rawValue),title:title,action:nil)
+    }
+    return [
+      command("\r",.command,.runStatement),
+      command(" ",.control,.completion),
+      command("b",.command,.definition),
+      command(".",.command,.cancelQuery),
+      command(",",.command,.settings),
+      command("[",[.command,.option],.fold),
+      command("]",[.command,.option],.unfoldAll),
+      native("q",.command,"Uygulamadan çık"),
+      command("w",.command,.closeWindow),
+      command("s",.command,.saveFile),
+      command("s",[.command,.shift],.saveAs),
+      command("o",.command,.openFile),
+      native("c",.command,"Kopyala"),
+      native("v",.command,"Yapıştır"),
+      native("x",.command,"Kes"),
+      native("a",.command,"Tümünü seç"),
+      command("z",.command,.undo),
+      command("z",[.command,.shift],.redo),
+      native("f",.command,"Bul"),
+      native("f",.control,"Bul"),
+      command("r",.command,.results),
+      native("m",.command,"Pencereyi küçült"),
+      command("l",.command,.estimatedPlan),
+      command("b",[.command,.option],.explorer)
+    ]
+  }
+  static func save(_ event:NSEvent,action:Action)->String? {
+    let feedback=assign(event,action:action)
+    return feedback.tone == .success ? nil:feedback.message
+  }
+  static func assign(_ event: NSEvent, action: Action) -> AssignmentFeedback {
     var flags = event.modifierFlags.intersection([.command,.shift,.option,.control])
     guard let key = eventKey(event), key.count == 1,
       functionNumber(key) != nil || ["/",",",".","[","]","\r"," "].contains(key) || key.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.contains($0) }), flags.contains(.command) || flags.contains(.control)
-    else { return "⌘ veya ⌃ ile harf, rakam, / , . [ ], Space, Enter veya F1–F35 kullanın. Escape iptal eder." }
+    else { return AssignmentFeedback(message:"⌘ veya ⌃ ile harf, rakam, / , . [ ], Space, Enter veya F1–F35 kullanın. Escape iptal eder.") }
     if key == "/" {flags.remove(.shift)}
     // Existing application and standard editing commands remain reserved.
-    let reserved: [(String,NSEvent.ModifierFlags)] = [("\r",.command),(" ",.control),("b",.command),(".",.command),(",",.command),("[",[.command,.option]),("]",[.command,.option]),("q",.command),("w",.command),("s",.command),("s",[.command,.shift]),("o",.command),("c",.command),("v",.command),("x",.command),("a",.command),("z",.command),("z",[.command,.shift]),("f",.command),("f",.control),("r",.command),("m",.command),("l",.command),("b",[.command,.option])]
+    let value = Binding(key:key,modifiers:flags.rawValue)
+    let reserved=reservedShortcuts.first {$0.binding == value}
     let historyOwner:Action? = key == "z" && (flags == .command || flags == .control) ? .undo
       : (key == "z" && (flags == [.command,.shift] || flags == [.control,.shift])) || (key == "y" && flags == .control) ? .redo : nil
-    guard historyOwner == nil || historyOwner == action,
-      historyOwner == action || StudioCommandCatalog.definitions[action]?.defaultBinding == Binding(key:key,modifiers:flags.rawValue) || !reserved.contains(where: { $0.0 == key && $0.1 == flags })
-    else { return "Bu tuş uygulamanın başka bir işlemi için ayrılmış." }
-    let value = Binding(key: key, modifiers: flags.rawValue)
-    guard !Action.allCases.filter({ $0 != action }).contains(where: { binding($0) == value }) else { return "Bu kısayol diğer işlemde kullanılıyor." }
-    if let data = try? JSONEncoder().encode(value) { UserDefaults.standard.set(data, forKey: "shortcut.\(action.rawValue)") }
+    if let historyOwner,historyOwner != action {
+      return AssignmentFeedback(message:value.label+" “"+title(historyOwner)+"” işlemi için ayrılmış.",target:historyOwner)
+    }
+    if historyOwner != action,StudioCommandCatalog.definitions[action]?.defaultBinding != value,let reserved {
+      let detail=reserved.action == nil ? " Bu yerleşik tuşun ayarlarda değiştirilebilir bir ataması yok.":""
+      return AssignmentFeedback(message:value.label+" “"+reserved.title+"” işlemi için yerleşik olarak ayrılmış."+detail,target:reserved.action)
+    }
+    if let owner=Action.allCases.first(where:{$0 != action && binding($0) == value}) {
+      return AssignmentFeedback(message:value.label+" zaten “"+title(owner)+"” işlemine atanmış.",target:owner)
+    }
+    guard let data=try? JSONEncoder().encode(value) else {return AssignmentFeedback(message:"Kısayol kaydedilemedi.",tone:.error)}
+    UserDefaults.standard.set(data,forKey:"shortcut.\(action.rawValue)")
     NotificationCenter.default.post(name: changed, object: nil)
-    return nil
+    return AssignmentFeedback(message:"Kısayol kaydedildi: "+title(action)+" · "+value.label,tone:.success)
   }
   static func clear(_ action:Action) {
     if let data=try? JSONEncoder().encode(Binding(key:"",modifiers:0)) {UserDefaults.standard.set(data,forKey:"shortcut."+action.rawValue)}

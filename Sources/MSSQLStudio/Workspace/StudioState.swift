@@ -584,10 +584,10 @@ import UniformTypeIdentifiers
       return true
     }
   }
-  func canQuit(choice:BulkCloseChoice?=nil) -> Bool {
+  func canQuit(choice:BulkCloseChoice?=nil,preservingWorkspace:Bool=false) -> Bool {
     guard choice.map({approveBulkClose($0)}) ?? (confirmBulkClose() != nil) else {return false}
     // A discard decision must not resurrect earlier recovery drafts next launch.
-    if documents.contains(where:{$0.needsCloseConfirmation || $0.hasResultEdits?() == true}) {
+    if !preservingWorkspace, documents.contains(where:{$0.needsCloseConfirmation || $0.hasResultEdits?() == true}) {
       for doc in documents {doc.disconnect()}
       documents=[];active=nil;changed?()
     }

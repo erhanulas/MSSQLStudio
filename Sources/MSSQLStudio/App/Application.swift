@@ -238,7 +238,9 @@ import SwiftUI
       alert.addButton(withTitle:"Çıkışı İptal Et");alert.addButton(withTitle:"Geçmişi Kaydetmeden Çık")
       return alert.runModal() == .alertSecondButtonReturn
     },mayTerminate:{ [self] in
-      SchemaComparisonModel.activeApplications==0 && studio.canQuit()
+      SchemaComparisonModel.activeApplications==0 && (Self.updateTerminationApproved
+        ? studio.canBeginBulkClose() && studio.saveSnapshot()
+        : studio.canQuit())
     },terminate:{sender.terminate(nil)},cancelled:{ [self] in cancelUpdateTermination() })
   }
   func applicationShouldTerminate(_ sender:NSApplication)->NSApplication.TerminateReply {
