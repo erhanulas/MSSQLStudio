@@ -36,7 +36,7 @@ import Foundation
   // Exhaustive: adding a command requires choosing its discoverable category.
   static func category(_ action:GridShortcuts.Action)->Category {
     switch action {
-    case .pinTab,.closeLeft,.closeRight,.history,.reopenTab,.newQuery,.openFile,.saveFile,.saveAs,.closeWindow,.detach,.redock,.closeOthers,.closeAll: .workspace
+    case .tabSwitcher,.pinTab,.closeLeft,.closeRight,.history,.reopenTab,.newQuery,.openFile,.saveFile,.saveAs,.closeWindow,.detach,.redock,.closeOthers,.closeAll: .workspace
     case .completion,.format,.matchingPair,.parameterInfo,.undo,.redo,.comment,.uncomment,.definition,.revealExplorer,.fold,.unfoldAll: .editor
     case .runStatement,.execute,.cancelQuery,.reconnectQuery,.estimatedPlan,.actualPlan,.beginTransaction,.commitTransaction,.rollbackTransaction: .execution
     case .gridAdd,.gridClone,.gridDelete,.gridRevert,.gridFilter,.gridFit,.gridPin,.gridHide,.gridUnpin,.headers,.columns,.results: .results

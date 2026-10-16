@@ -37,3 +37,27 @@ struct ProfilerSessionsPanel:View {
     if alert.runModal() == .alertFirstButtonReturn {Task {await model.remove(session,currentSession:currentSession)}}
   }
 }
+
+struct ProfilerSessionsButton:View {
+  @ObservedObject var model:ProfilerSessionsModel
+  let currentSession:String?
+  @State private var expanded=false
+  var body:some View {
+    let count=model.activeCount(excluding:currentSession)
+    Button {expanded.toggle();if expanded {Task {await model.refresh()}}} label:{
+      HStack(spacing:8) {
+        Label("Sunucu Oturumları",systemImage:"list.bullet.rectangle")
+        if count>0 {
+          Text(String(count)).font(.system(size:StudioMetrics.detailFont,weight:.semibold)).monospacedDigit()
+            .foregroundStyle(Color(nsColor:StudioTheme.accent)).padding(.horizontal,6).padding(.vertical,2)
+            .background(Capsule().fill(Color(nsColor:StudioTheme.selection)))
+        }
+        if model.busy {ProgressView().controlSize(.small)}
+        if !model.error.isEmpty {Image(systemName:"exclamationmark.circle").foregroundStyle(Color(nsColor:StudioTheme.warning))}
+      }
+    }.buttonStyle(StudioSecondaryButton())
+      .accessibilityLabel("Sunucu Oturumları · \(count) diğer etkin izleme")
+      .studioHelp(model.error.isEmpty ? "Sunucuda \(count) diğer etkin MSSQL Studio izlemesi. Oturumları görüntüle ve yönet.":model.error)
+      .popover(isPresented:$expanded) {ProfilerSessionsPanel(model:model,currentSession:currentSession).studioPanel()}
+  }
+}

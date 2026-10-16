@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.163",
+    "date": "2026-10-16",
+    "title": "Önizlemeli sekme geçişi ve yenilenen güncelleme ekranı",
+    "changes": [
+      "Option+Tab ile açık sekmeler arasında SQL önizlemeli geçiş eklendi. Tab/Shift+Tab ve oklarla gezinilir; Option bırakılınca veya Enter ile seçim açılır, Escape ile vazgeçilir. Kısayol ayarlardan değiştirilebilir.",
+      "Sekme seçici açık/koyu temalı kartlar, pin/değişiklik işaretleri ve hafif geçiş animasyonu sunar. Önizleme mevcut editörü değiştirmez; kabulde sekmenin hâlâ açık olduğu doğrulanır.",
+      "Güncelleme ekranı kaydırılabilir not kartı, belirgin sürüm bilgisi ve ortak birincil indirme düğmesiyle yenilendi. Paket açık indirme seçimi olmadan indirilmez.",
+      "Profiler açılışında sunucudaki diğer etkin MSSQL Studio izlemeleri kontrol edilir. Sunucu Oturumları düğmesindeki sayı rozeti mevcut pencerenin kendi izlemesini saymaz, sıfırda gizlenir."
+    ]
+  },
+  {
     "version": "0.2.162",
     "date": "2026-10-16",
     "title": "Profiler SQL sekmesi ve sunucu oturumları",

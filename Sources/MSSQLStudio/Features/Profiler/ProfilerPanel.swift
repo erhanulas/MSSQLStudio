@@ -6,7 +6,6 @@ struct ProfilerPanel:View {
   @ObservedObject var model:ProfilerModel
   let background:()->Void
   var openQuery:(([SQLProfiler.Event])->Void)?=nil
-  @State private var showSessions=false
   @State private var selected:Set<UInt64>=[]
   @State private var selectedClient:SQLProfilerFiltering.Client.Key?
   @State private var showClients=false
@@ -47,9 +46,7 @@ struct ProfilerPanel:View {
           .buttonStyle(StudioSecondaryButton())
           .studioHelp("Pencereyi gizler. İzleme ve olay toplama devam eder; üstteki Profiler düğmesiyle geri açın.")
       }
-          Button {showSessions.toggle();if showSessions {Task {await model.sessions.refresh()}}} label:{Label("Sunucu Oturumları",systemImage:"list.bullet.rectangle")}
-            .buttonStyle(StudioSecondaryButton())
-            .popover(isPresented:$showSessions) {ProfilerSessionsPanel(model:model.sessions,currentSession:model.sessionName).studioPanel()}
+          ProfilerSessionsButton(model:model.sessions,currentSession:model.sessionName)
           ProfilerFilters(model:model,showClients:$showClients)
         }.padding(8).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
       } content: {

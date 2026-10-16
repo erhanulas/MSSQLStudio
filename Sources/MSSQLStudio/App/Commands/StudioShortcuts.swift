@@ -4,6 +4,7 @@ import SwiftUI
 
 @MainActor enum GridShortcuts {
   enum Action:String,CaseIterable {
+    case tabSwitcher
     case runStatement
     case completion
     case pinTab
@@ -73,7 +74,7 @@ import SwiftUI
     return Int(value - 0xF703)
   }
   nonisolated static func keyLabel(_ key: String) -> String {
-    functionNumber(key).map { "F\($0)" } ?? key.uppercased()
+    key == "\t" ? "⇥" : functionNumber(key).map { "F\($0)" } ?? key.uppercased()
   }
   static let changed = Notification.Name("MSSQLStudio.gridShortcutsChanged")
   static func binding(_ action: Action) -> Binding {

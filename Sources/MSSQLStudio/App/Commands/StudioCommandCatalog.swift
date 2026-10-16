@@ -3,6 +3,7 @@ import AppKit
 @MainActor enum StudioCommandCatalog {
   struct Definition {let title:String;let selector:String;let defaultBinding:GridShortcuts.Binding}
   static let definitions:[GridShortcuts.Action:Definition]=[
+    .tabSwitcher:.init(title:"Açık sekmeler · Önizlemeli geçiş",selector:"showTabSwitcher",defaultBinding:.init(key:"\t",modifiers:NSEvent.ModifierFlags.option.rawValue)),
     .connections:.init(title:"Bağlantıları yönet",selector:"showConnect",defaultBinding:.init(key:"",modifiers:0)),
     .settings:.init(title:"Ayarlar",selector:"settings",defaultBinding:.init(key:",",modifiers:NSEvent.ModifierFlags([.command]).rawValue)),
     .checkUpdates:.init(title:"Güncellemeleri kontrol et",selector:"installUpdate",defaultBinding:.init(key:"",modifiers:0)),

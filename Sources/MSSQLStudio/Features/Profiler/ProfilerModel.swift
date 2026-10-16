@@ -126,7 +126,7 @@ private actor ProfilerConnection {
     do {
       let result=try await executor(SQLProfiler.dropSQL(name:name))
       guard !result.partial,!result.stoppedEarly else {throw SQLFailure("Profiler temizliği tamamlanamadı.")}
-      sessionName=nil;error="";await disconnect();return true
+      sessionName=nil;sessions.forget(name);error="";await disconnect();return true
     } catch {
       self.error="Sunucu izleme oturumu kaldırılamadı: \(name)\n"+error.localizedDescription
       return false

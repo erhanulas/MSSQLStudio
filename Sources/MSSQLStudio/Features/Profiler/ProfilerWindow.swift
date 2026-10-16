@@ -21,10 +21,10 @@ import SQLServerKit
     let host=NSHostingController(rootView:ProfilerPanel(model:model,background:{[weak window] in window?.orderOut(nil)},openQuery:openQuery))
     host.sizingOptions=[];window.contentViewController=host
     window.tabbingMode = .disallowed
-    model.choices.refresh(automatic:true)
+    model.choices.refresh(automatic:true);model.sessions.refreshOnOpen()
   }
   required init?(coder:NSCoder) {fatalError()}
-  func windowWillClose(_ notification:Notification) {model.choices.cancel()}
+  func windowWillClose(_ notification:Notification) {model.choices.cancel();model.sessions.cancel()}
   func windowShouldClose(_ sender:NSWindow)->Bool {
     guard !closing,!model.busy else {return false}
     guard model.hasSession else {return true}
@@ -49,7 +49,7 @@ import SQLServerKit
 extension WorkbenchController {
   @objc func profiler() {
     guard let server=selectedServer else {return}
-    if let owner=profilerWindows[server.id] {owner.model.choices.refresh(automatic:true);owner.showWindow(nil);owner.window?.makeKeyAndOrderFront(nil);return}
+    if let owner=profilerWindows[server.id] {owner.model.choices.refresh(automatic:true);owner.model.sessions.refreshOnOpen();owner.showWindow(nil);owner.window?.makeKeyAndOrderFront(nil);return}
     let model=ProfilerModel(server:server,explorerChoices:{ [weak self,weak server] in
       guard let server else {return .init(databases:[],logins:nil)}
       let root=self?.roots.first {$0.server === server && $0.generation==server.generation}

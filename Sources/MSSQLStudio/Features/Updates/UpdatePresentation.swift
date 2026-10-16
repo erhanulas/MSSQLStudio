@@ -18,20 +18,23 @@ import SwiftUI
   let version=NSTextField(labelWithString:"")
   let icon=NSImageView()
   let done=NSButton(title:"Kapat",target:nil,action:nil)
-  let download=NSButton(title:"Son Sürümü İndir",target:nil,action:nil)
+  let download=StudioPrimaryActionButton(title:"Son Sürümü İndir",target:nil,action:nil)
+  private var downloadWidth:NSLayoutConstraint?
   private var downloadAction:(()->Void)?
   var hasOffer:Bool {downloadAction != nil}
+  private let stages=NSStackView()
+  private let notesHeading=NSTextField(labelWithString:"Güncelleme durumu")
   private var stage=Stage.checking
   private var finished=false
   private let steps=["Kontrol","İndirme","Doğrulama"].map {NSTextField(labelWithString:$0)}
   init() {
-    let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:520,height:340),styleMask:[.titled,.resizable],backing:.buffered,defer:false)
+    let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:580,height:440),styleMask:[.titled,.resizable],backing:.buffered,defer:false)
     window.title="MSSQL Studio Güncellemesi";window.isReleasedWhenClosed=false
     window.contentMinSize=NSSize(width:440,height:320)
     window.framePersistenceRole="updates"
     super.init(window:window)
     let body=window.contentView!
-    StudioTheme.surface(body,card:true)
+    StudioTheme.surface(body)
     icon.image=NSImage(systemSymbolName:"arrow.down.app",accessibilityDescription:nil)
     icon.contentTintColor=StudioTheme.accent
     icon.translatesAutoresizingMaskIntoConstraints=false
@@ -41,8 +44,17 @@ import SwiftUI
     version.font=StudioTheme.uiFont;version.textColor=StudioTheme.muted
     let titles=NSStackView(views:[heading,version]);titles.orientation = .vertical;titles.alignment = .leading;titles.spacing=4
     spinner.style = .spinning;spinner.controlSize = .small;spinner.startAnimation(nil)
-    let header=NSStackView(views:[icon,titles,NSView(),spinner]);header.spacing=12
-    let stages=NSStackView(views:steps);stages.distribution = .fillEqually;stages.spacing=8
+    let iconTile=NSView();StudioTheme.statusSurface(iconTile);iconTile.layer?.cornerRadius=StudioMetrics.cardRadius
+    iconTile.addSubview(icon);iconTile.translatesAutoresizingMaskIntoConstraints=false
+    NSLayoutConstraint.activate([iconTile.widthAnchor.constraint(equalToConstant:48),iconTile.heightAnchor.constraint(equalToConstant:48),icon.centerXAnchor.constraint(equalTo:iconTile.centerXAnchor),icon.centerYAnchor.constraint(equalTo:iconTile.centerYAnchor)])
+    let header=NSStackView(views:[iconTile,titles,NSView(),spinner]);header.spacing=12
+    stages.distribution = .fillEqually;stages.spacing=8
+    for label in steps {
+      let tile=NSView();StudioTheme.surface(tile,card:true)
+      label.translatesAutoresizingMaskIntoConstraints=false;tile.addSubview(label)
+      NSLayoutConstraint.activate([label.leadingAnchor.constraint(equalTo:tile.leadingAnchor,constant:8),label.trailingAnchor.constraint(equalTo:tile.trailingAnchor,constant:-8),label.centerYAnchor.constraint(equalTo:tile.centerYAnchor),tile.heightAnchor.constraint(equalToConstant:28)])
+      stages.addArrangedSubview(tile)
+    }
     for (index,label) in steps.enumerated() {
       label.stringValue="\(index+1)  \(label.stringValue)";label.font=StudioTheme.uiFont
       label.setAccessibilityIdentifier("updateStage_\(index)")
@@ -63,11 +75,21 @@ import SwiftUI
     download.target=self;download.action=#selector(downloadSelected);download.bezelStyle = .rounded
     download.image=NSImage(systemSymbolName:"arrow.down.circle",accessibilityDescription:nil);download.imagePosition = .imageLeading
     download.isHidden=true;download.setAccessibilityIdentifier("updateDownloadLatest")
-    let actions=NSStackView(views:[NSView(),done,download])
-    let stack=NSStackView(views:[header,stages,progressBar,counters,scroll,actions]);stack.orientation = .vertical;stack.spacing=12
+    download.font = .systemFont(ofSize:StudioMetrics.bodyFont,weight:.medium)
+    download.refreshStyle()
+    download.translatesAutoresizingMaskIntoConstraints=false;done.translatesAutoresizingMaskIntoConstraints=false
+    downloadWidth=download.widthAnchor.constraint(greaterThanOrEqualToConstant:180)
+    NSLayoutConstraint.activate([download.heightAnchor.constraint(equalToConstant:30),done.heightAnchor.constraint(equalToConstant:30),downloadWidth!])
+    let actions=NSStackView(views:[NSView(),done,download]);actions.spacing=8
+    notesHeading.font = .systemFont(ofSize:StudioMetrics.bodyFont,weight:.semibold);notesHeading.textColor=StudioTheme.text
+    let details=NSView();StudioTheme.surface(details,card:true)
+    let detailsStack=NSStackView(views:[notesHeading,scroll]);detailsStack.orientation = .vertical;detailsStack.spacing=8
+    detailsStack.translatesAutoresizingMaskIntoConstraints=false;details.addSubview(detailsStack)
+    NSLayoutConstraint.activate([detailsStack.leadingAnchor.constraint(equalTo:details.leadingAnchor,constant:12),detailsStack.trailingAnchor.constraint(equalTo:details.trailingAnchor,constant:-12),detailsStack.topAnchor.constraint(equalTo:details.topAnchor,constant:12),detailsStack.bottomAnchor.constraint(equalTo:details.bottomAnchor,constant:-12),scroll.widthAnchor.constraint(equalTo:detailsStack.widthAnchor),notesHeading.widthAnchor.constraint(equalTo:detailsStack.widthAnchor)])
+    let stack=NSStackView(views:[header,stages,progressBar,counters,details,actions]);stack.orientation = .vertical;stack.spacing=12
     stack.translatesAutoresizingMaskIntoConstraints=false;body.addSubview(stack)
     NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:body.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:body.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:body.topAnchor,constant:16),stack.bottomAnchor.constraint(equalTo:body.bottomAnchor,constant:-16),scroll.heightAnchor.constraint(greaterThanOrEqualToConstant:60)])
-    for row in [header,stages,counters,scroll,actions] {row.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true}
+    for row in [header,stages,counters,details,actions] {row.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true}
     progressBar.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
     phase("Yeni sürüm bilgisi alınıyor…")
     window.center()
@@ -76,12 +98,13 @@ import SwiftUI
   func phase(_ text:String,stage:Stage = .checking) {
     guard !finished else {return}
     self.stage=stage
+    stages.isHidden=false;notesHeading.stringValue="Güncelleme durumu"
     status.stringValue=text
     heading.stringValue=stage == .checking ? "Güncellemeler kontrol ediliyor":stage == .downloading ? "Yeni sürüm indiriliyor":"Paket doğrulanıyor"
     transfer.stringValue=stage == .checking ? "Güvenli bağlantı kuruluyor":stage == .downloading ? "İndirme başlatılıyor":"Paket bütünlüğü ve imza denetleniyor"
     percentage.stringValue=""
     progressBar.isIndeterminate=true;progressBar.startAnimation(nil)
-    for (index,label) in steps.enumerated() {label.textColor=index==stage.rawValue ? StudioTheme.accent:StudioTheme.muted}
+    for (index,label) in steps.enumerated() {label.textColor=index==stage.rawValue ? StudioTheme.accent:StudioTheme.muted;label.font = .systemFont(ofSize:StudioMetrics.bodyFont,weight:index==stage.rawValue ? .semibold:.regular);label.stringValue=(index<stage.rawValue ? "✓":"\(index+1)")+"  "+["Kontrol","İndirme","Doğrulama"][index]}
     window?.contentView?.layoutSubtreeIfNeeded()
     status.enclosingScrollView?.documentView?.scroll(.zero)
   }
@@ -94,17 +117,20 @@ import SwiftUI
   }
   func offer(version latest:String,current:String,notes:[ReleaseNote],notesError:String="",download action:@escaping ()->Void) {
     guard !finished else {return}
-    heading.stringValue="Yeni sürüm mevcut"
+    heading.stringValue="Yeni sürüm hazır"
+    stages.isHidden=true;notesHeading.stringValue="Bu güncellemedeki yenilikler"
+    icon.image=NSImage(systemSymbolName:"sparkles",accessibilityDescription:nil)
     version.stringValue="Yüklü "+current+" → "+latest
     transfer.stringValue="Notları inceleyin; indirme seçiminizi bekliyor"
     progressBar.stopAnimation(nil);progressBar.isHidden=true;percentage.stringValue=""
     spinner.stopAnimation(nil);spinner.isHidden=true
     done.isEnabled=true;done.keyEquivalent="";window?.styleMask.insert(.closable)
     download.title="\(latest) Sürümünü İndir";download.isHidden=false;download.isEnabled=true;download.keyEquivalent="\r"
+    downloadWidth?.constant=(download.title as NSString).size(withAttributes:[.font:download.font!]).width+44
     downloadAction=action
     let text=NSMutableAttributedString(string:"")
     func append(_ value:String,bold:Bool=false,color:NSColor=StudioTheme.text) {
-      let paragraph=NSMutableParagraphStyle();paragraph.paragraphSpacing=8
+      let paragraph=NSMutableParagraphStyle();paragraph.paragraphSpacing=8;paragraph.lineSpacing=3
       text.append(NSAttributedString(string:value,attributes:[.font:bold ? NSFont.systemFont(ofSize:StudioMetrics.bodyFont,weight:.semibold):StudioTheme.uiFont,.foregroundColor:color,.paragraphStyle:paragraph]))
     }
     if !notesError.isEmpty {append("Sürüm notları alınamadı. "+notesError+"\n\n",color:StudioTheme.warning)}
@@ -140,6 +166,7 @@ import SwiftUI
     guard !finished else {return}
     downloadAction=nil;download.isHidden=true
     status.stringValue=text;finished=true
+    stages.isHidden=true;notesHeading.stringValue=failed ? "Hata ayrıntıları":"Durum"
     heading.stringValue=failed ? "Güncelleme tamamlanamadı":"Güncelleme kontrolü tamamlandı"
     icon.image=NSImage(systemSymbolName:failed ? "exclamationmark.circle":"checkmark.circle",accessibilityDescription:nil)
     icon.contentTintColor=failed ? StudioTheme.warning:StudioTheme.success

@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import SQLServerKit
 import Testing
 @testable import MSSQLStudio
@@ -46,6 +47,28 @@ private actor ProfilerSessionsProbe {
     let document=try #require(state.documents.first)
     #expect(document.database=="CapturedDB" && document.sql=="SELECT 1;\nGO\nSELECT 1;")
     #expect(!document.busy && state.documents.count==1 && !server.online)
+  }
+  @Test func openingRefreshesBadgeAndExcludesTheCurrentCapture() async throws {
+    let probe=ProfilerSessionsProbe(),server=ConnectedServer(profile:ServerProfile(),password:"")
+    let model=ProfilerSessionsModel(server:server,reader:{try await probe.execute($0)})
+    model.refreshOnOpen();model.refreshOnOpen()
+    for _ in 0..<200 where model.sessions.isEmpty {try await Task.sleep(for:.milliseconds(3))}
+    let session=try #require(model.sessions.first)
+    #expect(await probe.statements().count==1)
+    #expect(model.activeCount(excluding:nil)==1 && model.activeCount(excluding:session.name)==0)
+    let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      let host=NSHostingController(rootView:ProfilerSessionsButton(model:model,currentSession:nil));host.sizingOptions=[]
+      let window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false
+      window.setContentSize(NSSize(width:280,height:50));window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
+      try await Task.sleep(for:.milliseconds(50));host.view.layoutSubtreeIfNeeded()
+      let image=try #require(host.view.bitmapImageRepForCachingDisplay(in:host.view.bounds));host.view.cacheDisplay(in:host.view.bounds,to:image)
+      try image.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-profiler-badge-"+theme+".png"))
+      window.close()
+    }
+    model.forget(session.name);#expect(model.activeCount(excluding:nil)==0)
+    server.online=false;model.refreshOnOpen();#expect(await probe.statements().count==1)
   }
   @Test func failedInspectionKeepsPreviousSnapshotAndShowsError() async throws {
     let probe=ProfilerSessionsProbe(),server=ConnectedServer(profile:ServerProfile(),password:"")

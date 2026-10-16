@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineViewDataSource,
   NSOutlineViewDelegate, NSMenuDelegate, NSUserInterfaceValidations
 {
+  lazy var tabSwitcher=QueryTabSwitcher(owner:self)
   let state: StudioState
   var focusedWindowProvider:()->NSWindow? = {NSApp.keyWindow}
   var explorerTransferBusy=false
@@ -135,6 +136,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     ])
     sidebar.isCollapsed=UserDefaults.standard.bool(forKey:"explorerCollapsed")
     reloadWorkspace()
+    tabSwitcher.install()
     Task { [weak self] in await self?.state.favorites.load() }
   }
   private func buildCenter() {
@@ -617,6 +619,10 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   @objc private func selectTab(_ sender: DocumentButton) {
     guard let doc = sender.document else { return }
+    activateQueryTab(doc)
+  }
+  func activateQueryTab(_ doc:QueryDocument) {
+    guard state.documents.contains(where:{$0 === doc}) else {return}
     state.active = doc
     if let window = detached[doc.id] { window.showWindow(nil) }
     renderTabs()

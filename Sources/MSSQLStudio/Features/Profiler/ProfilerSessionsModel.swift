@@ -8,7 +8,10 @@ import SQLServerKit
   @Published private(set) var busy=false
   @Published private(set) var error=""
   private let reader:Reader
+  private let canRefreshAutomatically:()->Bool
+  private var openingTask:Task<Void,Never>?
   init(server:ConnectedServer,reader:Reader?=nil) {
+    canRefreshAutomatically={ [weak server] in server?.online == true && server?.catalogFixture == nil }
     var profile=server.profile;profile.database="master"
     let snapshot=profile,password=server.password
     self.reader=reader ?? {sql in
@@ -21,10 +24,24 @@ import SQLServerKit
       } catch {await connection.disconnect();throw error}
     }
   }
+  func activeCount(excluding current:String?)->Int {sessions.filter {$0.running && $0.name != current}.count}
+  func forget(_ name:String) {sessions.removeAll {$0.name==name}}
+  func refreshOnOpen() {
+    guard canRefreshAutomatically(),openingTask==nil,!busy else {return}
+    openingTask=Task { [weak self] in
+      guard let self else {return}
+      await refresh();openingTask=nil
+    }
+  }
+  func cancel() {openingTask?.cancel()}
   func refresh() async {
     guard !busy else {return};busy=true;defer {busy=false}
-    do {sessions=try SQLProfiler.decodeSessions(await reader(SQLProfiler.sessionsSQL));error=""}
-    catch {self.error=error.localizedDescription}
+    do {
+      let snapshot=try SQLProfiler.decodeSessions(await reader(SQLProfiler.sessionsSQL))
+      guard !Task.isCancelled else {return}
+      sessions=snapshot;error=""
+    }
+    catch {if !Task.isCancelled {self.error=error.localizedDescription}}
   }
   func remove(_ session:SQLProfiler.ServerSession,currentSession:String?) async {
     guard !busy,session.name != currentSession,sessions.contains(session) else {return}
