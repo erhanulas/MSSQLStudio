@@ -2,10 +2,13 @@ import Foundation
 
 public enum SQLProfilerFiltering {
   public enum Column:String,CaseIterable,Identifiable,Sendable {
-    case clientPID,session,sql,host,application,login,database,kind,duration,cpu,reads,writes,timestamp
+    case messageLevel,errorNumber,severity,clientPID,session,sql,host,application,login,database,kind,duration,cpu,reads,writes,timestamp
     public var id:String {rawValue}
     public var title:String {
       switch self {
+      case .messageLevel:"Bildirim"
+      case .errorNumber:"Hata no"
+      case .severity:"Önem derecesi"
       case .timestamp:"Zaman (UTC)"
       case .clientPID:"ClientProcessID"
       case .session:"SPID"
@@ -21,10 +24,13 @@ public enum SQLProfilerFiltering {
       case .writes:"Yazma"
       }
     }
-    public var numeric:Bool {[.clientPID,.session,.duration,.cpu,.reads,.writes].contains(self)}
+    public var numeric:Bool {[.errorNumber,.severity,.clientPID,.session,.duration,.cpu,.reads,.writes].contains(self)}
     public var operators:[Comparison] {numeric ? [.equals,.notEquals,.atLeast,.atMost]:[.contains,.notContains,.equals,.notEquals]}
     public func value(_ event:SQLProfiler.Event)->String {
       switch self {
+      case .messageLevel:event.messageLevel?.title ?? ""
+      case .errorNumber:event.errorNumber.map(String.init) ?? ""
+      case .severity:event.severity.map(String.init) ?? ""
       case .timestamp:event.timestamp
       case .clientPID:event.clientPID
       case .session:event.session

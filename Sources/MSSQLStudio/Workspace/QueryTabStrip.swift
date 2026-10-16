@@ -162,6 +162,7 @@ import UniformTypeIdentifiers
   var sourceColor:NSColor?
   private var hoverArea: NSTrackingArea?
   private var hovered = false
+  var isSwitchPreview=false {didSet {refreshSurface()}}
   private(set) var isActiveTab = false
   func configure(active: Bool) {
     isActiveTab = active
@@ -180,9 +181,10 @@ import UniformTypeIdentifiers
     // Opaque surfaces keep inactive tabs readable independently of window/titlebar materials.
     effectiveAppearance.performAsCurrentDrawingAppearance {
       let selected = NSColor.selectedContentBackgroundColor.blended(withFraction:0.82,of:.controlBackgroundColor) ?? .controlBackgroundColor
-      layer?.borderWidth = isActiveTab ? 1:0
+      layer?.borderWidth = isActiveTab || isSwitchPreview ? 1:0
       layer?.borderColor = NSColor.controlAccentColor.cgColor
-      layer?.backgroundColor = (isActiveTab ? selected : hovered ? NSColor.controlBackgroundColor : NSColor.windowBackgroundColor).cgColor
+      let preview=NSColor.windowBackgroundColor.blended(withFraction:0.18,of:.controlAccentColor) ?? .controlBackgroundColor
+      layer?.backgroundColor = (isSwitchPreview ? preview:isActiveTab ? selected : hovered ? NSColor.controlBackgroundColor : NSColor.windowBackgroundColor).cgColor
       if let button=primaryButton {
         button.contentTintColor = .labelColor
         button.attributedTitle=NSAttributedString(string:button.title,attributes:[.font:button.font ?? StudioTheme.uiFont,.foregroundColor:NSColor.labelColor])

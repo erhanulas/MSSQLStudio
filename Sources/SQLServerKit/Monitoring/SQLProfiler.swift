@@ -101,7 +101,23 @@ public enum SQLProfiler {
     public let writes:String
     public let sql:String
     public let message:String
+    public var errorNumber:Int?=nil
+    public var severity:Int?=nil
+    public var errorState:Int?=nil
+    public var messageLevel:MessageLevel? {
+      guard kind=="error_reported" else {return nil}
+      guard let severity,(0...25).contains(severity) else {return .unknown}
+      if severity>=11 {return .error}
+      // SQL Server assigns severity 10 to this documented aggregate warning.
+      return errorNumber==8153 ? .warning:.info
+    }
     public var retainedBytes:Int {[timestamp,kind,database,application,host,login,session,clientPID,cpu,reads,writes,sql,message].reduce(128) {$0+$1.utf8.count}}
+  }
+  public enum MessageLevel:String,Sendable {
+    case info,warning,error,unknown
+    public var title:String {
+      switch self {case .info:"Bilgi";case .warning:"Uyarı";case .error:"Hata";case .unknown:"Bilinmiyor"}
+    }
   }
   public struct Snapshot:Sendable {
     public let events:[Event]
@@ -194,7 +210,24 @@ private final class ProfilerXMLDecoder:NSObject,XMLParserDelegate {
     if element=="event" {
       guard events.count<5000,let sequence=values["event_sequence"].flatMap(UInt64.init),!timestamp.isEmpty,
         ["sql_batch_completed","rpc_completed","error_reported"].contains(kind) else {invalid=true;return}
-      events.append(.init(id:sequence,timestamp:timestamp,kind:kind,database:values["database_name"] ?? "",application:values["client_app_name"] ?? "",host:values["client_hostname"] ?? "",login:values["server_principal_name"] ?? "",session:values["session_id"] ?? "",clientPID:values["client_pid"].flatMap(UInt32.init).flatMap {$0>0 ? String($0):nil} ?? "",durationMS:values["duration"].flatMap(UInt64.init).map {Double($0)/1000},cpu:values["cpu_time"] ?? "",reads:values["logical_reads"] ?? "",writes:values["writes"] ?? "",sql:values["batch_text"] ?? values["statement"] ?? values["sql_text"] ?? "",message:values["message"] ?? ""))
+      func number(_ name:String,in range:ClosedRange<Int>)->Int? {
+        guard let raw=values[name] else {return nil}
+        guard let value=Int(raw),range.contains(value) else {invalid=true;return nil}
+        return value
+      }
+      let errorNumber=number("error_number",in:0...Int(Int32.max))
+      let severity=number("severity",in:0...25)
+      let errorState=number("state",in:0...255)
+      guard !invalid else {return}
+      events.append(.init(
+        id:sequence,timestamp:timestamp,kind:kind,database:values["database_name"] ?? "",
+        application:values["client_app_name"] ?? "",host:values["client_hostname"] ?? "",
+        login:values["server_principal_name"] ?? "",session:values["session_id"] ?? "",
+        clientPID:values["client_pid"].flatMap(UInt32.init).flatMap {$0>0 ? String($0):nil} ?? "",
+        durationMS:values["duration"].flatMap(UInt64.init).map {Double($0)/1000},
+        cpu:values["cpu_time"] ?? "",reads:values["logical_reads"] ?? "",writes:values["writes"] ?? "",
+        sql:values["batch_text"] ?? values["statement"] ?? values["sql_text"] ?? "",
+        message:values["message"] ?? "",errorNumber:errorNumber,severity:severity,errorState:errorState))
     }
   }
 }

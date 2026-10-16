@@ -74,7 +74,7 @@ struct ProfilerPanel:View {
             Button {openQuery?(selectedEvents)} label:{Label("Yeni Sekmede Aç",systemImage:"plus.rectangle.on.rectangle")}
               .buttonStyle(StudioSecondaryButton()).disabled(selectedEvents.isEmpty || openQuery==nil)
           }
-          if let event=selectedEvent,!event.message.isEmpty {Text(event.message).foregroundStyle(Color(nsColor:StudioTheme.warning)).textSelection(.enabled).lineLimit(3)}
+          if let event=selectedEvent,!event.message.isEmpty {StudioFeedback(message:ProfilerMessagePresentation.details(event),tone:ProfilerMessagePresentation.tone(event.messageLevel))}
           SQLReadOnlyPreview(sql:preview.sql,lexicalSnapshot:preview.tokens)
         }.padding(.top,8).frame(minHeight:90)
       }

@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.164",
+    "date": "2026-10-16",
+    "title": "Kompakt sekme seçici ve Profiler mesaj düzeyleri",
+    "changes": [
+      "Option+Tab seçici kompakt, kaydırılabilir sekme başlıklarına dönüştürüldü. Seçilen sekmenin tek SQL önizlemesi altta gösterilir; fareyle üzerine gelerek veya klavyeyle aday değiştirilebilir.",
+      "Aday hücre ve ana şeritteki ilgili sekme ayrı vurgulanır. Aday görünür alana gelir; Escape ile vazgeçilince geçici vurgu kaldırılır ve önceki şerit kaydırma konumu geri alınır.",
+      "Profiler bilgi, uyarı ve hata mesajlarını sunucu önem derecesi ve bilinen mesaj numarasına göre ayırır. Bağlantı/dil değişikliği bilgi olarak gösterilir; eksik önem derecesi Bilinmiyor şeklinde belirtilir.",
+      "Profiler gridine Bildirim, Hata no ve Önem derecesi filtrelenebilir sütunları eklendi. Önizleme tam mesaj ayrıntılarını ve durum bilgisini sunar; ham olaylar ve SQL korunur."
+    ]
+  },
+  {
     "version": "0.2.163",
     "date": "2026-10-16",
     "title": "Önizlemeli sekme geçişi ve yenilenen güncelleme ekranı",

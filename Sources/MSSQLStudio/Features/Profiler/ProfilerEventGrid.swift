@@ -3,8 +3,9 @@ import SwiftUI
 import SQLServerKit
 
 private final class ProfilerTextCell:NSTextFieldCell {
+  var normalTextColor:NSColor = .labelColor
   override var backgroundStyle:NSView.BackgroundStyle {
-    didSet {textColor = backgroundStyle == .emphasized ? .selectedControlTextColor:.labelColor}
+    didSet {textColor = backgroundStyle == .emphasized ? .selectedControlTextColor:normalTextColor}
   }
 }
 
@@ -86,7 +87,7 @@ struct ProfilerEventGrid:NSViewRepresentable {
   }
   @MainActor final class Coordinator:NSObject,NSTableViewDataSource,NSTableViewDelegate {
     static let columns:[(String,String,CGFloat)]=[
-      ("timestamp","Zaman (UTC)",185),("kind","Olay",150),("clientPID","ClientProcessID",110),
+      ("timestamp","Zaman (UTC)",185),("kind","Olay",150),("messageLevel","Bildirim",85),("errorNumber","Hata no",75),("severity","Önem derecesi",100),("clientPID","ClientProcessID",110),
       ("session","SPID",55),("database","Veritabanı",120),("duration","Süre (ms)",90),
       ("cpu","CPU (ham)",85),("reads","Okuma",80),("writes","Yazma",80),
       ("application","Uygulama",160),("host","Host",140),("login","Login",130),("sql","SQL metni",480)
@@ -137,6 +138,7 @@ struct ProfilerEventGrid:NSViewRepresentable {
       guard events.indices.contains(row),let column=tableColumn else {return nil}
       let cell=(tableView.makeView(withIdentifier:column.identifier,owner:self) as? NSTextField) ?? NSTextField(labelWithString:"")
       if !(cell.cell is ProfilerTextCell) {cell.cell=ProfilerTextCell(textCell:"")}
+      (cell.cell as? ProfilerTextCell)?.normalTextColor=column.identifier.rawValue=="messageLevel" ? ProfilerMessagePresentation.color(events[row].messageLevel):.labelColor
       cell.identifier=column.identifier;cell.font=StudioTheme.uiFont;cell.textColor = .labelColor;cell.drawsBackground=false;cell.isBordered=false;cell.isEditable=false;cell.isSelectable=false
       cell.cell?.backgroundStyle = tableView.selectedRowIndexes.contains(row) ? .emphasized:.normal
       cell.lineBreakMode = .byTruncatingTail;cell.maximumNumberOfLines=1
@@ -146,7 +148,7 @@ struct ProfilerEventGrid:NSViewRepresentable {
       else if key=="sql" {cell.stringValue=String(event.sql.prefix(240)).replacingOccurrences(of:"\n",with:" ").replacingOccurrences(of:"\r",with:" ")}
       else if let field=SQLProfilerFiltering.Column(rawValue:key) {cell.stringValue=field.value(event)}
       else {cell.stringValue=""}
-      cell.alignment=["clientPID","session","duration","cpu","reads","writes"].contains(key) ? .right:.left
+      cell.alignment=["errorNumber","severity","clientPID","session","duration","cpu","reads","writes"].contains(key) ? .right:.left
       if cell.stringValue.isEmpty {cell.stringValue="—"}
       return cell
     }

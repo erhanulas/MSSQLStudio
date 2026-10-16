@@ -403,7 +403,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     let plus = symbolButton("plus", tip: "Yeni Sorgu (\(GridShortcuts.binding(.newQuery).label))", action: #selector(newQuery))
     tabs.addView(plus,in:.leading)
-    (tabs.enclosingScrollView as? QueryTabScrollView)?.revealActiveTab()
+    if tabSwitcher.panel != nil {tabSwitcher.refreshHighlight()}
+    else {(tabs.enclosingScrollView as? QueryTabScrollView)?.revealActiveTab()}
   }
   private func renderActive() {
     var initialFocus: QueryController?
