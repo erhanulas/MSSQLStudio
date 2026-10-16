@@ -52,13 +52,69 @@ import Testing
     #expect(host.profilerWindows.isEmpty)
     server.reconnecting=false
   }
+  @Test func activityWaitsForConnectionAndRefreshesExplorerWithoutChangingQuery() async throws {
+    let (state,server,host,window)=fixture()
+    defer {host.auxiliaryWindows.forEach {$0.window?.close()};window.close()}
+    let document=state.newQuery(server:server,text:"SELECT 1;")
+    var calls=0,continuation:CheckedContinuation<Void,Never>?
+    server.reconnectFixture={calls+=1;await withCheckedContinuation {continuation=$0}}
+    host.showPerformanceMonitor(server);host.showPerformanceMonitor(server)
+    try await wait {continuation != nil}
+    #expect(calls==1 && !host.toolWindowIsOpen("activity") && server.reconnecting)
+    #expect(host.activityLauncher.loadingCards[server.id]?.phase.stringValue.contains("bağlantısı kuruluyor")==true)
+    continuation?.resume();continuation=nil
+    try await wait {!host.activityLauncher.opening}
+    #expect(server.online && !server.reconnecting && host.toolWindowIsOpen("activity"))
+    #expect(state.active === document && state.documents.count==1 && document.sql=="SELECT 1;")
+    #expect(host.activityLauncher.loadingCards.isEmpty)
+  }
+  @Test func activityFailureAndCancellationNeverOpenMonitor() async throws {
+    let (state,server,host,window)=fixture();defer {window.close()}
+    var message="";state.errorFixture={message=$0}
+    server.reconnectFixture={throw SQLFailure("fixture refused")}
+    host.showPerformanceMonitor(server);try await wait {!host.activityLauncher.opening}
+    #expect(!host.toolWindowIsOpen("activity") && !server.online && message.contains("fixture refused"))
+    server.reconnecting=true;host.showPerformanceMonitor(server)
+    try await wait {host.activityLauncher.loadingCards[server.id] != nil}
+    host.activityLauncher.cancel();try await wait {!host.activityLauncher.opening}
+    server.reconnecting=false
+    #expect(!host.toolWindowIsOpen("activity") && host.activityLauncher.loadingCards.isEmpty)
+  }
+  @Test func healthProbeIsSharedAndClearsStaleExplorerError() async throws {
+    let (_,server,_,window)=fixture();defer {window.close()}
+    server.recordExplorerFailure(SQLFailure("old connection error"));server.online=true
+    var checks=0,continuation:CheckedContinuation<Void,Never>?
+    server.healthCheckFixture={checks+=1;await withCheckedContinuation {continuation=$0}}
+    let first=Task {await server.checkExplorerHealth()}
+    try await wait {continuation != nil}
+    var secondFinished=false
+    let second=Task {await server.checkExplorerHealth();secondFinished=true}
+    try await Task.sleep(for:.milliseconds(20))
+    #expect(checks==1 && !secondFinished)
+    continuation?.resume();continuation=nil
+    await first.value;await second.value
+    #expect(server.online && server.startupError==nil && checks==1)
+  }
+  @Test func cancellingHealthCheckDoesNotReconnectOrOpenActivity() async throws {
+    let (_,server,host,window)=fixture();defer {window.close()}
+    server.online=true
+    var continuation:CheckedContinuation<Void,Never>?,reconnects=0
+    server.healthCheckFixture={await withCheckedContinuation {continuation=$0}}
+    server.reconnectFixture={reconnects+=1}
+    host.showPerformanceMonitor(server)
+    try await wait {continuation != nil}
+    host.activityLauncher.cancel();server.online=false
+    continuation?.resume();continuation=nil
+    try await wait {!host.activityLauncher.opening}
+    #expect(reconnects==0 && !host.toolWindowIsOpen("activity") && host.activityLauncher.loadingCards.isEmpty)
+  }
   @Test func loadingCardFitsBothThemesWithNativeProgress() throws {
     let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}
     for theme in ["light","dark"] {
       StudioTheme.apply(theme)
       let card=StudioLoadingCard(title:"SQL Profiler açılıyor",context:"Development / SQL Server")
       card.updatePhase("SQL Server bağlantısı kuruluyor…")
-      let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:360,height:112),styleMask:.borderless,backing:.buffered,defer:false)
+      let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:360,height:136),styleMask:.borderless,backing:.buffered,defer:false)
       window.isReleasedWhenClosed=false;window.contentView=card;window.orderFront(nil);defer {window.close()}
       card.layoutSubtreeIfNeeded()
       #expect(card.bounds.contains(card.convert(card.progress.bounds,from:card.progress)) && card.progress.isIndeterminate)

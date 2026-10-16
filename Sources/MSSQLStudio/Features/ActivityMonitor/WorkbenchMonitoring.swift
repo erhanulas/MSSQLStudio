@@ -15,6 +15,12 @@ extension WorkbenchController {
   }
   @objc func activity() {if let server=selectedServer {showPerformanceMonitor(server)}}
   func showPerformanceMonitor(_ server:ConnectedServer) {
+    if let window=auxiliaryWindows.compactMap(\.window).first(where:{$0.identifier?.rawValue=="activity|\(server.id)"}) {
+      window.makeKeyAndOrderFront(nil);return
+    }
+    activityLauncher.open(server)
+  }
+  func presentPerformanceMonitor(_ server:ConnectedServer) {
     let window=present(ActivityMonitorPanel(server:server,openDBATool:{[weak self] tool in
       guard let self else {return}
       state.newQuery(server:server,database:"master",text:tool.sql,title:"DBA · "+tool.title)

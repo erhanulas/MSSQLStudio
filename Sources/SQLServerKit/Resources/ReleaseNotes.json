@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.168",
+    "date": "2026-10-17",
+    "title": "Daha anlaşılır izleme ve ortak arama görünümü",
+    "changes": [
+      "Activity Monitor açılırken bağlantı kontrol edilir; gerekirse yeniden bağlanmayı dener ve Explorer durumunu günceller.",
+      "Activity Monitor ve Profiler açılışında yapılan işlemi gösteren yeni animasyonlu yükleme görünümü kullanılır.",
+      "Oturum sonlandırma onayında bağlantı bilgileri kartlarda, SQL metni renklendirilmiş önizlemede gösterilir.",
+      "Ayarlar, Explorer ve sonuç arama alanları daha sade ve ortak bir görünüme kavuştu."
+    ]
+  },
+  {
     "version": "0.2.167",
     "date": "2026-10-17",
     "title": "Uzun SQL önizlemeleri ve izleme iyileştirmeleri",

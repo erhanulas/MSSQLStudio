@@ -17,7 +17,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   let explorer = NSViewController()
   let center = NSViewController()
   let outline = StudioCommandOutlineView()
-  let explorerSearch = NSSearchField()
+  let explorerSearch = StudioSearchField(frame:.zero)
   let searchOperator = NSPopUpButton()
   let searchScopePicker = StudioSearchablePopUpButton()
   let searchType = NSPopUpButton()
@@ -64,7 +64,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private var tabSignature: [String]?
   private var controllers: [UUID: QueryController] = [:]
   var auxiliaryWindows: [NSWindowController] = []
-  lazy var profilerLauncher=ProfilerLauncher(owner:self)
+  lazy var profilerLauncher=MonitoringToolLauncher(owner:self,tool:.profiler)
+  lazy var activityLauncher=MonitoringToolLauncher(owner:self,tool:.activity)
   var profilerWindows:[UUID:ProfilerWindowController]=[:]
   var contextNode: TreeNode?
   var sheet: NSWindow?

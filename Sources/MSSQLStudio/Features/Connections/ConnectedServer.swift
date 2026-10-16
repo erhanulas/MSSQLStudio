@@ -21,8 +21,15 @@ import UniformTypeIdentifiers
   var healthCheckFixture: (() async throws -> Void)?
   var reconnectFixture: (() async throws -> Void)?
   private var checkingHealth = false
+  private var explorerFailureMessage:String?
   func checkExplorerHealth() async {
-    guard online, !reconnecting, !checkingHealth, catalogFixture == nil || healthCheckFixture != nil else {return}
+    if checkingHealth {
+      while checkingHealth {
+        do {try await Task.sleep(for:.milliseconds(50))} catch {return}
+      }
+      return
+    }
+    guard !Task.isCancelled,online,!reconnecting,catalogFixture == nil || healthCheckFixture != nil else {return}
     checkingHealth=true
     defer {checkingHealth=false}
     let token=generation, connection=metadata
@@ -32,8 +39,12 @@ import UniformTypeIdentifiers
         var limits=Limits();limits.rows=1;limits.timeout=5
         _ = try await connection.execute("SELECT 1;",limits:limits)
       }
+      guard !Task.isCancelled,generation==token,metadata === connection,online,!reconnecting else {return}
+      if startupError==explorerFailureMessage {startupError=nil}
+      explorerFailureMessage=nil
+      NotificationCenter.default.post(name:Self.explorerConnectionChanged,object:self)
     } catch {
-      guard generation == token, metadata === connection, online, !reconnecting else {return}
+      guard !Task.isCancelled,generation == token, metadata === connection, online, !reconnecting else {return}
       recordExplorerFailure(error)
     }
   }
@@ -43,6 +54,7 @@ import UniformTypeIdentifiers
   func recordExplorerFailure(_ error: Error) {
     guard !(error is CancellationError) else {return}
     startupError = error.localizedDescription
+    explorerFailureMessage=startupError
     if let failure = error as? SQLFailure,
       failure.diagnostics.contains(where: { $0.state.hasPrefix("08") }) {
       online = false

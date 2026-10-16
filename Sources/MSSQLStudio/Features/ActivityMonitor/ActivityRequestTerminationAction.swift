@@ -62,6 +62,7 @@ struct ActivityRequestTerminationAction:View {
   @State private var target:ActivityRequestTermination.Target?
   @State private var generation:UUID?
   @State private var confirming=false
+  @State private var confirmationServerName=""
   @State private var presented=true
   private var isApplicationLockAction:Bool {applicationLockMode || applicationLock != nil}
   private var candidate:ActivityRequestTermination.Target? {
@@ -81,41 +82,30 @@ struct ActivityRequestTerminationAction:View {
         Spacer()
         if model.busy {ProgressView().controlSize(.small)}
         StudioActionButton(!isApplicationLockAction ? "Sorguyu Sonlandır":"Oturumu Sonlandır",icon:"stop.circle",tint:Color(nsColor:StudioTheme.danger)) {
-          target=candidate;generation=monitor.server.generation;confirming=true
+          target=candidate;generation=monitor.server.generation;confirmationServerName=monitor.server.profile.name;confirming=true
         }.disabled(candidate==nil || !canTerminateTarget || !monitor.server.online || model.busy || monitor.loading)
           .accessibilityIdentifier(!isApplicationLockAction ? "activityTerminateRequest":"activityTerminateApplicationLock")
           .studioHelp(!isApplicationLockAction ? (request?.command.uppercased().hasPrefix("BACKUP")==true ? "Yedekleme sorguları bu ekrandan sonlandırılamaz.":"Seçili sorgunun oturumunu sonlandırır; bloklayan başka oturumu hedeflemez. Aynı oturumdaki tüm sorgular etkilenir."):"Seçili application lock sahibinin tüm oturumunu sonlandırır. Boşta oturumlar da sonlandırılabilir; diğer sorgu ve kilitler de etkilenir.")
       }
       if !model.message.isEmpty {StudioFeedback(message:model.message,tone:model.failed ? .error:.info)}
-    }.onAppear {presented=true}.onDisappear {presented=false}
-      .alert(!isApplicationLockAction ? "Seçili sorgunun oturumu sonlandırılsın mı?":"Uygulama kilidinin sahibi sonlandırılsın mı?",isPresented:$confirming) {
-      Button("Vazgeç",role:.cancel) {target=nil;generation=nil}
-      Button("Oturumu Sonlandır",role:.destructive) {
-        guard let target,let generation else {return}
-        Task {
-          if await model.terminate(target,generation:generation) {
-            monitor.clearDiagnostics()
-            if presented {await monitor.load(includeDiagnostics:true,includeApplicationLocks:target.isApplicationLock)}
-          }
+    }.onAppear {presented=true}.onDisappear {presented=false;confirming=false}
+      .sheet(isPresented:$confirming,onDismiss:{target=nil;generation=nil}) {
+        if let target {
+          ActivityTerminationConfirmation(target:target,serverName:confirmationServerName,cancel:{confirming=false},confirm:{
+            guard let generation else {return}
+            confirming=false
+            Task {
+              if await model.terminate(target,generation:generation) {
+                monitor.clearDiagnostics()
+                if presented {await monitor.load(includeDiagnostics:true,includeApplicationLocks:target.isApplicationLock)}
+              }
+            }
+          })
         }
-        self.target=nil;self.generation=nil
       }
-    } message: {
-      if let target {
-        Text("\(monitor.server.profile.name) · Oturum \(target.sessionID)\n\(target.confirmationDetails)\n\nAynı oturumdaki tüm sorgular durur ve application lock’lar dahil kilitler bırakılır. Açık transaction’ların geri alınması zaman alabilir.")
-      }
-    }
   }
 }
 
-private extension ActivityRequestTermination.Target {
+extension ActivityRequestTermination.Target {
   var isApplicationLock:Bool {if case .applicationLock=self {return true};return false}
-  var confirmationDetails:String {
-    switch self {
-    case .request(let value):
-      return "İstek \(value.requestID) · \(value.database) · \(value.login) · \(value.host) · \(value.program)\n\n"+String(value.sql.prefix(400))
-    case .applicationLock(let value):
-      return "\(value.database) · \(value.login) · \(value.host) · \(value.program)\nKaynak: \(value.resource)\n\(value.ownerType) · \(value.mode) · \(value.status)\n\nBu işlem yalnız seçili kilidi bırakmaz; sahibi olan oturumun tamamını sonlandırır."
-    }
-  }
 }

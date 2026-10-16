@@ -27,7 +27,7 @@ extension WorkbenchController {
     }
   }
   @objc func toolWindowVisibilityChanged(_ notification:Notification) {
-    if notification.name==NSWindow.willCloseNotification,isViewLoaded,(notification.object as? NSWindow) === view.window {profilerLauncher.cancel()}
+    if notification.name==NSWindow.willCloseNotification,isViewLoaded,(notification.object as? NSWindow) === view.window {profilerLauncher.cancel();activityLauncher.cancel()}
     refreshToolWindowIndicators()
   }
 }

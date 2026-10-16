@@ -64,7 +64,7 @@ import SwiftUI
   private let position = NSTextField(labelWithString: "Ln 1, Col 1")
   private let summary = NSTextField(labelWithString: "")
   private let actual = NSButton(checkboxWithTitle: "Gerçek plan", target: nil, action: nil)
-  private let filter = NSSearchField()
+  private let filter = StudioSearchField(frame:.zero)
   private let rowLimit = StudioToolbarPopUpButton(frame:.zero,pullsDown:true)
   private let export = StudioToolbarPopUpButton(frame: .zero, pullsDown: true)
   private let cancelExport = StudioToolbarButton(symbol: "stop.circle", label: "Dışa aktarmayı iptal et", tone: .warning)

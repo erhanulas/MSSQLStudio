@@ -1,4 +1,5 @@
-import Foundation
+import AppKit
+import SwiftUI
 import SQLServerKit
 import Testing
 @testable import MSSQLStudio
@@ -6,6 +7,32 @@ import Testing
 @MainActor @Suite(.serialized) struct ActivityRequestTerminationUITests {
   private func request()->ActivityMonitoring.Request {
     .init(sessionID:71,requestID:0,command:"SELECT",sessionLoginTime:"2026-10-16 12:00:00.000",requestStartTime:"2026-10-16 12:01:02.003")
+  }
+  @Test func confirmationShowsFullColoredSQLAndFitsBothThemes() async throws {
+    _=NSApplication.shared
+    let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}
+    var value=request()
+    value.sql=String(repeating:"SELECT N'Preview'; -- context\n",count:40)+"-- LAST_MARKER"
+    value.database="DemoDB";value.host="HOST";value.login="reader";value.program="Client App"
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      let host=NSHostingController(rootView:ActivityTerminationConfirmation(target:.request(value),serverName:"Development Server",cancel:{},confirm:{}))
+      host.sizingOptions=[]
+      let window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false
+      window.setContentSize(NSSize(width:680,height:660));window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
+      defer {window.close()}
+      try await Task.sleep(for:.milliseconds(50));host.view.layoutSubtreeIfNeeded()
+      func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+      let preview=try #require(descendants(host.view).compactMap {$0 as? SQLPreviewView}.first)
+      #expect(preview.textView.string==value.sql && preview.textView.string.hasSuffix("-- LAST_MARKER"))
+      #expect(!preview.textView.isEditable && preview.textView.textLayoutManager != nil)
+      let color=preview.textView.textContentStorage?.textStorage?.attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor
+      #expect(color != StudioTheme.editorText)
+      let rect=host.view.convert(preview.bounds,from:preview)
+      #expect(rect.width>600 && rect.height>=160 && host.view.bounds.contains(rect))
+      let image=try #require(host.view.bitmapImageRepForCachingDisplay(in:host.view.bounds));host.view.cacheDisplay(in:host.view.bounds,to:image)
+      try image.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-termination-confirmation-"+theme+".png"))
+    }
   }
   @Test func offlineChangedAndInvalidTargetsNeverReachWriter() async {
     let server=ConnectedServer(profile:.init(),password:"")

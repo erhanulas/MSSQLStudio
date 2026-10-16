@@ -4,6 +4,37 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct GridToolbarTests {
+  private final class SearchTarget:NSObject {
+    var received:[String]=[]
+    @objc func changed(_ field:NSSearchField) {received.append(field.stringValue)}
+  }
+  @Test func sharedSearchKeepsNativeClearAndFitsBothThemes() throws {
+    _=NSApplication.shared
+    let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      let root=NSView(frame:NSRect(x:0,y:0,width:380,height:140))
+      let window=NSWindow(contentRect:root.bounds,styleMask:.borderless,backing:.buffered,defer:false)
+      window.isReleasedWhenClosed=false;window.contentView=root;window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
+      defer {window.close()}
+      let target=SearchTarget()
+      for (index,placeholder) in ["Tüm ayarlarda ara…","Nesnelerde filtrele","Sonuç ara"].enumerated() {
+        let field=StudioSearchField(frame:NSRect(x:12,y:CGFloat(100-index*40),width:index==2 ? 140:356,height:28))
+        field.placeholderString=placeholder;field.target=target;field.action=#selector(SearchTarget.changed(_:));root.addSubview(field)
+        #expect(field.cell is NSSearchFieldCell && field.intrinsicContentSize.height==28 && field.isEditable && field.isSelectable)
+        if index==1 {
+          field.stringValue="customer"
+          let cell=try #require(field.cell as? NSSearchFieldCell)
+          #expect(field.bounds.contains(cell.searchTextRect(forBounds:field.bounds)))
+          cell.cancelButtonCell?.performClick(field)
+          #expect(field.stringValue.isEmpty && target.received.last=="")
+        }
+      }
+      root.layoutSubtreeIfNeeded()
+      let image=try #require(root.bitmapImageRepForCachingDisplay(in:root.bounds));root.cacheDisplay(in:root.bounds,to:image)
+      try image.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-shared-search-"+theme+".png"))
+    }
+  }
   @Test func geometryRefreshClearsHoverWithoutMouseExit() throws {
     _=NSApplication.shared
     let button=StudioToolbarButton(symbol:"sidebar.left",label:"Explorer")

@@ -54,7 +54,7 @@ struct SettingsPanel: View {
   @State private var expandedCards:Set<String>=["Renk teması","Otomatik tamamlama","Klavye kısayolları","Sekmeler ve pencereler","GitHub yayınları","Parola erişimi"]
   @State private var search=""
   @State private var searchTarget:SettingsSearchEntry?
-  @FocusState private var searchFocused:Bool
+  @State private var searchFocused=false
   init(state: StudioState, initialTab: SettingsSection = .appearance, definitionStorage:DefinitionIndexStorageModel = DefinitionIndexStorageModel()) {
     self.state = state
     _definitionStorage=StateObject(wrappedValue:definitionStorage)
@@ -72,16 +72,9 @@ struct SettingsPanel: View {
           }.padding(4).contentShape(Rectangle())
         }.buttonStyle(.plain).foregroundStyle(.secondary).accessibilityIdentifier("definitionIndexUsageSummary")
       }
-      HStack(spacing:8) {
-        Image(systemName:"magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
-        TextField("Tüm ayarlarda ara…",text:$search).textFieldStyle(.roundedBorder)
-          .focused($searchFocused).accessibilityLabel("Tüm ayarlarda ara").accessibilityIdentifier("settingsSearch")
-          .onSubmit {if let result=SettingsSearch.results(search).first {openSearchResult(result)}}
-        if !search.isEmpty {
-          Button {search=""} label: {Image(systemName:"xmark.circle.fill")}
-            .buttonStyle(.plain).studioHelp("Aramayı temizle").accessibilityLabel("Aramayı temizle")
-        }
-      }
+      StudioSearchInput(placeholder:"Tüm ayarlarda ara…",text:$search,focused:Binding(get:{searchFocused},set:{searchFocused=$0}),accessibilityLabel:"Tüm ayarlarda ara",accessibilityID:"settingsSearch",submit:{if let result=SettingsSearch.results(search).first {openSearchResult(result)}})
+        .frame(height:28)
+
       HStack(alignment:.top,spacing:0) {
         SettingsCategoryPicker(selected:selectedTab) {section in selectedTab=section;searchTarget=nil}
           .padding(8).frame(width:164)
