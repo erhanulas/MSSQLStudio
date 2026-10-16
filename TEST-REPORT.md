@@ -1,3 +1,9 @@
+## 16 Ekim 2026 — v0.2.160 / build 161 public yayın doğrulaması
+
+- Public/latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.160 ; kaynak `d371292cfc0bd6d27573d67c97ec3dd5ffb51846`. Actions `38941653032` başarılı. Tamamlanmış geliştirme testleri yeniden çalıştırılmadı; mevcut kullanıcı tercihiyle exact tag paket suite’i atlandı.
+- İndirilen ZIP/PKG/update.json/frozen archive hash’leri GitHub digest/manifest ile eşleşti. Exact sürüm/build, kaynak sürüm notları/public metin, app/helper strict imzaları, frozen helper byte eşliği ve Icon Composer varyantları doğrulandı. Signed app’in Foundation feed kontrolü exact `0.2.160` geçti. Yeni not okuma yolunun exact-tag public JSON’u kaynakla byte-for-byte eşleşti.
+- Kanıt: `/tmp/MSSQLStudio-160-public-verification/{verification.json,verification.log,foundation-feed.log,public-notes.log}`. Kullanıcı uygulaması kurulmadı/değiştirilmedi, oturumlar yeniden başlatılmadı; gerçek Installer kurulumu/canlı SQL denenmedi.
+
 ## 16 Ekim 2026 — v0.2.160 / build 161 yayın hazırlığı
 
 - Profiler ve güncelleme kontrolü geliştirme kanıtları aşağıdadır. Tamamlanmış testler yeniden çalıştırılmaz; mevcut kullanıcı tercihiyle exact tag paket suite’i atlanır. İmza/audit, paket/helper, hash/manifest ve public feed doğrulamaları korunur.
