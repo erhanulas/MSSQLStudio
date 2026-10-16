@@ -7,9 +7,10 @@ import Testing
   @Test func completionReadsPreferencesAndDisplaysMatchingNativeLabels() async throws {
     _=NSApplication.shared
     let defaults=UserDefaults.standard
-    let keys=[SQLEditorPreferences.completionSchemaKey,SQLEditorPreferences.completionBracketsKey]
+    let keys=[SQLEditorPreferences.completionSchemaKey,SQLEditorPreferences.completionBracketsKey,"sqlAutomaticAliases"]
     let old=keys.map {defaults.object(forKey:$0)}
     defer {for (key,value) in zip(keys,old) {defaults.set(value,forKey:key)}}
+    defaults.set(true,forKey:"sqlAutomaticAliases")
     let doc=QueryDocument(server:ConnectedServer(profile:.init(),password:""),database:"master",title:"Preview")
     doc.server.online=false;doc.sql="SELECT * FROM Prod";doc.catalogDatabase="master";doc.catalogVerified=true
     doc.intelligenceCatalog = .init(snapshot:.init(symbols:[CatalogSymbol(schema:"dbo",name:"Products",columns:["ID"])]))
@@ -19,6 +20,7 @@ import Testing
     let completion=EditorCompletionController(document:doc,editor:host.editor)
     defer {completion.cancel();window.close()}
     for (schema,brackets,expected) in [(true,true,"[dbo].[Products]"),(true,false,"dbo.Products"),(false,true,"[Products]"),(false,false,"Products")] {
+      let expected=expected+" AS P"
       defaults.set(schema,forKey:keys[0]);defaults.set(brackets,forKey:keys[1])
       completion.scheduleIntelligence(manual:true,allowPopup:false)
       for _ in 0..<100 where completion.currentAnalysis?.suggestions.first?.label != expected {try await Task.sleep(for:.milliseconds(10))}

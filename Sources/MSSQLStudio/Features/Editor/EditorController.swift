@@ -54,6 +54,16 @@ import SQLServerKit
   private var textRevision = UUID()
   var executionRequest=UUID()
   var executionChoiceFixture: (([NSRange]) -> Int?)?
+  func previewExecutionRange(_ range:NSRange?) {
+    guard let range else {occurrenceHighlights.executionRange=nil;return}
+    let length=(document.sql as NSString).length
+    guard range.location != NSNotFound,range.location<=length,range.length<=length-range.location else {occurrenceHighlights.executionRange=nil;return}
+    let start=projection?.displayOffset(range.location) ?? range.location
+    let end=projection?.displayOffset(NSMaxRange(range)) ?? NSMaxRange(range)
+    occurrenceHighlights.executionRange=NSRange(location:start,length:max(0,end-start))
+    editor.scrollRangeToVisible(NSRange(location:start,length:0))
+    occurrenceHighlights.needsDisplay=true
+  }
   func closeExecutionAssistance() {completion.close();parameterPopover.close();insertPresentation.hidePreview()}
   private var lineStarts = [0]
   private func updateOutline(refreshRegions: Bool = true) {
@@ -165,7 +175,7 @@ import SQLServerKit
     ruler.toggle = { [weak self] in self?.toggleFold($0) }
     ruler.selectLine = { [weak self] in self?.selectSourceLine($0) }
     completion.isProjected = { [weak self] in self?.projection != nil }
-    completion.willShow = { [weak self] in self?.insertPresentation.hidePreview(); self?.parameterPopover.close() }
+    completion.willShow = { [weak self] in self?.insertPresentation.hidePreview(); self?.dismissParameterHelp() }
     completion.parametersShown = { [weak self] in self?.parameterPopover.isShown ?? false }
     completion.anchor = { [weak self] in self?.suggestionAnchor() }
     completion.willAccept = { [weak self] in self?.suppressNextPopup = true }
@@ -438,7 +448,7 @@ import SQLServerKit
   }
   func textDidChange(_ notification: Notification) {
     objectHover.hide()
-    textRevision = UUID();executionRequest=UUID()
+    textRevision = UUID();executionRequest=UUID();previewExecutionRange(nil)
     guard !changingPresentation else { return }
     clearOccurrences()
     document.sql = editor.string
@@ -524,6 +534,7 @@ import SQLServerKit
     parameterTask?.cancel();parameterGeneration=UUID();parameterPopover.close()
   }
   func scheduleParameters(manual:Bool=false) {
+    if manual {completion.cancel()}
     parameterTask?.cancel()
     let generation=UUID();parameterGeneration=generation
     guard projection == nil,editor.selectedRange().length == 0,!editor.hasMarkedText(),editor.window == nil || editor.window?.firstResponder === editor else {parameterPopover.close();return}
@@ -564,7 +575,8 @@ import SQLServerKit
   }
   private func showParameterHelp() {
     guard let call=parameterCall,let window=editor.window,window.firstResponder === editor,let anchor=suggestionAnchor() else {return}
-    completion.close();insertPresentation.hidePreview()
+    guard !completionShown else {parameterPopover.close();return}
+    insertPresentation.hidePreview()
     let height=parameterStatus == nil && !parameterValues.isEmpty ? CGFloat(min(6,parameterValues.count))*28+62:104
     let content=SQLParameterHelp(name:call.symbol.schema+"."+call.symbol.name,parameters:parameterValues,active:call.activeIndex(in:parameterValues),status:parameterStatus)
     StudioPopover.show(parameterPopover,content:content,from:editor,rect:anchor,size:NSSize(width:480,height:height))

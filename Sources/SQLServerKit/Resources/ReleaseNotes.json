@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.150",
+    "date": "2026-10-16",
+    "title": "Net SQL blok önizlemesi ve kararlı editör etkileşimleri",
+    "changes": [
+      "Command–Enter seçicisinde vurgulanan SQL bloğu editörde görünür alana getirilir ve geçici çerçeveyle gösterilir. Menü kapanınca çerçeve kaldırılır; SQL ve imleç değişmez.",
+      "Otomatik alias açıkken tablo/view önerilerinde AS alias görünür. Mevcut alias ve kapalı tercih korunur; virgüllü FROM kaynakları da desteklenir.",
+      "Geç gelen procedure parametre yanıtları değişken autocomplete listesini kapatamaz. Manuel parametre yardımı isteği kendi önceliğini korur.",
+      "Sekme kapatma ikonunda takılı kalan hover vurgusu tracking yenileme, imleç konumu ve pencere odağı üzerinden temizlenir."
+    ]
+  },
+  {
     "version": "0.2.149",
     "date": "2026-10-16",
     "title": "Trigger zekâsı, otomatik içerik indeksi ve yakın nesne sekmeleri",

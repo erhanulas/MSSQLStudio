@@ -4,6 +4,23 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct TabPresentation137Tests {
+  @Test func closeHoverClearsAfterTrackingReplacementFocusLossAndRemoval() throws {
+    _=NSApplication.shared
+    let button=QueryTabCloseButton(frame:NSRect(x:0,y:0,width:24,height:24))
+    let host=NSView(frame:NSRect(x:0,y:0,width:300,height:200));host.addSubview(button)
+    let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:300,height:200),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=host;defer {window.close()}
+    window.orderFront(nil)
+    let event=try #require(NSEvent.enterExitEvent(with:.mouseEntered,location:.zero,modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,eventNumber:1,trackingNumber:1,userData:nil))
+    button.mouseEntered(with:event);#expect(button.hovered)
+    button.updateTrackingAreas()
+    #expect(!button.hovered && button.contentTintColor == NSColor.labelColor)
+    button.mouseEntered(with:event);button.highlight(true)
+    NotificationCenter.default.post(name:NSWindow.didResignKeyNotification,object:window)
+    #expect(!button.hovered && !button.isHighlighted)
+    button.mouseEntered(with:event);button.highlight(true);button.removeFromSuperview()
+    #expect(!button.hovered && !button.isHighlighted)
+  }
   @Test func draggingCapturesWholeTabAndPreviewsSlotsWithoutChangingDocuments() throws {
     _=NSApplication.shared
     let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false

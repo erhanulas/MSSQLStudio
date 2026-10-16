@@ -54,9 +54,20 @@ struct SQLIntelligenceTests {
       #expect(try analyze(sql,caret:caret).suggestions.allSatisfy {$0.kind != .column && $0.kind != .function})
     }
   }
+  @Test func relationAliasesAreVisibleAndRespectThePreferenceAndExistingAliases() throws {
+    let withAlias=try #require(analyze("SELECT * FROM Cus").suggestions.first)
+    #expect(withAlias.label.contains(" AS C") && withAlias.text.contains(" AS C"))
+    let withoutAlias=try #require(analyze("SELECT * FROM Cus",aliases:false).suggestions.first)
+    #expect(!withoutAlias.label.contains(" AS ") && !withoutAlias.text.contains(" AS "))
+    let source="SELECT * FROM Cus AS Existing"
+    let caret=(source as NSString).range(of:"Cus").location+3
+    #expect(try analyze(source,caret:caret).suggestions.allSatisfy {!$0.label.contains(" AS ")})
+    let comma=try analyze("SELECT * FROM dbo.Orders O, Cus")
+    #expect(comma.suggestions.contains {$0.kind == .table && $0.label.contains(" AS C")})
+  }
   @Test func typedPresentationMetadataNeverChangesCompletionSQL() throws {
     let table=try #require(analyze("SELECT * FROM Cus").suggestions.first)
-    #expect(table.kind == .table && table.label == "[dbo].[Customers]")
+    #expect(table.kind == .table && table.label == "[dbo].[Customers] AS C")
     #expect(table.text == "[dbo].[Customers] AS C" && table.detail == table.text)
     let view=try #require(analyze("SELECT * FROM report.Cus").suggestions.first)
     #expect(view.kind == .view && view.text == "[CustomerSummary] AS CS")

@@ -606,11 +606,13 @@ public enum SQLIntelligence {
         for item in candidates {
           let isRelation = ["USER_TABLE","VIEW"].contains(item.kind)
           let base=objectSuggestion(item,call:!execution && item.kind.contains("FUNCTION"))
-          var text=base.text
-          if automaticAliases && isRelation && !alreadyAliased && ["FROM","JOIN"].contains(context.last?.text.uppercased() ?? "") { text += " AS "+alias(for:item.name,occupied:occupied)
+          var text=base.text,label=base.label
+          if automaticAliases && isRelation && !alreadyAliased && readPosition {
+            let suffix=" AS "+alias(for:item.name,occupied:occupied)
+            text += suffix;label += suffix
             if automaticNoLock && nextToken?.text.uppercased() != "WITH" { text += " WITH(NOLOCK)" }
           }
-          suggestions.append(Suggestion(text:text,label:base.label,kind:base.kind,detail:text,caretOffset:base.caretOffset))
+          suggestions.append(Suggestion(text:text,label:label,kind:base.kind,detail:text,caretOffset:base.caretOffset))
         }
         if readPosition,qualifier == nil {
           suggestions += TSQL.tableFunctions.sorted().filter {$0.lowercased().contains(needle)}.prefix(max(0,100-suggestions.count)).map {word in

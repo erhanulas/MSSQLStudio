@@ -4,6 +4,36 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct DDLCompletionIntegrationTests {
+  @Test func lateParameterResponseCannotReplaceVariableSuggestions() async throws {
+    _=NSApplication.shared
+    let server=ConnectedServer(profile:.init(),password:"");server.online=false
+    var pending:CheckedContinuation<Execution,Never>?
+    server.asyncCatalogFixture={sql in
+      if sql.contains("SELECT object_id") {var result=Execution();result.results=[Rows(values:[["42"]])];return result}
+      return await withCheckedContinuation {pending=$0}
+    }
+    let doc=QueryDocument(server:server,database:"master",title:"Parameter completion race")
+    doc.sql="DECLARE @city nvarchar(20); EXEC dbo.p @Name = @ci"
+    doc.intelligenceCatalog = .init(snapshot:.init(symbols:[.init(schema:"dbo",name:"p",columns:[],kind:"SQL_STORED_PROCEDURE")]))
+    doc.catalogDatabase="master"
+    let controller=EditorController(document:doc),editor=controller.editor
+    let window=NSWindow(contentRect:NSRect(x:200,y:200,width:900,height:680),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=controller.surface
+    defer {controller.closeExecutionAssistance();window.close();if let pending {pending.resume(returning:Execution())}}
+    window.makeKeyAndOrderFront(nil);window.makeFirstResponder(editor)
+    editor.setSelectedRange(NSRange(location:doc.sql.utf16.count,length:0))
+    controller.scheduleParameters(manual:true)
+    for _ in 0..<100 where pending == nil {try await Task.sleep(for:.milliseconds(10))}
+    #expect(pending != nil && controller.parameterShown)
+    controller.scheduleIntelligence(manual:true)
+    for _ in 0..<100 where !controller.completionShown {try await Task.sleep(for:.milliseconds(10))}
+    #expect(controller.completionShown && !controller.parameterShown)
+    var result=Execution();result.results=[Rows(values:[["1","@Name","nvarchar(20)","0","0"]])]
+    pending?.resume(returning:result);pending=nil
+    try await Task.sleep(for:.milliseconds(60))
+    #expect(controller.completionShown && !controller.parameterShown)
+    #expect(editor.string == doc.sql)
+  }
   @Test func declaredVariableCompletionCanOpenWhileParameterHelpIsShown() async throws {
     _=NSApplication.shared
     let server=ConnectedServer(profile:.init(),password:"");server.online=false

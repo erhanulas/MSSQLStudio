@@ -7,6 +7,15 @@ import SQLServerKit
   @objc func invoke(_ sender:Any?) {action()}
 }
 
+@MainActor final class SQLExecutionPreview: NSObject, NSMenuDelegate {
+  let highlight:(NSRange?)->Void
+  init(highlight:@escaping (NSRange?)->Void) {self.highlight=highlight}
+  func menu(_ menu:NSMenu,willHighlight item:NSMenuItem?) {
+    highlight((item?.representedObject as? NSValue)?.rangeValue)
+  }
+  func menuDidClose(_ menu:NSMenu) {highlight(nil)}
+}
+
 extension EditorController {
   func requestStatementExecution() {
     guard document.canExecute,!editor.hasMarkedText(),editor.selectedRanges.count == 1 else {return}
@@ -37,7 +46,7 @@ extension EditorController {
         }
         actions.append(target);ranges.append(range)
         let item=NSMenuItem(title:title,action:#selector(SQLExecutionMenuAction.invoke(_:)),keyEquivalent:"")
-        item.target=target;item.toolTip=String(sql.prefix(2000));menu.addItem(item);return item
+        item.target=target;item.representedObject=NSValue(range:range);menu.addItem(item);return item
       }
       let nearest=scopes.statements.last(where:{$0.range.location <= caret}) ?? scopes.statements.first
       var preferred:NSMenuItem?
@@ -55,7 +64,15 @@ extension EditorController {
       let rect=editor.firstRect(forCharacterRange:editor.selectedRange(),actualRange:nil)
       let screen=rect.origin,window=editor.window?.convertPoint(fromScreen:screen) ?? .zero
       let point=editor.convert(window,from:nil)
-      withExtendedLifetime(actions) {menu.popUp(positioning:preferred,at:point,in:editor)}
+      let preview=SQLExecutionPreview { [weak self] range in
+        guard let self,executionRequest == request,document.sql == source,document.database == database,
+          document.server.generation == generation else {self?.previewExecutionRange(nil);return}
+        previewExecutionRange(range)
+      }
+      menu.delegate=preview
+      preview.menu(menu,willHighlight:preferred)
+      defer {previewExecutionRange(nil)}
+      withExtendedLifetime((actions,preview)) {menu.popUp(positioning:preferred,at:point,in:editor)}
     }
   }
 }

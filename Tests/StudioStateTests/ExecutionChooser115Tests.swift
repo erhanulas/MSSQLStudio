@@ -19,6 +19,30 @@ import Testing
     let event=try #require(NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:.command,timestamp:0,windowNumber:0,context:nil,characters:"\r",charactersIgnoringModifiers:"\r",isARepeat:false,keyCode:36))
     controller.editor.keyDown(with:event)
   }
+  @Test func menuHighlightRevealsAndFramesSQLWithoutChangingCaretOrExecuting() async throws {
+    let sql=(0..<100).map {"SELECT \($0);"}.joined(separator:"\n")
+    let (doc,controller)=setup(sql),editor=controller.editor
+    let window=NSWindow(contentRect:NSRect(x:200,y:200,width:900,height:600),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=controller.surface
+    defer {window.close()}
+    window.makeKeyAndOrderFront(nil);window.makeFirstResponder(editor)
+    editor.setSelectedRange(NSRange(location:0,length:0))
+    let source=sql as NSString,range=source.range(of:"SELECT 90;")
+    let content=try #require(editor.textContentStorage)
+    editor.textLayoutManager?.ensureLayout(for:content.documentRange)
+    let menu=StudioMenu(),item=NSMenuItem(title:"Statement",action:nil,keyEquivalent:"")
+    item.representedObject=NSValue(range:range);menu.addItem(item)
+    let preview=SQLExecutionPreview {controller.previewExecutionRange($0)}
+    preview.menu(menu,willHighlight:item)
+    try await Task.sleep(for:.milliseconds(50))
+    controller.surface.layoutSubtreeIfNeeded();window.displayIfNeeded()
+    #expect(controller.occurrenceHighlights.executionRange == range)
+    #expect(controller.occurrenceHighlights.executionFrame(in:controller.occurrenceHighlights.bounds) != nil)
+    #expect((editor.enclosingScrollView?.contentView.bounds.minY ?? 0) > 0)
+    #expect(editor.selectedRange() == NSRange(location:0,length:0) && doc.sql == sql && doc.lastExecutedSQL == nil)
+    preview.menuDidClose(menu)
+    #expect(controller.occurrenceHighlights.executionRange == nil)
+  }
   @Test func commandEnterChoosesExactStatementAndKeepsSQLCaretUndo() async throws {
     let (doc,controller)=setup("SELECT 1;\nSELECT N'İzmir 😀';")
     controller.editor.setSelectedRange(NSRange(location:15,length:0))

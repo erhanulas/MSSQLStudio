@@ -1,3 +1,24 @@
+## 16 Ekim 2026 — v0.2.150 test tekrarı istisnası
+
+- Önceki kullanıcı tercihiyle yerel/native/core/Release kanıtları yeniden kullanılır; yalnız bu tag için CI paket suite’i atlanır. İmza/helper, manifest ve public updater kontrolleri korunur; yeni tam suite başarısı iddia edilmez.
+
+## 16 Ekim 2026 — sekme kapatma hover vurgusunun takılı kalmasını engelleme, yerel
+
+- QueryTabCloseButton hovered bayrağı yalnız enter/exit ile değişiyordu; tracking alanı yeniden kurulurken eski true değer korunuyordu. Tracking update/layout/draw artık public pencere pointer konumu ve visibleRect ile hover’ı eşitler. Key pencere kaybında, view removal ve native mouse tracking bitişinde eski hover/pressed vurgu temizlenir. Tracking activeInKeyWindow’dur; ek polling/global event monitor yoktur, native kapatma/hit alanı korunur.
+- **12 native test /2 suite geçti /0 issue**, 2.884 sn (`/tmp/mssql-tab-close-hover.log`). Yeni regresyon exit olayı olmadan tracking yenilemesinin takılı hover’ı temizlemesini, key kaybı ve removal sonrası hovered/isHighlighted sıfırlanmasını doğrular. Mevcut sekme çizim/tema/drag/genişlik/kapatma hit/iptal testleri geçti. Release BUILD SUCCEEDED (`/tmp/mssql-tab-close-hover-release.log`); mimari/diff kontrolü geçti. Kullanıcının aralıklı gerçek fare senaryosu/CUA denenmedi; native state/lifecycle regresyonları kullanıldı. Kurulu uygulama/veri değiştirilmedi; henüz yayımlanmadı.
+
+## 16 Ekim 2026 — yürütme seçicisinde blok çerçevesi ve görünür alias önerileri, yerel
+
+- SQLExecutionChooser native NSMenuDelegate willHighlight callback’i hovered/klavyede vurgulanan öğenin source aralığını editörde görünür alana getirir. SQLExecutionPreview menü kapanışında/defer ile temizlenir; SQL/caret/selection/undo/yürütme değişmez. Source/request/DB/server generation koruması vardır. OccurrenceHighlights executionRange’i viewport ile kesiştirip görünür TextKit 2 segmentlerinin çevresine 1.5 pt accent çerçeve çizer; yeni event/hit yüzeyi yoktur. Kaynak değişimi çerçeveyi siler; fold projection eşlemesi korunur. Uzun tooltip yerine editör önizlemesi kullanılır.
+- Otomatik alias eklenen SQL’de vardı ama suggestion.label yalnız nesne adını gösteriyordu. Ayar açıkken AS alias artık etikette de görünür; virgüllü FROM kaynaklarına aynı alias kuralı uygulanır. Kapalı tercih/mevcut alias/şema-köşeli parantez tercihleri korunur; NOLOCK etikete yığılmaz.
+- **10 native +21 core =31 test geçti /0 issue**, 0.892 /0.111 sn (`/tmp/mssql-execution-preview-alias-checked.log`). Yeni native regresyon menu delegate ile 90. satıra önizleme gezinmesini, görünür çerçeve geometrisini, aynı caret/SQL ve kapanış temizliğini doğrular. Mevcut command-enter execution/cancel/snapshot ve completion yolları geçti; core test alias görünürlüğü/açık-kapalı tercih/mevcut alias/virgüllü FROM’u kapsar. İlk koşu eski alias’sız label bekleyen native tercih testinde 8 issue verdi; yeni ürün davranışına göre AS P etiketi ve test tercih izolasyonu güncellendi. İlk başarısız koşu başarı sayılmaz.
+- Release BUILD SUCCEEDED (`/tmp/mssql-execution-preview-alias-release.log`); mimari/diff kontrolü geçti. Gerçek fareyle menü hover/CUA ve canlı SQL denenmedi; native delegate/key/popover/viewport yolları kullanıldı. Kurulu uygulama/veri değiştirilmedi; henüz yayımlanmadı.
+
+## 16 Ekim 2026 — geç parametre yanıtının değişken önerilerini ezmesini engelleme, yerel
+
+- showParameterHelp completion.close çağırıyordu; öneri listesi açılırken yalnız panel kapandığından bekleyen metadata yanıtı yeniden parametre panelini açıp listeyi kapatabiliyordu. Completion willShow artık dismissParameterHelp ile task/generation’ı iptal eder. Parametre sunumu açık completion’ı kapatmaz; açık manuel parametre isteği completion task/generation’ını iptal edip öncelik alır.
+- **11 native test /3 suite geçti /0 issue**, 1.722 sn (`/tmp/mssql-parameter-completion-race.log`). Yeni gerçek EditorController/popover regresyonu parametre metadata continuation’ını tutar, @city önerilerini açar ve geç yanıt bırakıldığında completion’ın açık/parametre panelinin kapalı kaldığını doğrular. Mevcut routine header, cache, caret/stale, completion ve parametre yolları geçti. Release BUILD SUCCEEDED (`/tmp/mssql-parameter-completion-race-release.log`); mimari/diff kontrolü geçti. Canlı SQL Server/CUA denenmedi; kullanıcı uygulaması/verisi değiştirilmedi. Henüz yayımlanmadı.
+
 ## 16 Ekim 2026 — v0.2.149 / build 150 public yayın doğrulandı
 
 - [Public/latest v0.2.149](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.149), kaynak `071abd2f7b34cd8de174eee1efd50ed6b274b2b4`; [Actions 38882801956](https://github.com/erhanulas/MSSQLStudio/actions/runs/38882801956) başarılı. Önceki kullanıcı tercihiyle yerel test/build ve CI paket suite’i tekrarlanmadı; bu tag’de test adımı skipped. İlgili yerel regresyon kanıtları aşağıdadır; yeni tam suite iddiası yoktur.

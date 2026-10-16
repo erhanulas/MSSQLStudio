@@ -57,6 +57,7 @@ import SQLServerKit
 @MainActor final class OccurrenceHighlights: NSView {
   weak var editor: NSTextView?
   let blockGuides = EditorBlockGuides()
+  var executionRange:NSRange? {didSet {if oldValue != executionRange {needsDisplay=true}}}
   var insertRanges:[NSRange]=[] {didSet {if oldValue != insertRanges {needsDisplay=true}}}
   var findRanges:[NSRange]=[] {didSet {if oldValue != findRanges {needsDisplay=true}}}
   var blockRanges:[NSRange]=[] {didSet {if oldValue != blockRanges {needsDisplay=true}}}
@@ -81,12 +82,29 @@ import SQLServerKit
     }
     return rects
   }
+  func executionFrame(in dirtyRect:NSRect)->NSRect? {
+    guard var executionRange else {return nil}
+    if let content=editor?.textContentStorage,let viewport=editor?.textLayoutManager?.textViewportLayoutController.viewportRange {
+      let start=content.offset(from:content.documentRange.location,to:viewport.location)
+      let end=content.offset(from:content.documentRange.location,to:viewport.endLocation)
+      executionRange=NSIntersectionRange(executionRange,NSRange(location:start,length:max(0,end-start)))
+    }
+    guard executionRange.length>0 else {return nil}
+    let rects=highlightRects(in:dirtyRect,for:[executionRange])
+    guard let first=rects.first else {return nil}
+    return rects.dropFirst().reduce(first) {$0.union($1)}.insetBy(dx:-3,dy:-2)
+  }
   override func draw(_ dirtyRect:NSRect) {
     if let editor {
       for segment in blockGuides.segments(in: self, editor: editor, dirtyRect: dirtyRect) {
         (segment.active ? StudioTheme.activeBlockGuide : StudioTheme.blockGuide).setFill()
         segment.rect.fill()
       }
+    }
+    if let frame=executionFrame(in:bounds) {
+      StudioTheme.accent.withAlphaComponent(0.8).setStroke()
+      let border=NSBezierPath(roundedRect:frame,xRadius:4,yRadius:4)
+      border.lineWidth=1.5;border.stroke()
     }
     StudioTheme.accent.withAlphaComponent(0.16).setFill()
     for rect in highlightRects(in:dirtyRect,for:insertRanges) {NSBezierPath(roundedRect:rect,xRadius:2,yRadius:2).fill()}

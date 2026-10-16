@@ -108,8 +108,38 @@ import UniformTypeIdentifiers
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
     if let tracking {removeTrackingArea(tracking)}
-    let area=NSTrackingArea(rect:.zero,options:[.mouseEnteredAndExited,.activeAlways,.inVisibleRect],owner:self,userInfo:nil)
+    let area=NSTrackingArea(rect:.zero,options:[.mouseEnteredAndExited,.activeInKeyWindow,.inVisibleRect],owner:self,userInfo:nil)
     addTrackingArea(area);tracking=area
+    synchronizeHover()
+  }
+  @objc private func windowFocusChanged(_ notification:Notification) {
+    if notification.name == NSWindow.didResignKeyNotification {clearHover()}
+    else {synchronizeHover()}
+  }
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    for name in [NSWindow.didResignKeyNotification,NSWindow.didBecomeKeyNotification] {
+      NotificationCenter.default.removeObserver(self,name:name,object:nil)
+      if let window {NotificationCenter.default.addObserver(self,selector:#selector(windowFocusChanged(_:)),name:name,object:window)}
+    }
+    clearHover()
+  }
+  private func clearHover() {
+    hovered=false;highlight(false);refreshStyle()
+  }
+  private func synchronizeHover() {
+    let inside:Bool
+    if let window,window.isVisible,window.isKeyWindow,!isHiddenOrHasHiddenAncestor {
+      let point=convert(window.mouseLocationOutsideOfEventStream,from:nil)
+      inside=bounds.contains(point) && visibleRect.contains(point)
+    } else {inside=false}
+    if !inside,isHighlighted {highlight(false)}
+    if hovered != inside {hovered=inside;refreshStyle()}
+  }
+  override func layout() {super.layout();synchronizeHover()}
+  override func mouseDown(with event:NSEvent) {
+    defer {synchronizeHover()}
+    super.mouseDown(with:event)
   }
   override func mouseEntered(with event:NSEvent) {hovered=true;refreshStyle()}
   override func mouseExited(with event:NSEvent) {hovered=false;refreshStyle()}
@@ -119,6 +149,7 @@ import UniformTypeIdentifiers
   }
   override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance();refreshStyle()}
   override func draw(_ dirtyRect:NSRect) {
+    synchronizeHover()
     if hovered || isHighlighted {
       StudioTheme.danger.withAlphaComponent(isHighlighted ? 0.22:0.12).setFill()
       NSBezierPath(roundedRect:bounds.insetBy(dx:1,dy:1),xRadius:6,yRadius:6).fill()
