@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.173",
+    "date": "2026-10-17",
+    "title": "Sekme önizlemesinde kontrollü seçim ve ayarlanabilir pencere",
+    "changes": [
+      "Option+Tab listesinde fareyle üzerine gelmek seçimi değiştirmez; tıklama veya klavyeyle ilerleyebilirsiniz.",
+      "Sekme önizleme penceresini yeniden boyutlandırabilirsiniz; boyutu ve konumu sonraki açılışta korunur."
+    ]
+  },
+  {
     "version": "0.2.172",
     "date": "2026-10-17",
     "title": "Uzun SQL önizlemelerinde kesintisiz kaydırma",

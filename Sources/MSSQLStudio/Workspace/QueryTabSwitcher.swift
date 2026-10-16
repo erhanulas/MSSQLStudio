@@ -28,7 +28,7 @@ private final class TabSwitcherMonitor {
   private weak var sourceWindow:NSWindow?
   private var monitor:TabSwitcherMonitor?
   private(set) var panel:NSPanel?
-  private var lastHoverLocation=NSEvent.mouseLocation
+  var placementRole="queryTabSwitcher"
   private var originalTabOrigin:NSPoint?
   @Published private(set) var previewSQL=""
   @Published private(set) var previewTokens:[Lexeme]=[]
@@ -93,16 +93,21 @@ private final class TabSwitcherMonitor {
     }
     index=entries.firstIndex(where:{$0.id==owner.state.active?.id}) ?? 0
     sourceWindow=window
-    lastHoverLocation=NSEvent.mouseLocation
     originalTabOrigin=owner.tabs.enclosingScrollView?.contentView.bounds.origin
     advance(backwards ? -1:1)
-    let panel=TabSwitcherPanel(contentRect:.zero,styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
+    let panel=TabSwitcherPanel(contentRect:.zero,styleMask:[.borderless,.nonactivatingPanel,.resizable],backing:.buffered,defer:false)
     panel.isReleasedWhenClosed=false;panel.isFloatingPanel=true;panel.level = .floating
     panel.backgroundColor = .clear;panel.isOpaque=false;panel.hasShadow=true
     let host=NSHostingController(rootView:QueryTabSwitcherView(model:self));host.sizingOptions=[];panel.contentViewController=host
+    (host.view as? NSHostingView<QueryTabSwitcherView>)?.sizingOptions=[]
+    host.view.layoutSubtreeIfNeeded()
+    panel.contentMinSize=NSSize(width:680,height:400)
     let size=NSSize(width:min(1040,window.frame.width-48),height:min(600,window.frame.height-80))
     panel.setFrame(NSRect(x:window.frame.midX-size.width/2,y:window.frame.midY-size.height/2,width:size.width,height:size.height),display:true)
-    self.panel=panel;window.addChildWindow(panel,ordered:.above);panel.orderFront(nil);refreshHighlight()
+    StudioWindowPlacement.restore(panel,role:placementRole,owner:window)
+    self.panel=panel;window.addChildWindow(panel,ordered:.above);panel.orderFront(nil)
+    panel.contentMinSize=NSSize(width:680,height:400)
+    refreshHighlight()
   }
   var acceptanceHint:String {"↩ · Sekmeye geç"}
   var previewID:UUID? {panel != nil && entries.indices.contains(index) ? entries[index].id:nil}
@@ -116,13 +121,7 @@ private final class TabSwitcherMonitor {
   }
   func advance(_ delta:Int) {
     guard !entries.isEmpty else {return}
-    lastHoverLocation=NSEvent.mouseLocation
     index=(index+delta%entries.count+entries.count)%entries.count;refreshHighlight();requestPreview()
-  }
-  func previewFromHover(_ id:UUID) {
-    let point=NSEvent.mouseLocation
-    guard hypot(point.x-lastHoverLocation.x,point.y-lastHoverLocation.y)>0.5 else {return}
-    lastHoverLocation=point;preview(id)
   }
   func preview(_ id:UUID) {
     guard let value=entries.firstIndex(where:{$0.id==id}),value != index else {return}
@@ -151,6 +150,8 @@ private final class TabSwitcherMonitor {
   func dismiss(commit:Bool) {
     guard let panel else {return}
     let id=entries.indices.contains(index) ? entries[index].id:nil
+    StudioWindowPlacement.save(panel,role:placementRole)
+    panel.setFrameAutosaveName("")
     sourceWindow?.removeChildWindow(panel);panel.orderOut(nil);self.panel=nil;sourceWindow=nil
     refreshHighlight()
     if !commit,let origin=originalTabOrigin,let scroll=owner?.tabs.enclosingScrollView {
@@ -200,7 +201,6 @@ private struct QueryTabSwitcherView:View {
                     .overlay(RoundedRectangle(cornerRadius:6).stroke(Color(nsColor:active ? StudioTheme.accent:StudioTheme.border),lineWidth:active ? 2:1).allowsHitTesting(false))
                     .contentShape(RoundedRectangle(cornerRadius:6))
                 }.buttonStyle(.plain).id(entry.id)
-                  .onHover {inside in if inside {model.previewFromHover(entry.id)}}
                   .accessibilityLabel(entry.title+" · "+entry.context).accessibilityAddTraits(active ? [.isSelected]:[])
               }
             }.padding(2)

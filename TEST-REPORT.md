@@ -3281,3 +3281,11 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - `MSSQLStudio-CredentialAgent-v1.zip` SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
 - `update.json` SHA-256: `4b69b2c719eca38f8cbb1c1d3df9936f881c58e6afecd60602dac16627f0899c`.
 - İndirilen signed app `--check-update-feed 0.2.172` başarılı; exact tag public notları kaynakla byte eşleşti. Kanıt `/tmp/MSSQLStudio-172-public-verification/`. Installer çalıştırılmadı, kullanıcı uygulaması/DB oturumları değiştirilmedi.
+
+## 2026-10-17 — Option+Tab tıklama ve pencere boyutu (yayımlanmadı)
+
+- QueryTabSwitcher satırlarının onHover seçim callback’i ve fare konumu takibi kaldırıldı; aday yalnız tıklama/Tab/oklarla değişir, kabul Enter ve iptal Escape/dış tıklama olarak korunur.
+- Nonactivating child panel native resizable oldu; ortak StudioWindowPlacement queryTabSwitcher rolüyle frame kaydedilir/geri yüklenir ve ekran sınırlarına uydurulur. Minimum içerik 680×400 pt. Hosting controller/view sizingOptions boş tutulur; ilk orderFront sonrası native hosting’in sıfırladığı contentMinSize tekrar uygulanır.
+- İlk iki test koşusunda minimum content boyutu 0×0 olduğu için regresyon başarısız oldu; boyut kayıt/geri yükleme geçti. Hosting ilk gösteriminden sonra minimum uygulanınca `/tmp/mssql-switcher-click-resize-verified-tests.log`: 10 test / 1 suite geçti. Ayrı switcher instance üzerinden 880×480 yeniden açılış, kaynak odak/aktif sorgu korunması, Enter/Escape/oklar, uzun SQL kaydırma ve iki tema doğrulandı.
+- `/tmp/mssql-switcher-click-resize-verified-release.log`: Release BUILD SUCCEEDED; mimari/kaynak eşliği/diff kontrolleri geçti. Native açık/koyu screenshotlar `/tmp/mssql-tab-switcher-light.png`, `/tmp/mssql-tab-switcher-dark.png`; açık görünüm incelendi. Gerçek fareyle kenar sürükleme otomasyonu çalıştırılmadı; native resizable mask ve programatik resize/persistence doğrulandı.
+- Kullanıcı uygulaması/DB oturumları değiştirilmedi; yayın yapılmadı.

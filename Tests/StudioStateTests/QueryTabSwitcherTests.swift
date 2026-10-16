@@ -16,6 +16,7 @@ import Testing
     let owner=WorkbenchController(state:state),window=NSWindow(contentViewController:owner)
     window.isReleasedWhenClosed=false;window.setContentSize(NSSize(width:1060,height:680))
     window.setFrameOrigin(NSPoint(x:-20000,y:0));window.makeKeyAndOrderFront(nil)
+    owner.tabSwitcher.placementRole="tabSwitcherTest-"+UUID().uuidString
     owner.loadViewIfNeeded()
     return (state,owner,window)
   }
@@ -61,7 +62,7 @@ import Testing
     NotificationCenter.default.post(name:NSWindow.willCloseNotification,object:window)
     #expect(switcher.panel==nil && state.active===original)
   }
-  @Test func manyTabsHoverAndStripHighlightPreserveTheOriginalDocument() throws {
+  @Test func manyTabsClickAndStripHighlightPreserveTheOriginalDocument() throws {
     let (state,owner,window)=fixture(count:80);defer {owner.tabSwitcher.dismiss(commit:false);window.close()}
     let original=state.active,switcher=owner.tabSwitcher
     let scroll=try #require(owner.tabs.enclosingScrollView)
@@ -79,6 +80,23 @@ import Testing
     switcher.dismiss(commit:false)
     #expect(state.active===original && scroll.contentView.bounds.origin==origin)
     #expect(owner.tabs.arrangedSubviews.compactMap {$0 as? QueryTabSurface}.allSatisfy {!$0.isSwitchPreview})
+  }
+  @Test func resizedPanelRestoresSizeAcrossSwitcherInstances() throws {
+    let (state,owner,window)=fixture();defer {owner.tabSwitcher.dismiss(commit:false);window.close()}
+    let role=owner.tabSwitcher.placementRole,key="NSWindow Frame "+StudioWindowPlacement.name(role)
+    defer {UserDefaults.standard.removeObject(forKey:key)}
+    owner.tabSwitcher.present(in:window)
+    let panel=try #require(owner.tabSwitcher.panel),original=state.active
+    #expect(panel.styleMask.contains(.resizable))
+    #expect(panel.contentMinSize==NSSize(width:680,height:400))
+    panel.setContentSize(NSSize(width:880,height:480));panel.contentView?.layoutSubtreeIfNeeded()
+    let saved=panel.frame.size
+    owner.tabSwitcher.dismiss(commit:false)
+    let next=QueryTabSwitcher(owner:owner);next.placementRole=role
+    next.present(in:window);defer {next.dismiss(commit:false)}
+    let reopened=try #require(next.panel)
+    #expect(abs(reopened.frame.width-saved.width)<1 && abs(reopened.frame.height-saved.height)<1)
+    #expect(!reopened.isKeyWindow && state.active === original)
   }
   @Test func lateLexicalSnapshotRecolorsSameSourceWithoutMovingSelection() throws {
     let view=SQLPreviewView(frame:NSRect(x:0,y:0,width:600,height:300))
