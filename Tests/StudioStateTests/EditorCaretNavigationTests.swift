@@ -33,6 +33,45 @@ import Testing
     editor.insertTab(nil)
     #expect(updates==2 && document.sql == Array(repeating:"\tSELECT 1;",count:120).joined(separator:"\n"))
   }
+  @Test func bulkIndentHistoryPublishesOnlyTheFinalSnapshotPerUndoAndRedo() throws {
+    let sql=Array(repeating:"    SELECT 1;",count:120).joined(separator:"\n")
+    let stripped=Array(repeating:"SELECT 1;",count:120).joined(separator:"\n")
+    let indented=Array(repeating:"\tSELECT 1;",count:120).joined(separator:"\n")
+    let (controller,document,window)=fixture(sql);defer {window.close()}
+    let editor=controller.editor,undo=try #require(editor.undoManager)
+    undo.groupsByEvent=false
+    let storage=try #require(editor.textContentStorage?.textStorage)
+    var historyTextEdits=0,unbatchedHistoryEdits=0
+    let observer=NotificationCenter.default.addObserver(forName:NSTextStorage.didProcessEditingNotification,object:storage,queue:nil) { _ in
+      MainActor.assumeIsolated {
+        if (controller.editor.undoManager?.isUndoing == true || controller.editor.undoManager?.isRedoing == true),controller.editor.textContentStorage?.textStorage?.editedMask.contains(.editedCharacters) == true {
+          historyTextEdits+=1
+          if !controller.editor.isBatchEditing {unbatchedHistoryEdits+=1}
+        }
+      }
+    }
+    defer {NotificationCenter.default.removeObserver(observer)}
+    var positions=0
+    controller.position={_,_ in positions+=1}
+    var published:[String]=[]
+    controller.edited={published.append(document.sql)}
+    editor.columnSelection.set((0..<120).map {NSRange(location:$0*14,length:4)})
+    editor.deleteBackward(nil);editor.insertTab(nil)
+    #expect(published == [stripped,indented])
+    for _ in 0..<3 {
+      published=[];positions=0
+      editor.undoSQL(nil);#expect(published == [stripped]);#expect(positions<=1)
+      editor.undoSQL(nil);#expect(published == [stripped,sql])
+      published=[];positions=0
+      editor.redoSQL(nil);#expect(published == [stripped]);#expect(positions<=1)
+      editor.redoSQL(nil);#expect(published == [stripped,indented])
+      #expect(editor.string == indented && document.sql == indented)
+      #expect(editor.columnSelection.ranges.isEmpty && editor.textLayoutManager != nil)
+    }
+    #expect(historyTextEdits>0 && unbatchedHistoryEdits==0)
+    published=[]
+    editor.redoSQL(nil);#expect(published.isEmpty)
+  }
   @Test func zeroWidthColumnCaretsSurviveDeleteAndRepeatedTabsUntilAnotherClick() throws {
     let sql="    AA\n    BB\n    CC"
     let (controller,document,window)=fixture(sql);defer {window.close()}

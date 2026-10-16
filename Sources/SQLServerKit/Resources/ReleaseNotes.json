@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.157",
+    "date": "2026-10-16",
+    "title": "SQL Profiler, istemci filtreleri ve akıcı editör geçmişi",
+    "changes": [
+      "Üst araç çubuğuna SQL Profiler eklendi: ayrı, küçültülebilen pencere Escape ile kapanmaz; arka planda izleme sürer. İzleme SQL önizlemesi ve açık onayla başlar, normal çıkışta kendi Extended Events oturumu temizlenir.",
+      "SQL/RPC tamamlanmaları ve hata olayları native gridde gösterilir. ClientProcessID, SPID, Host ve SQL LIKE/NOT LIKE yakalama filtreleri; gelen SQL metinlerinde arama ve çoklu grid kolon koşulları eklendi.",
+      "Yoğun istemciler görünümü, bellekte tutulan ve filtrelenmiş olayları Host + ClientProcessID ile sıralar; seçili istemcinin SQL’lerine geçilebilir. Sağ tık menüsünde istemci filtreleme, SQL kopyalama, izlemeyi durdurma ve listeyi temizleme bulunur.",
+      "Profiler bellek sınırları ve olası olay kaybını görünür tutar. Canlı SQL Server izinleri ve olay yakalama bu sürümün yerel doğrulamasında denenmedi.",
+      "Çoklu girinti sonrası geri al/yinele sırasında ara editör güncellemeleri birleştirildi ve ikinci tam renklendirme kaldırıldı. Explorer göster/gizle düğmesi DB seçicinin soluna taşındı."
+    ]
+  },
+  {
     "version": "0.2.156",
     "date": "2026-10-16",
     "title": "Aşamalı kolon seçimi ve trigger kolon tamamlama",

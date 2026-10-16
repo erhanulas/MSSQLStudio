@@ -228,22 +228,28 @@ import SQLServerKit
     applyTheme()
     setText()
   }
+  private var historyBatchActive=false
   @objc private func willUndoChanged(_ notification: Notification) {
     guard let manager = notification.object as? UndoManager, manager === editor.undoManager else { return }
     editor.finishUndoInput()
     editor.sqlFinder.noteClientStringWillChange()
     expandAll()
+    guard !historyBatchActive else {return}
+    historyBatchActive=true
+    editor.beginBatchEdit()
   }
   @objc private func undoChanged(_ notification: Notification) {
     guard let manager = notification.object as? UndoManager, manager === editor.undoManager else {
       return
     }
-    // NSTextView can restore its storage without sending a delegate edit notification.
-    // Keep execution/save/recovery bound to the visible text after undo and redo.
-    if document.sql != editor.string {
-      textDidChange(Notification(name: NSText.didChangeNotification, object: editor))
+    // Native history restores every row separately. Publish and paint only once,
+    // after the complete group; this also covers restoration without didChangeText.
+    if historyBatchActive {
+      historyBatchActive=false
+      editor.endBatchEdit()
+    } else if document.sql != editor.string {
+      textDidChange(Notification(name:NSText.didChangeNotification,object:editor))
     }
-    highlightedSource=nil;highlight()
   }
   @objc func applyTheme() {
     insertPresentation.refreshTheme()

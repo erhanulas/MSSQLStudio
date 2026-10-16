@@ -24,7 +24,7 @@ import SwiftUI
     case uncomment, connections, settings, checkUpdates, about, openFile
     case saveFile, saveAs, closeWindow, execute, cancelQuery, reconnectQuery
     case estimatedPlan, actualPlan, beginTransaction, commitTransaction, rollbackTransaction, explorer
-    case results, activity, ai, extensions, detach, redock
+    case results, activity, profiler, ai, extensions, detach, redock
     case exportExplorer, importExplorer, manageFavorites, addFavorite, definition, revealExplorer
     case fold, unfoldAll, closeOthers, closeAll, copyName, refreshObject
     case editConnection, contextCreateExplorerGroup, contextRenameExplorerGroup, contextRemoveExplorerGroup, contextDeleteExplorerConnection, contextShowFavoritesAtNode

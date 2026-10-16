@@ -16,9 +16,14 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
   private var batchEditDepth=0
   var isBatchEditing:Bool {batchEditDepth>0}
   var batchEditingEnded:(()->Void)?
+  func beginBatchEdit() {batchEditDepth+=1}
+  func endBatchEdit() {
+    precondition(batchEditDepth>0)
+    batchEditDepth-=1
+    if batchEditDepth==0 {batchEditingEnded?()}
+  }
   func performBatchEdit(_ edit:()->Void) {
-    batchEditDepth+=1
-    defer {batchEditDepth-=1;if batchEditDepth==0 {batchEditingEnded?()}}
+    beginBatchEdit();defer {endBatchEdit()}
     edit()
   }
   var dismissCaretSuggestions:(()->Void)?

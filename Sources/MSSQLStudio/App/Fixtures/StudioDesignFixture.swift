@@ -10,7 +10,7 @@ import SwiftUI
     case table, newTable, tableStructure, view, newView, index, data, procedure, scalarFunction, tableFunction, synonym, rename, delete, properties, permissions
     case job, agentAction, agentGeneral, agentSteps, agentSchedules, agentNotifications, agentAlerts, agentTargets
     case step, advancedStep, readOnlyStep, schedule, pickSchedule, agentHistory, agentActivity
-    case activity, samples, diagnostics, databaseFiles, schema, explorerIndex, databaseProperties
+    case profiler, activity, samples, diagnostics, databaseFiles, schema, explorerIndex, databaseProperties
     case settingsAppearance, settingsEditor, settingsShortcuts, settingsWorkspace, settingsUpdates, settingsSecurity
     case resultLoading, resultRefresh, columnSearch, columnFilter, dataReview, offlineDefinition, parameters, feedback
     var id: String {rawValue}
@@ -26,6 +26,7 @@ import SwiftUI
       case .agentGeneral,.agentSteps,.agentSchedules,.agentNotifications,.agentAlerts,.agentTargets: NSSize(width:1000,height:680)
       case .agentHistory: NSSize(width:960,height:640)
       case .agentActivity: NSSize(width:1060,height:640)
+      case .profiler: NSSize(width:960,height:640)
       case .activity,.samples,.diagnostics,.databaseFiles: NSSize(width:1060,height:680)
       case .schema: NSSize(width:1100,height:720)
       case .settingsAppearance,.settingsEditor,.settingsShortcuts,.settingsWorkspace,.settingsUpdates,.settingsSecurity: NSSize(width:820,height:620)
@@ -95,6 +96,20 @@ import SwiftUI
     case .pickSchedule: return show(AgentPickSchedule(server:server,attached:[],open:{_ in}))
     case .agentHistory: return show(AgentHistoryPanel(server:server,job:"Demo Nightly",includeSteps:true))
     case .agentActivity: return show(AgentActivityPanel(server:server,history:{_ in},properties:{_ in},action:{_,_ in}))
+    case .profiler:
+      let model=ProfilerModel(server:server,executor:{sql in
+        var result=Execution()
+        if sql.contains("SELECT t.target_data") {
+          let xml="<RingBufferTarget totalEventsProcessed=\"1\" droppedCount=\"0\"><event name=\"sql_batch_completed\" timestamp=\"2026-10-16T12:00:00Z\"><data name=\"batch_text\"><value>SELECT * FROM dbo.Demo;</value></data><action name=\"event_sequence\"><value>0</value></action></event></RingBufferTarget>"
+          result.results=[Rows(fields:[Field("profiler_xml"),Field("dropped_events")],values:[[xml,"0"]])]
+        }
+        return result
+      },disconnect:{})
+      let name=SQLProfiler.sessionName(UUID())
+      await model.start(name:name,confirmedSQL:try model.preview(name:name))
+      for _ in 0..<100 where model.lastRead==nil {try await Task.sleep(for:.milliseconds(2))}
+      _ = await model.stop()
+      return show(ProfilerPanel(model:model,background:{}))
     case .activity,.samples,.diagnostics:
       let model=ActivityMonitorModel(server:server)
       await model.load(includeDiagnostics:true)

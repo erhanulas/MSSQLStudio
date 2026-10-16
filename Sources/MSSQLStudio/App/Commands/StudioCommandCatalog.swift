@@ -21,6 +21,7 @@ import AppKit
     .rollbackTransaction:.init(title:"Rollback",selector:"rollbackTransaction",defaultBinding:.init(key:"",modifiers:0)),
     .explorer:.init(title:"Explorer göster / gizle",selector:"toggleExplorer",defaultBinding:.init(key:"b",modifiers:NSEvent.ModifierFlags([.command,.option]).rawValue)),
     .results:.init(title:"Sonuçları göster / gizle",selector:"toggleResults",defaultBinding:.init(key:"r",modifiers:NSEvent.ModifierFlags([.command]).rawValue)),
+    .profiler:.init(title:"SQL Profiler",selector:"profiler",defaultBinding:.init(key:"",modifiers:0)),
     .activity:.init(title:"Activity Monitor",selector:"activity",defaultBinding:.init(key:"",modifiers:0)),
     .ai:.init(title:"AI Assistant",selector:"aiAssistant",defaultBinding:.init(key:"",modifiers:0)),
     .extensions:.init(title:"Extensions",selector:"extensionsPanel",defaultBinding:.init(key:"",modifiers:0)),

@@ -9,7 +9,8 @@ import AppKit
     guard approved else {return false}
     approved=false;return true
   }
-  func prepare(flush:@escaping () async -> Bool,
+  func prepare(prepareTools:@escaping () async -> Bool = {true},
+               flush:@escaping () async -> Bool,
                discardHistory:@escaping ()->Bool,
                mayTerminate:@escaping ()->Bool,
                terminate:@escaping ()->Void,
@@ -17,6 +18,7 @@ import AppKit
     guard !preparing else {return}
     preparing=true
     Task { @MainActor in
+      guard await prepareTools() else {preparing=false;cancelled();return}
       let saved=await flush()
       let allowed=saved || discardHistory()
       preparing=false

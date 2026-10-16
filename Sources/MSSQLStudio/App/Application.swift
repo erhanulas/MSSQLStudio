@@ -232,13 +232,13 @@ import SwiftUI
     Self.updateWatcher=nil
   }
   private func completeTermination(_ sender:NSApplication) {
-    termination.prepare(flush:{ [self] in await studio.flushHistory() },discardHistory:{
+    termination.prepare(prepareTools:{ [self] in await workbench.stopProfilersForTermination() },flush:{ [self] in await studio.flushHistory() },discardHistory:{
       let alert=StudioAlert();alert.messageText="Geçmiş kaydedilemedi"
       alert.informativeText="Son geçmiş ve kapatılan sekme kayıtları diske yazılamadı. Mevcut dosya korunur. Kaydetmeden çıkarsanız bu oturumdaki yeni geçmiş kayıtları kaybolabilir."
       alert.addButton(withTitle:"Çıkışı İptal Et");alert.addButton(withTitle:"Geçmişi Kaydetmeden Çık")
       return alert.runModal() == .alertSecondButtonReturn
     },mayTerminate:{ [self] in
-      SchemaComparisonModel.activeApplications==0 && (Self.updateTerminationApproved
+      SchemaComparisonModel.activeApplications==0 && !workbench.hasActiveProfilers && (Self.updateTerminationApproved
         ? studio.canBeginBulkClose() && studio.saveSnapshot()
         : studio.canQuit())
     },terminate:{sender.terminate(nil)},cancelled:{ [self] in cancelUpdateTermination() })
@@ -358,6 +358,7 @@ import SwiftUI
     let history=GridShortcuts.binding(.history)
     command(view, "History", #selector(WorkbenchController.showHistory), history.key,modifiers:history.flags)
     command(view, "Activity Monitor", #selector(WorkbenchController.activity))
+    command(view, "SQL Profiler", #selector(WorkbenchController.profiler))
     command(view, "AI Assistant", #selector(WorkbenchController.aiAssistant))
     command(view, "Extensions", #selector(WorkbenchController.extensionsPanel))
     command(view, "Sorguyu Ayrı Pencereye Taşı", #selector(WorkbenchController.detachQuery))

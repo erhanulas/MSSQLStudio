@@ -63,6 +63,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   private var tabSignature: [String]?
   private var controllers: [UUID: QueryController] = [:]
   var auxiliaryWindows: [NSWindowController] = []
+  var profilerWindows:[UUID:ProfilerWindowController]=[:]
   var contextNode: TreeNode?
   var sheet: NSWindow?
   private var connectionSheetBusy=false
@@ -168,7 +169,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     explorerToggle.toolTip = "Object Explorer’ı Göster / Gizle"
     queryToolbarHost.setAccessibilityIdentifier("queryToolbarHost")
     queryToolbarHost.isHidden=true
-    let row = NSStackView(views: [database, queryToolbarHost, context, explorerToggle])
+    let row = NSStackView(views: [explorerToggle, database, queryToolbarHost, context])
     row.setAccessibilityIdentifier("queryContextToolbar")
     StudioTheme.surface(row)
     row.orientation = .horizontal
@@ -515,7 +516,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       case "run", "plan": item.isEnabled = doc?.canExecute == true
       case "cancel": item.isEnabled = doc?.state == .running || doc?.state == .connecting
       case "save", "format": item.isEnabled = doc != nil
-      case "query": item.isEnabled = selectedServer != nil
+      case "query", "profiler": item.isEnabled = selectedServer != nil
       default: break
       }
       (item.view as? NSControl)?.isEnabled = item.isEnabled
@@ -876,7 +877,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   }
   func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
     [
-      .init("query"), .init("save"), .init("explorerBoundary"), .flexibleSpace, .init("activity"), .init("favorites"), .init("history"),
+      .init("query"), .init("save"), .init("explorerBoundary"), .flexibleSpace, .init("activity"), .init("profiler"), .init("favorites"), .init("history"),
       .init("ai"),
     ]
   }
@@ -895,6 +896,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       "format": ("Formatla", "text.alignleft", #selector(formatSQL)),
       "favorites": ("Favori Sorgular", "star", #selector(showFavorites)),
       "activity": ("Activity", "waveform.path.ecg", #selector(activity)),
+      "profiler": ("SQL Profiler", "list.bullet.rectangle.portrait", #selector(profiler)),
       "history": ("Geçmiş", "clock.arrow.circlepath", #selector(showHistory)),
       "ai": ("AI", "sparkles", #selector(aiAssistant)),
     ]
