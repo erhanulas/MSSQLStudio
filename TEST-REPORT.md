@@ -3245,3 +3245,14 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - `/tmp/mssql-editor-connection-sync-final-tests.log`: 30 test / 4 suite geçti. Ek query→Explorer regresyonuyla `/tmp/mssql-editor-connection-sync-added-tests.log`: 4 test / 1 suite geçti (önceki 3 test tekrar dahil).
 - `/tmp/mssql-editor-connection-sync-release.log`: Release BUILD SUCCEEDED. Architecture, Xcode kaynak eşliği ve diff whitespace kontrolü geçti.
 - Canlı SQL Server / gerçek kurtarılmış kullanıcı oturumu sınanmadı; kullanıcı uygulaması veya veritabanı değiştirilmedi. Native fixture logundaki mevcut NSLayoutConstraint büyük sabit uyarısı bu kapsamda giderilmedi.
+
+## 2026-10-17 — v0.2.171 / build 172 public yayın
+
+- Kaynak/tag: `986a943eade5a038f131e01d93950b7e17d70800`; Actions `38976954280` başarılı; public latest `v0.2.171`.
+- Önceki hedefli/native test kanıtları kullanıldı; kullanıcı tekrar test istemediği için exact tag CI test adımı atlandı. Paket doğrulama, sabit imza, frozen helper ve Foundation feed kontrolleri tamamlandı.
+- İndirilen ZIP/PKG GitHub digest ve manifest hashleriyle eşleşti; exact sürüm/build, paket içeriği, ReleaseNotes, strict app/helper imzaları ve Icon Composer görünümleri doğrulandı.
+- `MSSQLStudio-0.2.171.pkg` SHA-256: `12943bccf1597d95680956959a3bee8f481dc8f31b15a3856b78a0368a3d292a`.
+- `MSSQLStudio-0.2.171.zip` SHA-256: `e46adf80e06b8766b5846dc082218659c02c3eddde9b70d7f174a99b350cc36b`.
+- `MSSQLStudio-CredentialAgent-v1.zip` SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json` SHA-256: `54ae02c903e387d902c46a5842366b4743b4c8c65508ca9fa2b894092b10a94d`.
+- İndirilen signed uygulama `--check-update-feed 0.2.171` kontrolü geçti. Exact tag public notları kaynakla byte eşleşti. Kanıt: `/tmp/MSSQLStudio-171-public-verification/`. Gerçek Installer çalıştırılmadı; kurulu uygulama ve kullanıcı DB oturumları değiştirilmedi.
