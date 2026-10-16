@@ -3211,3 +3211,9 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Dört asset indirildi; GitHub digest/manifest SHA-256 eşliği, ZIP/PKG payload exact version/binary/ReleaseNotes, app/helper strict/deep sabit imza, frozen helper byte/archive eşliği ve Icon Composer varyantları doğrulandı. ZIP `059c347c0e164d1e87b1a1ed8b1547c1c7faeb71d30922f6396b5b2ce28915ea`; PKG `5968f3c777fa6f4bf143002a9ed68b0d201560a7652bc083f45239920069c3be`.
 - İndirilen signed app `--check-update-feed 0.2.169` Foundation/URLSession kontrolü geçti; public exact-tag not kaynağı yerel kaynakla aynı. Kanıt `/tmp/MSSQLStudio-169-public-verification/verification.json`, `verification.log`, `foundation-feed.log`, `public-notes.json`, release/latest/run/jobs JSON. Gerçek Installer çalıştırılmadı; kurulu uygulama ve kullanıcı oturumları değiştirilmedi.
 - Yayın: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.169
+
+## 2026-10-17 — Ortak aramada çift placeholder çizimi
+
+- v0.2.169 odak düzeltmesindeki view.draw native cell çiziminden sonra placeholder’ı tekrar çiziyordu; odaksız durumda da üst üste iki metin oluşuyordu. İkinci metin/placeholder çizimi kaldırıldı. Odaksız ikonlar native cell’e bırakıldı; özel ikon sunumu yalnız field editor açıkken uygulanır. Native edit/select text rect düzeltmesi korunur.
+- `/tmp/mssql-search-single-paint-tests.log`: 3 native test/1 suite geçti. Yeni raster regresyonu açık/koyu temada boş placeholder ve dolu metin bölgesini native cell’in tek çizimiyle piksel bazında karşılaştırır; editing bounds, native clear ve tema regresyonları da geçti. `/tmp/mssql-search-double-text-release.log`: BUILD SUCCEEDED. `/tmp/mssql-shared-search-light.png` görsel olarak incelendi; mimari/Xcode kaynak eşliği/diff kontrolü geçti.
+- Gerçek kullanıcı uygulaması değiştirilmedi; public yayın yapılmadı.

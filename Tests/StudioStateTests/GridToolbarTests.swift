@@ -8,6 +8,32 @@ import Testing
     var received:[String]=[]
     @objc func changed(_ field:NSSearchField) {received.append(field.stringValue)}
   }
+  @Test func unfocusedSearchTextIsPaintedExactlyOnceByNativeCell() throws {
+    _=NSApplication.shared
+    let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      let field=StudioSearchField(frame:NSRect(x:0,y:0,width:280,height:28))
+      field.placeholderString="Nesnelerde filtrele"
+      func render(_ draw:()->Void) throws -> Data {
+        let bitmap=try #require(NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:280,pixelsHigh:28,bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0))
+        let context=try #require(NSGraphicsContext(bitmapImageRep:bitmap))
+        NSGraphicsContext.saveGraphicsState();NSGraphicsContext.current=context
+        StudioTheme.controlSurface.setFill();NSRect(x:0,y:0,width:280,height:28).fill()
+        draw();NSGraphicsContext.restoreGraphicsState()
+        let bytes=try #require(bitmap.bitmapData)
+        var textPixels=Data()
+        for row in 0..<28 {textPixels.append(bytes.advanced(by:row*bitmap.bytesPerRow+30*4),count:222*4)}
+        return textPixels
+      }
+      for text in ["","Customer"] {
+        field.stringValue=text
+        let native=try render {field.cell?.draw(withFrame:field.bounds,in:field)}
+        let actual=try render {field.draw(field.bounds)}
+        #expect(actual==native,"\(theme): placeholder and text must have one drawing owner")
+      }
+    }
+  }
   @Test func sharedSearchEditingStaysBetweenSearchAndClearIcons() async throws {
     _=NSApplication.shared
     let field=StudioSearchField(frame:NSRect(x:12,y:12,width:280,height:28))

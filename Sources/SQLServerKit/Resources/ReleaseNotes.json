@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.170",
+    "date": "2026-10-17",
+    "title": "Arama kutularında yazı görünümü düzeltildi",
+    "changes": [
+      "Explorer, sonuçlar ve Ayarlar arama kutularında yazının üst üste iki kez görünmesi düzeltildi.",
+      "Arama alanına tıkladığınızda metnin ikonlarla çakışmasını önleyen hizalama korundu."
+    ]
+  },
+  {
     "version": "0.2.169",
     "date": "2026-10-17",
     "title": "Arama alanı ve editör kaydırma düzeltmeleri",

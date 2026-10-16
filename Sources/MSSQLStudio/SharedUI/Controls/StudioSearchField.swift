@@ -54,13 +54,11 @@ import SwiftUI
   override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance();refreshStyle()}
   override func draw(_ dirtyRect:NSRect) {
     super.draw(dirtyRect)
-    guard let searchCell=cell as? NSSearchFieldCell else {return}
+    guard currentEditor() != nil,let searchCell=cell as? NSSearchFieldCell else {return}
     let configuration=NSImage.SymbolConfiguration(paletteColors:[StudioTheme.muted])
     NSImage(systemSymbolName:"magnifyingglass",accessibilityDescription:nil)?.withSymbolConfiguration(configuration)?.draw(in:searchCell.searchButtonRect(forBounds:bounds))
     if !stringValue.isEmpty {
       NSImage(systemSymbolName:"xmark.circle.fill",accessibilityDescription:nil)?.withSymbolConfiguration(.init(paletteColors:[StudioTheme.controlSurface,StudioTheme.muted]))?.draw(in:searchCell.cancelButtonRect(forBounds:bounds))
-    } else if let placeholderString {
-      (placeholderString as NSString).draw(in:searchCell.searchTextRect(forBounds:bounds),withAttributes:[.font:font ?? StudioTheme.uiFont,.foregroundColor:NSColor.placeholderTextColor])
     }
   }
 
