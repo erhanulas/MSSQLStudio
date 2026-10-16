@@ -3,6 +3,11 @@ import Testing
 @testable import SQLServerKit
 
 struct DDLChangeTests {
+  @Test func triggerCreationRefreshesItsParentWithoutExecutingBodyDDL() {
+    let changes=ModuleEditing.changes("CREATE OR ALTER TRIGGER dbo.tr ON dbo.Customers AFTER INSERT AS BEGIN UPDATE dbo.Other SET ID=1; END")
+    #expect(changes.map(\.name) == ["tr","Customers"])
+    #expect(changes.map(\.folder) == [.triggers,.tables])
+  }
   @Test func identifiersKeepSchemaDatabaseAndEscapedDotsAsSeparateParts() {
     let changes=ModuleEditing.changes("USE [Target DB]; CREATE TABLE [sales.area].[News]]Log] (ID int); ALTER TABLE [Other DB]..[News] ADD Title nvarchar(100);")
     #expect(changes.count==2)

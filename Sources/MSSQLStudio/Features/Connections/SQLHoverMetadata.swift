@@ -7,10 +7,10 @@ import SQLServerKit
   private var running:Task<SQLObjectHover.Info?,any Error>?
   private var cache:[String:(Date,SQLObjectHover.Info?)]=[:]
   init(server:ConnectedServer) {self.server=server}
-  func lookup(targets:[[String]],column:String?=nil,database:String) async throws->SQLObjectHover.Info? {
+  func lookup(targets:[[String]],column:String?=nil,database:String,includeTableColumns:Bool=false) async throws->SQLObjectHover.Info? {
     guard let server,server.online else {return nil}
     let generation=server.generation,sql=try SQLObjectHover.query(targets:targets,column:column)
-    let key=generation.uuidString+"|"+database+"|"+sql
+    let key=generation.uuidString+"|"+database+"|"+String(includeTableColumns)+"|"+sql
     while let previous=running {
       _=try? await previous.value
       try Task.checkCancellation()
@@ -22,7 +22,7 @@ import SQLServerKit
       defer {self?.running=nil}
       guard let server else {return nil}
       var limits=Limits();limits.rows=8193;limits.timeout=5;limits.totalBytes=8_000_000
-      let info=SQLObjectHover.decode(try await server.catalog(sql,database:database,limits:limits),column:column)
+      let info=SQLObjectHover.decode(try await server.catalog(sql,database:database,limits:limits),column:column,includeTableColumns:includeTableColumns)
       guard server.generation==generation else {return nil}
       if let self {if cache.count>=64 {cache.removeAll()};cache[key]=(Date(),info)}
       return info

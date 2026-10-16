@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.149",
+    "date": "2026-10-16",
+    "title": "Trigger zekâsı, otomatik içerik indeksi ve yakın nesne sekmeleri",
+    "changes": [
+      "EXEC parametre yardımı açıkken declare edilmiş @ değişkenler önerilir; öneri ve parametre panelleri üst üste açılmaz.",
+      "Trigger hedef tablosu, INSERTED/DELETED ve alias kolonları tamamlamaya ve kolon önizlemesine bağlanır. Normal tablo/view hover davranışı korunur.",
+      "Başarılı ve commit edilmiş CREATE/ALTER/DROP işlemleri ilgili Explorer nesnelerini ve etkin içerik indeksini günceller. Beş dakikalık bekleme aşılır; aktif eşitleme sırasındaki istekler birleştirilir, değişmeyen tanımlar tekrar okunmaz.",
+      "Çevrimdışı tablo önizlemesi aynı indeks içindeki trigger scriptlerini de gösterir.",
+      "Nesneye gitme yeni veya zaten açık nesne sekmesini kaynak sekmenin yanına getirir; pin sırası ve detached pencereler korunur."
+    ]
+  },
+  {
     "version": "0.2.148",
     "date": "2026-10-16",
     "title": "SQL blok seçimi ve toplu girinti",

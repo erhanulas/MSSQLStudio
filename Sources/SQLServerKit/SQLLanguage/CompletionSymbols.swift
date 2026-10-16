@@ -295,6 +295,21 @@ public enum SQLIntelligence {
       local[parts.map { $0.lowercased() }.joined(separator:".")] = columns
       if let name = parts.last { local[name.lowercased()] = columns }
     }
+    var triggerParts:[String]?
+    var triggerHeaderEnd=0
+    if let trigger=tokens.indices.last(where: {tokens[$0].text.uppercased() == "TRIGGER" && $0>0 && ["CREATE","ALTER"].contains(tokens[$0-1].text.uppercased()) && tokens[$0].range.location <= caret}),
+      let on=((trigger+1)..<min(tokens.count,trigger+128)).first(where:{["ON","GO"].contains(tokens[$0].text.uppercased())}),tokens[on].text.uppercased() == "ON" {
+      var j=on+1,parts:[String]=[]
+      while j<tokens.count,[Lexeme.Kind.word,.keyword].contains(tokens[j].kind) {
+        parts.append(raw(tokens[j].text));triggerHeaderEnd=NSMaxRange(tokens[j].range);j+=1
+        if j<tokens.count,tokens[j].text == "." {j+=1} else {break}
+      }
+      if (1...2).contains(parts.count),!parts.contains(where:{["DATABASE","ALL","SERVER"].contains($0.uppercased())}),
+        !tokens.contains(where:{$0.text.uppercased() == "GO" && $0.range.location>triggerHeaderEnd && $0.range.location<caret}) {
+        triggerParts=parts
+        if let columns=catalog?.resolve(parts)?.columns {local["inserted"]=columns;local["deleted"]=columns}
+      }
+    }
     local = local.mapValues { $0.map(raw) }
     var bindings: [Binding] = [], ignored = Set<Int>(), diagnostics: [Diagnostic] = []
     var references: [(Int,[String],NSRange)] = []
@@ -352,6 +367,14 @@ public enum SQLIntelligence {
         let concrete=bindings.first(where:{$0.scope == binding.scope && $0.alias.lowercased() == binding.alias.lowercased() && $0.columns != nil}) {
         bindings[target.index]=Binding(alias:binding.alias,explicitAlias:true,parts:concrete.parts,columns:concrete.columns,scope:binding.scope)
       }
+    }
+    if let triggerParts {
+      for index in bindings.indices where bindings[index].parts.count == 1 && ["inserted","deleted"].contains(bindings[index].parts[0].lowercased()) {
+        let binding=bindings[index]
+        bindings[index]=Binding(alias:binding.alias,explicitAlias:binding.explicitAlias,parts:triggerParts,columns:binding.columns,scope:binding.scope)
+      }
+      let scope=NSRange(location:0,length:original.length)
+      for name in ["inserted","deleted"] {bindings.append(Binding(alias:name,explicitAlias:true,parts:triggerParts,columns:catalog?.resolve(triggerParts)?.columns,scope:scope))}
     }
     let targetBindings=targets.map {($0.verb,bindings[$0.index])}
     for (verb,binding) in targetBindings {

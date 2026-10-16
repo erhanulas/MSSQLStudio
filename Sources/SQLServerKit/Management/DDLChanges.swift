@@ -72,6 +72,15 @@ extension ModuleEditing {
           let schema=p.count>=2 && !p[p.count-2].isEmpty ? p[p.count-2]:nil
           let change=Change(database:p.count==3 ? p[0]:database,schema:dbTrigger ? "":schema,name:object,folder:folder,databaseTrigger:dbTrigger)
           if !result.contains(change),result.count<128 {result.append(change)}
+          if kind == "TRIGGER",verb != "DROP",!dbTrigger,j<tokens.count,tokens[j].text.uppercased() == "ON" {
+            var targetIndex=j+1
+            let parent=parts(&targetIndex)
+            if (1...3).contains(parent.count),let table=parent.last {
+              let parentSchema=parent.count>=2 ? parent[parent.count-2]:nil
+              let parentChange=Change(database:parent.count==3 ? parent[0]:database,schema:parentSchema,name:table,folder:.tables,databaseTrigger:false)
+              if !result.contains(parentChange),result.count<128 {result.append(parentChange)}
+            }
+          }
           if verb == "DROP",kind != "INDEX",j<tokens.count,tokens[j].text=="," {j+=1} else {break}
         } while j<tokens.count
         if verb != "DROP",["VIEW","PROC","PROCEDURE","FUNCTION","TRIGGER"].contains(kind) {break}

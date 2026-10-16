@@ -12,6 +12,7 @@ import SQLServerKit
   private(set) var activities: [String: DefinitionIndexActivity] = [:]
   private var lastProgress = Date.distantPast
   private var synchronizedAt: [String: Date] = [:]
+  private var pendingDDLDatabases=Set<String>()
   private var configuration: Task<Void, Never>?
   private(set) var status = "Kapalı"
   init(server: ConnectedServer, disk: CatalogDiskIndex) {
@@ -19,6 +20,7 @@ import SQLServerKit
     self.disk = disk
   }
   func pause() {
+    pendingDDLDatabases.removeAll()
     task?.cancel()
     if task != nil { status = "Eşitleme duraklatıldı" }
     for db in activities.keys
@@ -69,6 +71,12 @@ import SQLServerKit
       server.startupError = status
     }
   }
+  func refreshAfterDDL(database: String) {
+    guard let server,server.online,server.allowsDefinitionIndex(database) else {return}
+    synchronizedAt[database] = .distantPast
+    if task != nil {pendingDDLDatabases.insert(database)}
+    else {refresh(database:database)}
+  }
   func refresh(force: Bool = false, database: String? = nil) {
     guard task == nil, let server, server.online, server.profile.hasDefinitionIndexes,
       lease != nil
@@ -88,6 +96,12 @@ import SQLServerKit
       defer {
         task = nil
         NotificationCenter.default.post(name: .init("catalogIndexUpdated"), object: server)
+        let pending=pendingDDLDatabases
+        pendingDDLDatabases.removeAll()
+        if !pending.isEmpty,!Task.isCancelled,revision==token {
+          for db in pending {synchronizedAt[db] = .distantPast}
+          refresh()
+        }
       }
       for db in targets {
         if !force, Date().timeIntervalSince(synchronizedAt[db] ?? .distantPast) < 300 { continue }
@@ -305,8 +319,19 @@ import SQLServerKit
       let value = try await disk.definition(
         scope: CatalogDiskIndex.scope(profile: profile, database: database), id: id)
     else { throw SQLFailure("Bu nesnenin tanımı henüz indekslenmemiş veya okunamamış.") }
+    var result=value
+    if value.type == "U" {
+      let scope=CatalogDiskIndex.scope(profile:profile,database:database)
+      let triggers=try await disk.definitions(scope:scope,types:["TR"],parentID:id)
+      var scripts=[value.sql]
+      for trigger in triggers {
+        try Task.checkCancellation()
+        if let definition=try await disk.definition(scope:scope,id:trigger.id) {scripts.append(definition.sql)}
+      }
+      if scripts.count>1 {result=IndexedObjectDefinition(id:value.id,schema:value.schema,name:value.name,type:value.type,sql:scripts.joined(separator:"\nGO\n"),original:value.original,parentID:value.parentID,modified:value.modified,fetchedAt:value.fetchedAt)}
+    }
     guard !server.online, server.profile == profile else { throw CancellationError() }
-    return value
+    return result
   }
   func items(database: String, folder: Folder, parentID: Int? = nil) async throws -> [CatalogItem] {
     guard let server, !server.online, server.profile.hasDefinitionIndexes,

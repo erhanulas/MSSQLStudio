@@ -1,3 +1,26 @@
+## 16 Ekim 2026 — v0.2.149 test tekrarı istisnası
+
+- Kullanıcının önceki test tekrarı yapılmadan yayın tercihi korunur. İlgili yerel/native/core/Release kanıtları yeniden kullanılır; yalnız v0.2.149 tag’inde CI paket suite’i atlanır. İmza/helper, manifest ve updater kontrolleri korunur; yeni tam suite başarısı iddia edilmez.
+
+## 16 Ekim 2026 — tüm nesne CREATE işlemlerini içerik indeksine alma, yerel
+
+- DDL sonrası tanım indeksi isteğinin trigger filtresi kaldırıldı; tablo, view, procedure, fonksiyon, synonym ve trigger için aynı başarılı/commit edilmiş nesne değişiklik yolu ilgili DB’yi artımlı eşitler. Ortak yol ALTER/DROP değişikliklerini de kapsar. Kapalı DB indeksi açılmaz; generation/revision/online koruması ve DB başına birleştirme korunur.
+- ObjectDefinitionIndexController.refreshAfterDDL normal 300 sn tazelik beklemesini geçersiz kılar. Okuyucu aktifse DB Set’ine ekler; task fiziksel bitince bekleyen DB’lerin artımlı turu başlar. pause/configure/remove kuyruğu temizler. force kullanılmadığından değişmeyen tanımlar tekrar okunmaz.
+- **12 native +5 core =17 test geçti /0 issue**, 1.916 /0.002 sn (`/tmp/mssql-all-ddl-index.log`). Yeni /tmp SQLite/sentetik metadata regresyonu taze boş indeksten yeni view’ın 5 dakika beklenmeden kaydını, aktif uçuşa gelen ikinci isteğin kaybolmamasını (3 inventory turu) ve değişmeyen gövdenin yalnız bir kez okunmasını doğrular. Mevcut hedefli DDL/CREATE/DROP ve indeks lifecycle testleri geçti. Release BUILD SUCCEEDED (`/tmp/mssql-all-ddl-index-release.log`); mimari/diff kontrolü geçti. Canlı SQL Server CREATE/commit veya CUA denenmedi; kurulu uygulama/veri değiştirilmedi. Henüz yayımlanmadı.
+
+## 16 Ekim 2026 — yeni nesne sekmesini kaynağın yanında açma, yerel
+
+- Command+B/command-click ortak openEditorDefinition yolu yeni belgeyi oluşturduktan hemen sonra kaynak sekmenin yanına moveQueryTab ile yerleştirir; metadata yüklenirken ve tamamlanınca sıra korunur. Mevcut açık nesne davranışıyla aynıdır. Pin sınırı ve aynı sekmede çevrimdışı önizleme korunur.
+- **20 native +5 core =25 test geçti /0 issue**, 0.917 /0.007 sn (`/tmp/mssql-adjacent-definition.log`). Yeni sentetik native regresyon üç sekme arasında ilk sekmeden yeni tanım açılmasını, yükleme öncesi/sonrası sıra/aktif belge/SQL’i doğrular. Release BUILD SUCCEEDED (`/tmp/mssql-adjacent-definition-release.log`); mimari/diff kontrolü geçti. Canlı SQL/CUA yapılmadı; kurulu uygulama/veri değiştirilmedi. Henüz yayımlanmadı.
+
+## 16 Ekim 2026 — procedure değişkenleri, trigger bağlamı/indeksi ve yakın sekme gezinmesi, yerel
+
+- EXEC parametre yardımı completion popup’ını koşulsuz bastırıyordu. @ değişken completion’ı bu engelden ayrıldı; öneriler açılırken parametre paneli kapanır. CREATE/ALTER TRIGGER ON hedefinin kolonları aynı batch içinde INSERTED/DELETED ve FROM alias’larına bağlanır. GO/DB-server trigger sınırı korunur. Trigger başlığındaki tablo/pseudo-table hover’ı relation kolonlarını opt-in açar; sıradan tablo/view hover’ı kapalı kalır, metadata cache anahtarı opt-in bayrağını içerir.
+- DDLChanges CREATE/ALTER TRIGGER için ON parent nesnesini de üretir; gerçek metadata view gösterirse view klasörü yenilenir. Mevcut başarılı/commit edilmiş DDL bildiriminden sonra açık tanım indeksi yalnız ilgili DB’de artımlı eşitleme ister. Çevrimdışı tablo önizlemesi parentID ile yalnız kendi indeksli trigger scriptlerini GO ile birleştirir; kalıcı tablo tanımı/digest’i değiştirmez, online okuma cache’e düşmez.
+- Zaten açık nesneye gitme ana sekmeyi kaynak sekmenin yanına mevcut reorder yoluyla getirir; pin sınırları/detached pencere/SQL korunur. Asenkron kimlik çakışmasında kaynak belge yeniden esas alınır.
+- Geniş regresyon **39 native +30 core =69 test geçti /0 issue**, 3.756 /0.118 sn (`/tmp/mssql-trigger-workflow-checked.log`). Yeni testler pseudo-table/alias kolonları, declare değişkenleri, trigger-parent DDL, çevrimdışı parentID script eşliği/kalıcı kaydın korunması ve mevcut nesne sekmesi sırasını kapsar. Son hover/UI ve hedefli yenileme regresyonu **34 native +10 core =44 test geçti /0 issue**, 2.175 /0.010 sn (`/tmp/mssql-trigger-final-native.log`); önceki kapsamla örtüşür, toplam sayıya eklenmez. Parametre yardımı açıkmış gibi bildirilen gerçek native EditorController penceresinde @ değişken popup’ı açılır; relation opt-in decode normal hover’ı değiştirmez. İlk yalın SQLTextView fixture popup kontrolü 1 issue verdi; ürünün mevcut EditorController fixture’ına geçirilip caret pencere odağından sonra ayarlanarak doğrulandı. İlk başarısız koşu başarı sayılmaz.
+- Final Release BUILD SUCCEEDED (`/tmp/mssql-trigger-workflow-verified-release.log`); mimari ve diff kontrolü geçti. Canlı SQL Server CREATE/ALTER TRIGGER/commit/index eşitlemesi ve gerçek fare hover/CUA denenmedi; sentetik native/core ve /tmp SQLite doğrulaması yapıldı. Kurulu uygulama/kullanıcı verisi değiştirilmedi. Henüz yayımlanmadı.
+
 ## 16 Ekim 2026 — v0.2.148 / build 149 public yayın doğrulandı
 
 - [Public/latest v0.2.148](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.148), kaynak `cd45bfce2dce9bf8cb0d1043007752cfdbbd19b2`; [Actions 38874984234](https://github.com/erhanulas/MSSQLStudio/actions/runs/38874984234) başarılı. Yerel test/build ve CI paket suite’i önceki kullanıcı tercihiyle tekrarlanmadı; bu tag’in test adımı skipped. Önceki 15 native test kanıtı aşağıdadır; yeni tam suite iddiası yoktur.

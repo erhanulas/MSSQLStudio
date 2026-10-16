@@ -526,6 +526,8 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   @discardableResult func activateObjectEditor(server:ConnectedServer,database:String,objectID:Int) -> Bool {
     let key=ObjectEditorKey(serverID:server.id,database:database,objectID:objectID)
     guard let doc=state.documents.first(where:{$0.objectEditorKey == key && $0.database == database}) else {return false}
+    if let source=state.active,source !== doc,detached[doc.id] == nil,
+      let index=state.documents.firstIndex(where:{$0 === source}) {moveQueryTab(doc.id,to:index+1)}
     state.active=doc;state.changed?()
     if let owner=detached[doc.id] {owner.showWindow(nil);owner.query.focusEditor()}
     else {controllers[doc.id]?.focusEditor()}

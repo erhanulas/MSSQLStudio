@@ -165,7 +165,7 @@ import SQLServerKit
     ruler.toggle = { [weak self] in self?.toggleFold($0) }
     ruler.selectLine = { [weak self] in self?.selectSourceLine($0) }
     completion.isProjected = { [weak self] in self?.projection != nil }
-    completion.willShow = { [weak self] in self?.insertPresentation.hidePreview() }
+    completion.willShow = { [weak self] in self?.insertPresentation.hidePreview(); self?.parameterPopover.close() }
     completion.parametersShown = { [weak self] in self?.parameterPopover.isShown ?? false }
     completion.anchor = { [weak self] in self?.suggestionAnchor() }
     completion.willAccept = { [weak self] in self?.suppressNextPopup = true }

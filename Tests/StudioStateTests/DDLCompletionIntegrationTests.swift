@@ -4,6 +4,26 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct DDLCompletionIntegrationTests {
+  @Test func declaredVariableCompletionCanOpenWhileParameterHelpIsShown() async throws {
+    _=NSApplication.shared
+    let server=ConnectedServer(profile:.init(),password:"");server.online=false
+    let doc=QueryDocument(server:server,database:"master",title:"Variable completion")
+    doc.sql="DECLARE @city nvarchar(20); EXEC dbo.p @Name = @ci"
+    let controller=EditorController(document:doc),editor=controller.editor
+    let window=NSWindow(contentRect:NSRect(x:200,y:200,width:800,height:500),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=controller.surface;window.makeKeyAndOrderFront(nil);window.makeFirstResponder(editor)
+    editor.setSelectedRange(NSRange(location:doc.sql.utf16.count,length:0))
+    let completion=EditorCompletionController(document:doc,editor:editor)
+    defer {completion.cancel();window.close()}
+    completion.parametersShown={true}
+    completion.anchor={NSRect(x:20,y:20,width:1,height:20)}
+    completion.scheduleIntelligence(manual:true)
+    for _ in 0..<100 where !completion.isShown {try await Task.sleep(for:.milliseconds(10))}
+    #expect(window.firstResponder === editor)
+    #expect(completion.currentAnalysis?.variableCompletion == true)
+    #expect(completion.currentAnalysis?.suggestions.contains(where:{$0.text == "@city"}) == true)
+    #expect(completion.isShown)
+  }
   @Test func tableViewFunctionAndProcedureAcceptancePreservesCaretUndoAndQuery() async throws {
     _=NSApplication.shared
     let keys=[SQLEditorPreferences.completionSchemaKey,SQLEditorPreferences.completionBracketsKey,"sqlAutomaticAliases","sqlAutomaticNoLock","sqlAutomaticCompletion",SQLEditorPreferences.completionDelayKey]

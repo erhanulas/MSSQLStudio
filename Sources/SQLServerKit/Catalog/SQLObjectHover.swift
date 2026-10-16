@@ -36,7 +36,7 @@ public enum SQLObjectHover {
     ORDER BY 1,7;
     """
   }
-  public static func decode(_ execution:Execution,column:String?=nil)->Info? {
+  public static func decode(_ execution:Execution,column:String?=nil,includeTableColumns:Bool=false)->Info? {
     guard !execution.partial, !execution.stoppedEarly, execution.results.first?.truncated != true else {return nil}
     let rows=(execution.results.first?.values ?? []).filter {$0.count>=6}
     guard !rows.isEmpty,Set(rows.compactMap {$0[0]}).count==1,
@@ -49,8 +49,8 @@ public enum SQLObjectHover {
     if let column,let row=rows.first(where:{$0[4]?.caseInsensitiveCompare(column) == .orderedSame}),let type=row[5] {
       return Info(title:qualified+"."+(row[4] ?? column),detail:type)
     }
-    guard kind.contains("TABLE_VALUED_FUNCTION") else {return nil}
-    let header="Table Function → TABLE"
+    guard kind.contains("TABLE_VALUED_FUNCTION") || includeTableColumns && ["USER_TABLE","VIEW"].contains(kind) else {return nil}
+    let header=kind.contains("TABLE_VALUED_FUNCTION") ? "Table Function → TABLE":kind == "VIEW" ? "View":"Table"
     let columns=rows.enumerated().map { index,row in
       Column(ordinal:row.count>6 ? Int(row[6] ?? "") ?? index+1 : index+1,
         name:row[4] ?? "",type:row[5] ?? "")

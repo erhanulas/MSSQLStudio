@@ -45,6 +45,13 @@ struct ExplorerTransferHoverTests {
     #expect(Catalog.children(.parameters,object:7).contains("bt.user_type_id=p.system_type_id"))
     #expect(Catalog.children(.columns,object:7).contains("precision"))
   }
+  @Test func triggerContextCanOptIntoTableColumnsWithoutChangingOrdinaryHover() throws {
+    var execution=Execution()
+    execution.results=[Rows(values:[["7","dbo","T","USER_TABLE","ID","int NOT NULL","1"]])]
+    #expect(SQLObjectHover.decode(execution) == nil)
+    let info=try #require(SQLObjectHover.decode(execution,includeTableColumns:true))
+    #expect(info.columns.map(\.name) == ["ID"] && info.detail.contains("int NOT NULL"))
+  }
   @Test func tableHoverPreservesEveryReturnColumnInOrdinalOrderAndRejectsPartialMetadata() throws {
     var execution=Execution()
     execution.results=[Rows(values:(1...80).reversed().map { ordinal in

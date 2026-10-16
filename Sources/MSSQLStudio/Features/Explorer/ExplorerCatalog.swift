@@ -151,7 +151,7 @@ extension WorkbenchController {
   func refreshComparedObject(server:ConnectedServer,database:String,key:SchemaObjectKey,type:String,indexService:CatalogIndexService = .shared,catalogService:SQLCatalogService = .shared) async {
     guard server.online,server.allowsCatalogIndex(database) else {return}
     let generation=server.generation,revision=server.catalogIndexRevision
-    let folder:Folder
+    var folder:Folder
     switch type {case "U":folder = .tables;case "V":folder = .views;case "P","PC":folder = .procedures;case "FN","IF","TF","FS","FT":folder = .functions;case "SN":folder = .synonyms;case "TR","TRD":folder = .triggers;default:return}
     let sql:String
     if folder == .triggers {
@@ -168,6 +168,7 @@ extension WorkbenchController {
       let values=Array(result.results.first?.values ?? [])
       guard values.count<=30_000,values.allSatisfy({$0.count>=6 && $0[0].flatMap(Int.init).map {$0>0}==true && $0[0]==values.first?[0] && $0[1]==values.first?[1] && $0[2]==values.first?[2] && $0[1].map({!$0.isEmpty && $0.utf16.count<=128}) == true && $0[2].map({$0.utf16.count<=128}) == true && $0[3] != nil}) else {throw SQLFailure("Nesne yenileme yanıtı doğrulanamadı.")}
       let item=Catalog.rows(result).first
+      if folder == .tables,item?.detail == "VIEW" {folder = .views}
       let key=item.map {SchemaObjectKey(schema:$0.schema,name:$0.name,databaseTrigger:key.databaseTrigger)} ?? key
       let parentID=values.first?[5].flatMap(Int.init) ?? 0
       if folder != .triggers {
@@ -239,6 +240,11 @@ extension WorkbenchController {
       guard server.generation==generation,server.catalogIndexRevision==revision,let schema else {return}
       await refreshComparedObject(server:server,database:db,key:.init(schema:schema,name:change.name,databaseTrigger:change.databaseTrigger),type:change.type,indexService:indexService,catalogService:catalogService)
       if let fallback,server.generation==generation,server.catalogIndexRevision==revision {await refreshComparedObject(server:server,database:db,key:.init(schema:fallback,name:change.name,databaseTrigger:change.databaseTrigger),type:change.type,indexService:indexService,catalogService:catalogService)}
+    }
+    if server.generation==generation,server.online,server.catalogIndexRevision==revision {
+      for db in Set(changes.map {$0.database ?? database}) where server.allowsDefinitionIndex(db) {
+        server.definitionIndex.refreshAfterDDL(database:db)
+      }
     }
   }
   @objc func explorerConnectionChanged(_ notification:Notification) {

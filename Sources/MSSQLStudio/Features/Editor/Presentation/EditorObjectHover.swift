@@ -35,9 +35,16 @@ import SQLServerKit
         activeRange=token.range
         let analysis=try SQLIntelligence.analyze(source:source,caret:offset,catalog:document.intelligenceCatalog,verified:false)
         var targets:[[String]]=[],column:String?
-        if parts.count==2,let resolved=analysis.referenceBindings[parts[0].lowercased()] {targets=[resolved];column=parts[1]}
+        var includeTableColumns=false
+        if parts.count==1,["inserted","deleted"].contains(parts[0].lowercased()),let resolved=analysis.referenceBindings[parts[0].lowercased()] {targets=[resolved];includeTableColumns=true}
+        else if parts.count==2,let resolved=analysis.referenceBindings[parts[0].lowercased()] {targets=[resolved];column=parts[1]}
         else if let symbol=document.intelligenceCatalog?.resolve(parts) {
-          guard symbol.kind.contains("FUNCTION") else {return}
+          let triggerTarget=analysis.referenceBindings["inserted"]
+          let triggerHeader=tokens.first(where:{$0.text.uppercased() == "TRIGGER"})
+          let headerAS=tokens.first(where:{$0.text.uppercased() == "AS" && $0.range.location > (triggerHeader?.range.location ?? Int.max)})
+          let isTriggerTarget=triggerTarget == parts && triggerHeader != nil && token.range.location < (headerAS?.range.location ?? 0)
+          guard symbol.kind.contains("FUNCTION") || isTriggerTarget else {return}
+          includeTableColumns=isTriggerTarget
           targets=[parts]
         }
         else if parts.count==2 {targets=[parts]}
@@ -48,7 +55,7 @@ import SQLServerKit
           column=parts[0]
         }
         guard !targets.isEmpty,targets.count<=8,server.online else {return}
-        let info=try await server.hoverMetadata.lookup(targets:targets,column:column,database:db)
+        let info=try await server.hoverMetadata.lookup(targets:targets,column:column,database:db,includeTableColumns:includeTableColumns)
         guard !Task.isCancelled,StudioHoverHelp.shared.revision==hoverRevision,
           source==editor.string,document.database==db,document.server === server,server.generation==generation,editor.window?.isVisible == true,
           let info else {return}

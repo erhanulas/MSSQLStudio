@@ -7,6 +7,20 @@ struct SQLIntelligenceTests {
     try SQLIntelligence.analyze(source:source,caret:caret ?? (source as NSString).length,catalog:.init(snapshot:.init(symbols:symbols,synchronizedAt:date)),verified:verified,automaticAliases:aliases)
   }
   func marked(_ sql: String) throws -> [String] { let value = try analyze(sql); return value.diagnostics.map { (sql as NSString).substring(with:$0.range) } }
+  @Test func triggerPseudoTablesResolveColumnsAndAliasesToTheTargetTable() throws {
+    for source in [
+      "ALTER TRIGGER dbo.tr ON dbo.Customers AFTER UPDATE AS SELECT inserted.",
+      "CREATE OR ALTER TRIGGER dbo.tr ON dbo.Customers AFTER DELETE AS SELECT D. FROM deleted AS D"
+    ] {
+      let caret=source.hasSuffix(".") ? source.utf16.count:(source as NSString).range(of:"D.").location+2
+      let result=try analyze(source,caret:caret)
+      #expect(result.suggestions.contains {$0.kind == .column && $0.label.contains("CustomerID")})
+      #expect(result.referenceBindings["inserted"] == ["dbo","Customers"])
+      if source.contains("AS D") {#expect(result.referenceBindings["d"] == ["dbo","Customers"])}
+    }
+    let source="DECLARE @city nvarchar(20); EXEC dbo.GetCustomers @Name = @ci"
+    #expect(try analyze(source).suggestions.contains {$0.text == "@city"})
+  }
   @Test func explorerAliasBindingsRespectNestedAndSiblingStatementScopes() throws {
     let source="SELECT c.Name, (SELECT c.Amount FROM dbo.Orders c) FROM dbo.Customers c; SELECT c.City FROM report.CustomerSummary c;"
     let outer=try analyze(source,caret:(source as NSString).range(of:"c.Name").location+2)

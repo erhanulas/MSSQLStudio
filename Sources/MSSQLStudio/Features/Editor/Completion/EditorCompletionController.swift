@@ -68,7 +68,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
         publish?(analysis,regions,source,validate)
         let prefixLength = caret-analysis.replacement.location
         let dot = analysis.replacement.location > 0 && (source as NSString).substring(with:NSRange(location:analysis.replacement.location-1,length:1)) == "."
-        if !parametersShown(),(manual || automatic && allowPopup && (analysis.objectCompletion || analysis.procedureCompletion || analysis.variableCompletion || prefixLength >= 2 || dot)), !analysis.suggestions.isEmpty, let window = editor.window, window.firstResponder === editor {
+        if (analysis.variableCompletion || !parametersShown()),(manual || automatic && allowPopup && (analysis.objectCompletion || analysis.procedureCompletion || analysis.variableCompletion || prefixLength >= 2 || dot)), !analysis.suggestions.isEmpty, let window = editor.window, window.firstResponder === editor {
           guard let anchor = anchor?(), let host = window.contentView else { return }
           let hostAnchor = host.convert(anchor,from:editor)
           var below=true

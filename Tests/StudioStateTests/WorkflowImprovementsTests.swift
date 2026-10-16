@@ -5,6 +5,39 @@ import Testing
 
 @MainActor @Suite(.serialized) struct WorkflowImprovementsTests {
   private func views(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(views)}
+  @Test func newDefinitionTabOpensBesideItsSourceAndKeepsThatPositionAfterLoading() async throws {
+    let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false
+    let server=ConnectedServer(profile:.init(),password:"");server.online=false
+    let source=state.newQuery(server:server,text:"SELECT * FROM dbo.V")
+    let middle=state.newQuery(server:server,text:"SELECT 2")
+    let last=state.newQuery(server:server,text:"SELECT 3")
+    state.active=source
+    server.catalogFixture={ sql in
+      var result=Execution()
+      result.results=[Rows(values:[[sql.contains("SELECT object_id") ? "42":"CREATE VIEW dbo.V AS SELECT 1;"]])]
+      return result
+    }
+    server.online=true
+    let host=WorkbenchController(state:state);host.loadViewIfNeeded()
+    host.openEditorDefinition(.init(schema:"dbo",name:"V",columns:[],kind:"VIEW"),document:source)
+    let target=try #require(state.active)
+    #expect(state.documents.map(\.id) == [source.id,target.id,middle.id,last.id])
+    await target.definitionTask?.value
+    #expect(state.active === target && state.documents[1] === target)
+    #expect(target.sql == "ALTER VIEW dbo.V AS SELECT 1;" && source.sql == "SELECT * FROM dbo.V")
+  }
+  @Test func existingObjectEditorMovesBesideTheSourceWithoutChangingSQL() {
+    let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false
+    let server=ConnectedServer(profile:.init(),password:"");server.online=false
+    let target=state.newQuery(server:server,text:"ALTER VIEW dbo.V AS SELECT 1")
+    target.objectEditorKey=ObjectEditorKey(serverID:server.id,database:"master",objectID:42)
+    _=state.newQuery(server:server,text:"SELECT middle")
+    let source=state.newQuery(server:server,text:"SELECT * FROM dbo.V")
+    let host=WorkbenchController(state:state);host.loadViewIfNeeded()
+    #expect(host.activateObjectEditor(server:server,database:"master",objectID:42))
+    #expect(state.documents.map(\.id).suffix(2) == [source.id,target.id])
+    #expect(state.active === target && target.sql == "ALTER VIEW dbo.V AS SELECT 1" && source.sql == "SELECT * FROM dbo.V")
+  }
   @Test func queryConnectionStartsOneExplorerReconnectWithoutStealingQuery() async {
     let state = StudioState(); state.historyEnabled = false; state.recoveryEnabled = false
     let server = ConnectedServer(profile: .init(), password: ""); server.online = false

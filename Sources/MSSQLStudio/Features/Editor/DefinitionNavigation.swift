@@ -8,6 +8,7 @@ extension WorkbenchController {
     let server=document.server,db=document.database,generation=document.server.generation
     if !server.online {openOfflineDefinition(named:[symbol.schema,symbol.name],server:server,database:db,in:document);return}
     if let existing=state.documents.first(where: {$0.server === server && $0.database == db && $0.definitionSymbol?.schema == symbol.schema && $0.definitionSymbol?.name == symbol.name}) {
+      if existing !== document,detached[existing.id] == nil,let index=state.documents.firstIndex(where:{$0 === document}) {moveQueryTab(existing.id,to:index+1)}
       state.active=existing;state.changed?()
       detached[existing.id]?.showWindow(nil)
       if existing.definitionError == nil {return}
@@ -15,6 +16,7 @@ extension WorkbenchController {
       _=state.close(existing)
     }
     let target=state.newQuery(server:server,database:db,title:(symbol.kind == "USER_TABLE" ? "CREATE · ":"ALTER · ")+symbol.name,startConnection:false)
+    if let index=state.documents.firstIndex(where:{$0 === document}) {moveQueryTab(target.id,to:index+1)}
     target.definitionSymbol=symbol;target.definitionLoading=true;target.changed?()
     target.definitionTask=Task { [weak self,weak target] in
       guard let self,let target else {return}
@@ -28,6 +30,7 @@ extension WorkbenchController {
         let key=ObjectEditorKey(serverID:server.id,database:db,objectID:id)
         if let existing=state.documents.first(where: {$0 !== target && $0.objectEditorKey == key}) {
           target.definitionLoading=false;_=state.close(target)
+          state.active=document
           _=activateObjectEditor(server:server,database:db,objectID:id)
           existing.definitionSymbol=symbol;return
         }

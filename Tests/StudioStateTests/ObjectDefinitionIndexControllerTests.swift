@@ -18,6 +18,50 @@ import Testing
     for _ in 0..<400 where controller.isRefreshing { try await Task.sleep(for: .milliseconds(5)) }
     #expect(!controller.isRefreshing)
   }
+  @Test func ddlRefreshBypassesFreshnessAndQueuesBehindTheActiveReader() async throws {
+    let url=URL(fileURLWithPath:"/tmp/DDLDefinition-"+UUID().uuidString).appendingPathComponent("index.sqlite")
+    defer {try? FileManager.default.removeItem(at:url.deletingLastPathComponent())}
+    let disk=CatalogDiskIndex(url:url),profile=ServerProfile(indexObjectDefinitions:true)
+    let server=ConnectedServer(profile:profile,password:"",diskIndex:disk,objectIndexService:CatalogIndexService(index:disk),completionIndexService:SQLCatalogService(index:disk))
+    server.databases=[CatalogItem(id:1,name:"master")]
+    var created=false,inventoryReads=0,bodyReads=0
+    let body="CREATE VIEW dbo.NewView AS SELECT 1 AS ID;"
+    server.asyncCatalogFixture={sql in
+      if sql.contains("StudioObjectDefinitionInventory") {
+        inventoryReads+=1
+        try await Task.sleep(for:.milliseconds(20))
+        return output(created ? [["44","dbo","NewView","V","stamp","0"]]:[])
+      }
+      bodyReads+=1
+      return output([["44",body,"1","1","0",nil,String(body.utf16.count*2)]])
+    }
+    await server.definitionIndex.configure()
+    server.definitionIndex.refresh();try await wait(server.definitionIndex)
+    #expect(inventoryReads == 1)
+    created=true
+    server.definitionIndex.refreshAfterDDL(database:"master")
+    server.definitionIndex.refreshAfterDDL(database:"master")
+    try await wait(server.definitionIndex)
+    #expect(inventoryReads == 3 && bodyReads == 1)
+    server.online=false
+    #expect(try await server.definitionIndex.cached(database:"master",id:44).sql.contains("NewView"))
+  }
+  @Test func offlineTablePreviewIncludesOnlyItsIndexedTriggerScripts() async throws {
+    let url=URL(fileURLWithPath:"/tmp/TriggerPreview-"+UUID().uuidString).appendingPathComponent("index.sqlite")
+    defer {try? FileManager.default.removeItem(at:url.deletingLastPathComponent())}
+    let disk=CatalogDiskIndex(url:url)
+    let profile=ServerProfile(visibleDatabases:["master"],indexObjectDefinitions:true)
+    let server=ConnectedServer(profile:profile,password:"",diskIndex:disk,objectIndexService:CatalogIndexService(index:disk),completionIndexService:SQLCatalogService(index:disk))
+    server.online=false
+    await server.definitionIndex.configure()
+    let lease=try #require(try await disk.configureDefinitions(owner:server.id,enabled:true))
+    let scope=CatalogDiskIndex.scope(profile:profile,database:"master")
+    let values=[IndexedObjectDefinition(id:10,schema:"dbo",name:"T",type:"U",sql:"CREATE TABLE dbo.T(ID int);"),IndexedObjectDefinition(id:11,schema:"dbo",name:"tr",type:"TR",sql:"CREATE TRIGGER dbo.tr ON dbo.T AFTER INSERT AS SELECT 1;",parentID:10),IndexedObjectDefinition(id:12,schema:"dbo",name:"other",type:"TR",sql:"UNRELATED",parentID:99)]
+    try await disk.saveDefinitions(values,owner:server.id,lease:lease,scope:scope,generation:disk.generation(scope:scope))
+    let result=try await server.definitionIndex.cached(database:"master",id:10)
+    #expect(result.sql.contains("GO\nCREATE TRIGGER dbo.tr") && !result.sql.contains("UNRELATED"))
+    #expect(try await disk.definition(scope:scope,id:10)?.sql == values[0].sql)
+  }
   @Test func incrementalIndexOfflineReadAndLiveOpenNeverFallsBack() async throws {
     let url = URL(fileURLWithPath: "/tmp/DefinitionController-" + UUID().uuidString)
       .appendingPathComponent("index.sqlite")
