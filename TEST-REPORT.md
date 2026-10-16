@@ -1,3 +1,16 @@
+## v0.2.162 yayın hazırlığı — 16 Ekim 2026
+
+- Derleme 163; tamamlanmış 35 benzersiz Profiler testi ve Release derlemesi yeniden kullanılır. Kullanıcının tekrar test yapmadan yayın tercihiyle yalnız exact v0.2.162 tag paket testi atlanır; imza/helper/hash/manifest/feed kontrolleri korunur.
+
+## 16 Ekim 2026 — Profiler SQL sekmesi ve sunucu oturumu yönetimi (yerel)
+
+- SQL önizlemesindeki Kopyala yanında Yeni Sekmede Aç: seçili retained SQL’ler GO ile ayrılır, tek ortak DB varsa bu DB seçilir; yeni query idle açılır, otomatik SQL/connection çalışmaz. Workbench callback’i zayıf sahiplik taşır.
+- Sunucu Oturumları açık kullanıcı eyleminde ayrı ODBC bağlantısıyla, 10 sn / 501 sentinel satır / 512 KB sınırında okunur. MSSQLStudio_Profiler_ + 32 hex UUID adları, etkin/durmuş durum ve sunucu başlangıç zamanı gösterilir. Prefix diğer kullanıcıların izlemelerini de kapsayabilir; sahiplik iddiası yapılmaz. Seçili exact adı kaldırma, isim ve ring buffer kaybını gösteren onay ister; mevcut pencerenin oturumu bu yoldan kaldırılamaz. Otomatik temizleme/sahiplenme yoktur; kısmi/hatalı liste önceki snapshot’ı korur. Canlı capture worker’ı paylaşılmaz.
+- Pencere X/Command-W davranışı incelendi: Arka Planda İzle yakalamayı sürdürür; Durdur ve Kapat yalnız başarılı DROP sonrasında kapatır. Zorla kapanma/ağ kaybı oturumu sunucuda bırakabilir. Mevcut stop fiziksel okuma/temizlik hatası regresyonları korundu.
+- `/tmp/mssql-profiler-sessions-tests.log`: 23 native test/4 suite + 11 core test/3 suite geçti. `/tmp/mssql-profiler-sessions-final-tests.log`: yeni idle query aktarımı dahil 3 native + 1 core oturum testi geçti; toplam benzersiz 35 Profiler testi. İlk yeni query assertion’ında fixture’ın ConnectedServer.online varsayılanını false kurmadığı saptandı ve fixture düzeltildi; ürün ağ davranışı değiştirilmedi.
+- `/tmp/mssql-profiler-sessions-release.log`: izole imzasız Release BUILD SUCCEEDED. Xcode/SwiftPM kaynak eşliği, mimari ve diff denetimi geçti. Minimum/geniş açık/koyu ana Profiler native layout regresyonları geçti; yeni oturum popup’ı canlı SQL Server ile veya gerçek mouse etkileşimiyle doğrulanmadı. Yayın yapılmadı.
+- Microsoft referansları: [XE session tanımları ve durum DMV’leri](https://learn.microsoft.com/en-us/sql/relational-databases/extended-events/extended-events-tools), [sys.dm_xe_sessions create_time](https://learn.microsoft.com/en-us/sql/relational-databases/system-dynamic-management-views/sys-dm-xe-sessions-transact-sql).
+
 ## v0.2.161 public yayın doğrulaması — 16 Ekim 2026
 
 - Sürüm **0.2.161 / derleme 162**, kaynak `fab614898cf2cee7e62c8c4a8b339384b0027a97`; [public/latest yayın](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.161), [Actions 38944619478](https://github.com/erhanulas/MSSQLStudio/actions/runs/38944619478) başarılı. Paket test adımı bu exact tag için kullanıcı tercihiyle atlandı; önceki bölümdeki tamamlanmış 21 native + 10 core Profiler testi ve Release kanıtı yeniden kullanıldı.

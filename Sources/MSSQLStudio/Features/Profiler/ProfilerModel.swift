@@ -24,6 +24,7 @@ private actor ProfilerConnection {
   let serverName:String
   let serverID:UUID
   let choices:ProfilerChoicesModel
+  let sessions:ProfilerSessionsModel
   @Published var configuration=SQLProfiler.Configuration()
   @Published private(set) var events:[SQLProfiler.Event]=[]
   @Published var displayFilter=SQLProfilerFiltering.Filter() {didSet {scheduleProjection(debounce:true)}}
@@ -56,6 +57,7 @@ private actor ProfilerConnection {
   }
   init(server:ConnectedServer,executor:Executor?=nil,disconnect:(@Sendable () async -> Void)?=nil,interval:Duration = .milliseconds(ProfilerModel.defaultReadIntervalMilliseconds),explorerChoices:(()->ProfilerChoicesModel.ExplorerSnapshot)?=nil) {
     serverName=server.profile.name;serverID=server.id;self.interval=interval
+    sessions=ProfilerSessionsModel(server:server)
     choices=ProfilerChoicesModel(server:server,explorer:explorerChoices)
     let connection=ProfilerConnection(profile:server.profile,password:server.password)
     self.executor=executor ?? {sql in try await connection.execute(sql)}

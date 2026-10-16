@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.162",
+    "date": "2026-10-16",
+    "title": "Profiler SQL sekmesi ve sunucu oturumları",
+    "changes": [
+      "Profiler SQL önizlemesine Yeni Sekmede Aç eklendi. Seçili olaylar GO ile ayrılarak yeni sorguya aktarılır; SQL otomatik çalıştırılmaz.",
+      "Sunucu Oturumları ile MSSQL Studio prefix’li etkin ve durmuş izlemeler, başlangıç zamanlarıyla listelenebilir. Seçilen oturum açık onayla kaldırılabilir; diğer kullanıcıların etkin izlemeleri de listede bulunabilir.",
+      "Bu pencerenin etkin oturumu kendi Durdur düğmesiyle yönetilir. Pencere kapatılırken Durdur ve Kapat sunucu temizliğini bekler; Arka Planda İzle yakalamayı sürdürür."
+    ]
+  },
+  {
     "version": "0.2.161",
     "date": "2026-10-16",
     "title": "Profiler listesini koruma ve daha hızlı izleme",

@@ -5,6 +5,8 @@ import SQLServerKit
 struct ProfilerPanel:View {
   @ObservedObject var model:ProfilerModel
   let background:()->Void
+  var openQuery:(([SQLProfiler.Event])->Void)?=nil
+  @State private var showSessions=false
   @State private var selected:Set<UInt64>=[]
   @State private var selectedClient:SQLProfilerFiltering.Client.Key?
   @State private var showClients=false
@@ -45,6 +47,9 @@ struct ProfilerPanel:View {
           .buttonStyle(StudioSecondaryButton())
           .studioHelp("Pencereyi gizler. İzleme ve olay toplama devam eder; üstteki Profiler düğmesiyle geri açın.")
       }
+          Button {showSessions.toggle();if showSessions {Task {await model.sessions.refresh()}}} label:{Label("Sunucu Oturumları",systemImage:"list.bullet.rectangle")}
+            .buttonStyle(StudioSecondaryButton())
+            .popover(isPresented:$showSessions) {ProfilerSessionsPanel(model:model.sessions,currentSession:model.sessionName).studioPanel()}
           ProfilerFilters(model:model,showClients:$showClients)
         }.padding(8).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
       } content: {
@@ -69,6 +74,8 @@ struct ProfilerPanel:View {
             Spacer()
             if preview.busy {ProgressView().controlSize(.small)}
             Button {NSPasteboard.general.clearContents();NSPasteboard.general.setString(ProfilerExport.sql(selectedEvents),forType:.string)} label:{Label("SQL’i Kopyala",systemImage:"doc.on.doc")}.buttonStyle(StudioSecondaryButton()).disabled(selectedEvents.isEmpty)
+            Button {openQuery?(selectedEvents)} label:{Label("Yeni Sekmede Aç",systemImage:"plus.rectangle.on.rectangle")}
+              .buttonStyle(StudioSecondaryButton()).disabled(selectedEvents.isEmpty || openQuery==nil)
           }
           if let event=selectedEvent,!event.message.isEmpty {Text(event.message).foregroundStyle(Color(nsColor:StudioTheme.warning)).textSelection(.enabled).lineLimit(3)}
           SQLReadOnlyPreview(sql:preview.sql,lexicalSnapshot:preview.tokens)
