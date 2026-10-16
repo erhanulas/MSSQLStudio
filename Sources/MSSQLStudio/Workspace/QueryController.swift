@@ -23,9 +23,7 @@ import SwiftUI
   private var optionsPopover: NSPopover?
   private var selectedRefreshSeconds = 0
   private var defaultRefreshApplied = false
-  private let definitionStatus=NSTextField(wrappingLabelWithString: "")
-  private let definitionSpinner=NSProgressIndicator()
-  private let definitionOverlay=NSStackView()
+  private var definitionPresentation:DefinitionLoadingPresentation?
   private var offlinePreviewHost: NSHostingView<InlineOfflineDefinitionView>?
   private let editor: EditorController
   private let resultTabs = NSTabView()
@@ -183,18 +181,7 @@ import SwiftUI
       editor.surface.topAnchor.constraint(equalTo: editorHeaderSlot.bottomAnchor),
       editor.surface.bottomAnchor.constraint(equalTo: editorPane.bottomAnchor),
     ])
-    definitionSpinner.style = .spinning;definitionSpinner.controlSize = .small
-    definitionStatus.setAccessibilityIdentifier("definitionStatus")
-    definitionStatus.alignment = .center
-    definitionOverlay.orientation = .vertical;definitionOverlay.spacing=12
-    definitionOverlay.addArrangedSubview(definitionSpinner);definitionOverlay.addArrangedSubview(definitionStatus)
-    definitionOverlay.translatesAutoresizingMaskIntoConstraints=false
-    editorPane.addSubview(definitionOverlay)
-    NSLayoutConstraint.activate([
-      definitionOverlay.centerXAnchor.constraint(equalTo:editor.surface.centerXAnchor),
-      definitionOverlay.centerYAnchor.constraint(equalTo:editor.surface.centerYAnchor),
-      definitionOverlay.widthAnchor.constraint(lessThanOrEqualTo:editorPane.widthAnchor,multiplier:0.8),
-    ])
+    definitionPresentation=DefinitionLoadingPresentation(in:editorPane,relativeTo:editor.surface)
     placeEditorToolbar(in:editorHeaderSlot)
     resultTabs.delegate = self
     resultTabs.tabViewType = .noTabsNoBorder
@@ -727,11 +714,7 @@ import SwiftUI
     submitModuleButton.isEnabled = document.canSubmitModule && !checkingModuleSubmission
     guard isViewLoaded else { return }
     let pending=document.definitionLoading || document.definitionError != nil
-    definitionOverlay.isHidden = !pending
-    definitionSpinner.isHidden = !document.definitionLoading
-    if document.definitionLoading {definitionSpinner.startAnimation(nil)} else {definitionSpinner.stopAnimation(nil)}
-    definitionStatus.stringValue=document.definitionError ?? "Nesne tanımı yükleniyor…"
-    definitionStatus.textColor=document.definitionError == nil ? StudioTheme.muted:.systemRed
+    definitionPresentation?.update(document)
     if let preview=document.offlinePreview {
       let root=InlineOfflineDefinitionView(preview:preview,back:{[weak self] in
         guard let self else {return};document.offlinePreview=nil;document.changed?();focusEditor()

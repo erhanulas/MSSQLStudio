@@ -218,6 +218,10 @@ import SwiftUI
 /// Shared presentation for legacy confirmations; button semantics stay native.
 @MainActor final class StudioAlert:NSAlert {
   var framePersistenceRole:String?
+  private var desiredModalFrame:NSRect?
+  @objc private func restoreModalFrame(_ timer:Timer) {
+    if let desiredModalFrame {window.setFrame(desiredModalFrame,display:true)}
+  }
   @discardableResult override func runModal()->NSApplication.ModalResponse {
     layout();window.animationBehavior = .none;window.backgroundColor=StudioTheme.canvas
     func style(_ view:NSView) {
@@ -230,17 +234,17 @@ import SwiftUI
     if let content=window.contentView {style(content)}
     let parent=NSApp.keyWindow ?? NSApp.mainWindow
     if let parent,parent !== window {parent.addChildWindow(window,ordered:.above)}
-    var placementObserver:NSObjectProtocol?
+    var placementTimer:Timer?
     if let role=framePersistenceRole {
       StudioWindowPlacement.restore(window,role:role,owner:parent)
-      // NSAlert may position its window again when entering its modal loop.
-      let alertWindow=window
-      placementObserver=NotificationCenter.default.addObserver(forName:NSWindow.didBecomeKeyNotification,object:alertWindow,queue:.main) {_ in
-        MainActor.assumeIsolated {StudioWindowPlacement.restore(alertWindow,role:role,owner:parent)}
-      }
+      // NSAlert positions itself again before its modal loop. Keep the desired
+      // frame before native autosave sees that move, then restore once in that loop.
+      desiredModalFrame=window.frame
+      let timer=Timer(timeInterval:0,target:self,selector:#selector(restoreModalFrame(_:)),userInfo:nil,repeats:false)
+      placementTimer=timer;RunLoop.main.add(timer,forMode:.modalPanel)
     }
     defer {
-      if let placementObserver {NotificationCenter.default.removeObserver(placementObserver)}
+      placementTimer?.invalidate();desiredModalFrame=nil
       if let role=framePersistenceRole {StudioWindowPlacement.save(window,role:role);window.setFrameAutosaveName("")}
       window.parent?.removeChildWindow(window)
     }

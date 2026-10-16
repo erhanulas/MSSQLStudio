@@ -3,7 +3,43 @@ import SwiftUI
 import Testing
 @testable import MSSQLStudio
 
+@MainActor private final class AlertPositionProbe:NSObject {
+  let alert:StudioAlert
+  var moveTo:NSPoint?
+  var origin:NSPoint?
+  init(_ alert:StudioAlert,moveTo:NSPoint?=nil) {self.alert=alert;self.moveTo=moveTo}
+  @objc func fire(_ timer:Timer) {
+    if let moveTo {alert.window.setFrameOrigin(moveTo)} else {origin=alert.window.frame.origin}
+    NSApp.stopModal(withCode:.abort)
+  }
+}
+
 @MainActor @Suite(.serialized) struct WindowInteraction123Tests {
+  @Test func modalAlertRestoresMovedPositionAcrossNewInstances() throws {
+    _=NSApplication.shared
+    let role="update-alert-test-\(UUID())"
+    defer {NSWindow.removeFrame(usingName:StudioWindowPlacement.name(role))}
+    let screen=try #require(NSScreen.main?.visibleFrame)
+    let position=NSPoint(x:screen.minX+48,y:screen.minY+48)
+    func make(_ version:String)->StudioAlert {
+      let alert=StudioAlert();alert.framePersistenceRole=role
+      alert.messageText="MSSQL Studio \(version) kuruluma hazır"
+      alert.addButton(withTitle:"Vazgeç")
+      return alert
+    }
+    let first=make("0.0.1")
+    let mover=AlertPositionProbe(first,moveTo:position)
+    let move=Timer(timeInterval:0.15,target:mover,selector:#selector(AlertPositionProbe.fire(_:)),userInfo:nil,repeats:false)
+    RunLoop.main.add(move,forMode:.modalPanel)
+    _=first.runModal();move.invalidate();first.window.orderOut(nil)
+    let second=make("0.0.2")
+    let probe=AlertPositionProbe(second)
+    let inspect=Timer(timeInterval:0.15,target:probe,selector:#selector(AlertPositionProbe.fire(_:)),userInfo:nil,repeats:false)
+    RunLoop.main.add(inspect,forMode:.modalPanel)
+    _=second.runModal();inspect.invalidate();second.window.orderOut(nil)
+    let origin=try #require(probe.origin)
+    #expect(abs(origin.x-position.x)<1 && abs(origin.y-position.y)<1)
+  }
   @Test func auxiliaryWindowRestoresMovedAndResizedFrameAfterRecreation() throws {
     _=NSApplication.shared
     let role="placement-test-\(UUID())"

@@ -89,6 +89,8 @@ import UniformTypeIdentifiers
   var servers: [ConnectedServer] = []
   var documents: [QueryDocument] = []
   var active: QueryDocument?
+  var editorCatalogTasks:[UUID:Task<Void,Never>]=[:]
+  var editorCatalogRequests:[UUID:UUID]=[:]
   var changed: (() -> Void)?
   var history: [QueryRecord] = []
   var closedTabs: [QueryRecord] = []
@@ -140,7 +142,7 @@ import UniformTypeIdentifiers
     catch {connectionErrors[profile.id]=error.localizedDescription;throw error}
   }
   private func performConnect(_ profile:ServerProfile,password:String,save:Bool) async throws -> ConnectedServer {
-    if let old = servers.first(where: { $0.id == profile.id }) {
+    if let old = servers.first(where: { $0.id == profile.id }) ?? documents.first(where:{$0.server.id==profile.id})?.server {
       guard !old.updatingProfile else {throw SQLFailure("Bağlantı bilgileri kaydediliyor.")}
       let previousProfile=old.profile,previousDatabases=old.databases
       let reconnect =
@@ -202,6 +204,8 @@ import UniformTypeIdentifiers
         old.databases = profile.visibleItems(from: items)
         await old.synchronizeCatalogVisibility(available:items,previousProfile:previousProfile,previousDatabases:previousDatabases)
         old.online = true; old.startupError = nil
+        if !servers.contains(where:{$0 === old}) {servers.append(old)}
+        synchronizeEditorCatalogs(old)
         old.prepareCatalogIndexes()
         if save || old.remembered { rememberExplorer(profile.id, selected: true) }
         old.remembered = old.remembered || save
@@ -261,7 +265,7 @@ import UniformTypeIdentifiers
     defer { server.reconnecting = false; changed?() }
     do {
       if let reconnectFixture=server.reconnectFixture {
-        try await reconnectFixture(); server.online=true; return
+        try await reconnectFixture(); server.online=true; synchronizeEditorCatalogs(server); return
       }
       if !servers.contains(where:{$0 === server}) {servers.append(server)}
       _ = try await connect(server.profile, password: server.password, save: false)
@@ -309,6 +313,7 @@ import UniformTypeIdentifiers
           server.databases = server.profile.visibleItems(from:available)
           await server.synchronizeCatalogVisibility(available:available)
           server.online = true; server.startupError = nil; server.generation = UUID()
+          synchronizeEditorCatalogs(server)
           server.prepareCatalogIndexes()
           changed?()
           completeExplorerConnection(server,previousActive:activeBefore)
@@ -332,11 +337,13 @@ import UniformTypeIdentifiers
       server: server, database: database ?? server.profile.database,
       title: title ?? "SQLQuery\(nextQueryNumber).sql")
     doc.connected = { [weak self, weak server] in
-      guard let self, let server, self.servers.contains(where: { $0 === server }),
-        !server.online, !server.reconnecting, self.connectionActivities[server.id] == nil else { return }
-      Task { [weak self, weak server] in
-        guard let self, let server, self.servers.contains(where: { $0 === server }), !server.online else { return }
-        await self.reconnectExplorer(server)
+      guard let self,let server,self.servers.contains(where:{$0 === server}),!server.reconnecting,self.connectionActivities[server.id]==nil else {return}
+      Task { [weak self,weak server] in
+        guard let self,let server else {return}
+        if server.online {await server.checkExplorerHealth()}
+        guard self.servers.contains(where:{$0 === server}),!server.updatingProfile else {return}
+        if !server.online {await self.reconnectExplorer(server)}
+        else {self.synchronizeEditorCatalogs(server)}
       }
     }
     nextQueryNumber += 1

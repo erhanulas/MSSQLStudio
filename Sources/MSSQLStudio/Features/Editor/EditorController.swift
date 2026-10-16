@@ -619,6 +619,7 @@ import SQLServerKit
     guard let parts=DefinitionReference.parts(in:document.sql,at:offset) else {return}
     if !document.server.online {document.openDefinitionNamed?(parts);return}
     if let catalog=document.intelligenceCatalog,document.catalogDatabase == document.database,let symbol=catalog.resolve(parts) {document.openDefinition?(symbol)}
+    else {document.openDefinitionNamed?(parts)}
   }
   func insertSQLAtCaret(_ text:String) throws {
     guard document.offlinePreview == nil,!document.definitionLoading,document.definitionError == nil,!editor.hasMarkedText() else {throw SQLFailure("SQL’e dönün ve metin girişini tamamlayın.")}

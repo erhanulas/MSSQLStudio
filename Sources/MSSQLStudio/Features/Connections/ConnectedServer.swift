@@ -29,7 +29,7 @@ import UniformTypeIdentifiers
       }
       return
     }
-    guard !Task.isCancelled,online,!reconnecting,catalogFixture == nil || healthCheckFixture != nil else {return}
+    guard !Task.isCancelled,online,!reconnecting,(catalogFixture == nil && asyncCatalogFixture == nil) || healthCheckFixture != nil else {return}
     checkingHealth=true
     defer {checkingHealth=false}
     let token=generation, connection=metadata
@@ -97,6 +97,9 @@ import UniformTypeIdentifiers
   func catalogScopeUsage(database:String) async throws -> CatalogScopeUsage {
     if let application=visibilityApplication {await application.task.value}
     return try await diskIndex.scopeUsage(scope:CatalogDiskIndex.scope(profile:profile,database:database))
+  }
+  var canRefreshEditorCatalog:Bool {
+    (catalogFixture==nil && asyncCatalogFixture==nil && reconnectFixture==nil) || completionIndexService !== SQLCatalogService.shared
   }
   func cachedCompletionCatalog(database:String) async throws -> SQLIntelligence.Catalog? {
     if let application=visibilityApplication {await application.task.value}

@@ -4,6 +4,20 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 extension WorkbenchController {
+  func openDefinitionReference(_ parts:[String],document:QueryDocument) {
+    let server=document.server,active=state.active
+    guard server.online else {openOfflineDefinition(named:parts,server:server,database:document.database,in:document);return}
+    let request=UUID(),generation=server.generation,database=document.database,sql=document.sql,selection=document.selectedRange
+    document.offlinePreviewRequest=request;document.definitionTask?.cancel()
+    document.definitionTask=Task { [weak self,weak document] in
+      guard let self,let document else {return}
+      defer {if document.offlinePreviewRequest==request {document.definitionTask=nil}}
+      await document.loadSymbols()
+      guard !Task.isCancelled,state.active === active,server.online,server.generation==generation,document.database==database,document.sql==sql,document.selectedRange==selection,document.offlinePreviewRequest==request,state.documents.contains(where:{$0 === document}) else {return}
+      if let catalog=document.intelligenceCatalog,document.catalogDatabase==database,let symbol=catalog.resolve(parts) {openEditorDefinition(symbol,document:document)}
+      else {state.showError(document.catalogError ?? "Nesne katalogda bulunamadı. Veritabanını ve nesne adını kontrol edin.")}
+    }
+  }
   func openEditorDefinition(_ symbol: CatalogSymbol, document: QueryDocument) {
     let server=document.server,db=document.database,generation=document.server.generation
     if !server.online {openOfflineDefinition(named:[symbol.schema,symbol.name],server:server,database:db,in:document);return}

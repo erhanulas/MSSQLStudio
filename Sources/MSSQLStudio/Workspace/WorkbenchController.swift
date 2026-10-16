@@ -421,7 +421,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
           guard let self, let doc else { return }; self.openEditorDefinition(symbol,document:doc)
         }
         doc.openDefinitionNamed = { [weak self,weak doc] parts in
-          guard let self,let doc else {return};openOfflineDefinition(named:parts,server:doc.server,database:doc.database,in:doc)
+          guard let self,let doc else {return};openDefinitionReference(parts,document:doc)
         }
         doc.openOfflineReference = { [weak self,weak doc] parts,server,db in
           guard let self,let doc else {return};openOfflineDefinition(named:parts,server:server,database:db,in:doc)

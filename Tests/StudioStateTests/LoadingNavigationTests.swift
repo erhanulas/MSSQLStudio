@@ -4,6 +4,33 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct LoadingNavigationTests {
+  @Test func definitionLoadingUsesSharedCardInBothThemesAndRemovesItOnSuccess() throws {
+    _=NSApplication.shared
+    let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      let server=ConnectedServer(profile:ServerProfile(name:"Development"),password:"")
+      server.online=false
+      let doc=QueryDocument(server:server,database:"Demo",title:"ALTER · Example")
+      doc.definitionSymbol=CatalogSymbol(schema:"dbo",name:"Example",columns:[],kind:"SQL_STORED_PROCEDURE")
+      doc.definitionLoading=true
+      let controller=QueryController(document:doc)
+      let window=NSWindow(contentViewController:controller);window.isReleasedWhenClosed=false
+      window.setContentSize(NSSize(width:850,height:560));window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
+      defer {window.close()}
+      controller.view.layoutSubtreeIfNeeded();controller.viewDidLayout()
+      func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+      let card=try #require(descendants(controller.view).compactMap {$0 as? StudioLoadingCard}.first)
+      #expect(card.bounds.width>=280 && card.bounds.height>=100)
+      let rect=controller.view.convert(card.bounds,from:card)
+      #expect(controller.view.bounds.contains(rect))
+      #expect(card.hitTest(.zero)==nil && card.phase.stringValue=="Nesne tanımı yükleniyor…")
+      let image=try #require(controller.view.bitmapImageRepForCachingDisplay(in:controller.view.bounds));controller.view.cacheDisplay(in:controller.view.bounds,to:image)
+      try image.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-definition-loading-"+theme+".png"))
+      doc.definitionLoading=false;doc.sql="ALTER PROCEDURE dbo.Example AS SELECT 1;";controller.update()
+      #expect(!descendants(controller.view).contains {$0 is StudioLoadingCard})
+    }
+  }
   @Test func definitionOpensImmediatelyDeduplicatesAndPreservesEdits() async throws {
     _=NSApplication.shared
     let server=ConnectedServer(profile:ServerProfile(visibleDatabases:[]),password:"");server.online=true
@@ -21,6 +48,8 @@ import Testing
     func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
     let status=try #require(descendants(host.view).compactMap {$0 as? NSTextField}.first {$0.accessibilityIdentifier() == "definitionStatus"})
     #expect(status.stringValue == "Nesne tanımı yükleniyor…" && !status.isHiddenOrHasHiddenAncestor)
+    let loading=try #require(descendants(host.view).compactMap {$0 as? StudioLoadingCard}.first)
+    #expect(loading.phase === status && loading.hitTest(.zero)==nil && loading.progress.isIndeterminate)
     let textView=try #require(descendants(host.view).compactMap {$0 as? SQLTextView}.first)
     #expect(!textView.isEditable)
     host.openEditorDefinition(symbol,document:source)
@@ -55,6 +84,10 @@ import Testing
     let failed=try #require(state.active)
     for _ in 0..<100 where failed.definitionLoading {try await Task.sleep(for:.milliseconds(10))}
     #expect(failed.definitionError == "Fixture permission denied" && !failed.definitionLoading)
+    func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+    #expect(!descendants(host.view).contains {$0 is StudioLoadingCard})
+    let errorLabel=try #require(descendants(host.view).compactMap {$0 as? NSTextField}.first {$0.accessibilityIdentifier()=="definitionStatus"})
+    #expect(errorLabel.stringValue=="Fixture permission denied" && !errorLabel.isHiddenOrHasHiddenAncestor)
     #expect(state.active === failed && failed.sql.isEmpty && !failed.dirty)
   }
   @Test func resolvedIdentityReusesExistingEditedObjectTabAndTablesLoadCreate() async throws {

@@ -231,7 +231,7 @@ extension WorkbenchController {
         var installerOpened=false
         defer {if !installerOpened {try? FileManager.default.removeItem(at:prepared.directory)}}
         progress.close()
-        let alert=StudioAlert();alert.messageText="MSSQL Studio \(prepared.version) kuruluma hazır"
+        let alert=StudioAlert();alert.framePersistenceRole="updateInstallationConfirmation";alert.messageText="MSSQL Studio \(prepared.version) kuruluma hazır"
         alert.informativeText="macOS Kurulum penceresinde kurulumu tamamlayın. Yeniden açmayı seçerseniz yeni sürüm doğrulandıktan sonra uygulama otomatik açılır; kurulum iptal edilirse açılmaz. Kayıtlı bağlantılarınız korunur."
         alert.addButton(withTitle:"Güncelle ve Yeniden Aç")
         alert.addButton(withTitle:"Güncelle ve Kapat")

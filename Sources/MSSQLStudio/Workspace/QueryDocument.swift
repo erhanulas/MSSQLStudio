@@ -98,6 +98,12 @@ struct ObjectEditorKey: Codable, Equatable {
     NotificationCenter.default.post(name:.init("sqlCatalogChanged"),object:self)
     changed?()
   }
+  func applyConnectedCatalog(_ catalog:SQLIntelligence.Catalog,database:String,generation:UUID,verified:Bool) {
+    guard self.database==database,server.generation==generation,server.online,server.allowsCatalogIndex(database) else {return}
+    symbolRequest=UUID();intelligenceCatalog=catalog;catalogDatabase=database
+    symbols=catalog.snapshot.symbols;catalogVerified=verified;catalogError=nil
+    NotificationCenter.default.post(name:.init("sqlCatalogChanged"),object:self);changed?()
+  }
   var elapsed = 0.0
   var rowCount = 0
   private(set) var resultReadStoppedEarly = false
@@ -209,7 +215,7 @@ struct ObjectEditorKey: Codable, Equatable {
         publish(cached,verified:!force && cached.fresh)
         if !force && cached.fresh {return}
       }
-      guard server.online,server.catalogIndexRevision==indexRevision,server.allowsCatalogIndex(database) else {return}
+      guard server.online,server.canRefreshEditorCatalog,server.catalogIndexRevision==indexRevision,server.allowsCatalogIndex(database) else {return}
       let catalog = try await server.refreshCompletionCatalog(database:database,force:force)
       publish(catalog,verified:true)
     } catch {

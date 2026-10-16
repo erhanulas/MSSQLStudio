@@ -70,7 +70,7 @@ enum DefinitionReference {
 extension WorkbenchController {
   func openOfflineDefinition(named parts:[String], server:ConnectedServer, database:String, in document:QueryDocument) {
     guard !server.online else {return}
-    let request=UUID();document.offlinePreviewRequest=request
+    let request=UUID(),generation=server.generation,sourceDatabase=document.database;document.offlinePreviewRequest=request
     Task { [weak self,weak document] in
       guard let self,let document else {return}
       do {
@@ -84,11 +84,11 @@ extension WorkbenchController {
         let candidates=preferred.isEmpty ? matches:preferred
         guard candidates.count == 1,let item=candidates.first else {throw SQLFailure(candidates.isEmpty ? "Bu nesnenin çevrimdışı tanımı indekslenmemiş." : "Nesne adı belirsiz; şema adıyla tekrar deneyin.")}
         let value=try await server.definitionIndex.cached(database:database,id:item.id)
-        guard state.documents.contains(where:{$0 === document}),document.offlinePreviewRequest == request else {return}
+        guard !server.online,server.generation==generation,document.database==sourceDatabase,state.documents.contains(where:{$0 === document}),document.offlinePreviewRequest == request else {return}
         document.offlinePreview=OfflineDefinitionPreview(server:server,database:database,value:value)
         document.changed?()
       } catch is CancellationError {}
-      catch {if document.offlinePreviewRequest == request {state.showError(error.localizedDescription)}}
+      catch {if !server.online,server.generation==generation,document.offlinePreviewRequest == request {state.showError(error.localizedDescription)}}
     }
   }
 }

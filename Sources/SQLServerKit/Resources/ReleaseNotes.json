@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.171",
+    "date": "2026-10-17",
+    "title": "Bağlantı ve nesne açma iyileştirmeleri",
+    "changes": [
+      "Explorer bağlandığında kurtarılan ve açık SQL sekmelerinin tamamlama ve parametre bilgileri yenilenir.",
+      "SQL sekmesinden bağlandığınızda Explorer bağlantı durumu da güncellenir.",
+      "Bağlantı açıkken nesneye gitmenin yanlışlıkla çevrimdışı önizleme açması düzeltildi.",
+      "Nesne tanımı açılırken yapılan işlemi gösteren ortak yükleme görünümü kullanılır.",
+      "Güncelleme kurulumu onay penceresi taşıdığınız konumu hatırlar."
+    ]
+  },
+  {
     "version": "0.2.170",
     "date": "2026-10-17",
     "title": "Arama kutularında yazı görünümü düzeltildi",

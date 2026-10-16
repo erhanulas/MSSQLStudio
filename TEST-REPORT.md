@@ -3224,3 +3224,24 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Dört asset indirildi; GitHub digest/manifest SHA-256 eşliği, ZIP/PKG payload exact sürüm/binary/notlar, app/helper strict/deep sabit imza, frozen helper byte/archive eşliği ve Icon Composer varyantları doğrulandı. ZIP `be70d573f17726b99010b08c2c9f8defa16926bbc3d21cc48f5ae5797ecd3594`; PKG `368389c08205da9ab8b998b4139f7db076554f47c4076d464e6a0d0e435ee288`.
 - İndirilen signed app `--check-update-feed 0.2.170` Foundation/URLSession kontrolü geçti; public exact-tag not kaynağı yerel kaynakla aynı. Kanıt `/tmp/MSSQLStudio-170-public-verification/verification.json`, `verification.log`, `foundation-feed.log`, `public-notes.json`, release/latest/run/jobs JSON. Gerçek Installer çalıştırılmadı; kurulu uygulama ve kullanıcı oturumları değiştirilmedi.
 - Yayın: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.170
+
+## 2026-10-17 — Nesne tanımı açılışında ortak yükleme kartı
+
+- Command+B/Command+tıklama ortak openEditorDefinition yolunun definitionLoading sunumu StudioLoadingCard’a geçirildi. DefinitionLoadingPresentation sunucu/DB/nesne bağlamı ve işlem metnini gösterir; task, SQL, generation ve sekme sahipliği QueryDocument/mevcut gezinme yolunda kaldı. Kart hit test almaz; success/error geçişinde kaldırılıp animasyonu durdurulur. Hata definitionStatus native alanında korunur, yeni ağ/otomatik SQL veya minimum bekleme eklenmedi.
+- `/tmp/mssql-definition-loading-verified-tests.log`: LoadingNavigationTests + DefinitionClickTests 13 native test/2 suite geçti. Ortak kart, açık/koyu boyut/yerleşim, success cleanup, hata sunumu, erken sekme açılışı/tekilleştirme/editi koruma, kapanmış sekmeye geç yanıt ve tablo tanımı dahil. `/tmp/mssql-definition-loading-verified-release.log`: Release BUILD SUCCEEDED. Xcode kaynak sync/mimari/diff kontrolleri geçti. `/tmp/mssql-definition-loading-{light,dark}.png` incelendi.
+- Native fixture’da büyük constraint sabiti uyarısı kaydedildi; assertion/test başarısızlığı yok. Gerçek kullanıcı uygulaması/oturumu değiştirilmedi, canlı SQL veya public yayın yapılmadı.
+
+## 2026-10-17 — Kuruluma hazır güncelleme onayının konumu
+
+- Güncelleme kuruluma hazır onayı `updateInstallationConfirmation` sabit StudioAlert konum rolüne bağlandı; sürüm başlığı key’e girmez. Native modal testi, yalnız rol eklemenin yetmediğini ve NSAlert’ın açılışta yeniden merkezleyebildiğini yakaladı. StudioAlert istenen frame’i native merkezleme/autosave öncesi yakalar; modalPanel run-loop’ta tek sefer geri uygular. Tekrar odak eski konumu dayatmaz; timer dönüşte temizlenir, son taşınmış frame kaydedilir.
+- `/tmp/mssql-update-alert-position-final-tests.log` ilk gerçek modal restorasyon hatasını yeniden üretti. Son `/tmp/mssql-update-alert-position-confirmed-tests.log`: WindowInteraction123Tests + LoadingNavigationTests 18 native test/2 suite geçti. Modal uyarı taşınıp kapatıldı; farklı sürüm başlıklı yeni instance gerçek native runModal döngüsünde aynı konumda açıldı. İzole UUID autosave anahtarı temizlendi; gerçek güncelleme/Installer başlatılmadı.
+- Test sürücüsünde main dispatch modal döngüde ilerlemediğinden yalnız exact disposable test-helper PID durduruldu; sürücü modalPanel Timer target/action ile düzeltildi. Bu koşu başarı sayılmadı. `/tmp/mssql-update-alert-position-confirmed-release.log`: BUILD SUCCEEDED. Mimari/Xcode kaynak eşliği/diff kontrolü geçti. Kurulu kullanıcı uygulaması veya oturumları değiştirilmedi; public yayın yapılmadı.
+
+## 2026-10-17 — Kurtarılan editör / Explorer katalog eşitlemesi (yayımlanmadı)
+
+- Explorer login/reconnect tamamlanınca açık sorgular DB başına ortak katalog snapshot’ı alır; bağımsız sorgu oturumu açılmaz, SQL ve aktif sekme korunur. Query bağlantı callback’i Explorer sağlık/reconnect ve katalog eşitlemesini tetikler. Açık belgelerin tuttuğu aynı profil server nesnesi yeniden kullanılır.
+- Online nesneye gitme eksik katalog için metadata yolunu bekler; eski offline disk yanıtı bağlantı hazır olduktan sonra salt okunur önizleme açamaz. Async lookup kaynak SQL/seçim/DB/generation/aktif belge değişiminde uygulanmaz.
+- İzole fixture regresyonu: 8 kurtarılan belge / 2 DB için birer katalog okuması; query bağlantısından diğer sekmeye eşitleme; canlı tanım yolunun query çalıştırmadan açılması; stale offline yanıtının engellenmesi.
+- `/tmp/mssql-editor-connection-sync-final-tests.log`: 30 test / 4 suite geçti. Ek query→Explorer regresyonuyla `/tmp/mssql-editor-connection-sync-added-tests.log`: 4 test / 1 suite geçti (önceki 3 test tekrar dahil).
+- `/tmp/mssql-editor-connection-sync-release.log`: Release BUILD SUCCEEDED. Architecture, Xcode kaynak eşliği ve diff whitespace kontrolü geçti.
+- Canlı SQL Server / gerçek kurtarılmış kullanıcı oturumu sınanmadı; kullanıcı uygulaması veya veritabanı değiştirilmedi. Native fixture logundaki mevcut NSLayoutConstraint büyük sabit uyarısı bu kapsamda giderilmedi.
