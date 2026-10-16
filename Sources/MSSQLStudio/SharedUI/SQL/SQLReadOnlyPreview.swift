@@ -56,6 +56,7 @@ import SwiftUI
   private var lastDark:Bool?
   private var lineStarts=[0]
   private var measuredWidth:CGFloat=1
+  private var updatingViewport=false
   override var isFlipped:Bool {true}
   override init(frame:NSRect) {
     ruler=LineNumbers(scrollView:scroll)
@@ -89,7 +90,20 @@ import SwiftUI
     NotificationCenter.default.addObserver(self,selector:#selector(themeChanged),name:StudioTheme.changed,object:nil)
   }
   required init?(coder:NSCoder) {fatalError()}
-  @objc private func scrolled() {ruler.needsDisplay=true}
+  @objc private func scrolled() {
+    // Scroll can expose paragraphs without changing the document frame. Update
+    // TextKit's viewport as well as the gutter, including after source replacement.
+    refreshViewport()
+    ruler.needsDisplay=true
+  }
+  private func refreshViewport() {
+    guard !updatingViewport else {return}
+    updatingViewport=true
+    defer {updatingViewport=false}
+    preview.needsLayout=true
+    preview.layoutSubtreeIfNeeded()
+    preview.textLayoutManager?.textViewportLayoutController.layoutViewport()
+  }
   @objc private func themeChanged() {if let lastSQL {display(lastSQL,lexicalSnapshot:lexicalSnapshot)}}
   override func layout() {super.layout();updateGeometry();ruler.needsDisplay=true}
   private func updateGeometry() {
@@ -128,6 +142,7 @@ import SwiftUI
     updateGeometry()
     if same {preview.selectedRanges=selection;scroll.contentView.scroll(to:origin)}
     else {preview.setSelectedRange(NSRange(location:0,length:0));scroll.contentView.scroll(to:.zero)}
+    refreshViewport()
     scroll.reflectScrolledClipView(scroll.contentView);ruler.needsDisplay=true
   }
 }

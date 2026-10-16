@@ -107,6 +107,60 @@ import Testing
     for _ in 0..<300 where owner.tabSwitcher.previewBusy {try await Task.sleep(for:.milliseconds(3))}
     #expect(owner.tabSwitcher.previewSQL.hasSuffix("-- LAST_LINE_MARKER") && !owner.tabSwitcher.previewTokens.isEmpty)
   }
+  @Test func longPreviewScrollLaysOutFinalLinesAfterRecoloring() throws {
+    _=NSApplication.shared
+    let preview=SQLPreviewView(frame:NSRect(x:0,y:0,width:650,height:320))
+    let window=NSWindow(contentRect:preview.bounds,styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=preview;window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
+    defer {window.close()}
+    let source=String(repeating:"\t\tSELECT \t1 AS value, \t2 AS other;\n",count:12000)+"SELECT 'LAST_LINE_MARKER';"
+    preview.display(source,lexicalSnapshot:[]);preview.layoutSubtreeIfNeeded()
+    preview.display(source,lexicalSnapshot:TSQL.lex(source))
+    let bottom=max(0,preview.textView.frame.height-preview.scroll.contentView.bounds.height)
+    preview.scroll.contentView.scroll(to:NSPoint(x:0,y:bottom));preview.scroll.reflectScrolledClipView(preview.scroll.contentView)
+    preview.displayIfNeeded()
+    let content=try #require(preview.textView.textContentStorage)
+    let viewport=try #require(preview.textView.textLayoutManager?.textViewportLayoutController.viewportRange)
+    let end=content.offset(from:content.documentRange.location,to:viewport.endLocation)
+    #expect(end>=source.utf16.count-30)
+    #expect(preview.textView.string==source)
+    let bitmap=try #require(preview.bitmapImageRepForCachingDisplay(in:preview.bounds))
+    preview.cacheDisplay(in:preview.bounds,to:bitmap)
+    try bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-preview-last-lines.png"))
+  }
+  @Test func incrementalScrollPastLine220KeepsTextVisibleAfterRecoloring() throws {
+    _=NSApplication.shared
+    let mode=StudioTheme.mode;defer {StudioTheme.apply(mode)}
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      let preview=SQLPreviewView(frame:NSRect(x:0,y:0,width:650,height:320))
+      let window=NSPanel(contentRect:preview.bounds,styleMask:[.titled,.nonactivatingPanel],backing:.buffered,defer:false)
+      window.isReleasedWhenClosed=false;window.contentView=preview;window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
+      defer {window.close()}
+      let line="SELECT 123 AS VisibleValue;\n",source=String(repeating:line,count:600)
+      preview.display(source,lexicalSnapshot:[]);preview.layoutSubtreeIfNeeded()
+      let content=try #require(preview.textView.textContentStorage)
+      for row in stride(from:0,through:300,by:10) {
+        preview.scroll.contentView.scroll(to:NSPoint(x:0,y:CGFloat(row)*20))
+        preview.scroll.reflectScrolledClipView(preview.scroll.contentView)
+        if row==210 {preview.display(source,lexicalSnapshot:TSQL.lex(source))}
+        let viewport=try #require(preview.textView.textLayoutManager?.textViewportLayoutController.viewportRange)
+        let start=content.offset(from:content.documentRange.location,to:viewport.location)
+        let end=content.offset(from:content.documentRange.location,to:viewport.endLocation)
+        #expect(start<=row*line.utf16.count && end>=(row+10)*line.utf16.count)
+      }
+      let bitmap=try #require(preview.bitmapImageRepForCachingDisplay(in:preview.bounds))
+      preview.cacheDisplay(in:preview.bounds,to:bitmap)
+      var ink=0
+      for y in 0..<bitmap.pixelsHigh {
+        for x in (bitmap.pixelsWide/4)..<(bitmap.pixelsWide/2) {
+          if let color=bitmap.colorAt(x:x,y:y)?.usingColorSpace(.deviceRGB),let canvas=StudioTheme.editorCanvas.usingColorSpace(.deviceRGB),abs(color.redComponent-canvas.redComponent)+abs(color.greenComponent-canvas.greenComponent)+abs(color.blueComponent-canvas.blueComponent)>0.3 {ink+=1}
+        }
+      }
+      #expect(ink>100)
+      try bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-preview-line300-"+theme+".png"))
+    }
+  }
   @Test func previewFitsBothThemesAndShortcutIsDiscoverable() throws {
     let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}
     #expect(GridShortcuts.binding(.tabSwitcher).key=="\t")

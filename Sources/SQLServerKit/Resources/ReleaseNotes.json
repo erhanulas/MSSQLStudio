@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.172",
+    "date": "2026-10-17",
+    "title": "Uzun SQL önizlemelerinde kesintisiz kaydırma",
+    "changes": [
+      "Option+Tab önizlemesinde aşağı kaydırırken kodun devamının boş görünmesi düzeltildi.",
+      "Uzun sorgularda kaydırma ve renklendirme sonrası görünür satırlar güncel tutulur."
+    ]
+  },
+  {
     "version": "0.2.171",
     "date": "2026-10-17",
     "title": "Bağlantı ve nesne açma iyileştirmeleri",

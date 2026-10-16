@@ -3256,3 +3256,17 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - `MSSQLStudio-CredentialAgent-v1.zip` SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
 - `update.json` SHA-256: `54ae02c903e387d902c46a5842366b4743b4c8c65508ca9fa2b894092b10a94d`.
 - İndirilen signed uygulama `--check-update-feed 0.2.171` kontrolü geçti. Exact tag public notları kaynakla byte eşleşti. Kanıt: `/tmp/MSSQLStudio-171-public-verification/`. Gerçek Installer çalıştırılmadı; kurulu uygulama ve kullanıcı DB oturumları değiştirilmedi.
+
+## 2026-10-17 — Option+Tab uzun SQL önizleme viewport yenilemesi (yayımlanmadı)
+
+- İnceleme: QueryTabSwitcher tam SQL snapshot’ını taşır; 1.000.000 Character sınırı yalnız renklendirme içindir. Bildirilen kısmi görünüm sentetik uzun SQL ile kesin olarak yeniden üretilemedi; kaynak kesilmesi kanıtlanmadı.
+- Ortak SQLPreviewView kaydırma callback’i yalnız gutter’ı yeniliyordu; artık TextKit 2 görünür alan layout’u da yenilenir. Metin/renk değişimi ve scroll origin geri yükleme sonunda da viewport tazelenir; reentrant layout engellenir, tüm belge zorla layout edilmez.
+- 12.000 girintili satır + son satır işaretiyle native scroll/viewport ve bitmap doğrulandı. Son satır görüntüsü `/tmp/mssql-preview-last-lines.png`; değişiklik öncesinde de sentetik örnek geçtiğinden bu, kullanıcının tam hata koşulunu yeniden üretme kanıtı değildir.
+- `/tmp/mssql-switch-preview-verified-tests.log`: 24 test / 4 suite geçti (QueryTabSwitcher, EditorPresentation134, ProfilerFilteringUI, DefinitionClick). `/tmp/mssql-switch-preview-release.log`: Release BUILD SUCCEEDED. Mimari/kaynak eşliği/diff kontrolü geçti.
+- Sonraki kullanıcı yanıtı: aşağı kaydırınca yaklaşık 220. satırda metin boş görünüyor. Bunun üzerine incremental scroll regresyonu eklendi; aşağıdaki ek kanıt önceki belirsizliği daraltır. Kullanıcı uygulaması değiştirilmedi, yayın yapılmadı.
+
+### Ek kanıt — yaklaşık 220. satır sonrası kademeli kaydırma
+
+- Nonactivating native panelde 600 satırlık SQL, 10 satırlık adımlarla 0→300 kaydırıldı; 210. satırda gecikmeli renklendirme uygulandı. Her adımda TextKit viewport kaynak aralığının görünür satırları kapsaması denetlendi. Açık/koyu temada metin alanı bitmap piksel kontrolü de eklendi.
+- Aynı test orijinal HEAD uygulamasıyla `/tmp/mssql-preview-line220-original-tests.log` içinde 60 viewport kapsam assertion’ı ile başarısız oldu. Kaynak dosya finally ile mevcut düzeltmeye geri alındı. `/tmp/mssql-preview-line220-confirmed-tests.log`: aynı test iki temada geçti. Böylece viewport yenileme eksikliği kontrollü karşılaştırmayla doğrulandı; kullanıcının birebir sorgusu/macOS koşulu yine ayrıca sınanmadı.
+- 300. satır sonrası bitmapler `/tmp/mssql-preview-line300-light.png` ve `/tmp/mssql-preview-line300-dark.png`; önceki 24 test ve Release kanıtı aynı ürün kaynağı için geçerlidir.
