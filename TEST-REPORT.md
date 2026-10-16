@@ -3314,3 +3314,14 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - Removed the named bulk-selection menu from Object Explorer database choices. Individual checkboxes, visible-selection actions, default database and definition-index preferences retain the existing draft owner. Database Enter acceptance, search clear and filtering remain in their existing owner.
 - /tmp/mssql-connections-shared-ui-final-tests.log: 7 native tests / 3 suites and 3 core DatabaseSelection tests / 1 suite passed. Added native shared-field identity and geometry assertions. A prior strict 26 pt assertion failed because shared search intrinsic height is 28 pt; removed the unnecessary local height override and verified native intrinsic geometry.
 - /tmp/mssql-connections-shared-ui-final-release.log: Release BUILD SUCCEEDED; architecture/source sync/diff passed. Native 940x620 connection form bitmap /tmp/MSSQLStudio-112-connection-choices.png inspected. Existing manager tests exercise both themes and confirm zero connect/save actions during presentation. Physical mouse/real network/Keychain operations were not tested. User app/data unchanged; not published.
+
+## 2026-10-17 - v0.2.174 / build 175 public release
+
+- Source/tag `781cdf96e9879974184efa94f9906ea860863b7f`; Actions `38982027391` succeeded; public latest `v0.2.174`.
+- Existing shared picker and connection native/core test results plus Release build reused. Exact-tag CI suite skipped under user no-retest preference; package, signature, helper and feed checks completed.
+- Downloaded ZIP/PKG matched GitHub digests and manifest; exact version/build, release notes, strict app/helper signatures, frozen helper byte identity and icon appearances verified.
+- `MSSQLStudio-0.2.174.pkg` SHA-256: `c719ab7671f022a66f7e9d7595ae7eb24e2a6005735ba071cbabf12404564e88`.
+- `MSSQLStudio-0.2.174.zip` SHA-256: `7582e6667efe46fa0ede7e577fb0391ec6b9cf5bcfb0bbe6ee7426b801fcbdbc`.
+- `MSSQLStudio-CredentialAgent-v1.zip` SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json` SHA-256: `10c1c2d910b638de142585a9e4cbd0d386f80b57d26e076a756678fac51fe0aa`.
+- Downloaded signed app --check-update-feed 0.2.174 succeeded; public exact-tag release notes matched source bytes. Evidence /tmp/MSSQLStudio-174-public-verification/. Installer not run; installed app and user DB sessions untouched.
