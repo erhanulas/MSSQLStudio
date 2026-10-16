@@ -1,3 +1,9 @@
+## 16 Ekim 2026 — v0.2.150 / build 151 public yayın doğrulandı
+
+- [Public/latest v0.2.150](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.150), kaynak `3404075e73e8dde146c60dcce93b5c0116749806`; [Actions 38887283088](https://github.com/erhanulas/MSSQLStudio/actions/runs/38887283088) başarılı. Önceki kullanıcı tercihiyle yerel test/build ve CI paket suite’i tekrarlanmadı; bu tag’de test adımı skipped. Yerel regresyon kanıtları aşağıdadır; yeni tam suite iddiası yoktur.
+- İmza/helper audit, signed app/PKG, manifest ve CI Foundation feed başarılı. Dört public asset indirildi; digest/SHA-256, exact sürüm/build, kaynak/paket/not eşliği, app/helper strict/deep imza, frozen helper ve ikon varyantları doğrulandı. İndirilen uygulamanın exact Foundation updater kontrolü exit 0 verdi. Kanıt: `/tmp/MSSQLStudio-150-public-verification/verification.json`, `verification.log`, `foundation-feed.log`.
+- ZIP SHA-256 `991ccd600314e683e449ad2d980569945ef841ed17882d210ebd8e3b6ca2b337`; PKG `cf1eabc8bee7ef3ae6ce4f685b1dd8e575135d29bc1397fe3d65c3f39f934de1`. Kurulu uygulama/veri değiştirilmedi; gerçek Installer, kullanıcı hover senaryosu veya canlı SQL denenmedi.
+
 ## 16 Ekim 2026 — v0.2.150 test tekrarı istisnası
 
 - Önceki kullanıcı tercihiyle yerel/native/core/Release kanıtları yeniden kullanılır; yalnız bu tag için CI paket suite’i atlanır. İmza/helper, manifest ve public updater kontrolleri korunur; yeni tam suite başarısı iddia edilmez.
