@@ -303,8 +303,10 @@ import SQLServerKit
     }
     let measuredHeight=editor.textLayoutManager?.usageBoundsForTextContainer.maxY ?? 0
     let textHeight=max(measuredHeight,CGFloat(displayLineCount)*18)+editor.textContainerInset.height*2
-    // Trailing space lets the final fold header stay under the pointer near EOF.
-    let height=max(scroll.contentView.bounds.height,textHeight+scroll.contentView.bounds.height)
+    // Only a collapsed projection needs trailing room to keep its EOF header
+    // under the pointer. Ordinary SQL must not gain a viewport of empty scroll.
+    let trailingHeight=folded.isEmpty ? 0:scroll.contentView.bounds.height
+    let height=max(scroll.contentView.bounds.height,textHeight+trailingHeight)
     if editor.frame.size != NSSize(width: width, height: height) {
       editor.setFrameSize(NSSize(width: width, height: height))
       editor.needsDisplay = true
@@ -315,6 +317,11 @@ import SQLServerKit
     if width <= scroll.contentView.bounds.width + 0.5 && scroll.contentView.bounds.origin.x != 0 {
       scroll.contentView.scroll(to: NSPoint(x: 0, y: scroll.contentView.bounds.origin.y))
       scroll.reflectScrolledClipView(scroll.contentView)
+    }
+    let clip=scroll.contentView
+    let constrained=clip.constrainBoundsRect(clip.bounds)
+    if constrained.origin != clip.bounds.origin {
+      clip.scroll(to:constrained.origin);scroll.reflectScrolledClipView(clip)
     }
     occurrenceHighlights.frame=scroll.contentView.bounds
     occurrenceHighlights.needsDisplay=true

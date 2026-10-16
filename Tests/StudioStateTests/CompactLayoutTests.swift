@@ -51,6 +51,16 @@ import Testing
     #expect(!controller.resultsHidden)
     #expect(abs(try #require(editor.enclosingScrollView).frame.height - originalHeight) < 3)
     #expect(tabs.selectedTabViewItem?.label == "Results 2 (1)")
+    let sqlScroll=try #require(editor.enclosingScrollView)
+    for position in [180.0,320.0,400.0,240.0] {
+      split.setPosition(position,ofDividerAt:0)
+      controller.view.layoutSubtreeIfNeeded();controller.viewDidLayout()
+      #expect(abs(editor.frame.height-sqlScroll.contentView.bounds.height)<1)
+      let proposed=NSRect(origin:NSPoint(x:0,y:80),size:sqlScroll.contentView.bounds.size)
+      sqlScroll.contentView.scroll(to:sqlScroll.contentView.constrainBoundsRect(proposed).origin)
+      #expect(abs(sqlScroll.contentView.bounds.minY)<1)
+      #expect(doc.sql=="SELECT 1; SELECT 2;" && doc.results.count==2)
+    }
     tabs.selectTabViewItem(at: 2)
     #expect(tabs.selectedTabViewItem?.label == "Messages")
   }

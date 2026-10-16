@@ -3,11 +3,29 @@ import SwiftUI
 
 /// Native editing, clearing and target/action with the same surface in all search hosts.
 @MainActor private final class StudioSearchFieldCell:NSSearchFieldCell {
+  private var editingFrameProvided=false
   override func draw(withFrame frame:NSRect,in view:NSView) {
     StudioTheme.controlSurface.setFill()
     let path=NSBezierPath(roundedRect:frame.insetBy(dx:0.5,dy:0.5),xRadius:StudioMetrics.controlRadius,yRadius:StudioMetrics.controlRadius)
     path.fill();StudioTheme.controlBorder.setStroke();path.lineWidth=1;path.stroke()
     super.drawInterior(withFrame:frame,in:view)
+  }
+  // NSCell editing otherwise uses the full control bounds, unlike search text drawing.
+  override func edit(withFrame rect:NSRect,in controlView:NSView,editor:NSText,delegate:Any?,event:NSEvent?) {
+    let textRect=editingFrameProvided ? rect:searchTextRect(forBounds:rect)
+    let previous=editingFrameProvided;editingFrameProvided=true
+    defer {editingFrameProvided=previous}
+    super.edit(withFrame:textRect,in:controlView,editor:editor,delegate:delegate,event:event)
+    (editor as? NSTextView)?.drawsBackground=false
+    controlView.needsDisplay=true
+  }
+  override func select(withFrame rect:NSRect,in controlView:NSView,editor:NSText,delegate:Any?,start:Int,length:Int) {
+    let textRect=editingFrameProvided ? rect:searchTextRect(forBounds:rect)
+    let previous=editingFrameProvided;editingFrameProvided=true
+    defer {editingFrameProvided=previous}
+    super.select(withFrame:textRect,in:controlView,editor:editor,delegate:delegate,start:start,length:length)
+    (editor as? NSTextView)?.drawsBackground=false
+    controlView.needsDisplay=true
   }
   override func searchButtonRect(forBounds rect:NSRect)->NSRect {NSRect(x:rect.minX+8,y:rect.midY-8,width:16,height:16)}
   override func cancelButtonRect(forBounds rect:NSRect)->NSRect {NSRect(x:rect.maxX-24,y:rect.midY-8,width:16,height:16)}
@@ -34,6 +52,18 @@ import SwiftUI
     needsDisplay=true
   }
   override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance();refreshStyle()}
+  override func draw(_ dirtyRect:NSRect) {
+    super.draw(dirtyRect)
+    guard let searchCell=cell as? NSSearchFieldCell else {return}
+    let configuration=NSImage.SymbolConfiguration(paletteColors:[StudioTheme.muted])
+    NSImage(systemSymbolName:"magnifyingglass",accessibilityDescription:nil)?.withSymbolConfiguration(configuration)?.draw(in:searchCell.searchButtonRect(forBounds:bounds))
+    if !stringValue.isEmpty {
+      NSImage(systemSymbolName:"xmark.circle.fill",accessibilityDescription:nil)?.withSymbolConfiguration(.init(paletteColors:[StudioTheme.controlSurface,StudioTheme.muted]))?.draw(in:searchCell.cancelButtonRect(forBounds:bounds))
+    } else if let placeholderString {
+      (placeholderString as NSString).draw(in:searchCell.searchTextRect(forBounds:bounds),withAttributes:[.font:font ?? StudioTheme.uiFont,.foregroundColor:NSColor.placeholderTextColor])
+    }
+  }
+
   override func drawFocusRingMask() {NSBezierPath(roundedRect:bounds,xRadius:StudioMetrics.controlRadius,yRadius:StudioMetrics.controlRadius).fill()}
   override var focusRingMaskBounds:NSRect {bounds}
 }

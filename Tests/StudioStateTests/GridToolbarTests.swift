@@ -8,6 +8,35 @@ import Testing
     var received:[String]=[]
     @objc func changed(_ field:NSSearchField) {received.append(field.stringValue)}
   }
+  @Test func sharedSearchEditingStaysBetweenSearchAndClearIcons() async throws {
+    _=NSApplication.shared
+    let field=StudioSearchField(frame:NSRect(x:12,y:12,width:280,height:28))
+    field.placeholderString="Nesnelerde filtrele"
+    let root=NSView(frame:NSRect(x:0,y:0,width:320,height:60));root.addSubview(field)
+    let window=NSWindow(contentRect:root.bounds,styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=root;window.setFrameOrigin(NSPoint(x:-20000,y:0));window.makeKeyAndOrderFront(nil)
+    defer {window.close()}
+    for value in ["","dbo.Customer"] {
+      window.makeFirstResponder(nil);field.stringValue=value;field.selectText(nil)
+      try await Task.sleep(for:.milliseconds(20))
+      let editor=try #require(field.currentEditor() as? NSTextView)
+      let rect=field.convert(editor.visibleRect,from:editor)
+      let cell=try #require(field.cell as? NSSearchFieldCell)
+      let expected=cell.searchTextRect(forBounds:field.bounds)
+      #expect(abs(rect.minX-expected.minX)<1 && abs(rect.width-expected.width)<1)
+      if !value.isEmpty {
+        window.makeFirstResponder(nil)
+        let nativeEditor=try #require(window.fieldEditor(true,for:field))
+        cell.edit(withFrame:field.bounds,in:field,editor:nativeEditor,delegate:field,event:nil)
+        let editRect=field.convert((nativeEditor as? NSTextView)?.visibleRect ?? .zero,from:nativeEditor)
+        #expect(abs(editRect.minX-expected.minX)<1 && abs(editRect.width-expected.width)<1)
+      }
+      let image=try #require(root.bitmapImageRepForCachingDisplay(in:root.bounds));root.cacheDisplay(in:root.bounds,to:image)
+      try image.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-search-focused-"+(value.isEmpty ? "empty":"text")+".png"))
+      #expect(rect.minX >= cell.searchButtonRect(forBounds:field.bounds).maxX+4)
+      #expect(rect.maxX <= cell.cancelButtonRect(forBounds:field.bounds).minX-2)
+    }
+  }
   @Test func sharedSearchKeepsNativeClearAndFitsBothThemes() throws {
     _=NSApplication.shared
     let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}

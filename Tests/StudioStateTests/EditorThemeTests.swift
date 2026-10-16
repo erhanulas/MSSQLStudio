@@ -10,6 +10,27 @@ import Testing
 }
 
 @MainActor @Suite(.serialized) struct EditorThemeTests {
+  @Test func shortSQLDoesNotGainEmptyVerticalScrollWhenViewportShrinks() throws {
+    _=NSApplication.shared
+    let doc=QueryDocument(server:ConnectedServer(profile:ServerProfile(),password:""),database:"master",title:"Short query")
+    doc.server.online=false;doc.sql="SELECT * FROM dbo.Example;"
+    let controller=EditorController(document:doc)
+    let window=NSWindow(contentRect:NSRect(x:0,y:0,width:800,height:600),styleMask:[.titled,.resizable],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=controller.surface
+    defer {window.close()}
+    controller.editor.setSelectedRange(NSRange(location:8,length:0))
+    for height in [600,280,480,150,600] {
+      window.setContentSize(NSSize(width:800,height:height))
+      controller.surface.layoutSubtreeIfNeeded();controller.resizeToViewport()
+      let clip=controller.scroll.contentView
+      #expect(abs(controller.editor.frame.height-clip.bounds.height)<1)
+      let proposed=NSRect(origin:NSPoint(x:0,y:120),size:clip.bounds.size)
+      clip.scroll(to:clip.constrainBoundsRect(proposed).origin);controller.scroll.reflectScrolledClipView(clip)
+      #expect(abs(clip.bounds.minY)<1)
+      #expect(controller.editor.string==doc.sql && controller.editor.selectedRange().location==8)
+    }
+    #expect(controller.editor.undoManager?.canUndo != true)
+  }
   @Test func ssmsColorCategoriesStayCorrectInMainEditorAndPreviewsAcrossThemes() throws {
     _ = NSApplication.shared
     let previous = UserDefaults.standard.string(forKey: "ssmsTheme")

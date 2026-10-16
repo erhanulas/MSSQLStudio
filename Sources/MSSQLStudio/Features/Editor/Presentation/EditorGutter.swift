@@ -49,6 +49,12 @@ import SQLServerKit
   override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
     var rect = super.constrainBoundsRect(proposedBounds)
     if !allowsHorizontalMovement { rect.origin.x = 0 }
+    if let documentView {
+      // AppKit can include a small inferred inset in its document rect even
+      // when our explicitly sized text surface exactly fills the viewport.
+      let maximumY=max(0,documentView.frame.height-proposedBounds.height)
+      rect.origin.y=min(max(0,rect.origin.y),maximumY)
+    }
     return rect
   }
 }

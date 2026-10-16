@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.169",
+    "date": "2026-10-17",
+    "title": "Arama alanı ve editör kaydırma düzeltmeleri",
+    "changes": [
+      "Explorer, sonuçlar ve Ayarlar aramasında alana tıklayınca yazının arama simgesinin üzerine binmesi düzeltildi.",
+      "Sonuç paneli açıldığında veya boyutlandırıldığında kısa SQL metinlerinde gereksiz dikey kaydırma oluşması giderildi.",
+      "Uzun SQL metinlerinde kaydırma ve blok katlama konumu korunur."
+    ]
+  },
+  {
     "version": "0.2.168",
     "date": "2026-10-17",
     "title": "Daha anlaşılır izleme ve ortak arama görünümü",
