@@ -11,8 +11,12 @@ struct StudioTabBar:View {
   let items:[Item]
   @Binding var selection:Int
   @State private var hovered:Int?
+  @State private var themeRevision=0
+  @Environment(\.colorScheme) private var colorScheme
   var body:some View {
-    HStack(spacing:4) {
+    let _=themeRevision
+    let _=colorScheme
+    return HStack(spacing:4) {
       ForEach(items) {item in
         let selected=selection==item.id
         Button {selection=item.id} label: {
@@ -35,6 +39,7 @@ struct StudioTabBar:View {
       }
     }.padding(4)
       .background(Color(nsColor:StudioTheme.panel),in:RoundedRectangle(cornerRadius:StudioMetrics.cardRadius))
+      .onReceive(NotificationCenter.default.publisher(for:StudioTheme.changed)) {_ in themeRevision+=1}
   }
 }
 

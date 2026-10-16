@@ -3325,3 +3325,17 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - `MSSQLStudio-CredentialAgent-v1.zip` SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
 - `update.json` SHA-256: `10c1c2d910b638de142585a9e4cbd0d386f80b57d26e076a756678fac51fe0aa`.
 - Downloaded signed app --check-update-feed 0.2.174 succeeded; public exact-tag release notes matched source bytes. Evidence /tmp/MSSQLStudio-174-public-verification/. Installer not run; installed app and user DB sessions untouched.
+
+## 2026-10-17 - Restore original Settings picker presentation (unpublished)
+
+- User correction: Settings assignment picker was the visual reference and must not be restyled to the Explorer native popup. Replaced the custom NSPopUpButton implementation with a shared SwiftUI Picker/labelsHidden matching that original Settings presentation. AppKit StudioSelectionControl hosts the same SwiftUI view and preserves filter indices/target-action. Settings keeps its original 142 pt width and inherited styling.
+- /tmp/mssql-selection-reference-tests.log: ExplorerTabs101 tests passed, but reference test failed because SwiftUI original Picker does not expose an NSPopUpButton child. No product assertion was removed; that incorrect test assumption was replaced with comparison of original/shared native geometry and preserved adapter selection. /tmp/mssql-selection-reference-render-tests.log: 2 tests passed in both themes, including Explorer choices and native filter action.
+- /tmp/mssql-selection-reference-release.log: Release BUILD SUCCEEDED; architecture/source sync/diff checks passed. Offscreen host bitmap was blank and is not visual evidence. Same SwiftUI source/style is now used in both hosts; actual mouse/menu tracking and on-screen visual comparison remain unverified. No user app/data changes; unpublished.
+
+## 2026-10-17 - Shared tab theme refresh (unpublished)
+
+- StudioTabBar now reads colorScheme and subscribes to StudioTheme.changed; theme changes invalidate semantic foreground/background/border colors without hover or replacing view identity. StudioTabControl and StudioChoiceTabs inherit the fix; selection and native action owners unchanged.
+- Mounted same Explorer tabs exercised light -> dark -> light without hover/selection changes. /tmp/mssql-shared-tab-theme-original-tests.log: original implementation failed; raster colors remained identical across light/dark. Source restored in finally after controlled comparison.
+- Initial stronger absolute token-color comparison failed because captured HDR raster colors differ from direct NSColor components; test now compares mounted raster against a newly mounted same-theme reference in the same capture/color space. Both direction changes and round-trip equality remain asserted.
+- /tmp/mssql-shared-tab-theme-final-tests.log: 7 tests / 3 suites passed (SharedTabTheme, ExplorerTabs101, ActivityApplicationLocksUI shared tab layout). /tmp/mssql-shared-tab-theme-release.log: Release BUILD SUCCEEDED with identical product source. Architecture/source sync/diff passed. Mounted light/dark screenshots /tmp/mssql-mounted-tabs-light.png and dark.png inspected.
+- Actual system theme scheduling/user physical hover was not exercised; explicit application theme transitions and native mounted rendering verified. Installed app/user DB untouched; not published.

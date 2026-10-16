@@ -18,9 +18,9 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   let center = NSViewController()
   let outline = StudioCommandOutlineView()
   let explorerSearch = StudioSearchField(frame:.zero)
-  let searchOperator = StudioSelectionPopUpButton()
+  let searchOperator = StudioSelectionControl()
   let searchScopePicker = StudioSearchablePopUpButton()
-  let searchType = StudioSelectionPopUpButton()
+  let searchType = StudioSelectionControl()
   let searchFilters = NSStackView()
   var searchScopes: [TreeNode] = []
   var searchDatabaseByServer: [UUID:String] = [:]

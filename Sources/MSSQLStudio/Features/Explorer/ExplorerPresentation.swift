@@ -81,7 +81,7 @@ extension WorkbenchController {
     searchOptions.distribution = .fillEqually
     // Metadata names and explanatory text must not dictate the pane's minimum width.
     for control in [searchScopePicker,searchOperator,searchType] {
-      if !(control is StudioSelectionPopUpButton) {control.controlSize = .small; control.font = .systemFont(ofSize: 11)}
+      if !(control is StudioSelectionControl) {control.controlSize = .small; control.font = .systemFont(ofSize: 11)}
       control.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
       (control.cell as? NSPopUpButtonCell)?.lineBreakMode = .byTruncatingTail
     }
