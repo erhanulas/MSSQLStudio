@@ -3217,3 +3217,10 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - v0.2.169 odak düzeltmesindeki view.draw native cell çiziminden sonra placeholder’ı tekrar çiziyordu; odaksız durumda da üst üste iki metin oluşuyordu. İkinci metin/placeholder çizimi kaldırıldı. Odaksız ikonlar native cell’e bırakıldı; özel ikon sunumu yalnız field editor açıkken uygulanır. Native edit/select text rect düzeltmesi korunur.
 - `/tmp/mssql-search-single-paint-tests.log`: 3 native test/1 suite geçti. Yeni raster regresyonu açık/koyu temada boş placeholder ve dolu metin bölgesini native cell’in tek çizimiyle piksel bazında karşılaştırır; editing bounds, native clear ve tema regresyonları da geçti. `/tmp/mssql-search-double-text-release.log`: BUILD SUCCEEDED. `/tmp/mssql-shared-search-light.png` görsel olarak incelendi; mimari/Xcode kaynak eşliği/diff kontrolü geçti.
 - Gerçek kullanıcı uygulaması değiştirilmedi; public yayın yapılmadı.
+
+## 2026-10-17 — v0.2.170 public yayın
+
+- v0.2.170 / build 171; kaynak/tag `04c60f859b906ee21246d61f0cff7027cf4cac82`; Actions `38973371578` başarılı; public/latest v0.2.170 doğrulandı. Tamamlanan geliştirme testleri tekrarlanmadı; release-package tam suite kullanıcı tercihiyle exact tag’de atlandı. Zorunlu imza/izole Keychain fixture/paket/manifest/feed kontrolleri geçti.
+- Dört asset indirildi; GitHub digest/manifest SHA-256 eşliği, ZIP/PKG payload exact sürüm/binary/notlar, app/helper strict/deep sabit imza, frozen helper byte/archive eşliği ve Icon Composer varyantları doğrulandı. ZIP `be70d573f17726b99010b08c2c9f8defa16926bbc3d21cc48f5ae5797ecd3594`; PKG `368389c08205da9ab8b998b4139f7db076554f47c4076d464e6a0d0e435ee288`.
+- İndirilen signed app `--check-update-feed 0.2.170` Foundation/URLSession kontrolü geçti; public exact-tag not kaynağı yerel kaynakla aynı. Kanıt `/tmp/MSSQLStudio-170-public-verification/verification.json`, `verification.log`, `foundation-feed.log`, `public-notes.json`, release/latest/run/jobs JSON. Gerçek Installer çalıştırılmadı; kurulu uygulama ve kullanıcı oturumları değiştirilmedi.
+- Yayın: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.170
