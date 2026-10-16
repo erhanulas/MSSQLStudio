@@ -13,6 +13,17 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
     finder.isIncrementalSearchingEnabled=true;finder.incrementalSearchingShouldDimContentView=false
     return finder
   }()
+  private var batchEditDepth=0
+  var isBatchEditing:Bool {batchEditDepth>0}
+  var batchEditingEnded:(()->Void)?
+  func performBatchEdit(_ edit:()->Void) {
+    batchEditDepth+=1
+    defer {batchEditDepth-=1;if batchEditDepth==0 {batchEditingEnded?()}}
+    edit()
+  }
+  var dismissCaretSuggestions:(()->Void)?
+  lazy var columnSelection=EditorColumnSelection(editor:self)
+  override func draw(_ dirtyRect:NSRect) {super.draw(dirtyRect);columnSelection.draw(in:dirtyRect)}
   var hoverMoved:((NSPoint?)->Void)?
   private var hoverArea:NSTrackingArea?
   override func updateTrackingAreas() {
@@ -81,7 +92,7 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
     if item.action == #selector(expandCodeOutline(_:)) {return expandOutline != nil}
     if item.action == #selector(runSQLStatement(_:)) {return isEditable && !hasMarkedText() && canRunStatement?() == true}
     if item.action == #selector(formatSQLText(_:)) {return isEditable && !hasMarkedText() && requestFormat != nil}
-    if item.action == #selector(toggleSQLComment(_:)) || item.action == #selector(uncommentSQL(_:)) {return isEditable && !hasMarkedText() && selectedRanges.count == 1}
+    if item.action == #selector(toggleSQLComment(_:)) || item.action == #selector(uncommentSQL(_:)) {return isEditable && !hasMarkedText() && selectedRanges.count == 1 && columnSelection.ranges.count<=1}
     if item.action == #selector(undoSQL(_:)) || item.action == #selector(undoFromMenu(_:)) {return isEditable && undoManager?.canUndo == true}
     if item.action == #selector(redoSQL(_:)) || item.action == #selector(redoFromMenu(_:)) {return isEditable && undoManager?.canRedo == true}
     if item.action == #selector(performFindPanelAction(_:)),let action=NSTextFinder.Action(rawValue:item.tag) {
@@ -143,10 +154,12 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
   }
   override func insertText(_ value:Any,replacementRange:NSRange) {
     let text=(value as? String) ?? (value as? NSAttributedString)?.string
+    if replacementRange.location == NSNotFound || replacementRange == selectedRange(),let text,columnSelection.replace(with:text) {return}
     let range=replacementRange.location == NSNotFound ? selectedRange():replacementRange
     withUndoInput(in:range,replacement:text) {super.insertText(value,replacementRange:replacementRange)}
   }
   override func deleteBackward(_ sender:Any?) {
+    if columnSelection.replace(with:"",backward:true) {return}
     var range=selectedRange()
     if range.length == 0,range.location>0,range.location <= (string as NSString).length {
       range=(string as NSString).rangeOfComposedCharacterSequence(at:range.location-1)
@@ -154,6 +167,7 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
     withUndoInput(in:range,replacement:"") {super.deleteBackward(sender)}
   }
   override func deleteForward(_ sender:Any?) {
+    if columnSelection.replace(with:"",backward:false) {return}
     var range=selectedRange()
     if range.length == 0,range.location < (string as NSString).length {
       range=(string as NSString).rangeOfComposedCharacterSequence(at:range.location)
@@ -161,9 +175,11 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
     withUndoInput(in:range,replacement:"") {super.deleteForward(sender)}
   }
   override func cut(_ sender:Any?) {
+    if columnSelection.ranges.count>1 {copy(sender);_ = columnSelection.replace(with:"");return}
     finishUndoInput();super.cut(sender);finishUndoInput()
   }
   override func paste(_ sender:Any?) {
+    if let text=NSPasteboard.general.string(forType:.string),columnSelection.replace(with:text) {return}
     finishUndoInput();super.paste(sender);finishUndoInput()
   }
   // NSWindow normally owns these responder actions. Route the Edit menu to this
@@ -172,11 +188,11 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
   @objc(redo:) func redoFromMenu(_ sender:Any?) {redoSQL(sender)}
   @objc func undoSQL(_ sender:Any?) {
     guard isEditable else {return}
-    dismissSuggestions?();finishUndoInput();undoManager?.undo()
+    columnSelection.clear();dismissSuggestions?();finishUndoInput();undoManager?.undo()
   }
   @objc func redoSQL(_ sender:Any?) {
     guard isEditable else {return}
-    dismissSuggestions?();finishUndoInput();undoManager?.redo()
+    columnSelection.clear();dismissSuggestions?();finishUndoInput();undoManager?.redo()
   }
   private func handleHistoryKey(_ event:NSEvent)->Bool {
     let flags=event.modifierFlags.intersection([.command,.control,.shift,.option])
@@ -189,10 +205,11 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
   private enum CaretMovement { case word, line }
   @discardableResult private func navigateSQL(_ movement:CaretMovement,_ direction:SQLCaretNavigation.Direction,extending:Bool=false)->Bool {
     guard isSelectable,!hasMarkedText(),!selectedRanges.isEmpty else {return false}
-    let ranges=selectedRanges.map(\.rangeValue)
+    let columnRanges=columnSelection.ranges
+    let ranges=columnRanges.count>1 ? columnRanges:selectedRanges.map(\.rangeValue)
     let length=(string as NSString).length
     guard ranges.allSatisfy({$0.location != NSNotFound && $0.location <= length && $0.length <= length-$0.location}) else {return false}
-    let upstream=selectionAffinity == .upstream
+    let upstream=(columnRanges.count>1 ? columnSelection.affinity:selectionAffinity) == .upstream
     var heads:[Int]=[]
     let selections=ranges.map { range -> NSValue in
       // TextKit 2 affinity describes the non-anchored edge of a nonempty
@@ -215,7 +232,8 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
     }
     dismissSuggestions?();finishUndoInput()
     let backwards=extending && zip(ranges,heads).contains { range,head in head < (upstream ? NSMaxRange(range):range.location) }
-    setSelectedRanges(selections,affinity:backwards ? .upstream:.downstream,stillSelecting:false)
+    if columnRanges.count>1 {columnSelection.set(selections.map(\.rangeValue),affinity:backwards ? .upstream:.downstream)}
+    else {setSelectedRanges(selections,affinity:backwards ? .upstream:.downstream,stillSelecting:false)}
     if let head=heads.first {scrollRangeToVisible(NSRange(location:head,length:0))}
     return true
   }
@@ -266,7 +284,7 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
     return true
   }
   private func handleQuoteKey(_ event:NSEvent) -> Bool {
-    guard isEditable,!hasMarkedText(),selectedRanges.count == 1,
+    guard isEditable,!hasMarkedText(),selectedRanges.count == 1,columnSelection.ranges.count<=1,
       event.modifierFlags.intersection([.command,.control,.option]).isEmpty else {return false}
     let quote=event.characters == "'" ? UInt16(39):event.characters == "\"" ? UInt16(34):nil
     guard quote != nil || event.keyCode == 51 else {return false}
@@ -337,11 +355,24 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
   private(set) var trackingMouseSelection=false
   var mouseSelectionEnded:(() -> Void)?
+  override func mouseDragged(with event:NSEvent) {
+    if columnSelection.dragging {_ = autoscroll(with:event);columnSelection.update(to:convert(event.locationInWindow,from:nil));return}
+    super.mouseDragged(with:event)
+  }
+  override func mouseUp(with event:NSEvent) {
+    if columnSelection.dragging {columnSelection.update(to:convert(event.locationInWindow,from:nil));columnSelection.end();mouseSelectionEnded?();return}
+    super.mouseUp(with:event)
+  }
   override func mouseDown(with event: NSEvent) {
+    if event.modifierFlags.intersection([.command,.control,.option]) == .option,isEditable,!hasMarkedText() {
+      window?.makeFirstResponder(self);dismissSuggestions?();finishUndoInput();prepareEdit?()
+      columnSelection.begin(at:convert(event.locationInWindow,from:nil));return
+    }
+    columnSelection.clear()
     let navigationClick=DefinitionReference.isNavigationClick(event)
     trackingMouseSelection=true
     defer {trackingMouseSelection=false;if !navigationClick {mouseSelectionEnded?()}}
-    dismissSuggestions?()
+    if navigationClick {dismissSuggestions?()} else {dismissCaretSuggestions?()}
     window?.makeFirstResponder(self)
     if navigationClick {
       let point=convert(event.locationInWindow,from:nil)
@@ -421,7 +452,7 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
   @objc func toggleSQLComment(_ sender:Any?) {changeSQLComment(uncomment:false)}
   @objc func uncommentSQL(_ sender:Any?) {changeSQLComment(uncomment:true)}
   private func changeSQLComment(uncomment:Bool) {
-    guard isEditable,!hasMarkedText(),selectedRanges.count == 1 else {return}
+    guard isEditable,!hasMarkedText(),selectedRanges.count == 1,columnSelection.ranges.count<=1 else {return}
     window?.makeFirstResponder(self)
     dismissSuggestions?();prepareEdit?()
     guard let edit=SQLComments.edit(string,selection:selectedRange(),uncomment:uncomment) else {return}
@@ -477,6 +508,12 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
   var prepareEdit: (() -> Void)?
   var sourceCopy: (() -> String?)?
   override func copy(_ sender: Any?) {
+    if columnSelection.ranges.count>1 {
+      let source=string as NSString
+      let selected=columnSelection.ranges.filter {$0.length>0}.map {source.substring(with:$0)}
+      guard !selected.isEmpty else {return}
+      NSPasteboard.general.clearContents();NSPasteboard.general.setString(selected.joined(separator:"\n"),forType:.string);return
+    }
     guard let value = sourceCopy?() else { super.copy(sender); return }
     NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string)
   }
@@ -503,11 +540,12 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
   }
   override func insertTab(_ sender: Any?) {
     prepareEdit?()
+    if columnSelection.replace(with:"\t") {return}
     let range = selectedRange()
     if selectedRanges.count == 1 && range.length == 0 { insertText("\t",replacementRange:range); return }
     indentLines(removing:false)
   }
-  override func insertBacktab(_ sender: Any?) { prepareEdit?(); indentLines(removing:true) }
+  override func insertBacktab(_ sender: Any?) { prepareEdit?(); if columnSelection.removeIndent() {return}; indentLines(removing:true) }
   private func indentLines(removing: Bool) {
     guard isEditable,!hasMarkedText() else {return}
     let source=string as NSString
@@ -532,7 +570,7 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
     }
     guard edits.contains(where:{source.substring(with:$0.0) != $0.1}) else {return}
     finishUndoInput();undoManager?.beginUndoGrouping()
-    for (range,text) in edits.reversed() {insertText(text,replacementRange:range)}
+    performBatchEdit {for (range,text) in edits.reversed() {insertText(text,replacementRange:range)}}
     undoManager?.endUndoGrouping();finishUndoInput()
     var delta=0
     let selections=edits.map { range,text -> NSValue in
@@ -561,6 +599,7 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
     if StudioCommandCatalog.dispatch(event,to:self,allowForwardedTarget:false,menu:{makeSQLMenu(at:selectedRange().location)}) {return}
     if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control, event.charactersIgnoringModifiers?.lowercased() == "a" { selectAll(nil); return }
     if handleSQLNavigationKey(event) {return}
+    if [123,124,125,126,115,119,53].contains(event.keyCode) {columnSelection.clear()}
     if suggestionKey?(event) == true { return }
     if GridShortcuts.matches(.completion,event),let requestSuggestions {requestSuggestions();return}
     if GridShortcuts.matches(.runStatement,event) {runStatement?();return}

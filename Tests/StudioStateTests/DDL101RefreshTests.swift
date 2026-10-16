@@ -10,6 +10,42 @@ import Testing
 
 @MainActor @Suite(.serialized) struct DDL101RefreshTests {
   private func views(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(views)}
+  @Test func ddlSeedsMissingSharedCatalogAndPublishesOneSnapshotToOlderTabsOnlyInItsDatabase() async throws {
+    _=NSApplication.shared
+    let folder=URL(fileURLWithPath:"/tmp/StudioDDL-open-tabs-\(UUID())");defer {try? FileManager.default.removeItem(at:folder)}
+    let disk=CatalogDiskIndex(url:folder.appendingPathComponent("catalog.sqlite")),index=CatalogIndexService(index:disk),catalog=SQLCatalogService(index:disk)
+    let server=ConnectedServer(profile:ServerProfile(),password:"",diskIndex:disk,objectIndexService:index,completionIndexService:catalog)
+    server.online=false
+    let old=QueryDocument(server:server,database:"master",title:"Older SQL"),writer=QueryDocument(server:server,database:"master",title:"DDL"),other=QueryDocument(server:server,database:"Other",title:"Other DB")
+    old.sql="EXEC NewRoutine";old.catalogDatabase="master";old.catalogVerified=true
+    let date=Date()
+    old.intelligenceCatalog = .init(snapshot:.init(symbols:[CatalogSymbol(schema:"dbo",name:"Keep",columns:["ID"],kind:"USER_TABLE")],synchronizedAt:date))
+    let oldEditor=EditorController(document:old)
+    let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false;state.servers=[server];state.documents=[old,writer,other];state.active=writer
+    let host=WorkbenchController(state:state),window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false
+    defer {server.online=false;window.close()}
+    var reads=0,dropped=false
+    server.asyncCatalogFixture={sql in
+      reads+=1;#expect(sql.contains("StudioSchemaTargetRefresh"))
+      var output=Execution();output.results=[Rows(values:dropped ? []:[["99","NewRoutine","dbo","SQL_STORED_PROCEDURE",nil,"0"]])];return output
+    }
+    server.online=true
+    await host.refreshDDLChanges(ModuleEditing.changes("CREATE PROCEDURE dbo.NewRoutine AS SELECT 1;"),server:server,database:"master",indexService:index,catalogService:catalog)
+    let updated=try #require(old.intelligenceCatalog)
+    #expect(writer.intelligenceCatalog === updated && other.intelligenceCatalog == nil)
+    #expect(updated.resolve(["Keep"]) != nil && updated.snapshot.synchronizedAt==date)
+    #expect(try SQLIntelligence.analyze(source:old.sql,caret:old.sql.utf16.count,catalog:updated,verified:true).suggestions.contains {$0.text.contains("NewRoutine")})
+    #expect(old.sql=="EXEC NewRoutine" && reads==1 && oldEditor.catalogAnalysisPending)
+    let oldWindow=NSWindow(contentRect:NSRect(x:0,y:0,width:900,height:600),styleMask:[.titled],backing:.buffered,defer:false)
+    oldWindow.isReleasedWhenClosed=false;oldWindow.contentView=oldEditor.surface
+    defer {oldWindow.close()}
+    oldWindow.makeFirstResponder(oldEditor.editor)
+    oldEditor.refreshCatalogAnalysisIfNeeded()
+    #expect(!oldEditor.catalogAnalysisPending && reads==1)
+    dropped=true
+    await host.refreshDDLChanges(ModuleEditing.changes("DROP PROCEDURE dbo.NewRoutine;"),server:server,database:"master",indexService:index,catalogService:catalog)
+    #expect(old.intelligenceCatalog?.resolve(["NewRoutine"]) == nil && writer.intelligenceCatalog === old.intelligenceCatalog && reads==2)
+  }
   @Test func editorDDLUpdatesOnlyItsObjectInExplorerDiskAndCompletionIncludingDropAndCreate() async throws {
     _=NSApplication.shared
     let folder=URL(fileURLWithPath:"/tmp/StudioDDL101-\(UUID())");defer {try? FileManager.default.removeItem(at:folder)}

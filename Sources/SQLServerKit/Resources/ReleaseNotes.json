@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.152",
+    "date": "2026-10-16",
+    "title": "Kalıcı çoklu imleç ve güncel IntelliSense",
+    "changes": [
+      "Option ile aynı sütunda yukarı/aşağı çoklu imleç oluşturulur; silme sonrası imleçler korunur ve Tab/Shift+Tab ile hizalamaya devam edilir. Başka yere tıklamak çoklu imleçleri kaldırır.",
+      "Toplu girinti düzenlemesinde renklendirme ve analiz işlem sonunda tek güncellemeyle yapılır.",
+      "Procedure parametre önizlemesi, argümanlar arasında geçişte kapanıp yeniden açılmadan güncellenir.",
+      "CREATE/ALTER/DROP sonrası aynı veritabanındaki eski açık sekmeler ortak güncel IntelliSense kataloğunu alır. Gizli editörlerin analizi sekmeye dönüldüğünde yenilenir.",
+      "Uygulanmamış nesne değişiklikleri için bağımsız kapanış uyarısı ayarı eklendi; normal SQL kaydetme uyarısından ayrı yönetilir."
+    ]
+  },
+  {
     "version": "0.2.151",
     "date": "2026-10-16",
     "title": "Checkbox düzenleme ve güncellemede çalışma alanını koruma",

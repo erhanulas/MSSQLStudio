@@ -146,6 +146,19 @@ struct CatalogCompletionTargetTests {
     #expect(Set(memory.snapshot.symbols.dropFirst().map(\.name))==Set((0..<12).map {"New\($0)"}))
     #expect(memory.snapshot.synchronizedAt==date && persisted.synchronizedAt==date)
   }
+  @Test func explicitPartialSeedMakesNewObjectsAvailableWithoutClaimingFullFreshness() async throws {
+    let url=location();defer {try? FileManager.default.removeItem(at:url.deletingLastPathComponent())}
+    let disk=CatalogDiskIndex(url:url),service=SQLCatalogService(index:disk),profile=ServerProfile()
+    let seed=SQLCatalogSnapshot(symbols:[],synchronizedAt:.distantPast)
+    let symbol=CatalogSymbol(schema:"dbo",name:"Created",columns:[],kind:"SQL_STORED_PROCEDURE")
+    let updated=try #require(try await service.replaceTarget(profile:profile,database:"D",schema:"dbo",name:"Created",symbol:symbol,fallback:seed))
+    #expect(updated.resolve(["Created"]) != nil && !updated.fresh)
+    #expect(updated.snapshot.synchronizedAt == .distantPast)
+    let cached=try await service.cached(profile:profile,database:"D")
+    #expect(cached === updated)
+    let persisted=try #require(try await disk.completionSnapshot(scope:CatalogDiskIndex.scope(profile:profile,database:"D")))
+    #expect(persisted.symbols.count==1 && persisted.synchronizedAt == .distantPast)
+  }
   @Test func scopedUpdateWaitsForFullRefreshAndLateWaitersDoNotRestoreOldSymbol() async throws {
     let url=location();defer {try? FileManager.default.removeItem(at:url.deletingLastPathComponent())}
     let disk=CatalogDiskIndex(url:url),gate=CatalogCompletionRefreshGate(),profile=ServerProfile(),date=Date()

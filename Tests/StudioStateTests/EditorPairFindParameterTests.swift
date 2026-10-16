@@ -1,9 +1,27 @@
 import AppKit
+import SwiftUI
 import SQLServerKit
 import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct EditorPairFindParameterTests {
+  @Test func parameterPopoverUpdatesItsHostWithoutClosing() throws {
+    _=NSApplication.shared
+    let window=NSWindow(contentRect:NSRect(x:100,y:100,width:900,height:700),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false
+    let host=try #require(window.contentView),popup=NSPopover()
+    defer {popup.close();window.close()}
+    window.orderFront(nil)
+    let anchor=NSRect(x:200,y:350,width:8,height:18)
+    StudioPopover.show(popup,content:Text("@First"),from:host,rect:anchor,size:NSSize(width:480,height:118),updatingExisting:true,behavior:.semitransient)
+    let original=try #require(popup.contentViewController)
+    #expect(popup.isShown)
+    for name in ["@Second","@Third","@First"] {
+      StudioPopover.show(popup,content:Text(name),from:host,rect:anchor,size:NSSize(width:480,height:118),updatingExisting:true,behavior:.semitransient)
+      #expect(popup.isShown && popup.contentViewController === original)
+      #expect(popup.behavior == .semitransient)
+    }
+  }
   @Test func shortcutJumpsBothDirectionsPreservingTextColorsAndUndo() throws {
     _=NSApplication.shared
     let server=ConnectedServer(profile:ServerProfile(),password:"");server.online=false

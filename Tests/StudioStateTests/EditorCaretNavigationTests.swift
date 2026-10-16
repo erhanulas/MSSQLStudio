@@ -19,6 +19,64 @@ import Testing
     let event=try #require(NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:flags,timestamp:0,windowNumber:editor.window?.windowNumber ?? 0,context:nil,characters:key,charactersIgnoringModifiers:key,isARepeat:false,keyCode:right ? 124:123))
     editor.keyDown(with:event)
   }
+  @Test func bulkIndentDeletionPublishesOneDocumentUpdate() throws {
+    let sql=Array(repeating:"    SELECT 1;",count:120).joined(separator:"\n")
+    let (controller,document,window)=fixture(sql);defer {window.close()}
+    let editor=controller.editor
+    var updates=0
+    controller.edited={updates+=1}
+    editor.columnSelection.set((0..<120).map {NSRange(location:$0*14,length:4)})
+    editor.deleteBackward(nil)
+    #expect(updates==1)
+    #expect(document.sql == Array(repeating:"SELECT 1;",count:120).joined(separator:"\n"))
+    #expect(editor.columnSelection.ranges.count==120)
+    editor.insertTab(nil)
+    #expect(updates==2 && document.sql == Array(repeating:"\tSELECT 1;",count:120).joined(separator:"\n"))
+  }
+  @Test func zeroWidthColumnCaretsSurviveDeleteAndRepeatedTabsUntilAnotherClick() throws {
+    let sql="    AA\n    BB\n    CC"
+    let (controller,document,window)=fixture(sql);defer {window.close()}
+    let editor=controller.editor,undo=try #require(controller.editor.undoManager)
+    undo.groupsByEvent=false
+    editor.columnSelection.set([4,11,18].map {NSRange(location:$0,length:0)})
+    try arrow(editor,right:false,flags:[.command,.shift])
+    #expect(editor.columnSelection.ranges == [0,7,14].map {NSRange(location:$0,length:4)})
+    editor.deleteBackward(nil)
+    #expect(editor.string == "AA\nBB\nCC" && document.sql == editor.string)
+    #expect(editor.columnSelection.ranges == [0,3,6].map {NSRange(location:$0,length:0)})
+    editor.insertTab(nil);editor.insertTab(nil)
+    #expect(editor.string == "\t\tAA\n\t\tBB\n\t\tCC")
+    #expect(editor.columnSelection.ranges.count == 3)
+    editor.insertBacktab(nil);#expect(editor.string == "\tAA\n\tBB\n\tCC" && editor.columnSelection.ranges.count == 3)
+    editor.insertTab(nil)
+    undo.undo();#expect(editor.string == "\tAA\n\tBB\n\tCC")
+    editor.columnSelection.set([1,5,9].map {NSRange(location:$0,length:0)})
+    let event=try #require(NSEvent.mouseEvent(with:.leftMouseDown,location:NSPoint(x:800,y:10),modifierFlags:.command,timestamp:0,windowNumber:window.windowNumber,context:nil,eventNumber:1,clickCount:1,pressure:1))
+    editor.mouseDown(with:event)
+    #expect(editor.columnSelection.ranges.isEmpty)
+  }
+  @Test func optionVerticalDragCreatesEmptyCaretsInEitherDirectionWithoutChangingSQL() throws {
+    let (controller,document,window)=fixture("    AA\n    BB\n    CC");defer {window.close()}
+    let editor=controller.editor
+    controller.surface.layoutSubtreeIfNeeded()
+    editor.textLayoutManager?.textViewportLayoutController.layoutViewport()
+    func point(_ offset:Int)->NSPoint {
+      let screen=editor.firstRect(forCharacterRange:NSRange(location:offset,length:0),actualRange:nil)
+      let rect=window.convertFromScreen(screen)
+      return NSPoint(x:rect.minX,y:rect.midY)
+    }
+    for (start,end) in [(4,18),(18,4)] {
+      for (kind,offset) in [(NSEvent.EventType.leftMouseDown,start),(.leftMouseDragged,end),(.leftMouseUp,end)] {
+        let event=try #require(NSEvent.mouseEvent(with:kind,location:point(offset),modifierFlags:.option,timestamp:0,windowNumber:window.windowNumber,context:nil,eventNumber:1,clickCount:1,pressure:1))
+        switch kind {case .leftMouseDown:editor.mouseDown(with:event);case .leftMouseDragged:editor.mouseDragged(with:event);default:editor.mouseUp(with:event)}
+      }
+      #expect(editor.columnSelection.ranges == [4,11,18].map {NSRange(location:$0,length:0)})
+      #expect(document.sql == "    AA\n    BB\n    CC")
+    }
+    let bitmap=try #require(editor.bitmapImageRepForCachingDisplay(in:editor.visibleRect))
+    editor.cacheDisplay(in:editor.visibleRect,to:bitmap)
+    #expect(bitmap.pixelsWide>0 && bitmap.pixelsHigh>0)
+  }
   @Test func rectangularSelectionExtendsEveryLineAndIndentsWithOneUndo() throws {
     let sql="    AA\n    BB\n    CC"
     let (controller,document,window)=fixture(sql);defer {window.close()}

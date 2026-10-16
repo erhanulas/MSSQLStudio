@@ -638,6 +638,7 @@ import SwiftUI
     guard document.offlinePreview == nil,!document.definitionLoading else {return}
     editor.resizeToViewport()
     view.window?.makeFirstResponder(editor.editor)
+    editor.refreshCatalogAnalysisIfNeeded()
     editor.editor.scrollRangeToVisible(editor.editor.selectedRange())
     editor.editor.updateInsertionPointStateAndRestartTimer(true)
   }

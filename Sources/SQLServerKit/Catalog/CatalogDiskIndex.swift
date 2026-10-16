@@ -398,7 +398,7 @@ public actor SQLCatalogService {
   }
   /// Updates one already cached completion object without a connection or a
   /// whole-catalog freshness change. Names are exact, including case/Unicode.
-  public func replaceTarget(profile:ServerProfile,database:String,schema:String,name:String,symbol:CatalogSymbol?) async throws -> SQLIntelligence.Catalog? {
+  public func replaceTarget(profile:ServerProfile,database:String,schema:String,name:String,symbol:CatalogSymbol?,fallback:SQLCatalogSnapshot?=nil) async throws -> SQLIntelligence.Catalog? {
     guard profile.visibleDatabases?.contains(database) != false else {return nil}
     func valid(_ text:String,empty:Bool=false)->Bool {(empty || !text.isEmpty) && text.utf16.count<=128 && !text.utf16.contains(0)}
     guard valid(database),valid(schema,empty:true),valid(name),symbol.map({
@@ -418,15 +418,18 @@ public actor SQLCatalogService {
         do {_ = try finish(job,scope:scope,value:try await job.task.value)}
         catch {if jobs[scope]?.id==job.id {jobs[scope]=nil}}
       }
-      guard let value=try await cached(profile:profile,database:database) else {return nil}
-      var symbols=value.snapshot.symbols
+      let cached=try await cached(profile:profile,database:database)
+      // An open editor may already have a catalog before the disk index exists.
+      // Its timestamp is preserved; a caller-provided partial seed stays stale.
+      guard let base=cached?.snapshot ?? fallback else {return nil}
+      var symbols=base.symbols
       let matches:(CatalogSymbol)->Bool = {$0.schema.utf8.elementsEqual(schema.utf8) && $0.name.utf8.elementsEqual(name.utf8)}
       if let position=symbols.firstIndex(where:matches) {
         symbols.removeAll(where:matches)
         if let symbol {symbols.insert(symbol,at:position)}
       } else if let symbol {symbols.append(symbol)}
       guard symbols.count<=50_000,symbols.reduce(0,{$0+max(1,$1.columns.count)})<=250_000 else {throw SQLFailure("Akıllı editör indeks boyutu sınırına ulaştı; son tamamlanan indeks korundu.")}
-      let snapshot=SQLCatalogSnapshot(symbols:symbols,synchronizedAt:value.snapshot.synchronizedAt)
+      let snapshot=SQLCatalogSnapshot(symbols:symbols,synchronizedAt:base.synchronizedAt)
       try Task.checkCancellation()
       try await index.saveCompletionSnapshot(scope:scope,snapshot:snapshot,generation:generation)
       try Task.checkCancellation()

@@ -45,6 +45,7 @@ struct SettingsPanel: View {
   @State private var historyDays = QueryHistoryPolicy.defaultDays
   @State private var recovery = false
   @State private var warnOnTabClose = true
+  @State private var warnOnObjectClose = true
   @State private var updateRepository = UserDefaults.standard.string(forKey:"githubUpdateRepository") ?? ""
   @State private var keychainMessage = ""
   @State private var renewingKeychain = false
@@ -222,7 +223,8 @@ struct SettingsPanel: View {
             settingsNote("Varsayılan 1 GB (1024 MB). Kota ve otomatik artış Uygula ile kaydedilir. Üst sınır dolunca veya kota küçültülürse en eski tanımlar temizlenir. Otomatik artış fiziksel diskte boş alan oluşturmaz. Doluluk tanım verisini ölçer; SQLite dosya/WAL ve diğer katalog alanları dahil değildir. İndeksleme bağlantı ayarlarından açılır.",icon:"info.circle")
           }
           settingsCard("Sekmeler ve pencereler",icon:"macwindow") {
-            settingsToggle("Sekme kapatırken kaydetme uyarısı",detail:"Kaydedilmemiş SQL için sorar. Kapalıysa SQL kaydedilmeden kapanır. Çalışan sorgu, açık transaction ve veritabanı düzenlemesi korumaları sürer.",value:$warnOnTabClose)
+            settingsToggle("Sekme kapatırken kaydetme uyarısı",detail:"Kaydedilmemiş SQL için sorar. Kapalıysa SQL kaydedilmeden kapanır. Nesne değişiklikleri için aşağıdaki ayrı ayar kullanılır.",value:$warnOnTabClose)
+            settingsToggle("Uygulanmamış nesne değişikliklerinde uyar",detail:"Tablo, procedure, view veya fonksiyon tanımındaki uygulanmamış değişikliklerde sorar. Kapalıysa değişiklikler veritabanına gönderilmeden kapanır. Çalışan sorgu, açık transaction ve gönderilmemiş sonuç düzenlemeleri korumaları sürer.",value:$warnOnObjectClose)
           }
           settingsCard("Geçmiş ve kurtarma", icon: "clock.arrow.circlepath") {
             settingsToggle("Sorgu geçmişini sakla", detail: "Çalıştırılan sorgular History üzerinden yeniden açılabilir.", value: $history)
@@ -314,6 +316,7 @@ struct SettingsPanel: View {
       closedTabLimit = state.closedTabLimit
       recovery = state.recoveryEnabled
       warnOnTabClose=state.warnOnTabClose
+      warnOnObjectClose=state.warnOnObjectClose
     }.task {await definitionStorage.refresh()}
   }
   private func settingsPage<Content: View>(_ section: SettingsSection, subtitle: String, @ViewBuilder content: @escaping () -> Content) -> some View {
@@ -445,6 +448,8 @@ struct SettingsPanel: View {
           UserDefaults.standard.set(aliases,forKey:"sqlAutomaticAliases")
           UserDefaults.standard.set(noLock,forKey:"sqlAutomaticNoLock")
           NotificationCenter.default.post(name:Notification.Name("sqlEditorPreferencesChanged"),object:nil)
+          state.warnOnObjectClose=warnOnObjectClose
+          UserDefaults.standard.set(warnOnObjectClose,forKey:"warnOnObjectClose")
           state.warnOnTabClose=warnOnTabClose
           UserDefaults.standard.set(warnOnTabClose,forKey:"warnOnTabClose")
           state.historyEnabled = history

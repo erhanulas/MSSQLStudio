@@ -102,7 +102,11 @@ import UniformTypeIdentifiers
     ? URL(fileURLWithPath:"/tmp/MSSQLStudio-UI-\(ProcessInfo.processInfo.processIdentifier)") : folder).appendingPathComponent("favorites.json"))
   private var nextQueryNumber = 1
   var warnOnTabClose=UserDefaults.standard.object(forKey:"warnOnTabClose") as? Bool ?? true
-  func requiresCloseConfirmation(_ doc:QueryDocument)->Bool {doc.hasPendingDatabaseChanges || warnOnTabClose && doc.dirty}
+  var warnOnObjectClose=UserDefaults.standard.object(forKey:"warnOnObjectClose") as? Bool ?? true
+  func requiresCloseConfirmation(_ doc:QueryDocument)->Bool {
+    if doc.hasPendingDatabaseChanges {return warnOnObjectClose}
+    return warnOnTabClose && doc.dirty
+  }
   var historyEnabled = UserDefaults.standard.bool(forKey: "historyEnabled")
   var historyRetentionDays = QueryHistoryPolicy.days(UserDefaults.standard.object(forKey: "historyRetentionDays") as? Int ?? QueryHistoryPolicy.defaultDays)
   private var snapshotTask: Task<Void, Never>?

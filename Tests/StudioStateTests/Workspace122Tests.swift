@@ -37,6 +37,23 @@ private actor ImportedProfiles122 {
     for _ in 0..<100 where host.auxiliaryWindows.contains(where:{$0.window === panel}) {try await Task.sleep(for:.milliseconds(2))}
     #expect(!host.auxiliaryWindows.contains {$0.window === panel} && panel.parent==nil)
   }
+  @Test func objectCloseWarningIsIndependentAndKeepsDatabaseSafetyGuards() {
+    let (state,server,_,window)=fixture();defer {window.close()}
+    state.errorFixture={_ in}
+    let doc=state.newQuery(server:server,text:"ALTER PROCEDURE dbo.P AS SELECT 2;")
+    doc.savedText="";doc.moduleInitialSQL="ALTER PROCEDURE dbo.P AS SELECT 1;"
+    for sqlWarning in [false,true] {
+      state.warnOnTabClose=sqlWarning
+      state.warnOnObjectClose=true
+      #expect(state.requiresCloseConfirmation(doc) && state.needsBulkCloseConfirmation)
+      state.warnOnObjectClose=false
+      #expect(!state.requiresCloseConfirmation(doc) && !state.needsBulkCloseConfirmation)
+    }
+    doc.transactionCount=1;#expect(!state.close(doc));doc.transactionCount=0
+    doc.confirmDiscardResultEdits={false};#expect(!state.close(doc));doc.confirmDiscardResultEdits=nil
+    #expect(state.close(doc))
+    #expect(SettingsSearch.entries.contains {$0.id == "objectCloseWarning"})
+  }
   @Test func disabledSQLCloseWarningKeepsTransactionAndResultDraftGuards() {
     let (state,server,_,window)=fixture();defer {window.close()}
     state.warnOnTabClose=false;state.errorFixture={_ in}

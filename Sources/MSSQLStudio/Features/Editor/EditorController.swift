@@ -194,6 +194,14 @@ import SQLServerKit
     NotificationCenter.default.addObserver(self,selector:#selector(catalogChanged),name:.init("sqlEditorPreferencesChanged"),object:nil)
     editor.toggleOutline = { [weak self] in self?.toggleCurrentFold() }
     editor.expandOutline = { [weak self] in self?.expandAll() }
+    editor.batchEditingEnded = { [weak self] in
+      guard let self else {return}
+      textDidChange(Notification(name:NSText.didChangeNotification,object:editor))
+      textViewDidChangeSelection(Notification(name:NSTextView.didChangeSelectionNotification,object:editor))
+    }
+    editor.dismissCaretSuggestions = { [weak self] in
+      self?.objectHover.hide();self?.completion.close();self?.insertPresentation.dismissPreview()
+    }
     editor.prepareEdit = { [weak self] in self?.expandAll() }
     editor.sourceCopy = { [weak self] in
       guard let self, projection != nil else { return nil }
@@ -447,6 +455,7 @@ import SQLServerKit
     scheduleIntelligence()
   }
   func textDidChange(_ notification: Notification) {
+    guard !editor.isBatchEditing else {return}
     objectHover.hide()
     textRevision = UUID();executionRequest=UUID();previewExecutionRange(nil)
     guard !changingPresentation else { return }
@@ -476,7 +485,7 @@ import SQLServerKit
   }
   func textViewDidChangeSelection(_ notification: Notification) {
     objectHover.hide()
-    guard !paintingOccurrences, !changingPresentation else {return}
+    guard !editor.isBatchEditing,!paintingOccurrences, !changingPresentation else {return}
     let range = editor.selectedRange()
     updateCommentHint()
     scheduleOccurrences()
@@ -540,9 +549,10 @@ import SQLServerKit
     guard projection == nil,editor.selectedRange().length == 0,!editor.hasMarkedText(),editor.window == nil || editor.window?.firstResponder === editor else {parameterPopover.close();return}
     let source=editor.string,caret=editor.selectedRange().location,db=document.database,server=document.server,serverGeneration=document.server.generation
     let catalog=document.catalogDatabase == db ? document.intelligenceCatalog:nil
+    let delay = !manual && !parameterShown
     parameterTask=Task { [weak self] in
       do {
-        if !manual {try await Task.sleep(for:.milliseconds(180))}
+        if delay {try await Task.sleep(for:.milliseconds(180))}
         let call=await Task.detached(priority:.userInitiated) {SQLRoutineCall.context(source:source,caret:caret,catalog:catalog)}.value
         guard let self else {return}
         guard !Task.isCancelled,parameterGeneration == generation,editor.string == source,editor.selectedRange().location == caret,document.database == db,document.server === server,server.generation == serverGeneration else {return}
@@ -579,7 +589,7 @@ import SQLServerKit
     insertPresentation.hidePreview()
     let height=parameterStatus == nil && !parameterValues.isEmpty ? CGFloat(min(6,parameterValues.count))*28+62:104
     let content=SQLParameterHelp(name:call.symbol.schema+"."+call.symbol.name,parameters:parameterValues,active:call.activeIndex(in:parameterValues),status:parameterStatus)
-    StudioPopover.show(parameterPopover,content:content,from:editor,rect:anchor,size:NSSize(width:480,height:height))
+    StudioPopover.show(parameterPopover,content:content,from:editor,rect:anchor,size:NSSize(width:480,height:height),updatingExisting:true,behavior:.semitransient)
   }
   func jumpToMatchingPair() {
     let sourceRange=projection?.sourceRange(editor.selectedRange()) ?? editor.selectedRange()
@@ -729,7 +739,7 @@ import SQLServerKit
     if projection == nil { scheduleIntelligence(allowPopup:false) }
   }
   func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
-    clearOccurrences()
+    if !editor.isBatchEditing {clearOccurrences()}
     editor.typingAttributes.removeValue(forKey:.backgroundColor)
     guard let projection else { return true }
     let range = projection.sourceRange(affectedCharRange)
@@ -747,7 +757,17 @@ import SQLServerKit
     index?.pointee = values.isEmpty ? -1 : 0
     return values
   }
-  @objc private func catalogChanged() {dismissParameterHelp();scheduleParameters();scheduleIntelligence(allowPopup:false)}
+  private(set) var catalogAnalysisPending=false
+  @objc private func catalogChanged() {
+    dismissParameterHelp();completion.cancel()
+    catalogAnalysisPending=true
+    refreshCatalogAnalysisIfNeeded()
+  }
+  func refreshCatalogAnalysisIfNeeded() {
+    guard catalogAnalysisPending,editor.window != nil,!editor.isHiddenOrHasHiddenAncestor else {return}
+    catalogAnalysisPending=false
+    scheduleParameters();scheduleIntelligence(allowPopup:false)
+  }
   func scheduleIntelligence(manual:Bool=false,allowPopup:Bool=true) {
     completion.scheduleIntelligence(manual:manual,allowPopup:allowPopup)
   }

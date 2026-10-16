@@ -176,7 +176,10 @@ extension WorkbenchController {
         try await indexService.replaceTarget(profile:server.profile,database:database,name:key.schema+"."+key.name,folder:folder,items:rows)
         guard generation==server.generation,server.online,server.catalogIndexRevision==revision,server.allowsCatalogIndex(database) else {return}
         let symbol=item.map {CatalogSymbol(schema:$0.schema,name:$0.name,columns:values.compactMap {$0[4]},kind:$0.detail)}
-        let catalog=try await catalogService.replaceTarget(profile:server.profile,database:database,schema:key.schema,name:key.name,symbol:symbol)
+        let seed=state.documents.first {
+          $0.server === server && $0.database==database && $0.catalogDatabase==database && $0.intelligenceCatalog != nil
+        }?.intelligenceCatalog?.snapshot ?? SQLCatalogSnapshot(symbols:[],synchronizedAt:.distantPast)
+        let catalog=try await catalogService.replaceTarget(profile:server.profile,database:database,schema:key.schema,name:key.name,symbol:symbol,fallback:seed)
         guard generation==server.generation,server.online,server.catalogIndexRevision==revision,server.allowsCatalogIndex(database) else {return}
         if let catalog {for document in state.documents where document.server === server && document.database==database {document.applyTargetedCatalog(catalog,database:database,generation:generation)}}
       }
