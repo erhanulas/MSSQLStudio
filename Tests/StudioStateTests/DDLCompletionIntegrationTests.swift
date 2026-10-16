@@ -4,6 +4,21 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct DDLCompletionIntegrationTests {
+  @Test func triggerCompletionPassesItsDatabaseToQualifiedPseudoTableResolution() async throws {
+    _=NSApplication.shared
+    let server=ConnectedServer(profile:.init(),password:"");server.online=false
+    let doc=QueryDocument(server:server,database:"Warehouse",title:"Trigger CTE")
+    doc.sql="ALTER TRIGGER dbo.tr ON Warehouse.dbo.Cells AFTER UPDATE AS BEGIN ;WITH Src AS (SELECT i.Code FROM inserted i JOIN deleted d ON i.Code=d.Code WHERE ISNULL(i.V_, '')='') SELECT * FROM Src; END;"
+    doc.catalogDatabase="Warehouse"
+    doc.intelligenceCatalog = .init(snapshot:.init(symbols:[.init(schema:"dbo",name:"Cells",columns:["Code","V_Extra10"],kind:"USER_TABLE")]))
+    let editor=SQLTextView(usingTextLayoutManager:true);editor.string=doc.sql
+    editor.setSelectedRange(NSRange(location:(doc.sql as NSString).range(of:"i.V_").location+4,length:0))
+    let completion=EditorCompletionController(document:doc,editor:editor)
+    defer {completion.cancel()}
+    completion.scheduleIntelligence(manual:true)
+    for _ in 0..<100 where completion.currentAnalysis == nil {try await Task.sleep(for:.milliseconds(10))}
+    #expect(completion.currentAnalysis?.suggestions.contains {$0.kind == .column && $0.text.contains("V_Extra10")} == true)
+  }
   @Test func lateParameterResponseCannotReplaceVariableSuggestions() async throws {
     _=NSApplication.shared
     let server=ConnectedServer(profile:.init(),password:"");server.online=false

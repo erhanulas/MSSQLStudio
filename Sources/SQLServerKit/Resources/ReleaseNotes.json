@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.156",
+    "date": "2026-10-16",
+    "title": "Aşamalı kolon seçimi ve trigger kolon tamamlama",
+    "changes": [
+      "SQL editöründe ilk çift tıklama kolon adını seçer; aynı kelimeye devam eden tıklamalar alias ile birlikte nitelikli adı seçer. Köşeli parantezli adlar ve sürükleyerek seçim korunur.",
+      "Aktif veritabanı adıyla başlayan üç parçalı trigger hedeflerinde inserted/deleted ve alias kolon önerileri çalışır; CTE ve iç içe fonksiyon bağlamları desteklenir. Başka veritabanının kolonları yerel metadata ile tahmin edilmez."
+    ]
+  },
+  {
     "version": "0.2.155",
     "date": "2026-10-16",
     "title": "Kalıcı pencere yerleşimleri ve güncel bulucu seçimi",

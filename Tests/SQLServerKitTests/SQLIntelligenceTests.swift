@@ -21,6 +21,60 @@ struct SQLIntelligenceTests {
     let source="DECLARE @city nvarchar(20); EXEC dbo.GetCustomers @Name = @ci"
     #expect(try analyze(source).suggestions.contains {$0.text == "@city"})
   }
+  @Test func databaseQualifiedTriggerTargetCompletesCTEPseudoTablesOnlyInItsOwnDatabase() throws {
+    let template="""
+    SET ANSI_NULLS ON;
+    GO
+    SET QUOTED_IDENTIFIER ON;
+    GO
+    ALTER TRIGGER [dbo].[UpdateCells] ON [Warehouse].dbo.InventoryCells AFTER UPDATE AS
+    BEGIN
+      SET NOCOUNT ON;
+      IF NOT UPDATE(GroupCode) RETURN;
+      ;WITH Src AS (
+        SELECT d.CellCode, d.GroupCode AS OldGroup, i.GroupCode AS NewGroup
+        FROM inserted i JOIN deleted d ON d.CellCode=i.CellCode
+        WHERE ISNULL(i.GroupCode, '') <> ISNULL(d.GroupCode, '')
+          OR ISNULL(MARKER, '') <> ISNULL(d.V_Extra10, '')
+      )
+      UPDATE t SET GroupCode=s.NewGroup FROM Warehouse.dbo.InventoryCells t JOIN Src s ON t.CellCode=s.CellCode;
+    END;
+    GO
+    ENABLE TRIGGER dbo.UpdateCells ON dbo.InventoryCells;
+    """
+    let catalog=SQLIntelligence.Catalog(snapshot:.init(symbols:[CatalogSymbol(schema:"dbo",name:"InventoryCells",columns:["CellCode","GroupCode","V_Extra10"],kind:"USER_TABLE")]))
+    for alias in ["i.","d.","inserted.","deleted.","i.V_"] {
+      let source=template.replacingOccurrences(of:"MARKER",with:alias)
+      let caret=(source as NSString).range(of:"OR ISNULL(").location+"OR ISNULL(".utf16.count+alias.utf16.count
+      let matched=try SQLIntelligence.analyze(source:source,caret:caret,catalog:catalog,verified:true,currentDatabase:"Warehouse")
+      #expect(matched.suggestions.contains {$0.kind == .column && $0.text.contains("V_Extra10")})
+      #expect(matched.referenceBindings["i"] == ["dbo","InventoryCells"])
+      for database:String? in [nil,"Other"] {
+        let other=try SQLIntelligence.analyze(source:source,caret:caret,catalog:catalog,verified:true,currentDatabase:database)
+        #expect(!other.suggestions.contains {$0.kind == .column && $0.text.contains("V_Extra10")})
+      }
+    }
+  }
+  @Test func triggerCTEAliasesCompleteInsideNestedPredicateFunctions() throws {
+    let template="""
+    ALTER TRIGGER dbo.tr ON dbo.Customers AFTER UPDATE AS
+    BEGIN
+      ;WITH Src AS (
+        SELECT d.CustomerID, d.City AS OldCity, i.City AS NewCity
+        FROM inserted i JOIN deleted d ON d.CustomerID = i.CustomerID
+        WHERE d.CustomerID = 10 AND (ISNULL(i.City, '') <> ISNULL(d.City, '')
+          OR ISNULL(MARKER, '') <> ISNULL(d.City, ''))
+      )
+      SELECT * FROM Src;
+    END
+    """
+    for alias in ["i.","d.","inserted.","deleted.","i.Ci"] {
+      let source=template.replacingOccurrences(of:"MARKER",with:alias)
+      let caret=(source as NSString).range(of:"OR ISNULL(").location+"OR ISNULL(".utf16.count+alias.utf16.count
+      let result=try analyze(source,caret:caret)
+      #expect(result.suggestions.contains {$0.kind == .column && $0.text.contains("City")},"Missing columns for \(alias)")
+    }
+  }
   @Test func explorerAliasBindingsRespectNestedAndSiblingStatementScopes() throws {
     let source="SELECT c.Name, (SELECT c.Amount FROM dbo.Orders c) FROM dbo.Customers c; SELECT c.City FROM report.CustomerSummary c;"
     let outer=try analyze(source,caret:(source as NSString).range(of:"c.Name").location+2)

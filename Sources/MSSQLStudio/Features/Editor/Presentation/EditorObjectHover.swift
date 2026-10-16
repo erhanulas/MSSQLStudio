@@ -33,7 +33,7 @@ import SQLServerKit
         guard let token=tokens.first(where:{$0.kind == .word && NSLocationInRange(offset,$0.range)}),
           let parts=DefinitionReference.parts(in:source,at:offset,maxParts:3) else {return}
         activeRange=token.range
-        let analysis=try SQLIntelligence.analyze(source:source,caret:offset,catalog:document.intelligenceCatalog,verified:false)
+        let analysis=try SQLIntelligence.analyze(source:source,caret:offset,catalog:document.intelligenceCatalog,verified:false,currentDatabase:db)
         var targets:[[String]]=[],column:String?
         var includeTableColumns=false
         if parts.count==1,["inserted","deleted"].contains(parts[0].lowercased()),let resolved=analysis.referenceBindings[parts[0].lowercased()] {targets=[resolved];includeTableColumns=true}

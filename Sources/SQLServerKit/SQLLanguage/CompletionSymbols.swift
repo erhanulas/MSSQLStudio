@@ -232,7 +232,7 @@ public enum SQLIntelligence {
     while occupied.contains(candidate.lowercased()) { candidate = initials+String(suffix); suffix += 1 }
     return candidate.uppercased()
   }
-  public static func analyze(source: String, caret: Int, catalog: Catalog?, verified: Bool, automaticAliases: Bool = true, automaticNoLock: Bool = false, includeSchema: Bool = true, quoteIdentifiers: Bool = true) throws -> Analysis {
+  public static func analyze(source: String, caret: Int, catalog: Catalog?, verified: Bool, automaticAliases: Bool = true, automaticNoLock: Bool = false, includeSchema: Bool = true, quoteIdentifiers: Bool = true, currentDatabase:String? = nil) throws -> Analysis {
     try Task.checkCancellation()
     let original = source as NSString, caret = max(0,min(caret,original.length))
     guard original.length <= 250_000 else { return Analysis(tokens:[],diagnostics:[],suggestions:[],replacement:NSRange(location:caret,length:0)) }
@@ -304,6 +304,9 @@ public enum SQLIntelligence {
         parts.append(raw(tokens[j].text));triggerHeaderEnd=NSMaxRange(tokens[j].range);j+=1
         if j<tokens.count,tokens[j].text == "." {j+=1} else {break}
       }
+      // A database-qualified DML target can use this catalog only when its
+      // database is explicitly the editor's database. Never infer remote columns.
+      if parts.count==3,let currentDatabase,parts[0].utf8.elementsEqual(currentDatabase.utf8) {parts.removeFirst()}
       if (1...2).contains(parts.count),!parts.contains(where:{["DATABASE","ALL","SERVER"].contains($0.uppercased())}),
         !tokens.contains(where:{$0.text.uppercased() == "GO" && $0.range.location>triggerHeaderEnd && $0.range.location<caret}) {
         triggerParts=parts

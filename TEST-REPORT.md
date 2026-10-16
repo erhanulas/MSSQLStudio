@@ -1,3 +1,19 @@
+## 16 Ekim 2026 — v0.2.156 yayın hazırlığı
+
+- Mevcut 45 native editör testi, trigger için 32 geçen /1 atlanan test ve başarılı Release derleme kanıtları kullanıldı. Kullanıcının mevcut tercihiyle testler tekrarlanmaz; yalnız bu tag için CI paket suite’i atlanır. İmza/helper, manifest/hash ve Foundation feed denetimleri korunur.
+
+## 16 Ekim 2026 — SQL kelime seçiminde aşamalı alias genişletme, yerel
+
+- İlk çift tıklama yalnız kolon/SQL kelimesini seçer; aynı kelimede devam eden tıklamalar noktayla bağlı nitelikli adı seçer. T.DEPO_KODU ve köşeli parantezli adlar desteklenir. Son glifin sağ kenarında native insertion offset sonraki boşluğa denk gelse de tıklanan karakter korunur; çift tıklayıp sürükleme, SQL/undo ve mevcut prefix seçimi korunur.
+- **45 native test /3 suite geçti /0 issue**, 6.426 sn (`/tmp/mssql-progressive-word-selection-final.log`). Yeni regresyonlar ilk/tekrarlı/gecikmiş seçim, köşeli parantez ve gerçek TextKit 2 glif koordinatında mouseDown yolunu doğrular. İlk test derleme denemesinde NSValue rect dönüşümü düzeltildi; son koşu başarılıdır.
+- Release BUILD SUCCEEDED (`/tmp/mssql-progressive-word-selection-release-final.log`); mimari ve diff kontrolleri geçti. Fiziksel fare/CUA denenmedi; kurulu uygulama ve gerçek kullanıcı verileri değiştirilmedi. Henüz yayımlanmadı.
+
+## 16 Ekim 2026 — üç parçalı trigger hedefinde inserted/deleted kolon tamamlama, yerel
+
+- Kullanıcının trigger başlığındaki DB.schema.table hedefi önceki 1–2 parça sınırında reddediliyordu; pseudo-table alias’ları hedef kolonlarına bağlanmıyordu. SQLIntelligence.analyze optional currentDatabase bağlamıyla üç parçalı hedefi yalnız veritabanı byte-exact eşleştiğinde schema.table olarak yerel kataloğa çözer. Completion worker ve alias hover aktif DB snapshot’ını iletir. Bilinmeyen/başka DB ve uzak dört parçalı hedeflerde yerel kolon tahmini yapılmaz; yeni metadata sorgusu/bağımlılık yoktur.
+- **32 test geçti /1 canlı test atlandı**: 5 native /2 suite ve 28 core kayıt /2 suite (core’da 1 skipped), 1.176 /0.230 sn (`/tmp/mssql-trigger-qualified-target.log`). Anonim fixture GO/SET başlıkları, üç parçalı ON, CTE, inserted i/deleted d, ISNULL içinde i./d./inserted./deleted./i.V_ ve aynı/başka/bilinmeyen DB ayrımını doğrular. Native completion regresyonu document DB’nin analize aktarılmasını sınar. İlk iki parçalı CTE kontrolü mevcut davranışın çalıştığını göstermişti; paylaşılan tam SQL üç parçalı hedef boşluğunu belirledi.
+- Release BUILD SUCCEEDED (`/tmp/mssql-trigger-qualified-target-release.log`); mimari ve diff kontrolleri geçti. Canlı SQL/CUA denenmedi, kullanıcının trigger SQL’i çalıştırılmadı; kurulu uygulama/gerçek veri değiştirilmedi. Henüz yayımlanmadı.
+
 ## 16 Ekim 2026 — v0.2.155 / build 156 public yayın doğrulaması
 
 - Public/latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.155 ; kaynak 007f77abc41a0dd41746f81f9ddb20ea82a3701a. Actions 38911512144 başarılı. Kullanıcı tercihiyle paket suite’i bu tag’de atlandı; yeni test koşusu yapılmadı.

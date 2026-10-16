@@ -368,6 +368,7 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
   }
   override func selectAll(_ sender: Any?) { dismissSuggestions?(); super.selectAll(sender) }
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+  private var lastWordClick:(source:String,word:NSRange,time:TimeInterval)?
   private(set) var trackingMouseSelection=false
   var mouseSelectionEnded:(() -> Void)?
   override func mouseDragged(with event:NSEvent) {
@@ -380,10 +381,14 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
   }
   override func mouseDown(with event: NSEvent) {
     if event.modifierFlags.intersection([.command,.control,.option]) == .option,isEditable,!hasMarkedText() {
+      lastWordClick=nil
       window?.makeFirstResponder(self);dismissSuggestions?();finishUndoInput();prepareEdit?()
       columnSelection.begin(at:convert(event.locationInWindow,from:nil));return
     }
     columnSelection.clear()
+    let clickPoint=convert(event.locationInWindow,from:nil)
+    let clickedOffset=wordHitOffset(at:clickPoint)
+    if let lastWordClick,!NSLocationInRange(clickedOffset,lastWordClick.word) {self.lastWordClick=nil}
     let navigationClick=DefinitionReference.isNavigationClick(event)
     trackingMouseSelection=true
     defer {trackingMouseSelection=false;if !navigationClick {mouseSelectionEnded?()}}
@@ -404,10 +409,63 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
       updateInsertionPointStateAndRestartTimer(true)
       return
     }
+    if event.clickCount>=3,selectSQLWord(at:clickedOffset,clickCount:event.clickCount,time:event.timestamp) {return}
     super.mouseDown(with: event)
     if event.clickCount == 2, unfoldSelection?(selectedRange()) == true {return}
-    if event.clickCount == 2 { normalizeSQLWordSelection() }
+    if event.clickCount == 2 {
+      let pointer=window.map {convert($0.mouseLocationOutsideOfEventStream,from:nil)} ?? clickPoint
+      let dragged=abs(pointer.x-clickPoint.x)>3 || abs(pointer.y-clickPoint.y)>3
+      if dragged || !selectSQLWord(at:clickedOffset,clickCount:2,time:event.timestamp) {normalizeSQLWordSelection()}
+    }
     // Double-click belongs to word selection. Navigation must be deliberate.
+  }
+  private func wordHitOffset(at point:NSPoint)->Int {
+    let offset=characterIndexForInsertion(at:point)
+    guard offset>0,let window else {return offset}
+    let screen=firstRect(forCharacterRange:NSRange(location:offset,length:0),actualRange:nil)
+    let caret=convert(window.convertFromScreen(screen),from:nil)
+    if point.y>=caret.minY,point.y<=caret.maxY,point.x<caret.minX {
+      return (string as NSString).rangeOfComposedCharacterSequence(at:offset-1).location
+    }
+    return offset
+  }
+  @discardableResult func selectSQLWord(at offset:Int,clickCount:Int,time:TimeInterval)->Bool {
+    let text=string as NSString
+    guard offset>=0,offset<text.length else {return false}
+    func wordCharacter(_ index:Int)->Bool {
+      guard index>=0,index<text.length,let scalar=UnicodeScalar(text.character(at:index)) else {return false}
+      return CharacterSet.alphanumerics.contains(scalar) || "_@$#".unicodeScalars.contains(scalar)
+    }
+    guard wordCharacter(offset) else {return false}
+    let word=selectionRange(forProposedRange:NSRange(location:offset,length:0),granularity:.selectByWord)
+    func component(_ range:NSRange)->NSRange {
+      if range.location>0,NSMaxRange(range)<text.length,text.character(at:range.location-1)==91,text.character(at:NSMaxRange(range))==93 {
+        return NSRange(location:range.location-1,length:range.length+2)
+      }
+      return range
+    }
+    var qualified=component(word)
+    for _ in 0..<3 {
+      let dot=qualified.location-1
+      guard dot>0,text.character(at:dot)==46 else {break}
+      let index=text.character(at:dot-1)==93 ? dot-2:dot-1
+      guard wordCharacter(index) else {break}
+      let previous=component(selectionRange(forProposedRange:NSRange(location:index,length:0),granularity:.selectByWord))
+      qualified=NSUnionRange(previous,qualified)
+    }
+    for _ in 0..<3 {
+      let dot=NSMaxRange(qualified)
+      guard dot+1<text.length,text.character(at:dot)==46 else {break}
+      let index=text.character(at:dot+1)==91 ? dot+2:dot+1
+      guard wordCharacter(index) else {break}
+      let next=component(selectionRange(forProposedRange:NSRange(location:index,length:0),granularity:.selectByWord))
+      qualified=NSUnionRange(qualified,next)
+    }
+    let repeated=lastWordClick.map {$0.source==string && $0.word==word && time >= $0.time && time-$0.time<=NSEvent.doubleClickInterval*2} ?? false
+    if clickCount>=3,qualified==component(word) {return false}
+    setSelectedRange(clickCount>=3 || repeated ? qualified:word)
+    lastWordClick=(string,word,time)
+    return true
   }
   // AppKit may apply its own word boundaries after selectionRange; normalize the final
   // mouse selection as well, so SQL variable prefixes survive the native tracking loop.
@@ -605,6 +663,7 @@ private final class SQLFindKeyMonitor:@unchecked Sendable {
     insertText("\n" + indentation,replacementRange:selection)
   }
   override func keyDown(with event: NSEvent) {
+    lastWordClick=nil
     if handleHistoryKey(event) {return}
     if handleCommentKey(event) {return}
     if GridShortcuts.matches(.format,event) {formatSQLText(nil);return}

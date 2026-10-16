@@ -255,6 +255,39 @@ import Testing
     #expect(controller.editor.string == doc.sql)
   }
 
+  @Test func doubleClickSelectsColumnBeforeRepeatedClickExpandsItsQualifier() {
+    let editor=SQLTextView(usingTextLayoutManager:true)
+    editor.string="SELECT * FROM TBLDEPMAS AS T WITH(NOLOCK) WHERE T.DEPO_KODU = 11;"
+    let source=editor.string as NSString,column=source.range(of:"DEPO_KODU"),qualified=source.range(of:"T.DEPO_KODU")
+    #expect(editor.selectSQLWord(at:column.location+2,clickCount:2,time:1))
+    #expect(editor.selectedRange()==column)
+    #expect(editor.selectSQLWord(at:column.location+2,clickCount:2,time:1+NSEvent.doubleClickInterval))
+    #expect(editor.selectedRange()==qualified)
+    #expect(editor.selectSQLWord(at:column.location+2,clickCount:2,time:10))
+    #expect(editor.selectedRange()==column)
+    #expect(editor.selectSQLWord(at:column.location+2,clickCount:4,time:10.1))
+    #expect(editor.selectedRange()==qualified && editor.string==source as String)
+    editor.string="SELECT [dbo].[T].[DEPO_KODU], @PARAM;"
+    let quoted=editor.string as NSString,word=quoted.range(of:"DEPO_KODU")
+    #expect(editor.selectSQLWord(at:word.location+1,clickCount:2,time:20))
+    #expect(editor.selectedRange()==word)
+    #expect(editor.selectSQLWord(at:word.location+1,clickCount:4,time:20.1))
+    #expect(editor.selectedRange()==quoted.range(of:"[dbo].[T].[DEPO_KODU]"))
+  }
+  @Test func repeatedQualifiedClickUsesTheLastGlyphRatherThanTheFollowingSpace() throws {
+    _=NSApplication.shared
+    let editor=SQLTextView(usingTextLayoutManager:true)
+    let window=NSWindow(contentRect:NSRect(x:100,y:100,width:900,height:450),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=editor;defer {window.close()}
+    editor.string="SELECT T.DEPO_KODU FROM dbo.Cells T;"
+    editor.textLayoutManager?.textViewportLayoutController.layoutViewport()
+    let text=editor.string as NSString,word=text.range(of:"DEPO_KODU")
+    let glyph=try #require(editor.rects(forCharacterRange:NSRange(location:NSMaxRange(word)-1,length:1))?.first)
+    let point=editor.convert(NSPoint(x:glyph.rectValue.maxX-0.5,y:glyph.rectValue.midY),to:nil)
+    let event=try #require(NSEvent.mouseEvent(with:.leftMouseDown,location:point,modifierFlags:[],timestamp:1,windowNumber:window.windowNumber,context:nil,eventNumber:1,clickCount:4,pressure:1))
+    editor.mouseDown(with:event)
+    #expect(editor.selectedRange()==text.range(of:"T.DEPO_KODU"))
+  }
   @Test func finalMouseSelectionRestoresSQLPrefixesWithoutExpandingMultipleWords() {
     let editor=SQLTextView(usingTextLayoutManager:true)
     editor.string="SELECT @STOK_KODU, @@ROWCOUNT, #Temp, @şehir; SELECT @STOK_KODU;"

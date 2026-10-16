@@ -44,7 +44,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
     let generation = UUID(); intelligenceGeneration = generation
     guard !isProjected() else { return }
     document.ensureCatalogFresh()
-    let source = editor.string, caret = editor.selectedRange().location
+    let source = editor.string, caret = editor.selectedRange().location, database=document.database
     let catalog = document.catalogDatabase == document.database ? document.intelligenceCatalog : nil
     let verified = document.catalogVerified && document.catalogDatabase == document.database
     let aliases = UserDefaults.standard.object(forKey:"sqlAutomaticAliases") as? Bool ?? true
@@ -58,7 +58,7 @@ private final class SQLSuggestionKeyMonitor: @unchecked Sendable {
       do {
         if !manual { try await Task.sleep(for:.milliseconds(delay)) }
         let worker = Task.detached(priority:.userInitiated) {
-          let analysis = try SQLIntelligence.analyze(source:source,caret:caret,catalog:catalog,verified:verified,automaticAliases:aliases,automaticNoLock:noLock,includeSchema:includeSchema,quoteIdentifiers:quoteIdentifiers)
+          let analysis = try SQLIntelligence.analyze(source:source,caret:caret,catalog:catalog,verified:verified,automaticAliases:aliases,automaticNoLock:noLock,includeSchema:includeSchema,quoteIdentifiers:quoteIdentifiers,currentDatabase:database)
           try Task.checkCancellation()
           return (analysis,SQLFolding.regions(source))
         }
