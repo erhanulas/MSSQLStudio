@@ -1,3 +1,9 @@
+## 16 Ekim 2026 — v0.2.147 / build 148 public yayın doğrulandı
+
+- [Public/latest v0.2.147](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.147), kaynak `7be627f2d56cfbdd20a27ccdf5d5232518f43f4a`; [Actions 38872242952](https://github.com/erhanulas/MSSQLStudio/actions/runs/38872242952) başarılı. Kullanıcının açık isteğiyle yerel test/build ve CI paket test suite’i tekrarlanmadı; yalnız bu tag için test adımı skipped. Önceki 28 hedefli test kanıtı aşağıdadır; bu yayında tam suite çalıştı iddiası yoktur.
+- İmza/helper audit, signed app/PKG, manifest ve CI Foundation feed kontrolü başarılı. Dört public asset indirildi; digest/SHA-256, exact sürüm/build, kaynak/paket/not eşliği, app/helper strict/deep imza, frozen helper ve ikon varyantları doğrulandı. İndirilen uygulamanın exact Foundation updater kontrolü exit 0 verdi. Kanıt: `/tmp/MSSQLStudio-147-public-verification/verification.json`, `verification.log`, `foundation-feed.log`.
+- ZIP SHA-256 `f3ebe26d39267d8d7a945e08d4b969222113ba78d93d8981f9e40acac8d67579`; PKG `10062165d535604141ac3a892d519279330211a5b6da40e4f0252d870e591a2c`. Kurulu uygulama/kullanıcı verisi değiştirilmedi; gerçek Installer, canlı SQL veya fiziksel klavye davranışı denenmedi.
+
 ## 16 Ekim 2026 — v0.2.147 için kullanıcı talebiyle test tekrarı istisnası
 
 - Kullanıcı açıkça “çok hızlı test olmadan yayımla” istedi. Mevcut 28 hedefli test ve Release kanıtı korunarak yalnız v0.2.147 tag’i için CI paket suite adımı atlanır; gelecekteki sürümlerin varsayılan test akışı değişmez. İmza/helper audit, paket/manifest ve public Foundation updater kontrolleri korunur. Yeni tam suite başarısı iddia edilmez.
