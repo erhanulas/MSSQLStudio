@@ -1,3 +1,9 @@
+## v0.2.164 public yayın doğrulaması — 16 Ekim 2026
+
+- **0.2.164 / derleme 165**, kaynak `f35539a3a8297a73b2941857e91f9d4c6a6bbafc`; [public/latest yayın](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.164), [Actions 38955776710](https://github.com/erhanulas/MSSQLStudio/actions/runs/38955776710) başarılı. Tamamlanmış 41 Profiler ve 18 sekme/native pencere testi ile son Release derlemesi yeniden kullanılabildi; exact-tag paket testi kullanıcı tercihiyle atlandı.
+- İndirilen ZIP/PKG/update.json SHA-256 değerleri GitHub digest ve manifestle eşleşti. Exact bundle sürüm/derleme, paketlenmiş notlar/public gövde, app/helper strict imza, frozen helper arşiv/binary eşliği ve Icon Composer görünümleri doğrulandı. Signed app Foundation updater feed kontrolü `0.2.164` için geçti; public exact-tag notları kaynakla aynı.
+- Kanıt: `/tmp/MSSQLStudio-164-public-verification/{verification.json,verification.log,foundation-feed.log,public-notes.log}`. Kurulu uygulama değiştirilmedi/yeniden başlatılmadı; gerçek Installer, fiziksel Option/hover veya canlı SQL Server doğrulaması yapılmadı.
+
 ## v0.2.164 yayın hazırlığı — 16 Ekim 2026
 
 - Derleme 165; tamamlanmış 41 Profiler testi, 18 kompakt sekme/native pencere testi ve son Release derlemesi yeniden kullanılacak. Kullanıcının tekrar test yapmadan yayın tercihiyle yalnız exact v0.2.164 paket testi atlanır; imza/helper/hash/manifest/feed kontrolleri korunur.
