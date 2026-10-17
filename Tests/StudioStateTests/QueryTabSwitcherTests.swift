@@ -110,6 +110,16 @@ import Testing
     let dragArea=try #require(panel.contentView?.subviews.first {$0.identifier?.rawValue=="tabSwitcherDragArea"})
     #expect(dragArea.frame.height==44 && dragArea.frame.width==panel.contentView?.bounds.width)
     let selected=switcher.previewID,source=switcher.previewSQL,revision=switcher.keyboardRevealRevision,size=panel.frame.size
+    let origin=panel.frame.origin,autosave=panel.frameAutosaveName
+    func mouse(_ type:NSEvent.EventType,_ point:NSPoint)->NSEvent {
+      NSEvent.mouseEvent(with:type,location:point,modifierFlags:[],timestamp:0,windowNumber:panel.windowNumber,context:nil,eventNumber:0,clickCount:1,pressure:1)!
+    }
+    dragArea.mouseDown(with:mouse(.leftMouseDown,NSPoint(x:100,y:100)))
+    #expect(panel.frameAutosaveName.isEmpty)
+    dragArea.mouseDragged(with:mouse(.leftMouseDragged,NSPoint(x:180,y:180)))
+    dragArea.mouseUp(with:mouse(.leftMouseUp,NSPoint(x:100,y:100)))
+    #expect(panel.frame.origin==NSPoint(x:origin.x+80,y:origin.y+80))
+    #expect(panel.frameAutosaveName==autosave && !dragArea.mouseDownCanMoveWindow)
     for offset in 0..<60 {panel.setFrameOrigin(NSPoint(x:100+offset,y:100+offset))}
     #expect(panel.frame.origin==NSPoint(x:159,y:159) && panel.frame.size==size)
     #expect(switcher.previewID==selected && switcher.previewSQL==source && switcher.keyboardRevealRevision==revision)

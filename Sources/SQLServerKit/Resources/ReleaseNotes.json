@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.178",
+    "date": "2026-10-17",
+    "title": "Sekme önizlemesinin sürüklenmesi düzenlendi",
+    "changes": [
+      "Option+Tab penceresini başlığından taşırken kullanılan sürükleme yöntemi yenilendi.",
+      "Pencere konumu sürükleme bırakıldığında kaydedilir; seçili sekme ve SQL önizlemesi korunur."
+    ]
+  },
+  {
     "version": "0.2.177",
     "date": "2026-10-17",
     "title": "Sekme önizlemesinin pencere taşıması iyileştirildi",

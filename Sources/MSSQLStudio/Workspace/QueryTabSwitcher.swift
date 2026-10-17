@@ -13,10 +13,31 @@ private final class TabSwitcherMonitor {
   override var canBecomeMain:Bool {false}
 }
 
-/// Keep window movement in AppKit's native drag loop, outside the SwiftUI/SQL surface.
+/// Move only the buffered window surface; native performDrag stalls with this hosted panel.
 @MainActor private final class TabSwitcherDragArea:NSView {
+  private var start:NSPoint?
+  private var origin:NSPoint = .zero
+  private var autosave:NSWindow.FrameAutosaveName = ""
+  override var mouseDownCanMoveWindow:Bool {false}
   override func acceptsFirstMouse(for event:NSEvent?)->Bool {true}
-  override func mouseDown(with event:NSEvent) {window?.performDrag(with:event)}
+  override func mouseDown(with event:NSEvent) {
+    guard let window else {return}
+    start=window.convertPoint(toScreen:event.locationInWindow);origin=window.frame.origin
+    autosave=window.frameAutosaveName
+    // Persist the final placement, not every intermediate mouse position.
+    window.setFrameAutosaveName("")
+  }
+  override func mouseDragged(with event:NSEvent) {
+    guard let window,let start else {return}
+    let point=window.convertPoint(toScreen:event.locationInWindow)
+    window.setFrameOrigin(NSPoint(x:origin.x+point.x-start.x,y:origin.y+point.y-start.y))
+  }
+  override func mouseUp(with event:NSEvent) {
+    guard let window,start != nil else {return}
+    start=nil
+    if !autosave.isEmpty {window.saveFrame(usingName:autosave);window.setFrameAutosaveName(autosave)}
+    autosave=""
+  }
 }
 
 /// A visible corner target avoids the transparent rounded panel corner's tiny native hit area.
