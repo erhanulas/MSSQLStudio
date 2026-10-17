@@ -1,3 +1,16 @@
+## v0.2.187 / build 188 release preparation - 2026-10-17
+
+- Explicit user request: publish without further tests. No new suite run; completed native picker regressions, bitmap review and Release evidence below reused. Only exact v0.2.187 package suite is exempted; signing/frozen helper/package/manifest/public feed verification remains required.
+- Includes the colored Control+Tab cards, separate title/context, status/keycap presentation and full last-card fit. Version and user-facing notes synchronized. No installed app/Installer/live SQL operations authorized by publication.
+
+## Control+Tab colored native cards - 2026-10-17 (unpublished)
+
+- Reworked picker presentation into reusable vector-drawn cards: blue workspace/SQL, green server monitoring, amber Profiler/favorite emblems, semantic selection gradient/thin accent border, type caption, status pills, selected Enter/Open cue and keycap footer. Main/detached entry names are taken from their document, server/database are separate context; tool title/server separator is split to avoid duplicate header/context text. No window-content capture, SQL preview, network or analysis added.
+- Compact heading/count replaces repeated selected title; full selected title remains in the bottom transition hint and tooltip. Selection does not move status badges; keyboard and click behavior unchanged. Metrics account for full native row-view bounds, not only the nominal row rect, so the final card is not clipped with two windows.
+- /tmp/mssql-window-picker-cards-final-tests.log: 4 serialized native regressions passed, including 2/20 entries in both themes, actual full last-card bounds, no hover selection/activation, source/context projection and existing key release/Enter/Escape/sheet exclusion paths. /tmp/mssql-window-picker-cards-context-tests.log: expanded main/tool identity projection test passed after final category-label refinement; other unchanged evidence reused.
+- Reviewed native bitmaps /tmp/mssql-window-picker-two-light.png, -two-dark.png and 20-window /tmp/mssql-window-picker-light.png, -dark.png. Initial nominal-row-only fit check missed card edge clipping; strengthened to actual row-view bounds and corrected chrome height. No real window-content screenshots or separate CUA session.
+- /tmp/mssql-window-picker-cards-final-release.log: Release BUILD SUCCEEDED. Architecture/source sync/diff checks passed; installed app and SQL sessions untouched. Not published.
+
 ## v0.2.186 / build 187 public release - 2026-10-17
 
 - Source/tag 8defb9112daae328c2d470054651ed6ad17b36c2; Actions 39045324575 succeeded; public latest v0.2.186. All pending History, Control+Tab, trigger state and menu icon changes included.

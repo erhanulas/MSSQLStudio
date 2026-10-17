@@ -3,12 +3,58 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct StudioWindowCyclerTests {
+  @Test func twoWindowCardsFitAndHoverDoesNotSelectOrOpen() async throws {
+    _=NSApplication.shared
+    let old=UserDefaults.standard.string(forKey:"ssmsTheme");defer {StudioTheme.apply(old ?? "light")}
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      let entries:[StudioWindowSwitcherView.Entry]=[
+        .init(title:"SQLQuery9.sql",context:"DİNAMİK / TEST2026",type:"Çalışma alanı",symbol:"rectangle.split.2x1",status:"Açık"),
+        .init(title:"Activity Monitor",context:"DİNAMİK",type:"Sunucu izleme",symbol:"waveform.path.ecg",status:"Şu an açık")]
+      var selected = -1,accepted = -1
+      let view=StudioWindowSwitcherView(entries:entries,selected:0,select:{selected=$0},accept:{accepted=$0})
+      let height=2*(StudioWindowPickerStyle.rowHeight+StudioWindowPickerStyle.rowGap)+StudioWindowPickerStyle.chromeHeight
+      let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:620,height:height),styleMask:[.titled],backing:.buffered,defer:false)
+      window.isReleasedWhenClosed=false;window.contentView=view;window.orderFront(nil);defer {window.close()}
+      view.layoutSubtreeIfNeeded();try await Task.sleep(for:.milliseconds(50));view.layoutSubtreeIfNeeded()
+      let row=try #require(view.table.rowView(atRow:1,makeIfNecessary:true))
+      let last=view.table.convert(row.bounds,from:row)
+      #expect(last.intersection(view.table.visibleRect).height>=last.height-0.5)
+      let event=try #require(NSEvent.enterExitEvent(with:.mouseEntered,location:.zero,modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,eventNumber:0,trackingNumber:0,userData:nil))
+      row.mouseEntered(with:event)
+      #expect(view.table.selectedRow==0 && selected == -1 && accepted == -1)
+      row.mouseExited(with:event)
+      if let bitmap=view.bitmapImageRepForCachingDisplay(in:view.bounds) {
+        view.cacheDisplay(in:view.bounds,to:bitmap)
+        try bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-window-picker-two-\(theme).png"))
+      }
+    }
+  }
+  @Test func mainWindowEntrySeparatesQueryNameFromConnectionContext() {
+    _=NSApplication.shared
+    let state=StudioState(),server=ConnectedServer(profile:.init(name:"DİNAMİK",visibleDatabases:[]),password:"")
+    let document=QueryDocument(server:server,database:"TEST2026",title:"SQLQuery9.sql")
+    state.active=document
+    let workbench=WorkbenchController(state:state)
+    let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:620,height:400),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentViewController=workbench;defer {window.close()}
+    window.title="SQLQuery9.sql — DİNAMİK / TEST2026"
+    let cycler=StudioWindowCycler(main:window)
+    let entry=cycler.entry(for:window)
+    #expect(entry.title=="SQLQuery9.sql" && entry.context=="DİNAMİK / TEST2026")
+    #expect(entry.symbol=="rectangle.split.2x1")
+    let activity=StudioAssociatedWindow(contentRect:NSRect(x:-20000,y:0,width:620,height:400),styleMask:[.titled],backing:.buffered,defer:false)
+    activity.isReleasedWhenClosed=false;defer {activity.close()}
+    activity.identifier = .init("activity|fixture");activity.title="Activity Monitor · DİNAMİK"
+    let tool=cycler.entry(for:activity)
+    #expect(tool.title=="Activity Monitor" && tool.context=="DİNAMİK" && tool.type=="Sunucu izleme")
+  }
   @Test func nativePickerKeepsNamesVisibleWithManyWindowsInBothThemes() async throws {
     _=NSApplication.shared
     let old=UserDefaults.standard.string(forKey:"ssmsTheme");defer {StudioTheme.apply(old ?? "light")}
     for theme in ["light","dark"] {
       StudioTheme.apply(theme)
-      let entries=(0..<20).map {i in StudioWindowSwitcherView.Entry(title:i==1 ? "SQL Profiler · DİNAMİK — Üretim Sunucusu":"Activity Monitor · Sunucu \(i+1)",context:"ADAGRUP2026 · SQL Server",type:"SQL Profiler",symbol:i==1 ? "list.bullet.rectangle":"waveform.path.ecg",status:i==2 ? "Küçültülmüş":"Açık")}
+      let entries=(0..<20).map {i in StudioWindowSwitcherView.Entry(title:i==1 ? "SQL Profiler · DİNAMİK — Üretim Sunucusu":"Activity Monitor · Sunucu \(i+1)",context:"ADAGRUP2026 · SQL Server",type:i==1 ? "SQL izleme":"Sunucu izleme",symbol:i==1 ? "list.bullet.rectangle":"waveform.path.ecg",status:i==2 ? "Küçültülmüş":"Açık")}
       var selected = -1,accepted = -1
       let view=StudioWindowSwitcherView(entries:entries,selected:1,select:{selected=$0},accept:{accepted=$0})
       let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:620,height:600),styleMask:[.titled],backing:.buffered,defer:false)

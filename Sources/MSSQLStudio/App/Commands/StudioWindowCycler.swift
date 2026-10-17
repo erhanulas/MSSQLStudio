@@ -68,18 +68,24 @@ private final class StudioWindowKeyMonitor {
     default:
       let identity=window.identifier?.rawValue ?? ""
       if window === main {type="Çalışma alanı";symbol="rectangle.split.2x1"}
-      else if identity.hasPrefix("activity|") {type="Activity Monitor";symbol="waveform.path.ecg"}
-      else if window is ProfilerWindow {type="SQL Profiler";symbol="list.bullet.rectangle"}
-      else if identity.hasPrefix("history") {type="Sorgu geçmişi";symbol="clock.arrow.circlepath"}
-      else if identity.hasPrefix("favorites") {type="Favori sorgular";symbol="star"}
+      else if identity.hasPrefix("activity|") {type="Sunucu izleme";symbol="waveform.path.ecg"}
+      else if window is ProfilerWindow {type="SQL izleme";symbol="list.bullet.rectangle"}
+      else if identity.hasPrefix("history") {type="Geçmiş";symbol="clock.arrow.circlepath"}
+      else if identity.hasPrefix("favorites") {type="Favoriler";symbol="star"}
       else if identity.hasPrefix("files|") {type="Veritabanı dosyaları";symbol="externaldrive"}
       else {type="Araç penceresi";symbol="macwindow"}
     }
     let raw=window.title.trimmingCharacters(in:.whitespacesAndNewlines)
-    let title=raw.isEmpty ? type:raw
+    var title=raw.isEmpty ? type:raw
     var context=window.subtitle
     if window === main,let workbench=window.contentViewController as? WorkbenchController,let doc=workbench.state.active {
-      context="\(doc.title) · \(doc.server.profile.name) / \(doc.database)"
+      title=doc.title
+      context="\(doc.server.profile.name) / \(doc.database)"
+    }
+    if let detached=window.windowController as? DetachedQueryWindow {
+      let doc=detached.query.document;title=doc.title;context="\(doc.server.profile.name) / \(doc.database)"
+    } else if window !== main,context.isEmpty,let separator=raw.range(of:" · ") {
+      title=String(raw[..<separator.lowerBound]);context=String(raw[separator.upperBound...])
     }
     let status=window.isMiniaturized ? "Küçültülmüş":window === source ? "Şu an açık":"Açık"
     return .init(title:title,context:context.isEmpty ? type:context,type:type,symbol:symbol,status:status)
@@ -91,7 +97,7 @@ private final class StudioWindowKeyMonitor {
     index=(initial+(backwards ? windows.count-1:1))%windows.count
     let screen=current.screen?.visibleFrame ?? current.frame
     let width=min(620,max(360,screen.width-48))
-    let height=min(min(640,screen.height-48),CGFloat(windows.count)*76+160)
+    let height=min(min(640,screen.height-48),CGFloat(windows.count)*(StudioWindowPickerStyle.rowHeight+StudioWindowPickerStyle.rowGap)+StudioWindowPickerStyle.chromeHeight)
     let popup=NSPanel(contentRect:NSRect(x:0,y:0,width:width,height:height),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
     popup.isReleasedWhenClosed=false;popup.hasShadow=true;popup.isOpaque=false
     popup.backgroundColor = .clear;popup.level = .floating

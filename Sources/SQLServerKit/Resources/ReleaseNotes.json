@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.187",
+    "date": "2026-10-17",
+    "title": "Pencere seçicisi renkli kartlarla yenilendi",
+    "changes": [
+      "Control+Tab pencereleri artık türlerine göre renkli ikon kartları ve durum rozetleriyle gösterir.",
+      "Seçili pencere daha belirgin gösterilir; Aç işareti ve kısayol göstergeleriyle geçiş daha kolay anlaşılır.",
+      "Sorgu adı ile sunucu/veritabanı bilgisi ayrıldı, tekrarlanan başlıklar kaldırıldı.",
+      "İki pencere açıkken son kartın kenarının kesilmesi giderildi. Önizlemesiz kullanım ve mevcut klavye davranışı korundu."
+    ]
+  },
+  {
     "version": "0.2.186",
     "date": "2026-10-17",
     "title": "Geçmiş ve pencere seçimi daha okunaklı",
