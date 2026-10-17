@@ -1,3 +1,9 @@
+## v0.2.179 public yayın doğrulaması — 17 Ekim 2026
+
+- **0.2.179 / derleme 180**, kaynak `43e43cd82d0d3bcab9b60a008575562994026dcb`; [public/latest yayın](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.179), [Actions 38988195396](https://github.com/erhanulas/MSSQLStudio/actions/runs/38988195396) başarılı. Önceki 16 native test/2 suite ve Release kanıtı yeniden kullanıldı; kullanıcı tekrar test istemediği için exact-tag paket testi atlandı.
+- ZIP/PKG/update.json SHA-256 değerleri GitHub digest/manifestle eşleşti. Exact sürüm/derleme/notlar, app/helper strict imza, frozen helper byte eşliği ve ikon görünümleri doğrulandı. İndirilen signed app Foundation feed kontrolü 0.2.179 için geçti; public exact-tag notları kaynakla aynı.
+- Kanıt: `/tmp/MSSQLStudio-179-public-verification/{verification.json,verification.log,foundation-feed.log,public-notes.json}`. Kurulu uygulama/DB/Keychain değiştirilmedi; gerçek Installer veya kullanıcının kendi SQL’i/cihazı doğrulanmadı. Önceki yerel CUA son satır sınırlaması kayıtlıdır.
+
 ## 17 Ekim 2026 — Uzun/tablı önizlemenin kaydırma sınırı düzeltmesi (yerel)
 
 - Kullanıcı kaydırmanın yaklaşık 430. satırda sona erdiğini netleştirdi. SQLReadOnlyPreview yalnız textContainer.lineBreakMode’u ayarlıyordu; NSParagraphStyle varsayılan sarma davranışını sürdürüyordu. Manuel belge yüksekliği fiziksel satırlara göre hesaplanırken tablı uzun satırlar sarılıp sonraki kodu belge frame’i dışına taşıyordu. `/tmp/mssql-preview-tabbed-before.log` regresyonu düzeltmeden önce başarısız: 701 kaynak satırı 1.401 görüntü satırı; layout altı 28.030 pt, belge yüksekliği 14.052 pt.
