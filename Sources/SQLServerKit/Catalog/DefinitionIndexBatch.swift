@@ -20,7 +20,7 @@ public struct DefinitionIndexEntry: Sendable {
 
 public enum DefinitionIndexBatch {
   public static func query(_ entries: [DefinitionIndexEntry]) throws -> String {
-    guard !entries.isEmpty, entries.count <= (entries[0].isModule ? 200 : 64),
+    guard !entries.isEmpty, entries.count <= 200,
       Set(entries.map { $0.object.objectID }).count == entries.count,
       entries.allSatisfy({ $0.isModule == entries[0].isModule })
     else { throw SQLFailure("Geçersiz tanım okuma grubu.") }

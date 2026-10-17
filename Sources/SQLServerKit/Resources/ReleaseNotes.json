@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.194",
+    "date": "2026-10-18",
+    "title": "İçerik indeksleme hatadan sonra otomatik devam eder",
+    "changes": [
+      "İçerik indeksleme okumaları artık iki dakika bekler. Modül ve tablo/synonym tanımları 200 nesnelik gruplarla alınır.",
+      "Geçici bir hata sonrasında indeksleme 30 saniye bekleyerek otomatik yeniden dener. Tamamlanan tanımlar yeniden indirilmez; diğer veritabanları ilerlemeye devam eder.",
+      "İndeks durumunda hatanın hangi aşamada oluştuğu ve sonraki otomatik deneme zamanı gösterilir.",
+      "Timeout veya yavaş okuma nedeniyle gruplar küçültülmez. Eksik metin kaydetmemek için boyut sınırına takılan yanıtların güvenli bölünmesi korunur.",
+      "İndekslemeyi duraklatmak veya kapatmak bekleyen denemeleri de durdurur."
+    ]
+  },
+  {
     "version": "0.2.193",
     "date": "2026-10-18",
     "title": "Uzun sorgular ve nesne yenilemeleri daha güvenilir",

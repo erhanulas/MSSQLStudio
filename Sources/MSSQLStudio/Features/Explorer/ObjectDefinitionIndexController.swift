@@ -7,6 +7,9 @@ import SQLServerKit
   private let disk: CatalogDiskIndex
   private var lease: UUID?
   private var task: Task<Void, Never>?
+  private var retryTask:Task<Void,Never>?
+  private var retryDates:[String:Date]=[:]
+  private let retryDelay:TimeInterval
   private var revision = UUID()
   private var acceptingSince = Date.distantPast
   private(set) var activities: [String: DefinitionIndexActivity] = [:]
@@ -15,11 +18,15 @@ import SQLServerKit
   private var pendingDDLDatabases=Set<String>()
   private var configuration: Task<Void, Never>?
   private(set) var status = "Kapalı"
-  init(server: ConnectedServer, disk: CatalogDiskIndex) {
+  init(server: ConnectedServer, disk: CatalogDiskIndex, retryDelay:TimeInterval = 30) {
     self.server = server
     self.disk = disk
+    self.retryDelay=retryDelay
   }
+  deinit {retryTask?.cancel();task?.cancel()}
   func pause() {
+    retryTask?.cancel();retryTask=nil;retryDates.removeAll()
+    for db in activities.keys where activities[db]?.retryAt != nil {activities[db]?.retryAt=nil;activities[db]?.phase = .paused;notify(db)}
     pendingDDLDatabases.removeAll()
     task?.cancel()
     if task != nil { status = "Eşitleme duraklatıldı" }
@@ -81,7 +88,7 @@ import SQLServerKit
     guard task == nil, let server, server.online, server.profile.hasDefinitionIndexes,
       lease != nil
     else { return }
-    let targets = server.databases.map(\.name).filter { server.allowsDefinitionIndex($0) && (database == nil || database == $0) }
+    let targets = server.databases.map(\.name).filter { server.allowsDefinitionIndex($0) && (database == nil || database == $0) && (force || database == $0 || retryDates[$0].map {$0<=Date()} != false) }
     guard !targets.isEmpty else { return }
     let token = revision
     for db in targets {
@@ -102,22 +109,65 @@ import SQLServerKit
           for db in pending {synchronizedAt[db] = .distantPast}
           refresh()
         }
+        scheduleRetries()
       }
       for db in targets {
         if !force, Date().timeIntervalSince(synchronizedAt[db] ?? .distantPast) < 300 { continue }
         do {
           activities[db] = .init(phase: .building)
           notify(db)
+          retryDates[db]=nil
           try await withReader(database: db) { read in
             try await self.synchronize(database: db, token: token, force: force, read: read)
           }
+          retryDates[db]=nil
         } catch {
-          if Task.isCancelled || token != revision { return }
+          if error is CancellationError || Task.isCancelled || token != revision {
+            if token==revision {activities[db]?.phase = .paused;notify(db)}
+            return
+          }
           status = "Tanım indeksi: " + error.localizedDescription
           activities[db] = .init(phase: .failed, error: error.localizedDescription)
+          if retryable(error) {
+            let date=Date().addingTimeInterval(max(0.01,retryDelay))
+            retryDates[db]=date;activities[db]?.retryAt=date
+          }
           notify(db)
         }
       }
+    }
+  }
+  private func retryable(_ error:Error)->Bool {
+    guard let failure=error as? SQLFailure,!failure.diagnostics.isEmpty else {return false}
+    return failure.diagnostics.allSatisfy {diagnostic in
+      diagnostic.state=="HYT00" || diagnostic.state=="HYT01" || diagnostic.state.hasPrefix("08") || diagnostic.state=="40001"
+    }
+  }
+  private func scheduleRetries() {
+    guard task==nil,retryTask==nil,let first=retryDates.values.min(),let server,lease != nil else {return}
+    let token=revision,generation=server.generation
+    let delay=max(0.01,first.timeIntervalSinceNow)
+    retryTask=Task { [weak self,weak server] in
+      do {try await Task.sleep(for:.seconds(delay))} catch {return}
+      guard let self,let server else {return}
+      retryTask=nil
+      guard revision==token,!Task.isCancelled else {return}
+      guard server.generation==generation else {
+        retryDates.removeAll()
+        for db in activities.keys where activities[db]?.retryAt != nil {activities[db]?.retryAt=nil;activities[db]?.phase = .paused;notify(db)}
+        return
+      }
+      let due=retryDates.filter {$0.value<=Date()}.map(\.key)
+      for db in due {
+        guard server.allowsDefinitionIndex(db),server.databases.contains(where:{$0.name==db}) else {retryDates[db]=nil;activities[db]=nil;continue}
+        if !server.online {retryDates[db]=Date().addingTimeInterval(30);activities[db]?.retryAt=retryDates[db];notify(db);continue}
+        retryDates[db]=nil;synchronizedAt[db] = .distantPast
+        pendingDDLDatabases.insert(db)
+      }
+      if task==nil,!pendingDDLDatabases.isEmpty {
+        pendingDDLDatabases.removeAll();refresh()
+      }
+      scheduleRetries()
     }
   }
   private func withReader(
@@ -168,9 +218,12 @@ import SQLServerKit
     var limits = Limits()
     limits.rows = 50_001
     limits.totalBytes = 16_777_216
-    limits.timeout = 30
+    limits.timeout = 120
     let began = Date()
-    let result = try await read(IndexedObjectDefinition.inventorySQL, limits)
+    activities[db]?.stage="Nesne envanteri"
+    let result:Execution
+    do {result=try await read(IndexedObjectDefinition.inventorySQL,limits);if let failure=result.failure {throw failure}}
+    catch {throw readFailure(error,context:"\(db) · Nesne envanteri (120 sn)")}
     try check(token)
     guard !result.partial, !result.stoppedEarly, result.results.count == 1,
       let rows = result.results.first, rows.values.count <= 50_000
@@ -194,7 +247,7 @@ import SQLServerKit
     // while retaining the existing seven-result decoder and its safety checks.
     for module in [true, false] {
       let subset = changed.filter { $0.isModule == module }
-      var size = module ? 64 : 32
+      var size = 200
       var start = 0
       activities[db]?.stage = module ? "SQL modülleri" : "Tablo ve synonym metadata’sı"
       notify(db, progress: true)
@@ -204,7 +257,7 @@ import SQLServerKit
         let fetched = try await fetchPage(page, database: db, scope: scope,
           generation: generation, token: token, read: read)
         unavailable += fetched.unavailable
-        size = min(module ? 200 : 64, fetched.nextSize)
+        size = min(200, fetched.nextSize)
         start += page.count
         processed += page.count
         activities[db]?.processed = processed
@@ -237,18 +290,21 @@ import SQLServerKit
   ) async throws -> (unavailable: Int, nextSize: Int) {
     try check(token)
     let fetched = Date()
-    var limits = Limits(); limits.timeout = 30; limits.totalBytes = 8_388_608
-    let output = try await read(DefinitionIndexBatch.query(entries), limits)
+    var limits = Limits(); limits.timeout = 120; limits.totalBytes = 8_388_608
+    let output:Execution
+    do {
+      output=try await read(DefinitionIndexBatch.query(entries),limits)
+      if let failure=output.failure {throw failure}
+    } catch {
+      try check(token)
+      let target=entries.count==1 ? entries[0].object.key.schema+"."+entries[0].object.key.name:"\(entries.count) nesnelik okuma grubu"
+      throw readFailure(error,context:"\(database) · \(entries[0].isModule ? "SQL modülleri":"Tablo/synonym metadata’sı") · \(target) (120 sn)")
+    }
     try check(token)
     if output.partial || output.stoppedEarly || output.results.contains(where: \.truncated) {
       // Byte-heavy pages split adaptively. Never publish a partially fetched body.
       guard entries.count > 1 else { throw SQLFailure("Nesne tanımı kısmi; önceki kayıt korundu.") }
-      let middle = entries.count / 2
-      let first = try await fetchPage(Array(entries[..<middle]), database: database, scope: scope,
-        generation: generation, token: token, read: read)
-      let second = try await fetchPage(Array(entries[middle...]), database: database, scope: scope,
-        generation: generation, token: token, read: read)
-      return (first.unavailable + second.unavailable, max(1, min(middle, first.nextSize, second.nextSize)))
+      return try await splitPage(entries,database:database,scope:scope,generation:generation,token:token,read:read)
     }
     let decoded = try await Task.detached(priority: .utility) {
       try DefinitionIndexBatch.decode(output, entries: entries, fetched: fetched)
@@ -262,9 +318,21 @@ import SQLServerKit
       try await disk.removeDefinition(scope: scope, id: id, owner: server.id, lease: lease,
         generation: generation, before: fetched)
     }
-    let heavy = output.bytesRead >= 6_291_456 || Date().timeIntervalSince(fetched) > 2
-    let nextSize = heavy ? max(1, entries.count / 2) : output.bytesRead < 2_097_152 ? entries.count * 2 : entries.count
-    return (decoded.unavailable.count, nextSize)
+    return (decoded.unavailable.count,entries.count)
+  }
+  private func splitPage(
+    _ entries:[DefinitionIndexEntry],database:String,scope:String,generation:UUID,token:UUID,
+    read:@MainActor (String,Limits) async throws -> Execution
+  ) async throws -> (unavailable:Int,nextSize:Int) {
+    let middle=entries.count/2
+    let first=try await fetchPage(Array(entries[..<middle]),database:database,scope:scope,generation:generation,token:token,read:read)
+    let second=try await fetchPage(Array(entries[middle...]),database:database,scope:scope,generation:generation,token:token,read:read)
+    return (first.unavailable+second.unavailable,max(1,min(middle,first.nextSize,second.nextSize)))
+  }
+  private func readFailure(_ error:Error,context:String)->Error {
+    guard !(error is CancellationError) else {return error}
+    if let failure=error as? SQLFailure {return SQLFailure(context+": "+failure.message,diagnostics:failure.diagnostics,batchLine:failure.batchLine)}
+    return SQLFailure(context+": "+error.localizedDescription)
   }
   private func notify(_ database: String, progress: Bool = false) {
     guard let server else { return }

@@ -212,13 +212,13 @@ import Testing
     await server.definitionIndex.configure(); server.definitionIndex.refresh()
     for _ in 0..<6000 where server.definitionIndex.isRefreshing { try await Task.sleep(for: .milliseconds(5)) }
     #expect(!server.definitionIndex.isRefreshing)
-    #expect(reads == 37)
+    #expect(reads == 35)
     let scope = CatalogDiskIndex.scope(profile: profile, database: "master")
     #expect(try await disk.definitionStatus(scope: scope).count == 7000)
     print("Definition7000: \(Date().timeIntervalSince(began)) seconds, \(reads) detail queries")
     await server.definitionIndex.configure(); server.definitionIndex.refresh()
     try await wait(server.definitionIndex)
-    #expect(reads == 37)
+    #expect(reads == 35)
   }
   @Test func sevenThousandTablesUseSharedMetadataRowsetsInsteadOfSevenPerObject() async throws {
     let url = URL(fileURLWithPath: "/tmp/DefinitionTables7000-" + UUID().uuidString).appendingPathComponent("index.sqlite")
@@ -235,7 +235,7 @@ import Testing
       #expect(sql.components(separatedBy: "SELECT c.object_id,c.column_id").count == 2)
       let list = sql.components(separatedBy: "c.object_id IN (").last!.components(separatedBy: ")").first!
       let ids = list.split(separator: ",").map(String.init)
-      #expect(ids.count <= 64)
+      #expect(ids.count <= 200)
       var result = Execution()
       result.results = [Rows(values: ids.map { [$0, "1", "A", "int", "0", "0", nil, nil, nil, "0", nil, nil, nil, "0", "0", "0"] }),
         Rows(), Rows(), Rows(), Rows(), Rows(), Rows(values: ids.map { [$0, "0", "PRIMARY"] })]
@@ -245,7 +245,7 @@ import Testing
     let began = Date()
     await server.definitionIndex.configure(); server.definitionIndex.refresh()
     for _ in 0..<6000 where server.definitionIndex.isRefreshing { try await Task.sleep(for: .milliseconds(5)) }
-    #expect(!server.definitionIndex.isRefreshing && reads == 110 && rowsets == 770)
+    #expect(!server.definitionIndex.isRefreshing && reads == 35 && rowsets == 245)
     let scope = CatalogDiskIndex.scope(profile: server.profile, database: "master")
     #expect(try await disk.definitionStatus(scope: scope).count == 7000)
     #expect(try await disk.definition(scope: scope, id: 7000)?.sql.contains("[T7000]") == true)
@@ -285,6 +285,95 @@ import Testing
       host.cacheDisplay(in: host.bounds, to: bitmap)
       try bitmap.representation(using: .png, properties: [:])?.write(
         to: URL(fileURLWithPath: "/tmp/MSSQLStudio-offline-definition-\(mode).png"))
+    }
+  }
+
+  @Test(arguments:["timeout","persistent","permission","cancel","inventory"])
+  func timeoutsDoNotShrinkGroupsAndPreserveOldDefinitions(_ mode:String) async throws {
+    let url=URL(fileURLWithPath:"/tmp/DefinitionTimeout-"+UUID().uuidString).appendingPathComponent("index.sqlite")
+    defer {try? FileManager.default.removeItem(at:url.deletingLastPathComponent())}
+    let disk=CatalogDiskIndex(url:url),profile=ServerProfile(indexObjectDefinitions:true)
+    let server=ConnectedServer(profile:profile,password:"",diskIndex:disk)
+    server.databases=[.init(id:1,name:"master")]
+    let timeout=SQLFailure("Query timeout expired",diagnostics:[.init(state:"HYT00",code:0,message:"Synthetic timeout")])
+    var groups:[Int]=[],inventories=0
+    server.asyncCatalogFixture={sql in
+      if sql.contains("StudioObjectDefinitionInventory") {
+        inventories+=1
+        if mode=="inventory" {throw timeout}
+        return output((1...16).map {[String($0),"dbo","P"+String($0),"P","new","0"]})
+      }
+      let clause=try #require(sql.range(of:"IN ("))
+      let ids=sql[clause.upperBound...].prefix(while:{$0 != ")"}).split(separator:",").map(String.init)
+      groups.append(ids.count)
+      if mode=="persistent" {throw timeout}
+      if mode=="permission" {throw SQLFailure("Denied",diagnostics:[.init(state:"42000",code:229,message:"Denied")])}
+      if mode=="cancel" {throw CancellationError()}
+      if ids.count>8 {var result=Execution();result.failure=timeout;return result}
+      return output(ids.map {id in
+        let body="CREATE PROC dbo.P"+id+" AS SELECT 1;"
+        return [id,body,"1","1","0",nil,String(body.utf16.count*2)]
+      })
+    }
+    await server.definitionIndex.configure()
+    await server.definitionIndex.record(.init(id:1,schema:"dbo",name:"P1",type:"P",sql:"OLD_BODY"),database:"master",generation:server.generation)
+    server.definitionIndex.refresh();try await wait(server.definitionIndex)
+    let scope=CatalogDiskIndex.scope(profile:profile,database:"master")
+    let status=try await disk.definitionStatus(scope:scope)
+    #expect(inventories==1)
+    #expect(groups.count==(mode=="inventory" ? 0:1))
+    #expect(groups.isEmpty || groups==[16])
+    #expect(status.synchronizedAt==nil && status.count==1)
+    #expect(try await disk.definition(scope:scope,id:1)?.sql=="OLD_BODY")
+    let activity=server.definitionIndex.activities["master"]
+    if mode=="cancel" {#expect(activity?.phase == .paused)}
+    else {#expect(activity?.phase == .failed && activity?.error?.contains(mode=="inventory" ? "Nesne envanteri":"SQL modülleri")==true && activity?.error?.contains("120 sn")==true)}
+  }
+
+  @Test func transientFailureAutomaticallyResumesAndReusesAlreadySavedGroups() async throws {
+    let url=URL(fileURLWithPath:"/tmp/DefinitionAutoRetry-"+UUID().uuidString).appendingPathComponent("index.sqlite")
+    defer {try? FileManager.default.removeItem(at:url.deletingLastPathComponent())}
+    let disk=CatalogDiskIndex(url:url)
+    let server=ConnectedServer(profile:.init(definitionIndexDatabases:["master":true,"Other":true]),password:"",diskIndex:disk)
+    server.databases=[.init(id:1,name:"master"),.init(id:2,name:"Other")]
+    let controller=ObjectDefinitionIndexController(server:server,disk:disk,retryDelay:0.03);server.definitionIndex=controller
+    var inventories=0,groups:[Int]=[],attempts=0,inFlight=0,maxInFlight=0
+    server.asyncCatalogFixture={sql in
+      inFlight+=1;maxInFlight=max(maxInFlight,inFlight);defer {inFlight-=1}
+      try await Task.sleep(for:.milliseconds(2))
+      if sql.contains("Inventory") {
+        inventories+=1
+        return output(inventories==2 ? []:(1...201).map {[String($0),"dbo","P"+String($0),"P","new","0"]})
+      }
+      let start=try #require(sql.range(of:"IN ("))
+      let ids=sql[start.upperBound...].prefix(while:{$0 != ")"}).split(separator:",").map(String.init)
+      groups.append(ids.count)
+      if ids==["201"] {attempts+=1;if attempts==1 {throw SQLFailure("Synthetic timeout",diagnostics:[.init(state:"HYT00",code:0,message:"Timeout")])}}
+      return output(ids.map {id in let body="CREATE PROC dbo.P"+id+" AS SELECT 1;";return [id,body,"1","1","0",nil,String(body.utf16.count*2)]})
+    }
+    await controller.configure();controller.refresh()
+    for _ in 0..<500 where attempts<2 || controller.isRefreshing {try await Task.sleep(for:.milliseconds(5))}
+    #expect(attempts==2 && inventories==3 && groups==[200,1,1] && maxInFlight==1)
+    let status=try await disk.definitionStatus(scope:CatalogDiskIndex.scope(profile:server.profile,database:"master"))
+    #expect(status.count==201 && status.synchronizedAt != nil && controller.activities["master"]==nil)
+    controller.pause()
+  }
+  @Test(arguments:["pause","configure","generation"]) func pausingCancelsPendingRetryAndPermissionErrorsNeverScheduleOne(_ action:String) async throws {
+    for state in ["HYT00","42000"] {
+      let url=URL(fileURLWithPath:"/tmp/DefinitionRetryPause-"+UUID().uuidString).appendingPathComponent("index.sqlite")
+      defer {try? FileManager.default.removeItem(at:url.deletingLastPathComponent())}
+      let disk=CatalogDiskIndex(url:url),server=ConnectedServer(profile:.init(indexObjectDefinitions:true),password:"",diskIndex:disk)
+      server.databases=[.init(id:1,name:"master")]
+      let controller=ObjectDefinitionIndexController(server:server,disk:disk,retryDelay:0.1);server.definitionIndex=controller
+      var reads=0
+      server.asyncCatalogFixture={_ in reads+=1;throw SQLFailure("Synthetic",diagnostics:[.init(state:state,code:0,message:"Synthetic")])}
+      await controller.configure();controller.refresh();try await wait(controller)
+      #expect((controller.activities["master"]?.retryAt != nil)==(state=="HYT00"))
+      if action=="pause" {controller.pause()}
+      else if action=="configure" {await controller.configure(enabled:false)}
+      else {server.generation=UUID()}
+      try await Task.sleep(for:.milliseconds(150))
+      #expect(reads==1 && controller.activities["master"]?.retryAt==nil)
     }
   }
 

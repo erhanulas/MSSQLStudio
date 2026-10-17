@@ -179,7 +179,7 @@ public enum ObjectMetadata {
   }
   /// Seven shared rowsets with an object ID prefix; trigger bodies are indexed separately.
   public static func tableBatch(_ ids: [Int]) throws -> String {
-    guard !ids.isEmpty, ids.count <= 64, ids.allSatisfy({ $0 > 0 }), Set(ids).count == ids.count
+    guard !ids.isEmpty, ids.count <= 200, ids.allSatisfy({ $0 > 0 }), Set(ids).count == ids.count
     else { throw SQLFailure("Geçersiz tablo metadata grubu.") }
     return tableSQL(ids.map(String.init).joined(separator: ","), includeDefinitions: true, grouped: true)
   }

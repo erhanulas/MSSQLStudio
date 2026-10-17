@@ -9,6 +9,7 @@ struct DefinitionIndexActivity {
   var total: Int?
   var error: String?
   var stage: String?
+  var retryAt:Date?
 }
 struct DefinitionIndexPresentation {
   let enabled: Bool
@@ -25,7 +26,7 @@ struct DefinitionIndexPresentation {
       case .waiting: return "Sırada"
       case .building: return "Eşitleniyor"
       case .paused: return "Duraklatıldı"
-      case .failed: return "Hata"
+      case .failed: return activity.retryAt == nil ? "Hata":"Yeniden denenecek"
       }
     }
     guard let stored else { return "Henüz hazırlanmadı" }
@@ -52,6 +53,7 @@ struct DefinitionIndexPresentation {
     if let stored, let expected = stored.expected, stored.count < expected - stored.unavailable {
       lines.append("Bazı tanımlar kotadan dolayı temizlenmiş veya henüz alınmamış olabilir.")
     }
+    if let date=activity?.retryAt {lines.append("Otomatik yeniden deneme: "+date.formatted(date:.omitted,time:.standard))}
     if let error = activity?.error { lines.append(error) }
     if !online { lines.append("Çevrimdışı · Son disk indeksi") }
     return lines.joined(separator: "\n")

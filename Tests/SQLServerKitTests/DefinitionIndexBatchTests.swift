@@ -77,6 +77,10 @@ struct DefinitionIndexBatchTests {
     wrongID.results[0] = Rows(values: [["999", "1", "A"]])
     #expect(throws: SQLFailure.self) { try DefinitionIndexBatch.decode(wrongID, entries: entries, fetched: Date()) }
     #expect(throws: SQLFailure.self) { try ObjectMetadata.tableBatch([1, 1]) }
+    let large=try (1...200).map {try entry($0,type:"U")}
+    #expect(try DefinitionIndexBatch.query(large).contains("c.object_id IN (1,2,3,"))
+    #expect(throws:SQLFailure.self) {try DefinitionIndexBatch.query(large+[entry(201,type:"U")])}
+    #expect(throws:SQLFailure.self) {try ObjectMetadata.tableBatch(Array(1...201))}
     result.results.removeLast()
     #expect(throws: SQLFailure.self) { try DefinitionIndexBatch.decode(result, entries: entries, fetched: Date()) }
   }
