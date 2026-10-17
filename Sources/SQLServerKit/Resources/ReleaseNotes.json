@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.176",
+    "date": "2026-10-17",
+    "title": "Explorer filtreleri ve sekme önizlemesi düzeltildi",
+    "changes": [
+      "Explorer arama seçicileri Ayarlar ile aynı renkleri kullanır ve iki eşit genişlikte gösterilir.",
+      "Arama filtresini değiştirmek artık Nesneler sekmesine geçirmez.",
+      "Option+Tab listesinde satıra tıklamak listeyi gereksiz yere kaydırmaz.",
+      "Sekme önizlemesinin sağ altındaki tutamaçla pencereyi boyutlandırabilirsiniz; yeni boyut sonraki açılışta korunur."
+    ]
+  },
+  {
     "version": "0.2.175",
     "date": "2026-10-17",
     "title": "Seçici görünümü ve tema geçişleri düzeltildi",

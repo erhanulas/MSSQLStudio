@@ -90,7 +90,7 @@ extension WorkbenchController {
       searchResults = nil
       searchStatus.stringValue = searchScope.map { "Arama kapsamı: " + ($0.database == "*" ? $0.server.profile.name + " / Tüm seçili veritabanları" : $0.database) } ?? "Önce bir bağlantı / veritabanı seçin"
       searchStatus.toolTip = nil
-      showExplorerSearch(false)
+      if showingSearch {reloadExplorer()}
       return
     }
     showExplorerSearch(true)

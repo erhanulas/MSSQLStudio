@@ -73,10 +73,12 @@ import Testing
     let candidate=state.documents[71]
     let surface=try #require(owner.tabs.arrangedSubviews.compactMap {$0 as? QueryTabSurface}.first {$0.primaryButton?.document===candidate})
     #expect(surface.isSwitchPreview && !surface.isActiveTab)
+    let reveal=switcher.keyboardRevealRevision
     switcher.preview(state.documents[39].id)
     #expect(switcher.index==39 && !surface.isSwitchPreview && state.active===original)
+    #expect(switcher.keyboardRevealRevision==reveal)
     _=switcher.handle(event(window,key:125))
-    #expect(switcher.index==40)
+    #expect(switcher.index==40 && switcher.keyboardRevealRevision>reveal)
     switcher.dismiss(commit:false)
     #expect(state.active===original && scroll.contentView.bounds.origin==origin)
     #expect(owner.tabs.arrangedSubviews.compactMap {$0 as? QueryTabSurface}.allSatisfy {!$0.isSwitchPreview})
@@ -87,7 +89,7 @@ import Testing
     defer {UserDefaults.standard.removeObject(forKey:key)}
     owner.tabSwitcher.present(in:window)
     let panel=try #require(owner.tabSwitcher.panel),original=state.active
-    #expect(panel.styleMask.contains(.resizable))
+    #expect(panel.styleMask.contains(.resizable) && panel.styleMask.contains(.titled) && panel.styleMask.contains(.fullSizeContentView))
     #expect(panel.contentMinSize==NSSize(width:680,height:400))
     panel.setContentSize(NSSize(width:880,height:480));panel.contentView?.layoutSubtreeIfNeeded()
     let saved=panel.frame.size
@@ -97,6 +99,20 @@ import Testing
     let reopened=try #require(next.panel)
     #expect(abs(reopened.frame.width-saved.width)<1 && abs(reopened.frame.height-saved.height)<1)
     #expect(!reopened.isKeyWindow && state.active === original)
+  }
+  @Test func pointerFocusOnPanelIsAllowedAndOtherWindowFocusCancels() async throws {
+    let (state,owner,window)=fixture();defer {owner.tabSwitcher.dismiss(commit:false);window.close()}
+    let original=state.active,switcher=owner.tabSwitcher
+    switcher.present(in:window)
+    let panel=try #require(switcher.panel)
+    panel.makeKey()
+    try await Task.sleep(for:.milliseconds(40))
+    #expect(switcher.panel === panel && state.active === original)
+    let other=NSWindow(contentRect:NSRect(x:-22000,y:0,width:100,height:100),styleMask:[.titled],backing:.buffered,defer:false)
+    other.isReleasedWhenClosed=false;defer {other.close()}
+    other.makeKeyAndOrderFront(nil)
+    try await Task.sleep(for:.milliseconds(40))
+    #expect(switcher.panel==nil && state.active === original)
   }
   @Test func lateLexicalSnapshotRecolorsSameSourceWithoutMovingSelection() throws {
     let view=SQLPreviewView(frame:NSRect(x:0,y:0,width:600,height:300))

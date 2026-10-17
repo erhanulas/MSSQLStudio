@@ -9,8 +9,39 @@ private final class TabSwitcherMonitor {
 }
 
 @MainActor private final class TabSwitcherPanel:NSPanel {
-  override var canBecomeKey:Bool {false}
+  override var canBecomeKey:Bool {true}
   override var canBecomeMain:Bool {false}
+}
+
+/// A visible corner target avoids the transparent rounded panel corner's tiny native hit area.
+@MainActor private final class TabSwitcherResizeGrip:NSView {
+  override init(frame:NSRect) {
+    super.init(frame:frame)
+    wantsLayer=true
+    identifier = .init("tabSwitcherResizeGrip")
+    setAccessibilityElement(true)
+    setAccessibilityLabel("Önizleme penceresini boyutlandır")
+  }
+  required init?(coder:NSCoder) {fatalError()}
+  override func acceptsFirstMouse(for event:NSEvent?)->Bool {true}
+  override func resetCursorRects() {addCursorRect(bounds,cursor:.frameResize(position:.bottomRight,directions:.all))}
+  override func draw(_ dirtyRect:NSRect) {
+    guard let symbol=NSImage(systemSymbolName:"arrow.up.left.and.arrow.down.right",accessibilityDescription:nil)?.withSymbolConfiguration(.init(paletteColors:[StudioTheme.muted])) else {return}
+    StudioSymbolDrawing.draw(symbol,in:bounds.insetBy(dx:4,dy:4))
+  }
+  override func mouseDown(with event:NSEvent) {
+    guard let window else {return}
+    let start=window.convertPoint(toScreen:event.locationInWindow),initial=window.frame
+    let minimum=window.frameRect(forContentRect:NSRect(origin:.zero,size:window.contentMinSize)).size
+    let screen=window.screen?.visibleFrame
+    while let next=window.nextEvent(matching:[.leftMouseDragged,.leftMouseUp]) {
+      if next.type == .leftMouseUp {break}
+      let point=window.convertPoint(toScreen:next.locationInWindow)
+      let width=min(screen.map {$0.maxX-initial.minX} ?? .greatestFiniteMagnitude,max(minimum.width,initial.width+point.x-start.x))
+      let height=min(screen.map {initial.maxY-$0.minY} ?? .greatestFiniteMagnitude,max(minimum.height,initial.height+start.y-point.y))
+      window.setFrame(NSRect(x:initial.minX,y:initial.maxY-height,width:width,height:height),display:true)
+    }
+  }
 }
 
 @MainActor final class QueryTabSwitcher:NSObject,ObservableObject {
@@ -24,6 +55,7 @@ private final class TabSwitcherMonitor {
   }
   @Published private(set) var entries:[Entry]=[]
   @Published private(set) var index=0
+  @Published private(set) var keyboardRevealRevision=0
   private weak var owner:WorkbenchController?
   private weak var sourceWindow:NSWindow?
   private var monitor:TabSwitcherMonitor?
@@ -49,7 +81,18 @@ private final class TabSwitcherMonitor {
     }
   }
   @objc private func windowChanged(_ note:Notification) {
-    if note.name==NSApplication.didResignActiveNotification || (note.object as? NSWindow) === sourceWindow {dismiss(commit:false)}
+    if note.name==NSApplication.didResignActiveNotification || (note.name==NSWindow.willCloseNotification && (note.object as? NSWindow) === sourceWindow) {
+      dismiss(commit:false);return
+    }
+    guard note.name==NSWindow.didResignKeyNotification,
+      let current=panel,(note.object as? NSWindow) === sourceWindow || (note.object as? NSWindow) === current else {return}
+    // A native resize or click can transfer key status to our panel. Judge the
+    // completed focus transition, rather than dismissing during resignKey.
+    Task { [weak self,weak current] in
+      await Task.yield()
+      guard let self,let current,panel === current else {return}
+      if NSApp.keyWindow !== current && NSApp.keyWindow !== sourceWindow {dismiss(commit:false)}
+    }
   }
   @discardableResult func handle(_ event:NSEvent)->Bool {
     if panel != nil {
@@ -95,16 +138,22 @@ private final class TabSwitcherMonitor {
     sourceWindow=window
     originalTabOrigin=owner.tabs.enclosingScrollView?.contentView.bounds.origin
     advance(backwards ? -1:1)
-    let panel=TabSwitcherPanel(contentRect:.zero,styleMask:[.borderless,.nonactivatingPanel,.resizable],backing:.buffered,defer:false)
+    let panel=TabSwitcherPanel(contentRect:.zero,styleMask:[.titled,.fullSizeContentView,.nonactivatingPanel,.resizable],backing:.buffered,defer:false)
     panel.isReleasedWhenClosed=false;panel.isFloatingPanel=true;panel.level = .floating
+    panel.titleVisibility = .hidden;panel.titlebarAppearsTransparent=true
+    for kind in [NSWindow.ButtonType.closeButton,.miniaturizeButton,.zoomButton] {panel.standardWindowButton(kind)?.isHidden=true}
     panel.backgroundColor = .clear;panel.isOpaque=false;panel.hasShadow=true
-    let host=NSHostingController(rootView:QueryTabSwitcherView(model:self));host.sizingOptions=[];panel.contentViewController=host
-    (host.view as? NSHostingView<QueryTabSwitcherView>)?.sizingOptions=[]
-    host.view.layoutSubtreeIfNeeded()
+    let content=NSView(),host=NSHostingView(rootView:QueryTabSwitcherView(model:self))
+    host.sizingOptions=[];host.translatesAutoresizingMaskIntoConstraints=false
+    content.addSubview(host);panel.contentView=content
+    NSLayoutConstraint.activate([host.leadingAnchor.constraint(equalTo:content.leadingAnchor),host.trailingAnchor.constraint(equalTo:content.trailingAnchor),host.topAnchor.constraint(equalTo:content.topAnchor),host.bottomAnchor.constraint(equalTo:content.bottomAnchor)])
     panel.contentMinSize=NSSize(width:680,height:400)
     let size=NSSize(width:min(1040,window.frame.width-48),height:min(600,window.frame.height-80))
     panel.setFrame(NSRect(x:window.frame.midX-size.width/2,y:window.frame.midY-size.height/2,width:size.width,height:size.height),display:true)
     StudioWindowPlacement.restore(panel,role:placementRole,owner:window)
+    let grip=TabSwitcherResizeGrip(frame:.zero)
+    content.addSubview(grip);grip.translatesAutoresizingMaskIntoConstraints=false
+    NSLayoutConstraint.activate([grip.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-2),grip.bottomAnchor.constraint(equalTo:content.bottomAnchor,constant:-2),grip.widthAnchor.constraint(equalToConstant:20),grip.heightAnchor.constraint(equalToConstant:20)])
     self.panel=panel;window.addChildWindow(panel,ordered:.above);panel.orderFront(nil)
     panel.contentMinSize=NSSize(width:680,height:400)
     refreshHighlight()
@@ -121,7 +170,7 @@ private final class TabSwitcherMonitor {
   }
   func advance(_ delta:Int) {
     guard !entries.isEmpty else {return}
-    index=(index+delta%entries.count+entries.count)%entries.count;refreshHighlight();requestPreview()
+    index=(index+delta%entries.count+entries.count)%entries.count;keyboardRevealRevision+=1;refreshHighlight();requestPreview()
   }
   func preview(_ id:UUID) {
     guard let value=entries.firstIndex(where:{$0.id==id}),value != index else {return}
@@ -204,7 +253,7 @@ private struct QueryTabSwitcherView:View {
                   .accessibilityLabel(entry.title+" · "+entry.context).accessibilityAddTraits(active ? [.isSelected]:[])
               }
             }.padding(2)
-          }.onChange(of:model.index) {_,_ in if let id=selected?.id {proxy.scrollTo(id,anchor:.center)}}
+          }.onChange(of:model.keyboardRevealRevision) {_,_ in if let id=selected?.id {proxy.scrollTo(id,anchor:.center)}}
             .onAppear {if let id=selected?.id {proxy.scrollTo(id,anchor:.center)}}
         }.frame(minWidth:180,idealWidth:240,maxWidth:300,maxHeight:.infinity)
         if let selected {
@@ -225,10 +274,11 @@ private struct QueryTabSwitcherView:View {
         Text("Tab / ⇧Tab · İlerle     ← ↑ ↓ → · Seç").foregroundStyle(.secondary)
         Spacer()
         Text(model.acceptanceHint+"     esc · Vazgeç").foregroundStyle(.secondary)
-      }.font(.system(size:11))
+      }.font(.system(size:11)).padding(.trailing,12)
     }.padding(16).background(Color(nsColor:StudioTheme.panel)).clipShape(RoundedRectangle(cornerRadius:12))
       .overlay(RoundedRectangle(cornerRadius:12).stroke(Color(nsColor:StudioTheme.border),lineWidth:1).allowsHitTesting(false))
       .animation(reduceMotion ? nil:.easeOut(duration:0.10),value:selected?.id)
+      .ignoresSafeArea()
   }
 }
 
