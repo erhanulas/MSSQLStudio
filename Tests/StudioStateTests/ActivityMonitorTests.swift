@@ -18,6 +18,34 @@ import Testing
     for _ in 0..<200 where !condition() {await Task.yield()}
     #expect(condition())
   }
+  @Test func staleTargetRefreshKeepsReplacementRequestAndNeverSendsKill() async throws {
+    let server=ConnectedServer(profile:.init(),password:"")
+    var start="2026-10-16 12:01:02.003",reads=0
+    let model=ActivityMonitorModel(server:server,reader:{sql,_ in
+      #expect(!sql.contains("KILL "))
+      if sql==ActivityMonitoring.overviewSQL {return ObjectManagementUIFixture.catalog(sql)}
+      reads+=1
+      var output=ObjectManagementUIFixture.catalog(sql)
+      let active=output.results[0].values[0]+["2026-10-16 12:00:00.000",start]
+      output.results=Array(output.results.prefix(4))+[Rows(values:[active]),output.results.last!]
+      return output
+    })
+    await model.load(includeDiagnostics:true)
+    let old=try #require(model.diagnostics.active.first)
+    start="2026-10-16 12:02:00.000"
+    await model.refreshAfterStaleTarget(.request(old),generation:server.generation)
+    let current=try #require(model.diagnostics.active.first)
+    #expect(reads==2 && current.id==old.id && !ActivityMonitoring.sameRequest(old,current))
+    #expect(current.requestStartTime==start)
+  }
+  @Test func durationFormattingIncludesDaysHoursAndSmallUnits() {
+    #expect(ActivityFormat.duration(950)=="950 ms")
+    #expect(ActivityFormat.duration(9000)=="9 sn")
+    #expect(ActivityFormat.duration(120000)=="2 dk")
+    #expect(ActivityFormat.duration(3_661_000)=="1 sa 1 dk 1 sn")
+    #expect(ActivityFormat.duration(90_061_000)=="1 gün 1 sa 1 dk 1 sn")
+    #expect(ActivityFormat.duration(nil)=="—")
+  }
   @Test func hiddenPausedOfflineAndSingleFlightGuardsNeverStartExtraReads() async throws {
     let server=ConnectedServer(profile:ServerProfile(),password:"")
     var reads=0,pending:CheckedContinuation<Execution,any Error>?
@@ -229,7 +257,7 @@ import Testing
         for _ in 0..<3 {await model.load(includeDiagnostics:true)}
         if state >= 6 {failDiagnostics=true;await model.load(includeDiagnostics:true)}
         if state == 7 {failOverview=true;await model.load(includeDiagnostics:true)}
-        let mode=state<2 ? state:2,kind=state == 3 ? 1:state>=4 ? 2:0
+        let mode=state<2 ? 0:2,kind=state == 3 ? 1:state>=4 ? 2:0
         let rows=kind == 0 ? model.diagnostics.blocked:kind == 1 ? model.diagnostics.longRunning:model.diagnostics.backups
         let panel=ActivityMonitorPanel(model:model,initialMode:mode,initialDiagnosticKind:kind,initialSelectedRequest:mode == 2 ? rows.first?.id:nil,openTable:{})
         let host=NSHostingController(rootView:panel);host.sizingOptions=[]

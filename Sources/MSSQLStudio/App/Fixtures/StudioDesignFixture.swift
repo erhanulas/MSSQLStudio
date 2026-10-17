@@ -10,7 +10,7 @@ import SwiftUI
     case table, newTable, tableStructure, view, newView, index, data, procedure, scalarFunction, tableFunction, synonym, rename, delete, properties, permissions
     case job, agentAction, agentGeneral, agentSteps, agentSchedules, agentNotifications, agentAlerts, agentTargets
     case step, advancedStep, readOnlyStep, schedule, pickSchedule, agentHistory, agentActivity
-    case profiler, activity, samples, diagnostics, databaseFiles, schema, explorerIndex, databaseProperties
+    case profiler, activity, diagnostics, databaseFiles, schema, explorerIndex, databaseProperties
     case settingsAppearance, settingsEditor, settingsShortcuts, settingsWorkspace, settingsUpdates, settingsSecurity
     case resultLoading, resultRefresh, columnSearch, columnFilter, dataReview, offlineDefinition, parameters, feedback
     var id: String {rawValue}
@@ -27,7 +27,7 @@ import SwiftUI
       case .agentHistory: NSSize(width:960,height:640)
       case .agentActivity: NSSize(width:1060,height:640)
       case .profiler: NSSize(width:960,height:640)
-      case .activity,.samples,.diagnostics,.databaseFiles: NSSize(width:1060,height:680)
+      case .activity,.diagnostics,.databaseFiles: NSSize(width:1060,height:680)
       case .schema: NSSize(width:1100,height:720)
       case .settingsAppearance,.settingsEditor,.settingsShortcuts,.settingsWorkspace,.settingsUpdates,.settingsSecurity: NSSize(width:820,height:620)
       case .columnFilter: NSSize(width:380,height:480)
@@ -110,10 +110,10 @@ import SwiftUI
       for _ in 0..<100 where model.lastRead==nil {try await Task.sleep(for:.milliseconds(2))}
       _ = await model.stop()
       return show(ProfilerPanel(model:model,background:{}))
-    case .activity,.samples,.diagnostics:
+    case .activity,.diagnostics:
       let model=ActivityMonitorModel(server:server)
       await model.load(includeDiagnostics:true)
-      return show(ActivityMonitorPanel(model:model,initialMode:screen == .activity ? 0:screen == .samples ? 1:2,openTable:{}))
+      return show(ActivityMonitorPanel(model:model,initialMode:screen == .activity ? 0:2,openTable:{}))
     case .databaseFiles:
       let model=DatabaseFilesModel(server:server,reader:{sql,database,_ in DatabaseFilesUIFixture.catalog(sql,database:database)})
       await model.refresh()

@@ -90,7 +90,7 @@ public enum ActivityMonitoring {
   \(permissionSQL)
   DECLARE @cpu int,@waiting bigint,@bytes decimal(38,0),@batches bigint,@started nvarchar(40),@processCPU decimal(38,0),@cpuCount int;
   DECLARE @active bigint,@blocked bigint,@backups bigint,@transactions bigint,@idle bigint,@sessions bigint,@grants bigint;
-  DECLARE @sqlMemory decimal(28,3),@availableMemory decimal(28,3),@reads decimal(38,0),@writes decimal(38,0),@readStall decimal(38,0),@writeStall decimal(38,0);
+  DECLARE @sqlMemory decimal(28,3),@availableMemory decimal(28,3),@totalMemory decimal(28,3),@reads decimal(38,0),@writes decimal(38,0),@readStall decimal(38,0),@writeStall decimal(38,0);
   DECLARE @issues TABLE(metric nvarchar(40),message nvarchar(4000));
   BEGIN TRY
     SELECT @started=CONVERT(nvarchar(40),sqlserver_start_time,126),@processCPU=CONVERT(decimal(38,0),process_kernel_time_ms)+CONVERT(decimal(38,0),process_user_time_ms),@cpuCount=cpu_count FROM sys.dm_os_sys_info;
@@ -119,8 +119,9 @@ public enum ActivityMonitoring {
     IF @sqlMemory IS NULL INSERT @issues VALUES(N'SQL Server belleği',N'Sunucu işlem belleği sağlamadı.');
   END TRY BEGIN CATCH INSERT @issues VALUES(N'SQL Server belleği',ERROR_MESSAGE()); END CATCH;
   BEGIN TRY
-    SELECT @availableMemory=CONVERT(decimal(28,3),available_physical_memory_kb)/1024.0 FROM sys.dm_os_sys_memory;
+    SELECT @availableMemory=CONVERT(decimal(28,3),available_physical_memory_kb)/1024.0,@totalMemory=CONVERT(decimal(28,3),total_physical_memory_kb)/1024.0 FROM sys.dm_os_sys_memory;
     IF @availableMemory IS NULL INSERT @issues VALUES(N'Kullanılabilir sunucu belleği',N'Sunucu kullanılabilir fiziksel belleği sağlamadı.');
+    IF @totalMemory IS NULL OR @totalMemory<=0 INSERT @issues VALUES(N'Toplam sunucu belleği',N'Toplam fiziksel bellek alınamadı; bellek yüzdesi hesaplanamadı.');
   END TRY BEGIN CATCH INSERT @issues VALUES(N'Kullanılabilir sunucu belleği',ERROR_MESSAGE()); END CATCH;
   BEGIN TRY
     IF @canMonitor=0 THROW 51000,@permissionMessage,1;
@@ -128,7 +129,7 @@ public enum ActivityMonitoring {
   END TRY BEGIN CATCH INSERT @issues VALUES(N'Bellek bekleyen istekler',ERROR_MESSAGE()); END CATCH;
   SELECT CONVERT(nvarchar(40),SYSUTCDATETIME(),126)+N'Z' AS sampled_at,@started AS started_at,@cpu AS cpu_percent,@waiting AS waiting_tasks,@bytes AS io_bytes,@batches AS batch_requests,
     @active AS active_requests,@blocked AS blocked_requests,@backups AS backup_requests,@transactions AS open_transactions,@idle AS idle_transactions,@sessions AS user_sessions,@sqlMemory AS sql_memory_mb,@availableMemory AS available_memory_mb,@grants AS memory_grants_pending,
-    @reads AS io_reads,@writes AS io_writes,@readStall AS read_stall_ms,@writeStall AS write_stall_ms,@processCPU AS process_cpu_ms,@cpuCount AS logical_cpu_count;
+    @reads AS io_reads,@writes AS io_writes,@readStall AS read_stall_ms,@writeStall AS write_stall_ms,@processCPU AS process_cpu_ms,@cpuCount AS logical_cpu_count,@totalMemory AS total_memory_mb;
   SELECT metric,message FROM @issues;
   """
 
@@ -204,10 +205,15 @@ public enum ActivityMonitoring {
   public struct Health: Sendable, Equatable {
     public var activeRequests,blockedRequests,backupRequests,openTransactions,idleTransactions,userSessions:Int64?
     public var sqlMemoryMB,availableMemoryMB:Double?
+    public var totalMemoryMB:Double?=nil
     public var memoryGrantsPending:Int64?
-    public init(activeRequests:Int64?=nil,blockedRequests:Int64?=nil,backupRequests:Int64?=nil,openTransactions:Int64?=nil,idleTransactions:Int64?=nil,userSessions:Int64?=nil,sqlMemoryMB:Double?=nil,availableMemoryMB:Double?=nil,memoryGrantsPending:Int64?=nil) {
-      self.activeRequests=activeRequests;self.blockedRequests=blockedRequests;self.backupRequests=backupRequests;self.openTransactions=openTransactions;self.idleTransactions=idleTransactions;self.userSessions=userSessions;self.sqlMemoryMB=sqlMemoryMB;self.availableMemoryMB=availableMemoryMB;self.memoryGrantsPending=memoryGrantsPending
+    public init(activeRequests:Int64?=nil,blockedRequests:Int64?=nil,backupRequests:Int64?=nil,openTransactions:Int64?=nil,idleTransactions:Int64?=nil,userSessions:Int64?=nil,sqlMemoryMB:Double?=nil,availableMemoryMB:Double?=nil,memoryGrantsPending:Int64?=nil,totalMemoryMB:Double?=nil) {
+      self.activeRequests=activeRequests;self.blockedRequests=blockedRequests;self.backupRequests=backupRequests;self.openTransactions=openTransactions;self.idleTransactions=idleTransactions;self.userSessions=userSessions;self.sqlMemoryMB=sqlMemoryMB;self.availableMemoryMB=availableMemoryMB;self.memoryGrantsPending=memoryGrantsPending;self.totalMemoryMB=totalMemoryMB
     }
+  }
+  public static func memoryPercent(_ value:Double?,total:Double?)->Double? {
+    guard let value,let total,value.isFinite,total.isFinite,total>0,value>=0,value<=total else {return nil}
+    return value/total*100
   }
   public struct Snapshot: Sendable {
     public var time:Date
@@ -251,6 +257,10 @@ public enum ActivityMonitoring {
       self.sessionLoginTime=sessionLoginTime;self.requestStartTime=requestStartTime
       self.sessionID=sessionID;self.requestID=requestID;self.database=database;self.status=status;self.command=command;self.elapsedMS=elapsedMS;self.cpuMS=cpuMS;self.reads=reads;self.writes=writes;self.blocker=blocker;self.wait=wait;self.openTransactions=openTransactions;self.percentComplete=percentComplete;self.remainingMS=remainingMS;self.sql=sql;self.login=login;self.host=host;self.program=program;self.logicalReads=logicalReads;self.waitMS=waitMS;self.waitResource=waitResource
     }
+  }
+  public static func sameRequest(_ lhs:Request,_ rhs:Request)->Bool {
+    lhs.sessionID==rhs.sessionID && lhs.requestID==rhs.requestID
+      && lhs.sessionLoginTime==rhs.sessionLoginTime && lhs.requestStartTime==rhs.requestStartTime
   }
   public struct Diagnostics: Sendable, Equatable {
     public var blocked,longRunning,backups:[Request]
@@ -307,7 +317,7 @@ public enum ActivityMonitoring {
     }
   }
 
-  private static let overviewColumns=["sampled_at","started_at","cpu_percent","waiting_tasks","io_bytes","batch_requests","active_requests","blocked_requests","backup_requests","open_transactions","idle_transactions","user_sessions","sql_memory_mb","available_memory_mb","memory_grants_pending","io_reads","io_writes","read_stall_ms","write_stall_ms","process_cpu_ms","logical_cpu_count"]
+  private static let overviewColumns=["sampled_at","started_at","cpu_percent","waiting_tasks","io_bytes","batch_requests","active_requests","blocked_requests","backup_requests","open_transactions","idle_transactions","user_sessions","sql_memory_mb","available_memory_mb","memory_grants_pending","io_reads","io_writes","read_stall_ms","write_stall_ms","process_cpu_ms","logical_cpu_count","total_memory_mb"]
   private static let requestColumns=["session_id","request_id","database_name","status","command","elapsed_ms","cpu_ms","reads","writes","blocker","wait_type","open_transactions","percent_complete","remaining_ms","sql_text","login_name","host_name","program_name","logical_reads","wait_ms","wait_resource"]
   private static let blockingColumns=["session_id","request_id","request_count","database_name","status","command","blocker","wait_type","wait_ms","wait_resource","open_transactions","login_name","host_name","program_name","sql_source","sql_text"]
   private static func validate(_ execution:Execution) throws {
@@ -326,14 +336,14 @@ public enum ActivityMonitoring {
   private static func percentage(_ text:String?) -> Double? {measurement(text).flatMap {$0<=100 ? $0:nil}}
   public static func decode(_ execution:Execution) throws -> Snapshot {
     try validate(execution)
-    guard let rows=execution.results.first,rows.values.count == 1,let row=rows.values.first,(row.count == 6 || row.count == overviewColumns.count),let timeText=row[0],execution.results.count == 2 || (row.count == 6 && execution.results.count == 1) else {throw SQLFailure("Activity Monitor örneği eksik veya kısmi.")}
+    guard let rows=execution.results.first,rows.values.count == 1,let row=rows.values.first,([6,21,overviewColumns.count].contains(row.count)),let timeText=row[0],execution.results.count == 2 || (row.count == 6 && execution.results.count == 1) else {throw SQLFailure("Activity Monitor örneği eksik veya kısmi.")}
     try schema(rows,Array(overviewColumns.prefix(row.count)))
     let formatter=ISO8601DateFormatter();formatter.formatOptions=[.withInternetDateTime,.withFractionalSeconds]
     guard let time=formatter.date(from:timeText) ?? ISO8601DateFormatter().date(from:timeText) else {throw SQLFailure("Activity Monitor örnek zamanı geçersiz.")}
     let messages=try execution.results.dropFirst().flatMap {try issues($0)}
     var result=Snapshot(time:time,started:row[1]?.isEmpty == false ? row[1]:nil,cpu:percentage(row[2]),waiting:counter(row[3]),bytes:counter(row[4]),batches:counter(row[5]),issues:messages)
-    if row.count == overviewColumns.count {
-      result.health = .init(activeRequests:counter(row[6]),blockedRequests:counter(row[7]),backupRequests:counter(row[8]),openTransactions:counter(row[9]),idleTransactions:counter(row[10]),userSessions:counter(row[11]),sqlMemoryMB:measurement(row[12]),availableMemoryMB:measurement(row[13]),memoryGrantsPending:counter(row[14]))
+    if row.count >= 21 {
+      result.health = .init(activeRequests:counter(row[6]),blockedRequests:counter(row[7]),backupRequests:counter(row[8]),openTransactions:counter(row[9]),idleTransactions:counter(row[10]),userSessions:counter(row[11]),sqlMemoryMB:measurement(row[12]),availableMemoryMB:measurement(row[13]),memoryGrantsPending:counter(row[14]),totalMemoryMB:row.count>21 ? measurement(row[21]):nil)
       result.reads=counter(row[15]);result.writes=counter(row[16]);result.readStallMS=counter(row[17]);result.writeStallMS=counter(row[18]);result.processCPUMS=counter(row[19]);result.logicalCPUCount=counter(row[20]).flatMap {$0>0 ? $0:nil}
     }
     return result

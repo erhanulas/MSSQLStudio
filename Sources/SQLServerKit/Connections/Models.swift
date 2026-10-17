@@ -89,19 +89,22 @@ public struct Diagnostic: Sendable, Equatable {
   public let state: String
   public let code: Int
   public let message: String
+  public let line:Int?
+  public let procedure:String?
   public var description: String { "[\(state)] \(code): \(message)" }
-  public init(state: String, code: Int, message: String) {
+  public init(state: String, code: Int, message: String, line:Int?=nil, procedure:String?=nil) {
     self.state = state
     self.code = code
-    self.message = message
+    self.message = message;self.line=line;self.procedure=procedure
   }
 }
 public struct SQLFailure: LocalizedError, Sendable {
   public let message: String
   public let diagnostics: [Diagnostic]
-  public init(_ message: String, diagnostics: [Diagnostic] = []) {
+  public let batchLine:Int?
+  public init(_ message: String, diagnostics: [Diagnostic] = [], batchLine:Int?=nil) {
     self.message = message
-    self.diagnostics = diagnostics
+    self.diagnostics = diagnostics;self.batchLine=batchLine
   }
   public var errorDescription: String? {
     message
@@ -168,6 +171,8 @@ public struct Execution: Sendable {
   public var bytesRead = 0
   public var elapsed: TimeInterval = 0
   public var partial = false
+  /// A later batch failed after earlier results were retained; partial output is not success.
+  public var failure:SQLFailure?
   /// Remaining results/batches were not processed (error, cancellation or shared budget).
   /// A per-rowset row limit alone does not stop subsequent results.
   public var stoppedEarly = false

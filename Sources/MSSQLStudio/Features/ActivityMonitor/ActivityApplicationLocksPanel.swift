@@ -12,11 +12,13 @@ struct ActivityApplicationLocksPanel:View {
       Text("APPLICATION · Alınmış ve bekleyen kilitler · İlk 100 kayıt")
         .font(.system(size:StudioMetrics.detailFont)).foregroundStyle(.secondary)
         .studioHelp("SQL Server kaynak adının yalnız görünür kısmını ve hash’ini sağlar. Boşta oturumlar da session/transaction kilidi tutabilir; kilidin yaşı DMV tarafından sağlanmaz.")
-      ActivityRequestTerminationAction(monitor:model,model:model.termination,applicationLock:lock,applicationLockMode:true)
+      ActivityRequestTerminationAction(monitor:model,model:model.termination,applicationLock:lock,applicationLockMode:true,staleSelection:{target in
+        if case .applicationLock(let stale)=target,selected==stale.id {selected=nil}
+      })
       if model.applicationLocks.isEmpty {
         StudioEmptyState(title:model.applicationLocksTime==nil ? "Uygulama kilitleri bekleniyor":!model.applicationLockError.isEmpty || !model.applicationLockIssues.isEmpty ? "Kilit bilgisi doğrulanamadı":"Etkin uygulama kilidi yok",icon:"lock.shield",detail:"Yalnız bu sekme açıkken application lock kaynakları salt okunur olarak alınır.")
       } else {
-        ActivityDataGrid(rows:model.applicationLocks,columns:[
+        StudioDataGrid(rows:model.applicationLocks,columns:[
           .init(title:"Oturum",width:65,numeric:true,value:{String($0.sessionID)}),
           .init(title:"Kaynak",width:220,value:{$0.resource}),.init(title:"Durum",value:{$0.status}),
           .init(title:"Mod",width:65,value:{$0.mode}),.init(title:"Sahip",value:{$0.ownerType}),

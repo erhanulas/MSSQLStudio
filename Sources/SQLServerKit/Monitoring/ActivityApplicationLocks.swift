@@ -23,7 +23,7 @@ public enum ActivityApplicationLocks {
   BEGIN TRY
     IF @canMonitor=0 THROW 51000,@permissionMessage,1;
     INSERT @locks
-    SELECT CONVERT(varchar(34),l.lock_owner_address,1)+N':' + CONVERT(varchar(12),l.resource_lock_partition),l.request_session_id,l.request_request_id,DB_NAME(l.resource_database_id),l.resource_description,l.request_mode,l.request_status,l.request_owner_type,l.request_owner_id,s.login_name,s.host_name,s.program_name,
+    SELECT CONVERT(varchar(34),l.lock_owner_address,1)+N':' + COALESCE(CONVERT(varchar(12),l.resource_lock_partition),N'NULL'),l.request_session_id,l.request_request_id,DB_NAME(l.resource_database_id),l.resource_description,l.request_mode,l.request_status,l.request_owner_type,l.request_owner_id,s.login_name,s.host_name,s.program_name,
       CASE WHEN r.request_id IS NOT NULL THEN N'current' WHEN t.text IS NOT NULL THEN N'recent' ELSE N'unavailable' END,LEFT(t.text COLLATE Latin1_General_100_CI_AS_SC,2000),CONVERT(varchar(23),s.login_time,121),l.resource_database_id
     FROM (SELECT TOP(101) * FROM sys.dm_tran_locks WHERE resource_type=N'APPLICATION' AND request_session_id<>@@SPID
       ORDER BY CASE WHEN request_status=N'GRANTED' THEN 1 ELSE 0 END,request_session_id,resource_database_id,resource_description,request_owner_id,lock_owner_address) l

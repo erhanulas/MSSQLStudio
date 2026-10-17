@@ -11,8 +11,8 @@ import SwiftUI
     if sql == ActivityMonitoring.overviewSQL {
       let time=Date();let ticks=Int64(time.timeIntervalSince1970)
       let f=ISO8601DateFormatter();f.formatOptions=[.withInternetDateTime,.withFractionalSeconds]
-      let columns=["sampled_at","started_at","cpu_percent","waiting_tasks","io_bytes","batch_requests","active_requests","blocked_requests","backup_requests","open_transactions","idle_transactions","user_sessions","sql_memory_mb","available_memory_mb","memory_grants_pending","io_reads","io_writes","read_stall_ms","write_stall_ms","process_cpu_ms","logical_cpu_count"]
-      let values:[String?]=[f.string(from:time),"fixture-start",nil,String(2+ticks%4),String(ticks*2_097_152),String(ticks*25),String(6+ticks%4),"2","1","5","2","48",String(6144+ticks%4*64),"32768",String(ticks%2),String(ticks*320),String(ticks*80),String(ticks*640),String(ticks*400),String(ticks*3200),"8"]
+      let columns=["sampled_at","started_at","cpu_percent","waiting_tasks","io_bytes","batch_requests","active_requests","blocked_requests","backup_requests","open_transactions","idle_transactions","user_sessions","sql_memory_mb","available_memory_mb","memory_grants_pending","io_reads","io_writes","read_stall_ms","write_stall_ms","process_cpu_ms","logical_cpu_count","total_memory_mb"]
+      let values:[String?]=[f.string(from:time),"fixture-start",nil,String(2+ticks%4),String(ticks*2_097_152),String(ticks*25),String(6+ticks%4),"2","1","5","2","48",String(6144+ticks%4*64),"32768",String(ticks%2),String(ticks*320),String(ticks*80),String(ticks*640),String(ticks*400),String(ticks*3200),"8","65536"]
       e.results=[Rows(fields:columns.map {Field($0)},values:[values]),Rows(values:[])]
     } else if sql == ActivityMonitoring.diagnosticsSQL {
       let columns=["session_id","request_id","database_name","status","command","elapsed_ms","cpu_ms","reads","writes","blocker","wait_type","open_transactions","percent_complete","remaining_ms","sql_text","login_name","host_name","program_name","logical_reads","wait_ms","wait_resource"]

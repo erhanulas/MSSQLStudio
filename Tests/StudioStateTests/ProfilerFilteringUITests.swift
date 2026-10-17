@@ -30,6 +30,27 @@ private actor ProfilerFilteringProbe {
     try await wait {model.events.count==4 && model.visibleEvents.count==4 && !model.filtering}
     return (model,probe)
   }
+  @Test func eventHeaderSortIsLocalAndKeepsSelectionAndSourceOrder() async throws {
+    let (model,_)=try await fixture()
+    var selection:Set<UInt64>=[model.visibleEvents[0].id]
+    let host=NSHostingView(rootView:ProfilerEventGrid(model:model,selection:Binding(get:{selection},set:{selection=$0})))
+    let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:900,height:500),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=host;window.orderFront(nil);defer {window.close()}
+    host.layoutSubtreeIfNeeded()
+    func children(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(children)}
+    let table=try #require(children(host).compactMap {$0 as? NSTableView}.first)
+    let owner=try #require(table.delegate as? ProfilerEventGrid.Coordinator)
+    let column=table.tableColumns[table.column(withIdentifier:.init("clientPID"))]
+    let source=model.visibleEvents
+    owner.tableView(table,didClick:column)
+    try await wait {owner.events.first?.clientPID=="71"}
+    #expect(owner.filterPopover==nil && selection==[source[0].id] && model.visibleEvents==source)
+    owner.tableView(table,didClick:column)
+    try await wait {owner.events.first?.clientPID=="123"}
+    owner.tableView(table,didClick:column)
+    #expect(owner.events==source && (column.headerCell as? FilterHeaderCell)?.ascending==nil)
+    owner.cancelSorting();#expect(await model.stop())
+  }
   @Test func correlatedPreviewUsesHiddenStartAndPreservesRawExport() async throws {
     let xmlEvents=["rpc_starting","error_reported","rpc_completed"].enumerated().map {index,kind in
       """
@@ -226,7 +247,7 @@ private actor ProfilerFilteringProbe {
     let owner=try #require(table.delegate as? ProfilerEventGrid.Coordinator)
     let position=table.column(withIdentifier:.init("application"));table.scrollColumnToVisible(position)
     host.view.layoutSubtreeIfNeeded()
-    owner.tableView(table,didClick:table.tableColumns[position])
+    owner.openColumnFilter(table,column:table.tableColumns[position])
     let popup=try #require(owner.filterPopover);defer {popup.close()}
     let header=try #require(table.headerView),body=try #require(window.contentView)
     let visible=header.headerRect(ofColumn:position).intersection(header.visibleRect)

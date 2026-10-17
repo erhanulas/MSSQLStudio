@@ -7,6 +7,7 @@ import SQLServerKit
   @Published private(set) var busy=false
   @Published private(set) var message=""
   @Published private(set) var failed=false
+  private(set) var needsRefresh=false
   @Published private(set) var phase=""
   @Published private(set) var operationContext=""
   private let server:ConnectedServer
@@ -14,7 +15,7 @@ import SQLServerKit
   init(server:ConnectedServer,writer:Writer?=nil) {self.server=server;self.writer=writer}
   func prepare(_ target:ActivityRequestTermination.Target,generation:UUID) async -> Bool {
     guard !busy,server.online,server.generation==generation else {return false}
-    busy=true;failed=false;message=""
+    busy=true;failed=false;message="";needsRefresh=false
     phase="Seçili oturum ve istek sunucudan doğrulanıyor…"
     operationContext="\(server.profile.name) · Oturum \(target.sessionID)"
     defer {busy=false}
@@ -30,8 +31,15 @@ import SQLServerKit
       return true
     } catch {
       guard server.generation==generation,!Task.isCancelled else {return false}
-      failed=true;message=error.localizedDescription;return false
+      needsRefresh=(error as? SQLFailure)?.diagnostics.contains {$0.code==51081} == true
+      failed = !needsRefresh
+      message=needsRefresh ? "Seçili sorgu tamamlanmış veya durumu değişmiş; liste yeniden okunuyor.":error.localizedDescription
+      return false
     }
+  }
+  func completeStaleRefresh(_ updated:Bool) {
+    guard needsRefresh,!busy else {return}
+    message=updated ? "Seçili hedef tamamlanmış veya değişmiş. Liste güncellendi; güncel satırı seçebilirsiniz.":"Seçili hedef artık güncel değil. DBA listesini Yenile ile tekrar okuyun."
   }
   func terminate(_ request:ActivityMonitoring.Request,generation:UUID) async -> Bool {
     await terminate(.request(request),generation:generation)
@@ -41,7 +49,7 @@ import SQLServerKit
     guard server.online,server.generation==generation else {
       message="Bağlantı değişmiş veya çevrimdışı; DBA listesini yenileyin.";failed=true;return false
     }
-    busy=true;message="";failed=false
+    busy=true;message="";failed=false;needsRefresh=false
     phase="Sonlandırma sunucuya gönderiliyor; yanıt bekleniyor…"
     operationContext="\(server.profile.name) · Oturum \(target.sessionID)"
     defer {busy=false}
@@ -71,8 +79,9 @@ import SQLServerKit
     } catch {
       if let connection {await connection.disconnect()}
       guard server.generation==generation else {return false}
-      failed=true
-      message="Sonlandırma tamamlandığı doğrulanamadı; otomatik tekrar gönderilmedi. "+error.localizedDescription
+      needsRefresh=(error as? SQLFailure)?.diagnostics.contains {$0.code==51081} == true
+      failed = !needsRefresh
+      message=needsRefresh ? "Seçili hedef tamamlanmış veya değişmiş; liste yeniden okunuyor.":"Sonlandırma tamamlandığı doğrulanamadı; otomatik tekrar gönderilmedi. "+error.localizedDescription
       return false
     }
   }
@@ -84,6 +93,7 @@ struct ActivityRequestTerminationAction:View {
   var request:ActivityMonitoring.Request?=nil
   var applicationLock:ActivityApplicationLocks.Lock?=nil
   var applicationLockMode=false
+  var staleSelection:((ActivityRequestTermination.Target)->Void)?=nil
   private struct Confirmation:Identifiable {
     let id=UUID()
     let target:ActivityRequestTermination.Target
@@ -121,6 +131,11 @@ struct ActivityRequestTerminationAction:View {
           let snapshot=Confirmation(target:target,generation:monitor.server.generation,serverName:monitor.server.profile.name)
           preparation=Task {
             if await model.prepare(target,generation:snapshot.generation),presented,!Task.isCancelled {confirmation=snapshot}
+            else if model.needsRefresh,presented,!Task.isCancelled {
+              staleSelection?(target)
+              let updated=await monitor.refreshAfterStaleTarget(target,generation:snapshot.generation)
+              model.completeStaleRefresh(updated)
+            }
             preparation=nil
           }
         }.disabled(!actionEnabled)
@@ -137,6 +152,10 @@ struct ActivityRequestTerminationAction:View {
             if await model.terminate(snapshot.target,generation:snapshot.generation) {
               monitor.clearDiagnostics()
               if presented {await monitor.load(includeDiagnostics:true,includeApplicationLocks:snapshot.target.isApplicationLock)}
+            } else if model.needsRefresh,presented {
+              staleSelection?(snapshot.target)
+              let updated=await monitor.refreshAfterStaleTarget(snapshot.target,generation:snapshot.generation)
+              model.completeStaleRefresh(updated)
             }
           }
         })

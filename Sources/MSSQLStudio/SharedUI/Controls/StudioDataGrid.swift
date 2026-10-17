@@ -2,19 +2,20 @@ import AppKit
 import SwiftUI
 import SQLServerKit
 
-private final class ActivityGridTextCell:NSTextFieldCell {
+private final class StudioDataGridTextCell:NSTextFieldCell {
   override var backgroundStyle:NSView.BackgroundStyle {
     didSet {textColor=backgroundStyle == .emphasized ? .selectedControlTextColor:.labelColor}
   }
 }
 
 /// Read-only monitoring rows with the result grid's native filter header and rule editor.
-struct ActivityDataGrid<Row:Identifiable>:NSViewRepresentable {
+struct StudioDataGrid<Row:Identifiable>:NSViewRepresentable {
   struct Column {
     let title:String
     var width:CGFloat=110
     var numeric=false
     let value:(Row)->String?
+    var display:((Row)->String)?=nil
   }
   let rows:[Row]
   let columns:[Column]
@@ -35,7 +36,7 @@ struct ActivityDataGrid<Row:Identifiable>:NSViewRepresentable {
     let header=FilterHeader(frame:NSRect(x:0,y:0,width:0,height:28))
     header.openFilter={ [weak owner=context.coordinator,weak table] index in
       guard let table,table.tableColumns.indices.contains(index) else {return}
-      owner?.tableView(table,didClick:table.tableColumns[index])
+      owner?.openColumnFilter(table,column:table.tableColumns[index])
     }
     table.headerView=header;table.setAccessibilityIdentifier(identifier)
     return scroll
@@ -51,7 +52,10 @@ struct ActivityDataGrid<Row:Identifiable>:NSViewRepresentable {
     private var ids:[Row.ID]=[]
     private var source=Rows()
     private var snapshotValues:[[String?]]=[]
+    private var displayValues:[[String]]=[]
     private var indices:[Int]=[]
+    private var sortColumn:Int?
+    private var ascending=true
     private var rules:[Int:ColumnRule]=[:]
     private let projection=ResultProjectionController()
     private var popover:NSPopover?
@@ -61,19 +65,23 @@ struct ActivityDataGrid<Row:Identifiable>:NSViewRepresentable {
     func update(rows:[Row],columns:[Column],table:NSTableView) {
       let values=rows.map {row in columns.map {$0.value(row)}}
       let newIDs=rows.map(\.id)
+      let displays=rows.map {row in columns.map {$0.display?(row) ?? $0.value(row) ?? "—"}}
       let fields=columns.map {Field($0.title,type:$0.numeric ? 3:-9,declaredType:$0.numeric ? "decimal":"nvarchar")}
-      guard values != snapshotValues || newIDs != ids || fields != source.fields else {select(table);return}
-      ids=newIDs;snapshotValues=values
+      guard values != snapshotValues || newIDs != ids || fields != source.fields || displays != displayValues else {select(table);return}
+      ids=newIDs;snapshotValues=values;displayValues=displays
       source=Rows(fields:fields,values:values)
       apply(table)
     }
     private func apply(_ table:NSTableView) {
       projection.cancel()
-      for (index,column) in table.tableColumns.enumerated() {(column.headerCell as? FilterHeaderCell)?.active=rules[index]?.active==true}
+      for (index,column) in table.tableColumns.enumerated() {
+        (column.headerCell as? FilterHeaderCell)?.active=rules[index]?.active==true
+        (column.headerCell as? FilterHeaderCell)?.ascending=sortColumn==index ? ascending:nil
+      }
       table.headerView?.needsDisplay=true
-      if rules.isEmpty {indices=Array(ids.indices);reload(table);return}
+      if rules.isEmpty,sortColumn==nil {indices=Array(ids.indices);reload(table);return}
       indices=[];updating=true;table.reloadData();updating=false
-      projection.project(.init(rows:source,search:"",rules:rules,sortColumn:nil,ascending:true),debounce:false) { [weak self,weak table] result in
+      projection.project(.init(rows:source,search:"",rules:rules,sortColumn:sortColumn,ascending:ascending),debounce:false) { [weak self,weak table] result in
         guard let self,let table else {return}
         switch result {
         case .success(let output):indices=output ?? Array(ids.indices)
@@ -97,10 +105,10 @@ struct ActivityDataGrid<Row:Identifiable>:NSViewRepresentable {
     func tableView(_ tableView:NSTableView,viewFor column:NSTableColumn?,row:Int)->NSView? {
       guard indices.indices.contains(row),let column,let index=Int(column.identifier.rawValue) else {return nil}
       let cell=(tableView.makeView(withIdentifier:column.identifier,owner:self) as? NSTextField) ?? NSTextField(labelWithString:"")
-      if !(cell.cell is ActivityGridTextCell) {cell.cell=ActivityGridTextCell(textCell:"")}
+      if !(cell.cell is StudioDataGridTextCell) {cell.cell=StudioDataGridTextCell(textCell:"")}
       cell.cell?.backgroundStyle=tableView.selectedRowIndexes.contains(row) ? .emphasized:.normal
       cell.identifier=column.identifier;cell.font=StudioTheme.uiFont;cell.lineBreakMode = .byTruncatingTail
-      cell.stringValue=source.values[indices[row]][index] ?? "—"
+      cell.stringValue=displayValues[indices[row]][index]
       return cell
     }
     func setRule(_ rule:ColumnRule,column:Int,table:NSTableView) throws {
@@ -110,6 +118,13 @@ struct ActivityDataGrid<Row:Identifiable>:NSViewRepresentable {
       apply(table)
     }
     func tableView(_ table:NSTableView,didClick column:NSTableColumn) {
+      guard let index=Int(column.identifier.rawValue),source.fields.indices.contains(index) else {return}
+      if sortColumn != index {sortColumn=index;ascending=true}
+      else if ascending {ascending=false}
+      else {sortColumn=nil;ascending=true}
+      apply(table)
+    }
+    func openColumnFilter(_ table:NSTableView,column:NSTableColumn) {
       guard let index=Int(column.identifier.rawValue),source.fields.indices.contains(index),let header=table.headerView else {return}
       popover?.close();let popup=NSPopover();popover=popup
       let panel=ColumnFilterPanel(rows:source,column:index,initial:rules[index] ?? .init()) { [weak self,weak table,weak popup] rule in

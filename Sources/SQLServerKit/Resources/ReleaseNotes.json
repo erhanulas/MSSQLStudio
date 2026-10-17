@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.2.185",
+    "date": "2026-10-17",
+    "title": "Sorgu hataları ve izleme ekranları iyileştirildi",
+    "changes": [
+      "Sorgu hata verdiğinde gizli sonuç alanı açılır ve Messages gösterilir. Hata mesajına tıklayarak ilgili SQL satırına gidebilirsiniz.",
+      "İlk sonuçlardan sonra oluşan sorgu hataları artık başarılı işlem olarak gösterilmez.",
+      "Activity Monitor ve Profiler tablolarında kolon başlıklarından sıralama yapabilirsiniz.",
+      "Activity Monitor ölçümleri kartlarla gösterilir; yenileme varsayılanı 5 saniyedir ve sorgu süreleri daha okunaklıdır.",
+      "Tamamlanmış sorgular ve uygulama kilitleri için seçim ve liste yenileme sorunları giderildi.",
+      "Control+Tab ile açık uygulama pencerelerini önizlemesiz, kompakt bir listeden seçebilirsiniz."
+    ]
+  },
+  {
     "version": "0.2.184",
     "date": "2026-10-17",
     "title": "Activity Monitor ve Profiler kullanımı iyileştirildi",

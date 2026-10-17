@@ -37,7 +37,10 @@ import Testing
     server.catalogFixture=nil
     server.asyncCatalogFixture={_ in throw SQLFailure("Request completed")}
     #expect(!(await model.prepare(.request(request()),generation:server.generation)))
-    #expect(model.failed && model.message.contains("Request completed"))
+    #expect(model.failed && model.message.contains("Request completed") && !model.needsRefresh)
+    server.asyncCatalogFixture={_ in throw SQLFailure("Changed",diagnostics:[Diagnostic(state:"42000",code:51081,message:"Completed")])}
+    #expect(!(await model.prepare(.request(request()),generation:server.generation)))
+    #expect(model.needsRefresh)
   }
   @Test func confirmationShowsFullColoredSQLAndFitsBothThemes() async throws {
     _=NSApplication.shared

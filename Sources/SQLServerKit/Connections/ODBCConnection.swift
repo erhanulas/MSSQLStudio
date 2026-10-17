@@ -68,7 +68,7 @@ public final class ODBCConnection: @unchecked Sendable {
             let safe = ((error as? SQLFailure)?.message ?? error.localizedDescription).replacingOccurrences(
               of: password.isEmpty ? "\0" : password, with: "••••")
             throw SQLFailure(safe, diagnostics: (error as? SQLFailure)?.diagnostics.map {
-              Diagnostic(state:$0.state,code:$0.code,message:$0.message.replacingOccurrences(of:password.isEmpty ? "\0" : password,with:"••••"))
+              Diagnostic(state:$0.state,code:$0.code,message:$0.message.replacingOccurrences(of:password.isEmpty ? "\0" : password,with:"••••"),line:$0.line,procedure:$0.procedure)
             } ?? [])
           }
           continuation.resume()
@@ -395,10 +395,18 @@ public final class ODBCConnection: @unchecked Sendable {
         kind, handle, SQLSMALLINT(record), &state, &code, &text, SQLSMALLINT(text.count), &length)
       if rc == SQL_NO_DATA { break }
       if rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO { break }
+      // Microsoft driver-specific SQL_DIAG_SS_LINE / PROCNAME (msodbcsql.h).
+      var line:SQLINTEGER=0
+      let lineRC=SQLGetDiagFieldW(kind,handle,SQLSMALLINT(record),-1154,&line,0,nil)
+      var procedure=[SQLWCHAR](repeating:0,count:512)
+      var procedureLength:SQLSMALLINT=0
+      let procedureRC=SQLGetDiagFieldW(kind,handle,SQLSMALLINT(record),-1153,&procedure,SQLSMALLINT(procedure.count*2),&procedureLength)
+      let procedureName=procedureRC == SQL_SUCCESS ? String(decoding:procedure.prefix(while:{$0 != 0}),as:UTF16.self):""
       result.append(
         Diagnostic(
           state: String(decoding: state.prefix(5), as: UTF16.self), code: Int(code),
-          message: String(decoding: text.prefix(min(Int(length), 8191)), as: UTF16.self)))
+          message: String(decoding: text.prefix(min(Int(length), 8191)), as: UTF16.self),
+          line:lineRC == SQL_SUCCESS && line>0 ? Int(line):nil,procedure:procedureName.isEmpty ? nil:procedureName))
     }
     return result
   }

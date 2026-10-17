@@ -6,6 +6,16 @@ struct ActivityFavoriteTests {
   func snapshot(_ seconds:Double=0,start:String?="A",cpu:Double?=25,waiting:Int64?=3,bytes:Int64?=0,batches:Int64?=0) -> ActivityMonitoring.Snapshot {
     .init(time:Date(timeIntervalSince1970:1_800_000_000+seconds),started:start,cpu:cpu,waiting:waiting,bytes:bytes,batches:batches)
   }
+  @Test func totalPhysicalMemoryIsOptionalAndPercentagesDoNotInventCapacity() throws {
+    var output=overviewExecution()
+    #expect(try ActivityMonitoring.decode(output).health.totalMemoryMB==nil)
+    output.results[0]=Rows(values:[output.results[0].values[0]+["16384"]])
+    #expect(try ActivityMonitoring.decode(output).health.totalMemoryMB==16384)
+    #expect(ActivityMonitoring.memoryPercent(4096,total:16384)==25)
+    for total:Double? in [nil,0,-1,.infinity] {#expect(ActivityMonitoring.memoryPercent(4096,total:total)==nil)}
+    #expect(ActivityMonitoring.memoryPercent(20000,total:16384)==nil)
+    #expect(ActivityMonitoring.overviewSQL.contains("total_physical_memory_kb"))
+  }
   @Test func ratesUseElapsedTimeAndDoNotInventInitialZero() {
     let old=snapshot(bytes:10_485_760,batches:1000)
     let current=snapshot(5,bytes:20_971_520,batches:1100)

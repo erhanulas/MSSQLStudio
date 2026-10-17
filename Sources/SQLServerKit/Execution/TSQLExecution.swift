@@ -60,10 +60,10 @@ extension TSQL {
         if output.stoppedEarly { break }
       } catch {
         let message = "Batch başlangıç satırı \(batch.line): \(error.localizedDescription)"
-        guard !output.results.isEmpty else {
-          let failure=error as? SQLFailure
-          throw SQLFailure("Batch başlangıç satırı \(batch.line): \(failure?.message ?? error.localizedDescription)",diagnostics:failure?.diagnostics ?? [])
-        }
+        let original=error as? SQLFailure
+        let failure=SQLFailure("Batch başlangıç satırı \(batch.line): \(original?.message ?? error.localizedDescription)",diagnostics:original?.diagnostics ?? [],batchLine:batch.line)
+        guard !output.results.isEmpty else {throw failure}
+        output.failure=failure
         output.partial = true
         output.stoppedEarly = true
         output.messages.append(message)

@@ -367,5 +367,6 @@ struct UnusedDeclarationTests {
     #expect(result.partial && result.stoppedEarly && result.results.count == 1)
     #expect(result.results[0].values[0][0] == "0.00000000")
     #expect(result.messages.contains { $0.contains("expected failure") })
+    #expect(result.failure?.batchLine==3 && result.failure?.message.contains("expected failure")==true)
   }
 }

@@ -70,6 +70,9 @@ struct ObjectEditorKey: Codable, Equatable {
   var managedObjectApplied: (() -> Void)?
   var applyingModule = false
   var messages = ""
+  var executionFailed=false
+  var errorLocations:[(message:NSRange,source:NSRange)]=[]
+  var errorSourceSQL:String?
   var selectedResult = 0
   var transactionCount = 0
   var symbols: [CatalogSymbol] = []
@@ -251,7 +254,33 @@ struct ObjectEditorKey: Codable, Equatable {
       }
     }
   }
-  func execute(override: String? = nil, estimated: Bool = false, repeatRead: Bool = false) {
+  private func recordExecutionError(_ failure:SQLFailure,sourceSnapshot:String,query:String,queryRange:NSRange?) {
+    executionFailed=true;errorSourceSQL=sourceSnapshot
+    guard let queryRange,NSMaxRange(queryRange)<=(sourceSnapshot as NSString).length,
+      (sourceSnapshot as NSString).substring(with:queryRange)==query else {return}
+    let messageText=messages as NSString
+    let errorRange=messageText.range(of:failure.localizedDescription,options:.backwards)
+    guard errorRange.location != NSNotFound else {return}
+    let text=query as NSString
+    func lineRange(_ number:Int)->NSRange? {
+      guard number>0 else {return nil}
+      var offset=0,line=1
+      while line<number,offset<text.length {offset=NSMaxRange(text.lineRange(for:NSRange(location:offset,length:0)));line+=1}
+      guard line==number,offset<text.length else {return nil}
+      let range=text.lineRange(for:NSRange(location:offset,length:0))
+      return NSRange(location:queryRange.location+range.location,length:range.length)
+    }
+    let batch=failure.batchLine ?? 1
+    if let target=lineRange(batch) {errorLocations.append((errorRange,target))}
+    for diagnostic in failure.diagnostics {
+      // Procedure diagnostics refer to module source, not the calling EXEC batch.
+      let line=diagnostic.procedure == nil ? batch+(diagnostic.line ?? 1)-1:batch
+      let range=messageText.range(of:diagnostic.description,options:.backwards,range:errorRange)
+      if range.location != NSNotFound,let target=lineRange(line) {errorLocations.append((range,target))}
+    }
+  }
+
+  func execute(override: String? = nil, estimated: Bool = false, repeatRead: Bool = false, sourceRange:NSRange?=nil) {
     guard canExecute, confirmDiscardResultEdits?() != false else { return }
     let source = sql as NSString
     let query =
@@ -259,8 +288,10 @@ struct ObjectEditorKey: Codable, Equatable {
       ?? (selectedRange.length > 0 && NSMaxRange(selectedRange) <= source.length
         ? source.substring(with: selectedRange) : sql)
     guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    let sourceSnapshot=sql
+    let queryRange: NSRange? = sourceRange ?? (override == nil && selectedRange.length>0 ? selectedRange:query==sql ? NSRange(location:0,length:source.length):nil)
     if state == .disconnected {
-      connect { [weak self] in self?.execute(override:query,estimated:estimated,repeatRead:repeatRead) }
+      connect { [weak self] in self?.execute(override:query,estimated:estimated,repeatRead:repeatRead,sourceRange:queryRange) }
       return
     }
     let executionServer=server,executionServerGeneration=server.generation,executionDatabase=database
@@ -271,6 +302,7 @@ struct ObjectEditorKey: Codable, Equatable {
     repeating = repeatRead
     resultGeneration += 1
     lastExecutionSucceeded = false
+    executionFailed=false;errorLocations=[];errorSourceSQL=nil
     lastExecutedSQL = estimated ? nil : query
     lastExecutedDatabase = database
     lastExecutedReadLimit = appliesRowLimit ? executionLimits.rows:nil
@@ -355,13 +387,17 @@ struct ObjectEditorKey: Codable, Equatable {
         if estimated { messages += "Tahmini plan alındı; sorgu çalıştırılmadı.\n" }
         messages += String(
           format: "%.3f sn · %d satır%@\n", elapsed, rowCount, partial ? " · KISMİ SONUÇ" : "")
-        lastExecutionSucceeded = true
-        completed?(query, output, nil)
+        lastExecutionSucceeded = output.failure == nil
+        if let failure=output.failure,state != .cancelling {recordExecutionError(failure,sourceSnapshot:sourceSnapshot,query:query,queryRange:queryRange)}
+        completed?(query, output, output.failure?.localizedDescription)
 
       } catch {
         acceptingEvents = false
         elapsed = Date().timeIntervalSince(start)
         messages += error.localizedDescription + "\n"
+        if state != .cancelling,!(error is CancellationError) {
+          recordExecutionError(error as? SQLFailure ?? SQLFailure(error.localizedDescription),sourceSnapshot:sourceSnapshot,query:query,queryRange:queryRange)
+        }
         partial = !results.isEmpty
         if let index = results.lastIndex(where: { !$0.fields.isEmpty }) { results[index].truncated = true }
         completed?(query, nil, error.localizedDescription)

@@ -39,7 +39,8 @@ private final class ProfilerTableView:NSTableView {
 struct ProfilerEventGrid:NSViewRepresentable {
   @ObservedObject var model:ProfilerModel
   @Binding var selection:Set<UInt64>
-  func makeCoordinator()->Coordinator {Coordinator(model:model,selection:$selection)}
+  var sortingFailure:Binding<String> = .constant("")
+  func makeCoordinator()->Coordinator {Coordinator(model:model,selection:$selection,sortingFailure:sortingFailure)}
   func makeNSView(context:Context)->NSScrollView {
     let scroll=NSScrollView(),table=ProfilerTableView()
     scroll.documentView=table;scroll.hasVerticalScroller=true;scroll.hasHorizontalScroller=true
@@ -55,7 +56,7 @@ struct ProfilerEventGrid:NSViewRepresentable {
     let header=FilterHeader(frame:NSRect(x:0,y:0,width:0,height:28))
     header.openFilter={ [weak table,weak owner=context.coordinator] position in
       guard let table,table.tableColumns.indices.contains(position) else {return}
-      owner?.tableView(table,didClick:table.tableColumns[position])
+      owner?.openColumnFilter(table,column:table.tableColumns[position])
     }
     table.headerView=header
     table.dataSource=context.coordinator;table.delegate=context.coordinator
@@ -65,26 +66,22 @@ struct ProfilerEventGrid:NSViewRepresentable {
   }
   func updateNSView(_ scroll:NSScrollView,context:Context) {
     guard let table=scroll.documentView as? NSTableView else {return}
-    let owner=context.coordinator;owner.selection=$selection
+    let owner=context.coordinator;owner.selection=$selection;owner.sortingFailure=sortingFailure
     for (key,title,_) in Coordinator.columns {
       if let column=table.tableColumns.first(where:{$0.identifier.rawValue==key}) {
         let active=model.displayFilter.rules.contains {$0.column.rawValue==key && !$0.value.isEmpty} || model.displayFilter.columnRules.contains {$0.key.rawValue==key && $0.value.active}
         column.title=title
         if let cell=column.headerCell as? FilterHeaderCell {cell.active=active}
-        column.headerToolTip=active ? "Etkin filtre · Düzenlemek için tıklayın":"Filtrelemek için tıklayın"
+        column.headerToolTip="Başlığa tıklayarak sırala; filtre simgesiyle "+(active ? "etkin filtreyi düzenle":"filtre ekle")
       }
     }
     table.headerView?.needsDisplay=true
     scroll.backgroundColor=StudioTheme.resultCanvas;table.backgroundColor=StudioTheme.resultCanvas
     if owner.revision != model.gridRevision {
-      owner.revision=model.gridRevision;owner.events=model.visibleEvents
-      owner.updating=true
-      table.reloadData()
-      let indexes=IndexSet(owner.events.indices.filter {selection.contains(owner.events[$0].id)})
-      table.selectRowIndexes(indexes,byExtendingSelection:false)
-      owner.updating=false
+      owner.revision=model.gridRevision;owner.updateEvents(model.visibleEvents,table:table)
     }
   }
+  static func dismantleNSView(_ scroll:NSScrollView,coordinator:Coordinator) {coordinator.cancelSorting()}
   @MainActor final class Coordinator:NSObject,NSTableViewDataSource,NSTableViewDelegate {
     static let columns:[(String,String,CGFloat)]=[
       ("timestamp","Zaman (UTC)",185),("kind","Olay",150),("database","Veritabanı",120),
@@ -96,6 +93,7 @@ struct ProfilerEventGrid:NSViewRepresentable {
     ]
     let model:ProfilerModel
     var selection:Binding<Set<UInt64>>
+    var sortingFailure:Binding<String>
     var events:[SQLProfiler.Event]=[]
     var revision:UUID?
     var updating=false
@@ -103,7 +101,53 @@ struct ProfilerEventGrid:NSViewRepresentable {
     private var menuSQL=""
     private var menuColumn:SQLProfilerFiltering.Column?
     private(set) var filterPopover:NSPopover?
+    private var sourceEvents:[SQLProfiler.Event]=[]
+    private var sortColumn:SQLProfilerFiltering.Column?
+    private var ascending=true
+    private var sortTask:Task<Void,Never>?
+    private var sortRevision=UUID()
+    func cancelSorting() {sortRevision=UUID();sortTask?.cancel();sortTask=nil;filterPopover?.close()}
+    func updateEvents(_ source:[SQLProfiler.Event],table:NSTableView) {
+      sourceEvents=source;sortTask?.cancel();sortRevision=UUID()
+      for column in table.tableColumns {
+        (column.headerCell as? FilterHeaderCell)?.ascending=column.identifier.rawValue==sortColumn?.rawValue ? ascending:nil
+      }
+      table.headerView?.needsDisplay=true
+      guard let sortColumn else {events=source;reload(table);return}
+      let revision=sortRevision,ascending=ascending
+      sortTask=Task { [weak self,weak table] in
+        let worker=Task.detached(priority:.utility) {
+          let rows=try SQLProfilerFiltering.rows(source,columns:[sortColumn])
+          return try ResultFiltering.projection(rows,search:"",rules:[:],sortColumn:0,ascending:ascending)
+        }
+        do {
+          let indices=try await withTaskCancellationHandler {try await worker.value} onCancel:{worker.cancel()}
+          guard let self,let table,sortRevision==revision,!Task.isCancelled else {return}
+          events=indices.map {indexes in indexes.map {source[$0]}} ?? source
+          sortTask=nil;reload(table)
+        } catch {
+          guard let self,let table,sortRevision==revision,!Task.isCancelled else {return}
+          sortTask=nil;events=source;self.sortColumn=nil
+          sortingFailure.wrappedValue="Profiler sıralaması tamamlanamadı: "+error.localizedDescription
+          for column in table.tableColumns {(column.headerCell as? FilterHeaderCell)?.ascending=nil}
+          table.headerView?.needsDisplay=true;reload(table)
+        }
+      }
+    }
+    private func reload(_ table:NSTableView) {
+      updating=true;defer {updating=false}
+      table.reloadData()
+      table.selectRowIndexes(IndexSet(events.indices.filter {selection.wrappedValue.contains(events[$0].id)}),byExtendingSelection:false)
+    }
     func tableView(_ tableView:NSTableView,didClick tableColumn:NSTableColumn) {
+      guard let column=SQLProfilerFiltering.Column(rawValue:tableColumn.identifier.rawValue) else {return}
+      if sortColumn != column {sortColumn=column;ascending=true}
+      else if ascending {ascending=false}
+      else {sortColumn=nil;ascending=true}
+      sortingFailure.wrappedValue=""
+      updateEvents(sourceEvents,table:tableView)
+    }
+    func openColumnFilter(_ tableView:NSTableView,column tableColumn:NSTableColumn) {
       guard let column=SQLProfilerFiltering.Column(rawValue:tableColumn.identifier.rawValue),let header=tableView.headerView else {return}
       filterPopover?.close()
       let popup=NSPopover()
@@ -129,7 +173,7 @@ struct ProfilerEventGrid:NSViewRepresentable {
       }
       return result
     }
-    init(model:ProfilerModel,selection:Binding<Set<UInt64>>) {self.model=model;self.selection=selection}
+    init(model:ProfilerModel,selection:Binding<Set<UInt64>>,sortingFailure:Binding<String> = .constant("")) {self.model=model;self.selection=selection;self.sortingFailure=sortingFailure}
     func tableView(_ tableView:NSTableView,rowViewForRow row:Int)->NSTableRowView? {ProfilerRowView()}
     func numberOfRows(in tableView:NSTableView)->Int {events.count}
     func tableViewSelectionDidChange(_ notification:Notification) {

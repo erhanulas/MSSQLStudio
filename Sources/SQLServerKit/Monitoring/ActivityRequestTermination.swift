@@ -24,8 +24,13 @@ public enum ActivityRequestTermination {
     }
     let parts=address.split(separator:":",omittingEmptySubsequences:false)
     guard parts.count==2,parts[0].hasPrefix("0x"),parts[0].count>2,parts[0].count<=18,
-      parts[0].dropFirst(2).allSatisfy({"0123456789abcdefABCDEF".contains($0)}),
-      let partition=Int32(parts[1]),partition>=0 else {throw SQLFailure("Uygulama kilidi adresi geçersiz.")}
+      parts[0].dropFirst(2).allSatisfy({"0123456789abcdefABCDEF".contains($0)}) else {throw SQLFailure("Uygulama kilidi adresi geçersiz.")}
+    let partitionPredicate:String
+    if parts[1]=="NULL" {
+      partitionPredicate="l.resource_lock_partition IS NULL"
+    } else if let partition=Int32(parts[1]),partition>=0 {
+      partitionPredicate="l.resource_lock_partition=\(partition)"
+    } else {throw SQLFailure("Uygulama kilidi partition kimliği geçersiz.")}
     return """
     SET NOCOUNT ON;
     IF @@TRANCOUNT <> 0 THROW 51080,N'Sonlandırma ayrı, transaction olmayan bir bağlantı gerektirir.',1;
@@ -35,7 +40,7 @@ public enum ActivityRequestTermination {
       WHERE s.session_id=\(lock.sessionID) AND s.is_user_process=1
         AND s.login_time=CONVERT(datetime,\(SQL.literal(login)),121)
         AND l.resource_type=N'APPLICATION' AND l.resource_database_id=\(database)
-        AND CONVERT(varchar(34),l.lock_owner_address,1)=\(SQL.literal(String(parts[0]))) AND l.resource_lock_partition=\(partition)
+        AND CONVERT(varchar(34),l.lock_owner_address,1)=\(SQL.literal(String(parts[0]))) AND \(partitionPredicate)
         AND l.resource_description=\(SQL.literal(lock.resource))
         AND l.request_owner_type=\(SQL.literal(lock.ownerType)) AND l.request_owner_id=\(owner)
     ) THROW 51081,N'Seçili application lock veya oturum değişmiş ya da kilit bırakılmış. Listeyi yenileyin.',1;

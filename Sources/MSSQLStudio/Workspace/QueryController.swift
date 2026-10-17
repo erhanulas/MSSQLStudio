@@ -49,6 +49,7 @@ import SwiftUI
   private(set) var resultsHidden = false
   private var savedEditorFraction: CGFloat = 0.60
   private let messages = ResultMessagesView()
+  private var revealedErrorGeneration:Int?
   private let connectionBadge = NSTextField(labelWithString: "")
   private lazy var queryActions=QueryEditorActions(document:document,focus:{[weak self] in self?.focusEditor()},format:{[weak self] in self?.format()})
   private var editorHeader: NSStackView?
@@ -193,6 +194,11 @@ import SwiftUI
     refreshButton.setAccessibilityIdentifier("refreshResults")
     autoRefreshButton.target=self;autoRefreshButton.action=#selector(showAutoRefreshOptions)
     autoRefreshButton.setAccessibilityIdentifier("gridAutoRefresh")
+    messages.navigate = { [weak self] range in
+      guard let self,document.sql==document.errorSourceSQL else {return}
+      editor.expandAll();editor.selectSourceLine(range)
+      editor.editor.scrollRangeToVisible(range)
+    }
     messages.isEditable = false
     messages.isSelectable = true
     messages.font = StudioTheme.codeFont
@@ -823,7 +829,13 @@ import SwiftUI
     syncNavigation()
     syncResultStrip()
     syncResultSelector()
-    messages.show(document.messages)
+    messages.show(document.messages,locations:document.sql==document.errorSourceSQL ? document.errorLocations:[])
+    if document.executionFailed,revealedErrorGeneration != document.resultGeneration {
+      revealedErrorGeneration=document.resultGeneration
+      if resultsHidden {toggleResults()}
+      resultTabs.selectTabViewItem(withIdentifier:"messages")
+      syncResultSelector()
+    }
     summary.stringValue =
       document.state == .running
       ? "Sonuçlar okunuyor · \(document.rowCount.formatted()) satır"

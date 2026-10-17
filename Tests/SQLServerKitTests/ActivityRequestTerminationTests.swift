@@ -42,6 +42,42 @@ import Testing
     #expect(try ActivityRequestTermination.sql(for:decoded).contains("KILL 71;"))
     #expect(ActivityMonitoring.diagnosticsSQL.contains("CONVERT(varchar(23),s.login_time,121)"))
   }
+  @Test func sessionLockFullPointerAndReleaseAppLockBatchDoNotInvalidateAddress() throws {
+    var execution=ActivityApplicationLocksTests.execution()
+    var row=execution.results[0].values[0]
+    row[0]="0x000001ABCDEF1234:0"
+    row[13]="EXEC SP_RELEASEAPPLOCK @RESOURCE = 'BelgeOlusturD02', @LOCKOWNER='Session'"
+    execution.results[0]=Rows(values:[row+["2026-10-16 12:00:00.000","5"]])
+    let lock=try #require(ActivityApplicationLocks.decode(execution).locks.first)
+    let sql=try ActivityRequestTermination.sql(for:.applicationLock(lock))
+    #expect(sql.contains("0x000001ABCDEF1234") && sql.contains("l.request_owner_type=N'SESSION'"))
+    #expect(!sql.contains("SP_RELEASEAPPLOCK") && sql.contains("KILL 71;"))
+  }
+  @Test func nullApplicationLockPartitionPreservesAddressAndUsesNullSafeIdentity() throws {
+    var execution=ActivityApplicationLocksTests.execution()
+    var row=execution.results[0].values[0]
+    row[0]="0x000001ABCDEF1234:NULL";row[1]="73"
+    execution.results[0]=Rows(values:[row+["2026-10-16 12:00:00.000","5"]])
+    let lock=try #require(ActivityApplicationLocks.decode(execution).locks.first)
+    let sql=try ActivityRequestTermination.sql(for:.applicationLock(lock))
+    #expect(sql.contains("0x000001ABCDEF1234") && sql.contains("l.resource_lock_partition IS NULL"))
+    #expect(!sql.contains("l.resource_lock_partition=0") && sql.contains("KILL 73;"))
+    #expect(sql.contains("s.login_time=CONVERT(datetime") && sql.contains("l.resource_database_id=5"))
+    let validation=try ActivityRequestTermination.validationSQL(for:.applicationLock(lock))
+    #expect(validation.contains("l.resource_lock_partition IS NULL") && !validation.contains("KILL 73;"))
+    #expect(ActivityApplicationLocks.sql.contains("COALESCE(CONVERT(varchar(12),l.resource_lock_partition),N'NULL')"))
+    var zero=row;zero[0]="0x000001ABCDEF1234:0"
+    execution.results[0]=Rows(values:[row+["2026-10-16 12:00:00.000","5"],zero+["2026-10-16 12:00:00.000","5"]])
+    let distinct=try ActivityApplicationLocks.decode(execution).locks
+    #expect(distinct.count==2 && distinct[0].id != distinct[1].id)
+    #expect(try ActivityRequestTermination.sql(for:.applicationLock(distinct[1])).contains("l.resource_lock_partition=0"))
+    for invalid in ["", "null", "-1", "2147483648", "NULL OR 1=1", "0; KILL 72"] {
+      row[0]="0x000001ABCDEF1234:"+invalid
+      execution.results[0]=Rows(values:[row+["2026-10-16 12:00:00.000","5"]])
+      let unsafe=try #require(ActivityApplicationLocks.decode(execution).locks.first)
+      #expect(throws:SQLFailure.self) {try ActivityRequestTermination.sql(for:.applicationLock(unsafe))}
+    }
+  }
   @Test func applicationLockTerminationSupportsIdleOwnersAndRejectsLegacyOrUnsafeTargets() throws {
     var execution=ActivityApplicationLocksTests.execution()
     let legacy=try #require(ActivityApplicationLocks.decode(execution).locks.first)

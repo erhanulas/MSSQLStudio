@@ -35,6 +35,29 @@ import SQLServerKit
   func breakSequence() {previous=nil}
   func clearDiagnostics() {clearApplicationLocks();diagnosticsRevision=UUID();diagnostics = .init();diagnosticsTime=nil;diagnosticsError=""}
   func clearApplicationLocks() {applicationRevision=UUID();applicationLocks=[];applicationLockIssues=[];applicationLockError="";applicationLocksTime=nil}
+  @discardableResult func refreshAfterStaleTarget(_ target:ActivityRequestTermination.Target,generation:UUID) async -> Bool {
+    guard server.generation==generation else {return false}
+    diagnosticsRevision=UUID();applicationRevision=UUID()
+    switch target {
+    case .request(let request):
+      diagnostics.blocked.removeAll {ActivityMonitoring.sameRequest($0,request)}
+      diagnostics.longRunning.removeAll {ActivityMonitoring.sameRequest($0,request)}
+      diagnostics.backups.removeAll {ActivityMonitoring.sameRequest($0,request)}
+      diagnostics.active.removeAll {ActivityMonitoring.sameRequest($0,request)}
+      diagnosticsTime=nil
+    case .applicationLock(let lock):
+      applicationLocks.removeAll {$0.id==lock.id && $0.sessionLoginTime==lock.sessionLoginTime}
+      applicationLocksTime=nil
+    }
+    let deadline=ContinuousClock.now.advanced(by:.seconds(25))
+    while loading,visible,server.generation==generation,ContinuousClock.now<deadline {
+      do {try await Task.sleep(for:.milliseconds(25))} catch {return false}
+    }
+    guard !Task.isCancelled,visible,server.generation==generation else {return false}
+    await load(includeDiagnostics:true,includeApplicationLocks:target.isApplicationLock)
+    guard !Task.isCancelled,server.generation==generation else {return false}
+    return target.isApplicationLock ? applicationLocksTime != nil && applicationLockError.isEmpty:diagnosticsTime != nil && diagnosticsError.isEmpty
+  }
   private func markOffline(_ detail:String="") {
     error="Bağlantı çevrimdışı. Son örnek güncel değil; Explorer’dan yeniden bağlanın."+(detail.isEmpty ? "":" "+detail)
     previous=nil;clearDiagnostics()
@@ -121,7 +144,7 @@ struct ActivityMonitorPanel:View {
   var openDBATool:((ActivityMonitoring.DBATool)->Void)?
   @State private var paused=false
   @State private var visible=false
-  @State private var interval=10
+  @State private var interval=5
   @State private var mode=0
   @State private var range=5
   @State private var diagnosticKind=0
@@ -134,7 +157,7 @@ struct ActivityMonitorPanel:View {
   }
   init(model:ActivityMonitorModel,initialMode:Int=0,initialDiagnosticKind:Int=0,initialSelectedRequest:String?=nil,initialSelectedBlockingContext:String?=nil,openTable:@escaping ()->Void) {
     _model=StateObject(wrappedValue:model);self.openTable=openTable
-    _mode=State(initialValue:initialMode);_diagnosticKind=State(initialValue:initialDiagnosticKind)
+    _mode=State(initialValue:initialMode==2 ? 2:0);_diagnosticKind=State(initialValue:initialDiagnosticKind)
     _selectedRequest=State(initialValue:initialSelectedRequest)
     _selectedBlockingContext=State(initialValue:initialSelectedBlockingContext)
   }
@@ -163,11 +186,10 @@ struct ActivityMonitorPanel:View {
       }
       controls
       healthCards
-      healthStrip
+      resourceCards
       if !notices.isEmpty {issueBanner(notices.joined(separator:" · "),critical:!model.error.isEmpty || (mode == 2 && !model.diagnosticsError.isEmpty))}
       Group {
         switch mode {
-        case 1: samplesTable
         case 2: diagnosticsPanel
         default: charts
         }
@@ -199,8 +221,8 @@ struct ActivityMonitorPanel:View {
   }
   private var controls:some View {
     HStack(spacing:10) {
-      StudioTabBar(items:[.init(id:0,title:"Grafikler",icon:"chart.xyaxis.line"),.init(id:1,title:"Örnek tablosu",icon:"tablecells"),.init(id:2,title:"DBA",icon:"server.rack")],selection:$mode)
-        .frame(width:400).accessibilityIdentifier("activityMode")
+      StudioTabBar(items:[.init(id:0,title:"Grafikler",icon:"chart.xyaxis.line"),.init(id:2,title:"DBA",icon:"server.rack")],selection:$mode)
+        .frame(width:260).accessibilityIdentifier("activityMode")
       Spacer(minLength:8)
       Picker("Aralık",selection:$range) {ForEach([5,10,15,30,45,60],id:\.self) {Text($0==60 ? "Son 1 saat":"Son \($0) dakika").tag($0)}}
         .labelsHidden().frame(width:140).studioHelp("Grafik ve örnek tablosunun zaman aralığı").accessibilityLabel("Zaman aralığı")
@@ -230,21 +252,7 @@ struct ActivityMonitorPanel:View {
       ActivityHealthCard(title:"Açık transaction",value:latest?.health.openTransactions,icon:"arrow.triangle.2.circlepath.circle.fill",color:StudioTheme.warning,detail:"Boşta: "+ActivityFormat.count(latest?.health.idleTransactions),help:"Kendi oturumu hariç tüm kullanıcı oturumlarının açık transaction sayısı; sleeping oturumları da içerir.")
     }.accessibilityIdentifier("activityHealthCards")
   }
-  private var healthStrip:some View {
-    HStack(spacing:14) {
-      stripMetric("Oturum",ActivityFormat.count(latest?.health.userSessions),icon:"person.2",help:"Kendi izleme oturumu hariç kullanıcı oturumları")
-      stripMetric("SQL bellek",ActivityFormat.memory(latest?.health.sqlMemoryMB),icon:"memorychip",help:"SQL Server işleminin fiziksel bellek kullanımı; MiB")
-      stripMetric("Boş bellek",ActivityFormat.memory(latest?.health.availableMemoryMB),icon:"square.stack.3d.up",help:"Sunucu işletim sisteminin kullanılabilir fiziksel belleği; MiB")
-      stripMetric("Okuma",ActivityFormat.number(latest?.readLatencyMS)+" ms",icon:"arrow.down.circle",help:"Ardışık örnekler arasındaki ortalama dosya okuma gecikmesi; kümülatif stall / okuma sayısı farkı")
-      stripMetric("Yazma",ActivityFormat.number(latest?.writeLatencyMS)+" ms",icon:"arrow.up.circle",help:"Ardışık örnekler arasındaki ortalama dosya yazma gecikmesi; kümülatif stall / yazma sayısı farkı")
-      Spacer(minLength:0)
-    }.font(.system(size:11)).padding(.horizontal,12).padding(.vertical,9)
-      .background(Color(nsColor:StudioTheme.canvas).opacity(0.65),in:RoundedRectangle(cornerRadius:9))
-  }
-  private func stripMetric(_ title:String,_ value:String,icon:String,help:String) -> some View {
-    HStack(spacing:5) {Image(systemName:icon).foregroundStyle(Color(nsColor:StudioTheme.muted));Text(title).foregroundStyle(.secondary);Text(value).fontWeight(.medium).monospacedDigit()}
-      .studioHelp(help).accessibilityElement(children:.combine)
-  }
+  private var resourceCards:some View {ActivityResourceCards(sample:latest)}
   private var charts:some View {
     ScrollView {
       LazyVGrid(columns:[GridItem(.adaptive(minimum:340),spacing:12)],spacing:12) {
@@ -256,20 +264,6 @@ struct ActivityMonitorPanel:View {
       }.padding(1)
     }.accessibilityIdentifier("activityCharts")
   }
-  private var samplesTable:some View {
-    ActivityDataGrid(rows:Array(displayedSamples.reversed()),columns:[
-      .init(title:"Zaman",value:{$0.time.formatted(date:.omitted,time:.standard)}),
-      .init(title:"CPU %",numeric:true,value:{$0.cpu.map(String.init(describing:))}),
-      .init(title:"Aktif",numeric:true,value:{$0.health.activeRequests.map(String.init)}),
-      .init(title:"Blok",numeric:true,value:{$0.health.blockedRequests.map(String.init)}),
-      .init(title:"Tx",numeric:true,value:{$0.health.openTransactions.map(String.init)}),
-      .init(title:"Bekleyen",numeric:true,value:{$0.waiting.map(String.init(describing:))}),
-      .init(title:"I/O MiB/sn",numeric:true,value:{$0.megabytesPerSecond.map(String.init(describing:))}),
-      .init(title:"Okuma ms",numeric:true,value:{$0.readLatencyMS.map(String.init(describing:))}),
-      .init(title:"Yazma ms",numeric:true,value:{$0.writeLatencyMS.map(String.init(describing:))})
-    ],selection:.constant(nil),identifier:"activitySamples")
-  }
-
   private var diagnosticsPanel:some View {
     VStack(alignment:.leading,spacing:8) {
       HStack {
@@ -283,13 +277,15 @@ struct ActivityMonitorPanel:View {
       }
       if diagnosticKind==3 {ActivityApplicationLocksPanel(model:model)}
       else {
-      if diagnosticKind != 2 {ActivityRequestTerminationAction(monitor:model,model:model.termination,request:selected)}
+      if diagnosticKind != 2 {ActivityRequestTerminationAction(monitor:model,model:model.termination,request:selected,staleSelection:{target in
+        if case .request(let request)=target,let selected,ActivityMonitoring.sameRequest(selected,request) {selectedRequest=nil}
+      })}
       if diagnosticRows.isEmpty {
         StudioEmptyState(title:model.diagnosticsTime == nil ? "DBA verisi bekleniyor":!model.diagnosticsError.isEmpty || !model.diagnostics.issues.isEmpty ? "Tanı verisi doğrulanamadı":"Bu grupta istek yok",icon:diagnosticKind == 2 ? "externaldrive.badge.checkmark":"checkmark.shield",detail:model.diagnosticsTime == nil ? "DBA görünümü açıkken sınırlı, salt okunur örnek alınır.":"Yetki ve filtre kapsamı yukarıdaki uyarılarla birlikte değerlendirilmelidir.")
       } else {
-        ActivityDataGrid(rows:diagnosticRows,columns:[
+        StudioDataGrid(rows:diagnosticRows,columns:[
           .init(title:"Oturum",width:65,numeric:true,value:{String($0.sessionID)}),
-          .init(title:"Çalışma süresi (sn)",numeric:true,value:{$0.elapsedMS.map {String(Double($0)/1000)}}),
+          .init(title:"Süre",numeric:true,value:{$0.elapsedMS.map(String.init)},display:{ActivityFormat.duration($0.elapsedMS)}),
           .init(title:"Login",value:{$0.login}),.init(title:"Host",value:{$0.host}),
           .init(title:"Uygulama",width:160,value:{$0.program}),.init(title:"Veritabanı",value:{$0.database}),
           .init(title:"Komut",value:{$0.command}),.init(title:"Durum",value:{$0.status}),
@@ -553,7 +549,14 @@ enum ActivityFormat {
     guard let value,value>=0 else {return "—"}
     if value<1000 {return "\(value) ms"}
     if value<60_000 {return number(Double(value)/1000)+" sn"}
-    return "\(value/60_000) dk \((value%60_000)/1000) sn"
+    let seconds=value/1000
+    let days=seconds/86400,hours=(seconds%86400)/3600,minutes=(seconds%3600)/60,remainder=seconds%60
+    var parts:[String]=[]
+    if days>0 {parts.append("\(days) gün")}
+    if hours>0 {parts.append("\(hours) sa")}
+    if minutes>0 {parts.append("\(minutes) dk")}
+    if remainder>0 || parts.isEmpty {parts.append("\(remainder) sn")}
+    return parts.joined(separator:" ")
   }
 }
 

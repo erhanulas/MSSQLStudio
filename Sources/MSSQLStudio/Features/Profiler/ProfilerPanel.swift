@@ -10,6 +10,7 @@ struct ProfilerPanel:View {
   @State private var selectedClient:SQLProfilerFiltering.Client.Key?
   @State private var showClients=false
   @State private var validationError=""
+  @State private var sortingError=""
   @State private var exporting=false
   @StateObject private var preview=ProfilerPreviewPresentation()
   private var selectedEvents:[SQLProfiler.Event] {model.visibleEvents.filter {selected.contains($0.id)}}
@@ -25,6 +26,7 @@ struct ProfilerPanel:View {
   var body:some View {
     VStack(spacing:8) {
       if !model.filterError.isEmpty {StudioFeedback(message:model.filterError)}
+      if !sortingError.isEmpty {StudioFeedback(message:sortingError)}
       if !validationError.isEmpty {StudioFeedback(message:validationError)}
       if !model.error.isEmpty {StudioFeedback(message:model.error,tone:.error)}
       if !model.warning.isEmpty {StudioFeedback(message:model.warning,tone:.warning)}
@@ -123,25 +125,25 @@ struct ProfilerPanel:View {
   }
 
   private var eventTable:some View {
-    ProfilerEventGrid(model:model,selection:$selected)
+    ProfilerEventGrid(model:model,selection:$selected,sortingFailure:$sortingError)
   }
   private var clientTable:some View {
     VStack(alignment:.leading,spacing:8) {
       HStack {
-        Text("Filtrelenen, bellekte tutulan olaylara göre · Olay sayısı azalan sıra").foregroundStyle(.secondary)
+        Text("Filtrelenen, bellekte tutulan olaylara göre · Varsayılan: olay sayısı azalan sıra").foregroundStyle(.secondary)
         Spacer()
         Button {
           if let client=model.clients.first(where:{$0.id==selectedClient}) {model.focusClient(client);showClients=false}
         } label:{Label("Bu İstemcinin SQL’lerini Göster",systemImage:"line.3.horizontal.decrease.circle")}
           .buttonStyle(StudioSecondaryButton()).disabled(!model.clients.contains {$0.id==selectedClient})
       }
-      Table(model.clients,selection:$selectedClient) {
-        TableColumn("ClientProcessID") {Text($0.id.pid)}.width(110)
-        TableColumn("Host") {Text($0.id.host)}.width(min:120,ideal:180)
-        TableColumn("Olay sayısı") {Text(String($0.count))}.width(100)
-        TableColumn("Ölçülen süre (ms)") {Text($0.durationMS.map {String(format:"%.3f",$0)} ?? "—")}.width(140)
-        TableColumn("Uygulamalar",value:\.applications).width(min:180,ideal:320)
-      }.tableStyle(.inset(alternatesRowBackgrounds:true))
+      StudioDataGrid(rows:model.clients,columns:[
+        .init(title:"ClientProcessID",numeric:true,value:{$0.id.pid}),
+        .init(title:"Host",width:180,value:{$0.id.host}),
+        .init(title:"Olay sayısı",numeric:true,value:{String($0.count)}),
+        .init(title:"Ölçülen süre (ms)",width:160,numeric:true,value:{$0.durationMS.map {String($0)}}),
+        .init(title:"Uygulamalar",width:320,value:{$0.applications})
+      ],selection:$selectedClient,identifier:"profilerClients")
       if model.unknownClientEvents>0 {Text("\(model.unknownClientEvents) olayın PID/Host bilgisi yok; istemci sıralamasına dahil edilmedi.").font(.system(size:11)).foregroundStyle(.secondary)}
     }
   }

@@ -42,7 +42,7 @@ extension EditorController {
         let target=SQLExecutionMenuAction { [weak self] in
           guard let self,executionRequest == request,document.sql == source,document.database == database,
             document.server.generation == generation,document.canExecute,!editor.hasMarkedText() else {return}
-          document.execute(override:sql)
+          document.execute(override:sql,sourceRange:range)
         }
         actions.append(target);ranges.append(range)
         let item=NSMenuItem(title:title,action:#selector(SQLExecutionMenuAction.invoke(_:)),keyEquivalent:"")
