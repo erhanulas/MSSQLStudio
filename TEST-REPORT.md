@@ -1,3 +1,14 @@
+## v0.2.185 / build 186 public release - 2026-10-17
+
+- Source/tag d21e0f65be5b545858dc1aaeb86ee5aecc0d0233; Actions 39041010745 succeeded; public latest v0.2.185. Includes all pending changes described below.
+- No additional suite run under explicit user instruction. Exact-tag package suite skipped; completed targeted native/core tests and Release evidence reused. CI identity/package/manifest/feed verification passed.
+- Four downloaded assets matched GitHub digests/manifest; exact version/build, strict app/helper signatures, frozen helper archive/bytes, Icon Composer appearances and packaged/public exact-tag notes matched. Downloaded signed application's Foundation update-feed check passed for 0.2.185.
+- MSSQLStudio-0.2.185.pkg SHA-256: `9696b3e48e2d361b4aba5905df8889687259f8176f99535b9f1a7911cbfbcf0e`.
+- MSSQLStudio-0.2.185.zip SHA-256: `698c38c596a5da9c2e26e29b0fb03c64308f24df8c89eec3856a6ac55cf6c65b`.
+- MSSQLStudio-CredentialAgent-v1.zip SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- update.json SHA-256: `9316a092960d81972149ee43a7d75e06c9642e3a939f8baa09c0886c1636fc08`.
+- Evidence /tmp/MSSQLStudio-185-public-verification/. Installer not run; installed app and user SQL sessions unchanged. Live SQL diagnostic-line metadata/KILL not exercised.
+
 ## v0.2.185 / build 186 release preparation - 2026-10-17
 
 - Explicit user request: publish without further tests. No additional suite run; completed targeted native/core regressions and Release evidence below reused. Exact v0.2.185 package-test step is exempted only for this release; signing, frozen helper, package/manifest and public updater verification remain required.
