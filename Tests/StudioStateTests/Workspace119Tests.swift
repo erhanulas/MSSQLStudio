@@ -173,7 +173,7 @@ import Testing
     _=state.newQuery(server:server,database:"Other",text:"")
     host.updateControls();#expect(host.executionDate.stringValue=="Son çalıştırma: —")
   }
-  @Test func editorRevealsOnlyTheMatchingExplorerObjectAndKeepsSQL() async throws {
+  @Test(arguments:[false,true]) func editorRevealsOnlyTheMatchingExplorerObjectAndKeepsSQL(searchOpen:Bool) async throws {
     let (state,server)=fixture();server.online=true
     server.asyncCatalogFixture={sql in
       var value=Execution()
@@ -184,10 +184,11 @@ import Testing
     window.isReleasedWhenClosed=false;window.setFrameOrigin(NSPoint(x:-20000,y:0));defer {window.close()}
     let doc=state.newQuery(server:server,database:"DemoDB",text:"SELECT * FROM dbo.Example;")
     doc.applyTargetedCatalog(SQLIntelligence.Catalog(snapshot:.init(symbols:[.init(schema:"dbo",name:"Example",columns:[],kind:"USER_TABLE")])),database:"DemoDB",generation:server.generation)
+    if searchOpen {host.showExplorerSearch(true)}
     var errors:[String]=[];state.errorFixture={errors.append($0)}
     host.revealExplorerObject(["dbo","Example"],document:doc)
     await host.explorerRevealTask?.value
-    #expect(errors.isEmpty)
+    #expect(errors.isEmpty && !host.showingSearch && host.explorerTabs.selectedSegment==0)
     let selected=host.outline.item(atRow:host.outline.selectedRow) as? TreeNode
     #expect(selected?.item?.name=="Example" && selected?.database=="DemoDB")
     #expect(doc.sql=="SELECT * FROM dbo.Example;" && doc.state == .disconnected)

@@ -52,15 +52,26 @@ import SwiftUI
   }
 }
 
+@MainActor protocol StudioTabNavigation:AnyObject {
+  func advanceTabFocus(from view:NSView,backward:Bool)->Bool
+}
+
 @MainActor class StudioPanelWindow:StudioAssociatedWindow {
   var cancelAction:(()->Void)?
   weak var activePopover:NSPopover?
   var focusOrder:[NSView]=[]
   @discardableResult func advanceDialogFocus(backward:Bool=false)->Bool {
-    let available=focusOrder.filter {!$0.isHiddenOrHasHiddenAncestor && ($0 as? NSControl)?.isEnabled != false}
-    guard !available.isEmpty else {if backward {selectPreviousKeyView(nil)} else {selectNextKeyView(nil)};return true}
     let responder=firstResponder
     let current=(responder as? NSTextView).flatMap {$0.isFieldEditor ? $0.delegate as? NSView:nil} ?? (responder as? NSView)
+    if focusOrder.isEmpty,let current {
+      var ancestor:NSView?=current
+      while let view=ancestor {
+        if let navigation=view as? StudioTabNavigation,navigation.advanceTabFocus(from:current,backward:backward) {return true}
+        ancestor=view.superview
+      }
+    }
+    let available=focusOrder.filter {!$0.isHiddenOrHasHiddenAncestor && ($0 as? NSControl)?.isEnabled != false}
+    guard !available.isEmpty else {if backward {selectPreviousKeyView(nil)} else {selectNextKeyView(nil)};return true}
     let index=current.flatMap {view in available.firstIndex {$0 === view}} ?? (backward ? 0:available.count-1)
     (current as? NSControl)?.validateEditing()
     return makeFirstResponder(available[(index+(backward ? available.count-1:1)) % available.count])

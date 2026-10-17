@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.189",
+    "date": "2026-10-17",
+    "title": "Seçili sonuçlarla daha hızlı sorgu hazırlayın",
+    "changes": [
+      "Sonuç hücresine sağ tıklayıp Bu değerlerle sorgu kopyala ile kaynak SELECT’i seçtiğiniz değerlere göre panoya kopyalayabilirsiniz. Yan yana hücreler AND, aynı kolonda alt alta seçilen değerler IN koşulu oluşturur.",
+      "Metin, sayı ve NULL değerleri uygun SQL biçiminde yazılır; tekrar eden IN değerleri kaldırılır. Mevcut sorgunuz değiştirilmez ve otomatik çalıştırılmaz.",
+      "Sonuç araç çubuğunun en solundaki aramalı seçici dönen satır sayısını gösterir ve satır sınırını yönetir. Ayrı satır aralığı yazısı kaldırıldı; filtre yokken temizleme düğmesi pasif olur.",
+      "Explorer’da Git, Arama sekmesi açıkken de Bağlantılar görünümüne geçip ilgili nesneyi seçer.",
+      "Tablo tasarımında Tab ve Shift+Tab ile kolon adı, veri tipi ve diğer alanlar arasında sırayla ilerleyebilirsiniz; pasif alanlar atlanır."
+    ]
+  },
+  {
     "version": "0.2.188",
     "date": "2026-10-17",
     "title": "Tablo tasarımı ve pencere kullanımı iyileştirildi",

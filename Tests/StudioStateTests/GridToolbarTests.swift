@@ -8,6 +8,20 @@ import Testing
     var received:[String]=[]
     @objc func changed(_ field:NSSearchField) {received.append(field.stringValue)}
   }
+  @Test func clearFiltersIsDisabledUntilColumnRuleOrResultSearchExists() throws {
+    let grid=ResultController();_=grid.view
+    grid.update(Rows(fields:[Field("N")],values:[["A"],["B"]]))
+    let clear=try #require(descendants(grid.toolbar).compactMap {$0 as? NSButton}.first {$0.accessibilityIdentifier()=="gridClearFilters"})
+    #expect(!clear.isEnabled && clear.image != nil)
+    var rule=ColumnRule();rule.choices=[.text("A")]
+    try grid.setRule(rule,column:0)
+    #expect(clear.isEnabled)
+    #expect(NSApp.sendAction(try #require(clear.action),to:clear.target,from:clear))
+    #expect(grid.rules.isEmpty && !clear.isEnabled)
+    grid.filter="B";#expect(clear.isEnabled)
+    #expect(NSApp.sendAction(try #require(clear.action),to:clear.target,from:clear))
+    #expect(grid.filter.isEmpty && !clear.isEnabled)
+  }
   @Test func unfocusedSearchTextIsPaintedExactlyOnceByNativeCell() throws {
     _=NSApplication.shared
     let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}
@@ -339,7 +353,7 @@ import Testing
     _ = NSApplication.shared
     let doc = QueryDocument(server: ConnectedServer(profile: ServerProfile(), password: ""), database: "master", title: "Toolbar")
     doc.state = .ready
-    doc.results = [Rows(fields: [Field("First")], values: [["A"]]), Rows(fields: [Field("Second")], values: [["B"]])]
+    doc.results = [Rows(fields: [Field("First")], values: [["A"],["B"],["C"],["D"]]), Rows(fields: [Field("Second")], values: [["B"],["C"]])]
     let controller = QueryController(document: doc)
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 830, height: 680), styleMask: [.titled], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
@@ -355,13 +369,20 @@ import Testing
       let rect = controller.view.convert(control.bounds, from: control)
       #expect(rect.minX >= 0 && rect.maxX <= 831, "Toolbar control overflow: \(rect)")
     }
-    #expect(controls.contains { $0.accessibilityIdentifier() == "gridRowOptions" })
+    let rowOptions=try #require(controls.compactMap {$0 as? StudioSearchablePopUpButton}.first {$0.accessibilityIdentifier()=="gridRowOptions"})
+    #expect(rowOptions.displayTitle=="4 satır" && rowOptions.titleOfSelectedItem != "4 satır")
+    #expect((rowOptions.superview as? NSStackView)?.arrangedSubviews.first === rowOptions)
+    #expect(!views.contains {$0.accessibilityIdentifier()=="gridRange"})
     #expect(controls.contains { ($0 as? NSPopUpButton)?.itemTitles.contains("Görünen sonuç · CSV…") == true })
     #expect(!views.contains { $0.accessibilityLabel() == "Kolon filtresi" })
+    let bitmap=try #require(bar.bitmapImageRepForCachingDisplay(in:bar.bounds))
+    bar.cacheDisplay(in:bar.bounds,to:bitmap)
+    try bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-result-count-toolbar.png"))
     let tabs = try #require(views.compactMap { $0 as? NSTabView }.first)
     tabs.selectTabViewItem(withIdentifier: NSNumber(value: 1))
     let second = try #require(controller.children.compactMap { $0 as? ResultController }.first { $0.result.fields.first?.name == "Second" })
     #expect(descendants(bar).contains { $0 === second.toolbar })
+    #expect(rowOptions.displayTitle=="2 satır")
     tabs.selectTabViewItem(withIdentifier: "messages")
     #expect(!descendants(bar).contains { $0.accessibilityIdentifier() == "gridNavigation" })
   }
@@ -406,7 +427,7 @@ import Testing
       #expect(copy.isBit && !copy.isEditable && !copy.isSelectable && copy.stringValue == "NULL")
     }
   }
-  @Test func scrollingDoesNotReformatRangeAndHeaderShortcutIsConfigurable() throws {
+  @Test func scrollingDoesNotChangePageMetadataAndHeaderShortcutIsConfigurable() throws {
     _ = NSApplication.shared
     let controller = ResultController()
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 850, height: 480), styleMask: [.titled], backing: .buffered, defer: false)
@@ -416,14 +437,14 @@ import Testing
     controller.setPageSize(500)
     controller.update(Rows(fields: [Field("N")], values: (0..<10_000).map { [String($0)] }))
     controller.view.layoutSubtreeIfNeeded()
-    let label = try #require(descendants(controller.view).compactMap { $0 as? NSTextField }.first { $0.accessibilityIdentifier() == "gridRange" })
-    let before = label.stringValue
+    #expect(!descendants(controller.view).contains {$0.accessibilityIdentifier()=="gridRange"})
+    let before = controller.toolbar.accessibilityValue() as? String
     controller.table.scrollRowToVisible(400)
     controller.view.layoutSubtreeIfNeeded()
-    #expect(label.stringValue == before)
+    #expect(controller.toolbar.accessibilityValue() as? String == before)
     let last = try #require(controller.toolbar.arrangedSubviews.compactMap { $0 as? NSButton }.first { $0.tag == 3 })
     #expect(NSApp.sendAction(try #require(last.action),to:last.target,from:last))
-    #expect(label.stringValue == "9501–10000 / \(10_000.formatted())")
+    #expect(controller.pageStart == 9500 && controller.toolbar.accessibilityValue() as? String == "9501–10000 / \(10_000.formatted())")
     let old = UserDefaults.standard.object(forKey: "gridCopyHeadersShortcut")
     defer { if let old { UserDefaults.standard.set(old, forKey: "gridCopyHeadersShortcut") } else { UserDefaults.standard.removeObject(forKey: "gridCopyHeadersShortcut") } }
     UserDefaults.standard.set("option", forKey: "gridCopyHeadersShortcut")

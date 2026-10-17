@@ -7,6 +7,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   let table = CopyTable()
   let rowGutter = ResultRowGutter()
   let selectionSummary=ResultSelectionPresentation()
+  let queryCopy=ResultQueryCopyPresentation()
   // Both native tables read the same result/projection/staged edits; only presentation differs.
   let frozenTable = CopyTable()
   let frozenScroll = NSScrollView()
@@ -237,6 +238,51 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     else { return false }
     return definition.columns[ordinal].nullable
   }
+  private func queryCopyColumns() throws -> [Int] {
+    let rows=table.selectedRowIndexes
+    guard !rows.isEmpty,!table.cellColumns.isEmpty,table.cellColumns.allSatisfy({table.tableColumns.indices.contains($0)}),rows.allSatisfy({$0<basePageCount}) else {
+      throw SQLFailure("Bir satırda yan yana veya bir kolonda alt alta hücre seçin.")
+    }
+    guard !hasDraftChanges else {throw SQLFailure("Önce hücre düzenlemesini tamamlayın veya iptal edin.")}
+    let selected=Set(table.cellColumns.compactMap {position in Int(table.tableColumns[position].identifier.rawValue)})
+    let ordinals=visibleColumnOrdinals.filter {selected.contains($0)}
+    guard !ordinals.isEmpty,ordinals.count<=64,rows.count<=1000 else {throw SQLFailure("En fazla 64 kolon veya 1.000 satır seçin.")}
+    guard rows.count==1 || ordinals.count==1 else {throw SQLFailure("Çok satırlı seçimde tek bir kolon seçin.")}
+    return ordinals
+  }
+  private func queryCopyCells() throws -> [(column:Int,value:String?)] {
+    let ordinals=try queryCopyColumns()
+    return try table.selectedRowIndexes.flatMap {row in
+      let rowValues=values(at:sourceIndex(row))
+      return try ordinals.map {ordinal in
+        guard rowValues.indices.contains(ordinal) else {throw SQLFailure("Seçili hücre kaynağı değişti.")}
+        return (ordinal,rowValues[ordinal])
+      }
+    }
+  }
+  private func queryCopyMenuItem()->NSMenuItem {
+    let item=NSMenuItem(title:"Bu değerlerle sorgu kopyala",action:#selector(copyQueryWithValues),keyEquivalent:"")
+    item.target=self;item.image=NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil)
+    item.identifier = .init("gridCopyQuery")
+    do {
+      let columns=try queryCopyColumns()
+      if let template=queryCopy.template,!template.supports(columns:columns) {throw SQLFailure("Seçili hesaplanan kolon doğrudan WHERE koşuluna çevrilemiyor.")}
+      item.isEnabled=queryCopy.template != nil
+      item.toolTip=item.isEnabled ? "Kaynak SELECT’in WHERE koşulunu seçili değerlerle değiştirip panoya kopyalar; sorguyu çalıştırmaz.":queryCopy.reason
+    } catch {item.isEnabled=false;item.toolTip=error.localizedDescription}
+    return item
+  }
+  @objc private func copyQueryWithValues() {
+    do {
+      guard let template=queryCopy.template else {throw SQLFailure(queryCopy.reason)}
+      let sql=try template.sql(cells:queryCopyCells())
+      NSPasteboard.general.clearContents();NSPasteboard.general.setString(sql,forType:.string)
+    } catch {
+      let alert=StudioAlert(role:"copyQueryWithValues")
+      alert.messageText="Sorgu kopyalanamadı";alert.informativeText=error.localizedDescription
+      alert.runModal()
+    }
+  }
   func editingMenu() -> [NSMenuItem] {
     guard editDefinition != nil else { return [] }
     return [("Yeni Satır", "plus", #selector(addResultRow), canAppendRow), ("Satırı Çoğalt", "plus.square.on.square", #selector(cloneResultRow), canCloneRow), (selectionIsDeleted ? "Silmeyi Geri Al" : "Satırı Sil", selectionIsDeleted ? "trash.slash" : "trash", #selector(deleteResultRow), canDeleteRows), ("Seçili Düzenlemeleri Geri Al", "arrow.uturn.backward", #selector(revertResultRows), canRevertRows)].map { title, icon, action, enabled in
@@ -304,7 +350,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   private var busy = false
   var isProcessing: Bool { busy }
   private let info = NSTextField(labelWithString: "")
-  private let rangeLabel = NSTextField(labelWithString: "0 / 0")
+  private let clearFiltersButton=StudioToolbarButton(symbol:"line.3.horizontal.decrease",label:"Filtreleri temizle",tone:.warning)
   private var navigation: [NSButton] = []
   private let chips = NSStackView()
   let toolbar = NSStackView()
@@ -336,7 +382,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     scroll.drawsBackground=false
     scroll.backgroundColor = StudioTheme.resultCanvas
     scroll.horizontalScrollElasticity = .none; scroll.verticalScrollElasticity = .none
-    target.rowActions = { [weak self] in self?.editingMenu() ?? [] }
+    target.rowActions = { [weak self] in guard let self else {return []};return [queryCopyMenuItem()]+editingMenu() }
     target.columnShortcutItems={ [weak self] in
       guard let self else {return []}
       let ordinal=table.cellColumns.count == 1 ? table.cellColumns.first.flatMap {table.tableColumns.indices.contains($0) ? Int(table.tableColumns[$0].identifier.rawValue):nil}:nil
@@ -424,7 +470,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       frozenTable.reloadData(); synchronizeSelection(from:table)
       synchronizeVerticalScroll(from:table.enclosingScrollView?.contentView)
     }
-    let clear = StudioToolbarButton(symbol: "line.3.horizontal.decrease.circle", label: "Filtreleri temizle", tone: .warning)
+    let clear=clearFiltersButton
     clear.target = self; clear.action = #selector(clearFilters)
     clear.controlSize = .small; clear.flat = true
     info.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
@@ -437,19 +483,12 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       button.tag = index; button.target = self; button.action = #selector(navigate(_:))
       return button
     }
-    rangeLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-    rangeLabel.lineBreakMode = .byTruncatingMiddle
-    rangeLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-    rangeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 64).isActive = true
-    rangeLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 150).isActive = true
-    rangeLabel.toolTip = "Yüklenen ve filtrelenmiş satırlarda gezinir; sunucudan sayfa istemez."
-    // No bounds-change observer: scrolling never formats the counter or relayouts the toolbar.
-    let bar = toolbar
-    for control in [navigation[0], navigation[1], rangeLabel, navigation[2], navigation[3], info, clear] { bar.addArrangedSubview(control) }
-    rangeLabel.setAccessibilityIdentifier("gridRange")
-    rangeLabel.toolTip = "Son gezinme aralığı / yüklenen satırlar. Kaydırırken sayaç yeniden hesaplanmaz."
+    let bar=toolbar
+    for control in [navigation[0],navigation[1],navigation[2],navigation[3],info,clear] {bar.addArrangedSubview(control)}
+    clear.setAccessibilityIdentifier("gridClearFilters")
+    clear.isEnabled=false
     clear.title = ""
-    clear.image = NSImage(systemSymbolName: "line.3.horizontal.decrease.circle", accessibilityDescription: "Filtreleri temizle")
+    clear.image = NSImage(systemSymbolName:"line.3.horizontal.decrease",accessibilityDescription:"Filtreleri temizle")
     clear.toolTip = "Tüm kolon filtrelerini ve sonuç aramasını temizle"
     bar.setAccessibilityIdentifier("gridNavigation")
     StudioTheme.resultSurface(bar)
@@ -543,14 +582,15 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     updateFrozenWidth()
     pageStart = pageSize == 0 || visibleCount == 0 ? 0 : min(((visibleCount - 1) / pageSize) * pageSize, pageStart)
     let label = (visibleCount == 0 ? "0 / 0" : "\(pageStart + 1)–\(pageStart + basePageCount) / \(visibleCount.formatted())\(partial ? "+" : "")") + (newRowOrder.isEmpty ? "" : " + \(newRowOrder.count) yeni")
-    if rangeLabel.stringValue != label { rangeLabel.stringValue = label }
-    rangeLabel.toolTip = "Geçerli sayfa / sınır içindeki satırlar. \(visibleCount.formatted()) filtrelenen · \(result.values.count.formatted()) sınır içinde · \(loadedRowCount.formatted()) önbellekte."
+    toolbar.setAccessibilityValue(label)
+    toolbar.setAccessibilityHelp("Geçerli sayfa / sınır içindeki satırlar. \(visibleCount.formatted()) filtrelenen · \(result.values.count.formatted()) sınır içinde · \(loadedRowCount.formatted()) önbellekte.")
     for button in navigation { button.isHidden = pageSize == 0; button.isEnabled = pageSize > 0 && visibleCount > 0 && (button.tag < 2 ? pageStart > 0 : pageStart + basePageCount < visibleCount) }
   }
   func update(_ rows: Rows, generation: Int = 0) {
     _ = view
+    queryCopy.prepare(source:rows.source,fields:rows.fields)
     let changedFields = result.fields != rows.fields
-    guard changedFields || self.generation != generation || loadedResult.values.count != rows.values.count else { return }
+    guard changedFields || self.generation != generation || loadedResult.values.count != rows.values.count else {result.source=rows.source;loadedResult.source=rows.source;return}
     let changedGeneration=self.generation != generation,previousCount=result.values.count
     self.generation = generation
     highlightColumn(nil)
@@ -660,6 +700,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     updateRange()
   }
   private func rebuildChips() {
+    clearFiltersButton.isEnabled = !rules.isEmpty || !filter.isEmpty
     for c in chips.arrangedSubviews {
       chips.removeArrangedSubview(c)
       c.removeFromSuperview()

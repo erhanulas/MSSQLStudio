@@ -58,6 +58,7 @@ extension WorkbenchController {
         }
         guard let branch else {throw SQLFailure("Nesne klasörü Explorer’da bulunamadı.")}
         explorerSearch.stringValue="";filterExplorer()
+        showExplorerSearch(false)
         if sidebar.isCollapsed {toggleExplorer()}
         var ancestors:[TreeNode]=[];var parent:TreeNode?=branch
         while let node=parent {ancestors.append(node);parent=node.parent}
@@ -71,6 +72,8 @@ extension WorkbenchController {
         guard current() else {return}
         guard !branch.loading else {throw SQLFailure("Nesne listesi hâlâ yükleniyor; daha sonra tekrar deneyin.")}
         guard let node=branch.children.first(where:{$0.item?.name.caseInsensitiveCompare(symbol.name) == .orderedSame && $0.item?.schema.caseInsensitiveCompare(symbol.schema) == .orderedSame}) else {throw SQLFailure(branch.error ?? "Nesne Explorer’da bulunamadı; Yenile ile tekrar deneyin.")}
+        // Loading may finish after a search-tab change; reveal in the real tree.
+        showExplorerSearch(false)
         // A list reload can restore an old collapsed state. Expand the current
         // branch again after loading before asking AppKit for its visible row.
         for ancestor in ancestors.reversed() {expansionState[ancestor.persistenceKey]=true;outline.expandItem(ancestor)}

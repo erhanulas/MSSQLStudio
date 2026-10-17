@@ -9,6 +9,46 @@ import SQLServerKit
     var value=TableDefinition(schema:"dbo",name:"T",columns:[.init(id:1,name:"A",type:"int",nullable:false),.init(id:2,name:"B",type:"int",nullable:false),.init(id:3,name:"Name",type:"nvarchar(50)")],primaryKey:["B","A"],primaryKeyName:"PK_T",definitions:[.init(name:"IX_Name",kind:"INDEX",sql:"CREATE NONCLUSTERED INDEX [IX_Name] ON [dbo].[T] ([Name] DESC) WITH (FILLFACTOR = 80) ON [PRIMARY];")])
     value.objectID=42;return value
   }
+  @Test func columnNameTabsToDataTypeAndSizeAndBack() async throws {
+    _=NSApplication.shared
+    let model=TableDesignerModel(load:{self.table()},apply:{_ in self.table()})
+    await model.load()
+    let host=NSHostingController(rootView:TableDesignerPanel(server:"Fixture",database:"Demo",model:model,open:{_ in}))
+    host.sizingOptions=[]
+    let window=StudioPanelWindow(contentViewController:host)
+    window.isReleasedWhenClosed=false;window.setContentSize(NSSize(width:1100,height:750));window.makeKeyAndOrderFront(nil)
+    defer {window.close()}
+    try await Task.sleep(for:.milliseconds(120));host.view.layoutSubtreeIfNeeded();window.recalculateKeyViewLoop()
+    func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+    let children=descendants(host.view)
+    let name=try #require(children.compactMap {$0 as? NSTextField}.first {$0.isEditable && $0.stringValue=="Name"})
+    let picker=try #require(children.compactMap {$0 as? StudioSearchablePopUpButton}.first {$0.titleOfSelectedItem=="nvarchar"})
+    let size=try #require(children.compactMap {$0 as? NSTextField}.first {$0.isEditable && $0.stringValue=="50"})
+    func tab(backward:Bool=false) throws {
+      let event=try #require(NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:backward ? [.shift]:[],timestamp:0,windowNumber:window.windowNumber,context:nil,characters:"\t",charactersIgnoringModifiers:"\t",isARepeat:false,keyCode:48))
+      window.sendEvent(event)
+    }
+    #expect(window.makeFirstResponder(name))
+    try tab();#expect(window.firstResponder === picker)
+    try tab();#expect((window.firstResponder as? NSTextView)?.delegate as? NSTextField === size)
+    try tab(backward:true);#expect(window.firstResponder === picker)
+    try tab(backward:true);#expect((window.firstResponder as? NSTextView)?.delegate as? NSTextField === name)
+    let rows=children.compactMap {$0 as? TableColumnEditorView}
+    let first=try #require(rows.first {$0.name.stringValue=="A"})
+    let second=try #require(rows.first {$0.name.stringValue=="B"})
+    let pk=try #require(descendants(first).compactMap {$0 as? NSButton}.first {$0.accessibilityLabel()=="PK"})
+    #expect(window.makeFirstResponder(first.name))
+    try tab();#expect(window.firstResponder === first.type)
+    try tab();#expect(window.firstResponder === pk) // int has no size, PK disables NULL.
+    try tab();#expect((window.firstResponder as? NSTextView)?.delegate as? NSTextField === first.defaultSQL) // Existing Identity is disabled.
+    try tab();#expect((window.firstResponder as? NSTextView)?.delegate as? NSTextField === second.name)
+    try tab(backward:true);#expect((window.firstResponder as? NSTextView)?.delegate as? NSTextField === first.defaultSQL)
+    #expect(!model.hasChanges)
+    let last=try #require(rows.first {$0.name.stringValue=="Name"})
+    last.size.stringValue="80"
+    last.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:last.size))
+    #expect(model.columns[2].type=="nvarchar(80)" && model.hasChanges)
+  }
   @Test func unchangedCompositeKeyOrderAndExistingObjectSelectionDoNotEnableApply() async throws {
     let original=table(),model=TableDesignerModel(load:{original},apply:{_ in original})
     await model.load()

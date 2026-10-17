@@ -1,3 +1,44 @@
+## 0.2.189 publication preparation — 2026-10-17
+
+- Explicit user instruction: publish without rerunning tests. Reused the targeted native/core/layout and Release build evidence below for pending table keyboard navigation, Explorer reveal, result toolbar and typed AND/IN query copy. Package suite exception is restricted to v0.2.189; stable signing audit, package signatures/manifest/frozen-helper verification and signed updater feed checks remain enabled.
+- Version 0.2.189 / build 190; public verification pending. No installed-app changes or real SQL testing requested/performed.
+
+## Vertical result selection to IN query copy — 2026-10-17 (unpublished)
+
+- Extended the same copy-query action: single-column vertical selections produce IN with distinct serialized literals in visible selection order. NULL is excluded from the IN list and represented by a parenthesized OR IS NULL; all-NULL selections produce IS NULL. Single-row horizontal selections retain AND predicates.
+- Rectangular multi-row/multi-column and row-header selections remain explicitly disabled. Up to 1,000 vertical rows / 64 horizontal columns and 4 MB total input/output are allowed. Menu eligibility reads only selection metadata; row/spool values are read only on the explicit copy action. Invalid stale column coordinates are rejected before indexing metadata.
+- 2 native ResultQueryCopyUITests and 7 SQLServerKit ResultQueryCopyTests passed, covering sorted/pinned normal/frozen menu actions, IN numeric/string escaping, duplicate/NULL behavior, selection/size guards and prior horizontal/source behavior. Final stale-coordinate guard: 2 native tests passed again. Release build succeeded; architecture/source synchronization/diff checks passed. No live SQL or installed-app changes.
+- Logs: `/tmp/mssql-query-copy-in-tests.log`, `/tmp/mssql-query-copy-in-selection-tests.log`, `/tmp/mssql-query-copy-in-final-release.log`.
+
+## Copy SELECT with selected result values — 2026-10-17 (unpublished)
+
+- Added “Bu değerlerle sorgu kopyala” to normal/frozen result-cell menus. A single selected row's explicit cell selection (up to 64 columns) replaces the executed SELECT's WHERE with typed AND predicates, and copies to clipboard only. Existing editor SQL, query session, results and pending edits are not executed or changed.
+- Pure SQLServerKit ResultQueryCopy uses rowset statement provenance, preserves SELECT/TOP/FROM/alias/hints/ORDER/OPTION, maps direct projection aliases to source columns and handles numeric precision without floating conversion, bit, escaped Unicode strings, binary and IS NULL. JOIN/CTE/invocation/multiple-source and computed selected expressions are rejected instead of guessed; noncomparable types and large copies produce an explicit reason.
+- ResultQueryCopyPresentation owns one utility parser with latest pending source/field snapshot and cancellation on disposal; streaming rows do not reparse identical sources. Source-only events update Rows provenance even at the same generation/count. Native selection uses the existing filtered/sorted/paged/pinned sourceIndex mapping; multi-row and row-header selections are disabled.
+- 22 native tests / 3 suites passed (ResultQueryCopyUITests, GridToolbarTests, SnapshotReadLimitTests), plus 6 SQLServerKit tests (including 8 unsupported-source cases). Covers exact user query, typed AND predicates, old WHERE replacement, hint/alias/tail preservation, output-column alias mapping, quote/injection/NULL/binary/precise decimal cases, real normal/frozen menu actions, late source events, filtered/paged/sorted selection, pinned column order and latest source wins. After final parser-task lifecycle cleanup, 2 native and 6 core tests passed again.
+- Release build succeeded; architecture/source synchronization/diff checks passed. No live SQL/installed-app changes. Logs: `/tmp/mssql-query-copy-final-tests.log`, `/tmp/mssql-query-copy-lifecycle-tests.log`, `/tmp/mssql-query-copy-release.log`.
+
+## Results count and searchable read-limit toolbar — 2026-10-17 (unpublished)
+
+- Removed the separate visible page-range label; paging and its accessibility metadata remain. The leftmost shared searchable selector displays the selected result's capped returned-row count, with + for partial/limited snapshots. Display title is independent of the actual selected read limit and does not invalidate an open picker when only counts change.
+- Preset/custom/default read-limit actions retain QueryController's existing guards and safe SELECT refresh behavior. Result tab changes update the count; snapshot/paging/filter/export data mappings remain unchanged. Clear-filters uses the filter glyph and is disabled without column rules or result search.
+- 37 native tests / 4 suites passed: GridToolbarTests, SnapshotReadLimitTests, ConnectionReadLimitTests and Workspace127Tests. Covers leftmost 4/2 result counts, no visible range, filter-clear enabled transitions, real shared-picker action dispatch, cached prefix behavior, safe SELECT reexecution and editing/export guards. Final flexible selector width verified by a further native layout test (1 passed); bitmap `/tmp/mssql-result-count-toolbar.png` visually inspected.
+- Release build succeeded; architecture/source synchronization/diff checks passed. No live SQL/installed-app changes. Logs: `/tmp/mssql-result-count-toolbar-tests.log`, `/tmp/mssql-result-count-toolbar-layout.log`, `/tmp/mssql-result-count-toolbar-release.log`.
+
+## Reveal Explorer object from Search tab — 2026-10-17 (unpublished)
+
+- Root cause: reveal cleared the search string but intentionally persistent Search mode still displayed searchResults, so AppKit could not resolve a real tree object's row. Reveal now explicitly switches to Connections before expansion and rechecks the tree presentation after asynchronous branch loading.
+- Workspace119Tests: 13 native tests passed, including parameterized reveal with Connections/Search initially active, correct node/DB selection, unchanged query SQL/session, offline index-only navigation, failed-branch reload and stale response focus protection. Release build succeeded; architecture/source synchronization/diff checks passed. No live SQL or installed-app changes.
+- Logs: `/tmp/mssql-explorer-reveal-search-tests.log`, `/tmp/mssql-explorer-reveal-search-release.log`.
+
+## Table Designer keyboard navigation — 2026-10-17 (unpublished)
+
+- Mixed SwiftUI text fields/native datatype picker did not give a reliable native Tab chain. Merely enabling picker focus did not resolve the reproduced failure. Column rows now use TableColumnEditor native controls bound to the existing model; the searchable datatype picker remains shared. StudioPanelWindow delegates Tab only to an opted-in local StudioTabNavigation ancestor, preserving existing explicit dialog orders and default navigation elsewhere.
+- Tab/Shift+Tab proceeds through name, datatype, applicable parameters, NULL/PK/Identity and Default, skips disabled/hidden controls and crosses mounted rows. Row controls are discovered only on boundary navigation, without retained control registries. Existing field values/PK/identity/type parameter behavior and apply/review ownership remain unchanged.
+- 29 native tests / 4 suites passed (TableDesignerModelTests, Workspace127Tests, WindowPlacementTests, non-modal WindowInteraction123Tests), including real panel key-event navigation, reverse/cross-row navigation, skipped int parameters/disabled NULL and Identity, live binding edits, common picker and dialog behavior. After native field bezel correction, 7 TableDesignerModelTests passed again. Modal-alert lifecycle test was not rerun because alert behavior is unchanged.
+- Native bitmap inspected: `/tmp/mssql-table-designer-unchanged.png`; no CUA/live SQL/installed-app changes. Architecture/source synchronization/diff checks passed. Release build succeeded.
+- Logs: `/tmp/mssql-designer-tab-final-tests.log`, `/tmp/mssql-designer-tab-render-tests.log`, `/tmp/mssql-designer-tab-final-release.log`.
+
 ## 0.2.188 public release verified — 2026-10-17
 
 - Public latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.188 ; build 189, source `18d8a71580c0a32526183dc8cff28894ba4b955f`.

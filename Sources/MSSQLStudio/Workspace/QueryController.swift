@@ -64,7 +64,7 @@ import SwiftUI
   private let summary = NSTextField(labelWithString: "")
   private let actual = NSButton(checkboxWithTitle: "Gerçek plan", target: nil, action: nil)
   private let filter = StudioSearchField(frame:.zero)
-  private let rowLimit = StudioToolbarPopUpButton(frame:.zero,pullsDown:true)
+  private let rowLimit = StudioSearchablePopUpButton()
   private let export = StudioToolbarPopUpButton(frame: .zero, pullsDown: true)
   private let cancelExport = StudioToolbarButton(symbol: "stop.circle", label: "Dışa aktarmayı iptal et", tone: .warning)
   private var exportJob: Task<Void, Never>?
@@ -226,6 +226,8 @@ import SwiftUI
     export.toolTip = "Görünen sonuçları mevcut filtre ve sıralamayla CSV / JSON olarak dışa aktar"
     export.widthAnchor.constraint(equalToConstant: 38).isActive = true
     configurePageMenu()
+    rowLimit.leadingSymbol="tablecells"
+    rowLimit.target=self;rowLimit.action=#selector(selectReadChoice)
     rowLimit.controlSize = .small
     rowLimit.isBordered = false
     rowLimit.font = .systemFont(ofSize: StudioMetrics.detailFont,weight: .medium)
@@ -252,7 +254,7 @@ import SwiftUI
     browsingDivider.widthAnchor.constraint(equalToConstant: 1).isActive = true
     browsingDivider.heightAnchor.constraint(equalToConstant: 16).isActive = true
     let resultHeader = NSStackView(views: [
-      navigationHost, refreshButton, rowLimit, autoRefreshButton, browsingDivider, columnSearchButton,
+      rowLimit, navigationHost, refreshButton, autoRefreshButton, browsingDivider, columnSearchButton,
       copyHeadersButton, editingDivider, editDataButton, dataActionsBar,
       previewDataButton, NSView(), filter, cancelExport, export,
     ])
@@ -293,7 +295,7 @@ import SwiftUI
     filter.widthAnchor.constraint(greaterThanOrEqualToConstant: 90).isActive = true
     filter.widthAnchor.constraint(lessThanOrEqualToConstant: 140).isActive = true
     filter.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-    rowLimit.widthAnchor.constraint(equalToConstant: 128).isActive = true
+    NSLayoutConstraint.activate([rowLimit.widthAnchor.constraint(greaterThanOrEqualToConstant:120),rowLimit.widthAnchor.constraint(lessThanOrEqualToConstant:180)])
     rowLimit.setContentCompressionResistancePriority(.required, for: .horizontal)
     export.bezelStyle = .rounded; export.isBordered = false; export.contentTintColor = StudioTheme.muted
     export.setAccessibilityLabel("Sonuçları dışa aktar")
@@ -963,10 +965,6 @@ import SwiftUI
     let menu=StudioMenu();menu.autoenablesItems=false
     let selected=document.limits.rows == Int.max ? 0:document.limits.rows
     let defaultValue=ResultReadPreferences.readLimit == Int.max ? 0:ResultReadPreferences.readLimit
-    let title=NSMenuItem(title:selected==0 ? "Tümü":"\(selected.formatted()) satır",action:nil,keyEquivalent:"")
-    title.image=NSImage(systemSymbolName:"tablecells",accessibilityDescription:nil);menu.addItem(title)
-    menu.addItem(.separator())
-    menu.addItem(NSMenuItem(title:"Satır Sınırı",action:nil,keyEquivalent:""))
     let presets=[10,100,250,500,1000]
     let extra=[selected,defaultValue].filter {$0>0 && !presets.contains($0)}
     for value in presets+Array(Set(extra)).sorted()+[0] {
@@ -976,12 +974,24 @@ import SwiftUI
       item.state=value==selected ? .on:.off;item.isEnabled=canChangeReadLimit;menu.addItem(item)
     }
     let custom=NSMenuItem(title:"Özel…",action:#selector(showLoadingOptions),keyEquivalent:"");custom.target=self;custom.isEnabled=canChangeReadLimit;menu.addItem(custom)
-    menu.addItem(.separator())
     let save=NSMenuItem(title:"Varsayılan Yap",action:#selector(saveLoadingDefaults),keyEquivalent:"");save.target=self;save.tag = -2;menu.addItem(save)
-    rowLimit.menu=menu;rowLimit.selectItem(at:0)
+    rowLimit.invalidateChoices();rowLimit.menu=menu
+    if let item=menu.items.first(where:{$0.identifier?.rawValue=="gridReadChoices" && $0.tag==selected}) {rowLimit.select(item)}
     syncReadOptionsHelp()
   }
+  @objc private func selectReadChoice() {
+    guard let item=rowLimit.selectedItem,let action=item.action else {return}
+    syncPageMenu()
+    NSApp.sendAction(action,to:item.target,from:item)
+  }
   private func syncReadOptionsHelp() {
+    let grid=selectedGrid,count=grid?.result.values.count ?? 0
+    rowLimit.displayTitle="\(count.formatted())\(grid?.partial == true || grid?.isReadLimited == true ? "+":"") satır"
+    let enabled = !document.busy && !submittingData && canChangeReadLimit
+    if rowLimit.isEnabled && !enabled {rowLimit.invalidateChoices()}
+    rowLimit.isEnabled=enabled
+    rowLimit.setAccessibilityValue(rowLimit.displayTitle)
+
     rowLimit.toolTip="Satır sınırı: \(document.limits.rows == Int.max ? "Tümü":document.limits.rows.formatted()) / sonuç · Yalnız doğrulanmış SELECT sorgularında uygulanır. INSERT/UPDATE/DELETE/EXEC yürütmesini veya çıktısını sınırlamaz. Değiştirildiğinde güvenle yenilenebilen son SELECT yeni sınırla tekrar çalışır."
     if let previous=document.lastExecutedReadLimit,previous != document.limits.rows,!document.results.isEmpty {
       rowLimit.toolTip! += "\nSon okuma sınırı: \(previous == Int.max ? "Tümü":previous.formatted()). Yenileme uygun değilse mevcut önbelleğe uygulanır; ek satır okumak için Çalıştır’ı kullanın."

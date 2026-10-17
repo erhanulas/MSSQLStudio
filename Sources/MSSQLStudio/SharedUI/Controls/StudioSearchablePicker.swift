@@ -3,6 +3,12 @@ import SwiftUI
 
 /// Retains NSPopUpButton selection/target-action API; searching never changes selection.
 @MainActor final class StudioSearchablePopUpButton:NSPopUpButton {
+  var displayTitle:String? {didSet {if displayTitle != oldValue {invalidateIntrinsicContentSize();needsDisplay=true}}}
+  var participatesInTabOrder=false
+  override var acceptsFirstResponder:Bool {participatesInTabOrder ? isEnabled:super.acceptsFirstResponder}
+  override var canBecomeKeyView:Bool {participatesInTabOrder ? isEnabled && !isHiddenOrHasHiddenAncestor:super.canBecomeKeyView}
+  override func becomeFirstResponder()->Bool {let accepted=super.becomeFirstResponder();needsDisplay=true;return accepted}
+  override func resignFirstResponder()->Bool {let accepted=super.resignFirstResponder();needsDisplay=true;return accepted}
   private var helpText:String?
   override var toolTip:String? {
     get {helpText}
@@ -24,7 +30,7 @@ import SwiftUI
   override init(frame:NSRect = .zero,pullsDown:Bool = false) {super.init(frame:frame,pullsDown:pullsDown);font = .systemFont(ofSize:StudioMetrics.bodyFont);isBordered=false;setContentHuggingPriority(.required,for:.vertical);setContentCompressionResistancePriority(.required,for:.vertical)}
   required init?(coder:NSCoder) {super.init(coder:coder)}
   override var intrinsicContentSize:NSSize {
-    let text=(titleOfSelectedItem ?? "") as NSString
+    let text=(displayTitle ?? titleOfSelectedItem ?? "") as NSString
     let width=text.size(withAttributes:[.font:NSFont.systemFont(ofSize:StudioMetrics.bodyFont)]).width
     return NSSize(width:min(280,max(120,width+(leadingSymbol == nil ? 36:56))),height:StudioMetrics.controlHeight)
   }
@@ -44,7 +50,7 @@ import SwiftUI
     if let leadingSymbol,let image=NSImage(systemSymbolName:leadingSymbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(paletteColors:[StudioTheme.accent])) {
       StudioSymbolDrawing.draw(image,in:NSRect(x:7,y:(bounds.height-16)/2,width:16,height:16))
     }
-    NSAttributedString(string:titleOfSelectedItem ?? "",attributes:[.font:NSFont.systemFont(ofSize:StudioMetrics.bodyFont),.foregroundColor:color,.paragraphStyle:paragraph])
+    NSAttributedString(string:displayTitle ?? titleOfSelectedItem ?? "",attributes:[.font:NSFont.systemFont(ofSize:StudioMetrics.bodyFont),.foregroundColor:color,.paragraphStyle:paragraph])
       .draw(in:NSRect(x:left,y:(bounds.height-17)/2,width:max(0,bounds.width-left-24),height:17))
     if let arrow=NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:9,weight:.medium))?.withSymbolConfiguration(.init(paletteColors:[StudioTheme.muted])) {
       StudioSymbolDrawing.draw(arrow,in:NSRect(x:bounds.width-18,y:(bounds.height-10)/2,width:10,height:10))
