@@ -2,7 +2,9 @@
 
 - Explicit user request to publish without additional tests. Existing focused test/native/core and Release evidence below reused; exact v0.2.194 workflow exception skips only the package test-suite step. Signing/audit, package/hash/frozen-helper and public updater-feed verification remain required.
 - Includes final 120-second indexing reads, 200-object module/structure groups and fixed 30-second incremental recovery. Earlier unpublished timeout-group splitting and increasing backoff proposals are superseded by the latest user instructions; final source does not retain those policies.
-- Public verification pending. No installed-app change or restart.
+- Public/latest verified: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.194 ; successful CI https://github.com/erhanulas/MSSQLStudio/actions/runs/39078151266 at source `633e0bc7be6464c22a6c706714c5e9dd6389e4d8`. ZIP/PKG/update.json/frozen archive downloaded to `/tmp/MSSQLStudio-194-public-verification`; GitHub digests/manifest hashes, exact 0.2.194/build 195, tag-matched notes, icon appearances, strict app/helper signatures, expanded PKG payload and frozen helper byte equality passed. Package suite was skipped as requested; signing/audit/build/manifest/publication/feed checks passed.
+- Published SHA-256: ZIP `37b0b682e8780082ae8f3bbcd15b40129e66463b040c5a6ae54de477bd11c865`; PKG `077abee31ee1854c49724b60c9f6c7e84841720908134cd09d9518712e2b9bab`; update.json `eb819a2384d319b4e693b3c926b8b005193823257f1f55f1abd2d627b5b47e73`; frozen archive `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- Downloaded signed application returned `Foundation updater feed verified: 0.2.194` (`/tmp/mssql194-feed-check.log`). Full receipt `/tmp/MSSQLStudio-194-public-verification/verification.json`. No installed-app change/restart, real Installer completion or new live SQL test.
 
 ## 200-object structure groups and fixed 30-second recovery — 2026-10-18 (unpublished)
 
