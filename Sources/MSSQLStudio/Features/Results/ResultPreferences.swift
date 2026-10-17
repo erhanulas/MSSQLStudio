@@ -82,8 +82,38 @@ struct ResultRefreshPanel:View {
 struct ResultColumnChoice: Identifiable { let id: Int; let name: String; let type: String; let hidden: Bool }
 @MainActor enum ResultColumnNavigation {
   static func matches(_ columns:[ResultColumnChoice],search:String) -> [ResultColumnChoice] {
-    let search=search.trimmingCharacters(in:.whitespacesAndNewlines)
-    return columns.filter {search.isEmpty || $0.name.localizedStandardContains(search)}
+    let search=normalized(search.trimmingCharacters(in:.whitespacesAndNewlines))
+    guard !search.isEmpty else {return columns}
+    let query=Array(search)
+    var exact:[ResultColumnChoice]=[],similar:[ResultColumnChoice]=[]
+    for column in columns {
+      let name=normalized(column.name)
+      if name.contains(search) {exact.append(column);continue}
+      // One typo only; short fragments stay literal to avoid noisy matches.
+      guard (4...128).contains(query.count),name.count<=512 else {continue}
+      let candidates=search.contains("_") ? [name]:[name]+name.components(separatedBy:"_")
+      if candidates.contains(where:{oneEditApart(query,Array($0))}) {similar.append(column)}
+    }
+    return exact+similar
+  }
+  private static func normalized(_ text:String)->String {
+    text.folding(options:[.caseInsensitive,.diacriticInsensitive],locale:Locale(identifier:"tr_TR")).replacingOccurrences(of:"ı",with:"i")
+  }
+  private static func oneEditApart(_ a:[Character],_ b:[Character])->Bool {
+    guard abs(a.count-b.count)<=1 else {return false}
+    var index=0
+    while index<min(a.count,b.count),a[index]==b[index] {index+=1}
+    func equalTail(_ left:Int,_ right:Int)->Bool {
+      guard a.count-left==b.count-right else {return false}
+      var i=left,j=right
+      while i<a.count {if a[i] != b[j] {return false};i+=1;j+=1}
+      return true
+    }
+    if index==min(a.count,b.count) {return true}
+    if a.count>b.count {return equalTail(index+1,index)}
+    if b.count>a.count {return equalTail(index,index+1)}
+    if equalTail(index+1,index+1) {return true}
+    return index+1<a.count && a[index]==b[index+1] && a[index+1]==b[index] && equalTail(index+2,index+2)
   }
   static func next(_ matches:[ResultColumnChoice],selected:Int?,step:Int) -> Int? {
     guard !matches.isEmpty else {return nil}

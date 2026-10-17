@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.195",
+    "date": "2026-10-18",
+    "title": "Sekme kapatma ve sonuçlarla çalışma iyileştirildi",
+    "changes": [
+      "Transaction durumu doğrulanamayan veya açık transaction bulunan sekmeler, onayınızla bağlantısı kapatılarak kapatılabilir. Otomatik commit yapılmaz.",
+      "Sorgu sonrasında gereksiz transaction uyarısına ve sonuç düzenlemenin engellenmesine yol açan sorun düzeltildi.",
+      "Explorer’da tüm dalları daraltırken bağlantı klasörleri açık kalır.",
+      "Sorgu durumuna renkli ikonlar eklendi; hazır, çalışan, uyarılı ve hatalı durumlar daha kolay ayırt edilir.",
+      "Kolon araması büyük/küçük harf ve Türkçe karakter farklılıklarını dikkate almadan eşleştirir. Küçük yazım hatalarıyla da kolonları bulabilirsiniz."
+    ]
+  },
+  {
     "version": "0.2.194",
     "date": "2026-10-18",
     "title": "İçerik indeksleme hatadan sonra otomatik devam eder",

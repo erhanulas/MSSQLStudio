@@ -39,7 +39,7 @@ private actor ImportedProfiles122 {
   }
   @Test func objectCloseWarningIsIndependentAndKeepsDatabaseSafetyGuards() {
     let (state,server,_,window)=fixture();defer {window.close()}
-    state.errorFixture={_ in}
+    state.errorFixture={_ in};state.transactionCloseConfirmationFixture={_ in false}
     let doc=state.newQuery(server:server,text:"ALTER PROCEDURE dbo.P AS SELECT 2;")
     doc.savedText="";doc.moduleInitialSQL="ALTER PROCEDURE dbo.P AS SELECT 1;"
     for sqlWarning in [false,true] {
@@ -56,13 +56,35 @@ private actor ImportedProfiles122 {
   }
   @Test func disabledSQLCloseWarningKeepsTransactionAndResultDraftGuards() {
     let (state,server,_,window)=fixture();defer {window.close()}
-    state.warnOnTabClose=false;state.errorFixture={_ in}
+    state.warnOnTabClose=false;state.errorFixture={_ in};state.transactionCloseConfirmationFixture={_ in false}
     let doc=state.newQuery(server:server,text:"SELECT 1;")
     doc.savedText="";#expect(doc.dirty && !state.requiresCloseConfirmation(doc) && !state.needsBulkCloseConfirmation)
     doc.moduleInitialSQL="SELECT 2;";#expect(state.requiresCloseConfirmation(doc));doc.moduleInitialSQL=nil
     doc.transactionCount=1;#expect(!state.close(doc));doc.transactionCount=0
     doc.confirmDiscardResultEdits={false};#expect(!state.close(doc));doc.confirmDiscardResultEdits=nil
     #expect(state.close(doc) && state.lastClosedTab?.text=="SELECT 1;")
+  }
+  @Test func unknownOrOpenTransactionCanCloseWithExplicitDisconnectApproval() async {
+    let (state,server,_,window)=fixture();defer {window.close()}
+    state.warnOnTabClose=false
+    for known in [false,true] {
+      let doc=state.newQuery(server:server,text:"SELECT 1;")
+      doc.state = .ready
+      doc.executionFixture={_,_ in Execution()}
+      doc.sessionProbeFixture={_,_ in
+        if !known {throw SQLFailure("Probe unavailable")}
+        var result=Execution();result.results=[Rows(values:[["1","Demo","1"]])];return result
+      }
+      doc.execute();await doc.task?.value
+      #expect(doc.transactionStatusKnown == known && !doc.hasClosedTransaction)
+      state.transactionCloseConfirmationFixture={_ in false}
+      #expect(!state.close(doc) && state.documents.contains {$0 === doc} && doc.state == .ready)
+      state.transactionCloseConfirmationFixture={_ in true}
+      doc.confirmDiscardResultEdits={false}
+      #expect(!state.close(doc))
+      doc.confirmDiscardResultEdits=nil
+      #expect(state.close(doc) && doc.state == .disconnected && !state.documents.contains {$0 === doc})
+    }
   }
   @Test func importsStayOfflineNeverOverwriteExistingProfileAndPersistOnlyNewProfiles() async throws {
     let (state,server,_,window)=fixture();defer {window.close()}

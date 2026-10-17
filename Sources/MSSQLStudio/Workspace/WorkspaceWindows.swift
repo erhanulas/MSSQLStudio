@@ -7,6 +7,7 @@ import AppKit
   private let queryToolbarHost=NSView()
   private let label = NSTextField(labelWithString: "")
   private let status=NSTextField(labelWithString:"")
+  private let statusIcon=QueryStatusPresentation.makeIcon()
   private let selection=NSTextField(labelWithString:"")
   init(query: QueryController) {
     self.query = query
@@ -40,7 +41,8 @@ import AppKit
     query.hostEditorToolbar(in:queryToolbarHost)
     StudioTheme.surface(header)
     header.edgeInsets = NSEdgeInsets(top: 1, left: 8, bottom: 1, right: 8)
-    let footer=NSStackView(views:[status,NSView(),selection])
+    status.setAccessibilityIdentifier("queryStatus")
+    let footer=NSStackView(views:[statusIcon,status,NSView(),selection])
     StudioTheme.statusSurface(footer);footer.spacing=10
     footer.edgeInsets=NSEdgeInsets(top:1,left:8,bottom:1,right:8)
     for field in [status,selection] {
@@ -86,15 +88,7 @@ import AppKit
     let names=doc.server.databases.map(\.name)
     let values=names.contains(doc.database) ? names:[doc.database]+names
     database.updateChoices(values,selected:doc.database,contextID:doc.id,enabled:!doc.busy && doc.offlinePreview == nil)
-    let phase:String
-    switch doc.state {
-    case .ready:phase=doc.offlinePreview != nil ? "Çevrimdışı tanım · Salt okunur":"Ready"
-    case .running:phase="Executing…"
-    case .connecting:phase="Connecting…"
-    case .cancelling:phase="Cancelling…"
-    case .disconnected:phase=doc.disconnectedStatus
-    }
-    status.stringValue="\(phase) · \(doc.database) · Son çalıştırma: \(doc.lastExecutionDate?.formatted(date:.numeric,time:.standard) ?? "—")"
+    QueryStatusPresentation(document:doc).apply(to:status,icon:statusIcon,detail:" · \(doc.database) · Son çalıştırma: \(doc.lastExecutionDate?.formatted(date:.numeric,time:.standard) ?? "—")")
     selection.stringValue=query.selectionStatus?.text ?? ""
     selection.toolTip=query.selectionStatus?.help
     selection.isHidden=query.selectionStatus==nil

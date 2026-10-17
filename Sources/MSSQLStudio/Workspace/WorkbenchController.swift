@@ -48,6 +48,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   let database = StudioSearchablePopUpButton()
   let executionDate = NSTextField(labelWithString:"Son çalıştırma: —")
   let statusStrip = NSStackView()
+  let statusIcon = QueryStatusPresentation.makeIcon()
   let resultSelectionStatus=NSTextField(labelWithString:"")
   let status = NSTextField(labelWithString: "Bağlantı bekleniyor")
   let context = NSTextField(labelWithString: "")
@@ -200,7 +201,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     resultSelectionStatus.setContentCompressionResistancePriority(.init(751),for:.horizontal)
     resultSelectionStatus.widthAnchor.constraint(lessThanOrEqualToConstant:340).isActive=true
     executionDate.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-    statusRow.setViews([status,NSView(),resultSelectionStatus,divider,executionDate],in:.center)
+    statusRow.setViews([statusIcon,status,NSView(),resultSelectionStatus,divider,executionDate],in:.center)
     divider.widthAnchor.constraint(equalToConstant:1).isActive=true
     divider.heightAnchor.constraint(equalToConstant:14).isActive=true
     statusRow.spacing=10
@@ -495,28 +496,21 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       context.stringValue = "\(doc.server.profile.name) · \(doc.server.profile.host),\(doc.server.profile.port)  •  \(doc.server.profile.login)"
       context.toolTip=context.stringValue+" · "+(doc.server.profile.appearance?.badge ?? "")
       context.textColor = .secondaryLabelColor
-      let phase: String
-      switch doc.state {
-      case .disconnected: phase = doc.disconnectedStatus
-      case .connecting: phase = "Connecting…"
-      case .ready: phase = doc.offlinePreview != nil ? "Çevrimdışı tanım · Salt okunur" : doc.definitionLoading ? "Nesne tanımı yükleniyor…" : "Ready"
-      case .running: phase = "Executing…"
-      case .cancelling: phase = "Cancelling…"
-      }
       let operation=state.connectionActivities[doc.server.id] ?? (doc.server.reconnecting ? "Explorer yeniden bağlanıyor…" : doc.server.updatingProfile ? "Bağlantı ayarları kaydediliyor…" : connectionSheetBusy ? "Bağlantı yönetimi işlemi sürüyor…" : nil)
-      let displayPhase=operation ?? state.connectionErrors[doc.server.id].map {"Explorer bağlantısı başarısız: " + $0} ?? (doc.offlinePreview != nil ? "Çevrimdışı tanım · Salt okunur" : doc.definitionLoading ? "Nesne tanımı yükleniyor…" : phase)
+      let presentation=QueryStatusPresentation(document:doc,operation:operation,connectionError:state.connectionErrors[doc.server.id])
       let loaded = doc.results.filter { !$0.isPlan }.reduce(0) { $0 + $1.values.count }
       let shown = doc.results.filter { !$0.isPlan }.reduce(0) { $0 + min($1.values.count, max(1, doc.limits.rows)) }
       let rows = shown < loaded ? "\(shown.formatted()) gösterilen · \(loaded.formatted()) yüklenen" : "\(doc.rowCount.formatted()) rows"
       status.toolTip=doc.connectionError ?? state.connectionErrors[doc.server.id] ?? doc.server.startupError
       status.setAccessibilityIdentifier("queryStatus")
-      status.stringValue =
-        "\(displayPhase)   |   \(doc.database)   |   \(rows)   |   \(String(format:"%.3f",doc.elapsed)) s\(doc.partial ? "   |   PARTIAL" : "")\(!doc.transactionStatusKnown ? "   |   TRAN: bilinmiyor":doc.transactionCount > 0 ? "   |   TRAN: \(doc.transactionCount)" : "")"
+      presentation.apply(to:status,icon:statusIcon,detail:
+        "   |   \(doc.database)   |   \(rows)   |   \(String(format:"%.3f",doc.elapsed)) s\(doc.partial ? "   |   PARTIAL" : "")\(!doc.transactionStatusKnown ? "   |   TRAN: bilinmiyor":doc.transactionCount > 0 ? "   |   TRAN: \(doc.transactionCount)" : "")")
     } else {
       database.updateChoices([],selected:nil,contextID:nil,enabled:false)
       context.stringValue = ""
-      status.stringValue = (connectionSheetBusy ? "Bağlantı yönetimi işlemi sürüyor…" : nil) ?? state.connectionActivities.values.sorted().first ?? state.connectionErrors.values.sorted().first ?? selectedServer?.startupError ?? (
+      let message = (connectionSheetBusy ? "Bağlantı yönetimi işlemi sürüyor…" : nil) ?? state.connectionActivities.values.sorted().first ?? state.connectionErrors.values.sorted().first ?? selectedServer?.startupError ?? (
         state.servers.isEmpty ? "Connect to SQL Server" : "Yeni bir sorgu açın veya nesne seçin")
+      QueryStatusPresentation.apply(text:message,symbol:"info.circle",color:StudioTheme.muted,to:status,icon:statusIcon)
     }
     for item in view.window?.toolbar?.items ?? [] {
       switch item.itemIdentifier.rawValue {

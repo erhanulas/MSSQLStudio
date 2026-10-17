@@ -11,9 +11,9 @@ import SQLServerKit
   var expansionState: [String:Bool] = [:]
 
   func collapseAllBranches() {
-    for key in expansionState.keys {expansionState[key]=false}
+    for key in expansionState.keys where !key.hasPrefix("connection-group|") {expansionState[key]=false}
     func collapse(_ node:TreeNode) {
-      if node.expandable {expansionState[node.persistenceKey]=false}
+      if node.expandable,node.connectionGroupID==nil {expansionState[node.persistenceKey]=false}
       for child in node.children {collapse(child)}
     }
     for root in displayRoots {collapse(root)}

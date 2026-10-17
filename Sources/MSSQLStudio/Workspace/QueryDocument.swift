@@ -416,7 +416,9 @@ struct ObjectEditorKey: Codable, Equatable {
         if estimated && executionFixture == nil { _ = try? await connection.execute("SET SHOWPLAN_XML OFF;") }
         if captureActual && executionFixture == nil { _ = try? await connection.execute("SET STATISTICS XML OFF;") }
         do {
-          var limits=Limits();limits.rows=1;limits.timeout=5
+          // The single-row probe needs headroom: an exact row-limit hit is
+          // conservatively partial in the ODBC reader, even at end of data.
+          var limits=Limits();limits.rows=2;limits.timeout=5
           let result:Execution
           if let sessionProbeFixture {result=try await sessionProbeFixture("SELECT @@TRANCOUNT, DB_NAME(), XACT_STATE();",limits)}
           else {result=try await connection.execute("SELECT @@TRANCOUNT, DB_NAME(), XACT_STATE();",limits:limits)}
@@ -450,7 +452,7 @@ struct ObjectEditorKey: Codable, Equatable {
             }
           } else {throw SQLFailure("Sorgu sonrası oturum yanıtı eksik.")}
         } catch {
-          if executionID==token,server === executionServer,server.generation==executionServerGeneration {transactionStatusKnown=false;messages += "Transaction durumu doğrulanamadı. Aynı sekmede @@TRANCOUNT ve XACT_STATE() değerlerini kontrol edin.\n"}
+          if executionID==token,server === executionServer,server.generation==executionServerGeneration {transactionStatusKnown=false;messages += "Transaction durumu doğrulanamadı. Aynı sekmede @@TRANCOUNT ve XACT_STATE() değerlerini kontrol edin.\n"+error.localizedDescription+"\n"}
           if executionID==token,server === executionServer,server.generation==executionServerGeneration,self.database==executionDatabase {await recordConnectionFailure(error)}
           else if executionID==token {lastExecutedDatabase=nil}
         }

@@ -1,3 +1,40 @@
+## Public 0.2.195 preparation — 2026-10-18
+
+- User explicitly requested publication without rerunning tests. Reused completed targeted regression and isolated Release evidence for collapse, session-probe headroom, status presentation, column search and transaction-close exit recorded below. No new suite executed for this release; release-package suite excluded only for exact v0.2.195 tag.
+- Signing audit, signed Release packaging, frozen helper verification, manifest/hash/public-feed checks remain required. Version 0.2.195, build 196. Installed app, real DB and Keychain untouched.
+
+## Single-tab transaction disconnect exit — 2026-10-18 (unpublished)
+
+- Replaced the permanent open/unknown transaction close error with an explicit cancel/disconnect confirmation, after existing save/result-draft checks. Approval disconnects only the selected query session, never commits; cancellation retains the tab/session. Busy execution and active send guards, bulk-close/application termination guards remain unchanged.
+- Workspace122Tests: 8 tests passed, including failed real session-probe simulation, open transaction, rejected disconnect, accepted disconnect and result-draft veto. Log: /tmp/mssql-close-disconnect-tests.log. Initial test compile failed due a private setter; corrected fixture to produce unknown state through the actual probe path.
+- Isolated Release build passed: /tmp/mssql-close-disconnect-release.log. Architecture/source synchronization and diff checks passed. No live SQL transaction rollback or installed-app verification performed.
+- Microsoft reference: https://techcommunity.microsoft.com/blog/sqlserver/sql-server-management-studio-ssms-19-0-released/3725301 and https://learn.microsoft.com/en-us/troubleshoot/sql/database-engine/performance/understand-resolve-blocking (query connections are non-pooled; disconnect rolls back open transactions).
+
+## Typo-tolerant result column navigation — 2026-10-18 (unpublished)
+
+- ResultColumnNavigation retains normalized direct contains matches first, then one-character insertion/deletion/substitution or adjacent-transposition matches for complete column names/underscore-separated name components. Example topllama_id finds TOPLAMA_ID. Turkish case/diacritic normalization matches existing settings-search behavior. Fuzzy comparison is linear, limited to 4–128-character input and up to 512-character names; short/long inputs retain literal search. Real column ordinal/name/type/hidden flag and navigation remain unchanged, with no row filtering, SQL or metadata work.
+- Four tests / three suites passed (`/tmp/mssql-column-typo-tests.log`): exact-priority/source-order, duplicated/missing/wrong/swapped letter, Turkish normalization, short/noisy/oversize input, hidden-column identity and navigation; existing compact native column-search panel and header-navigation checks passed. Release build succeeded (`/tmp/mssql-column-typo-release.log`); architecture/source synchronization/diff checks passed.
+- No installed-app change or publication.
+
+## Colored query status and semantic icons — 2026-10-18 (unpublished)
+
+- QueryStatusPresentation shares stateless status text/icon/color between main Workbench and detached query footer. Ready uses success checkmark, running/connecting/loading accent symbols, cancellation/partial/open-or-unknown transaction warning, failed query/connection danger, disconnected muted. Only phase text/leading icon is colored; remaining DB/rows/duration/date content stays muted. Main queryStatus text identifier remains; detached footer exposes the same identifier. No query/session/action lifecycle change.
+- Sixteen serialized tests / three suites passed (`/tmp/mssql-status-icons-verified-tests.log`): both-theme native status/semantic text-vs-detail colors/icons, actual SF native alignment geometry, detached Ready/running, read-limit/status and lazy connection regressions. Initial geometry assertion incorrectly treated NSImageView's optical alignment frame as its outer frame; corrected to the constrained 14 pt native alignment rect after inspecting SF alignment insets. Light/dark status-strip bitmaps `/tmp/mssql-query-status-{light,dark}.png` inspected with green Ready/checkmark and secondary details.
+- Release build succeeded (`/tmp/mssql-status-icons-release.log`); Xcode source sync, architecture and diff checks passed. No installed-app change or publication.
+
+## Session probe exact-row-limit regression and result editing — 2026-10-18 (unpublished)
+
+- Root cause: the post-query transaction probe returned exactly one row with Limits.rows=1. ODBC's conservative exact-boundary policy marks a limit hit partial/truncated without fetching N+1. The newly strict probe validation rejected every normal one-row response, leaving transactionStatusKnown false and disabling canRefresh/canEditLoadedRows even when @@TRANCOUNT=0. This was a client-side validation regression, not proof of a user-opened transaction.
+- Probe now uses two-row headroom / unchanged 5-second timeout; the existing decoder still requires exactly one complete row and valid @@TRANCOUNT/DB_NAME/XACT_STATE. Real partial/malformed/failed probes continue to block unsafe editing; no transaction guard was removed. Genuine probe failures now include their original localized diagnostic after the unknown-state message instead of hiding the cause.
+- Twenty-six serialized tests / three suites passed (`/tmp/mssql-session-probe-headroom-tests.log`): new exact-boundary fixture reproduces the ODBC partial policy and verifies normal zero-transaction results regain editing while true partial responses remain blocked. Existing cancel/timeout, DDL commit/probe and read-refresh regressions passed. Fifteen native editing/row-action/grid workflow tests / seven suites also passed (`/tmp/mssql-session-probe-editing-tests.log`).
+- Release build succeeded (`/tmp/mssql-session-probe-headroom-release.log`); architecture/source sync/diff checks passed. No live SQL Server execution, installed-app modification or publication.
+
+## Collapse Explorer only through server roots — 2026-10-18 (unpublished)
+
+- Collapse All now closes server roots and their descendants individually; user connection-group folders keep native expansion and persisted connection-group keys. Search-result collapse remains unchanged. Model clears server/descendant preferences, including unloaded remembered branches, while retaining all organization-folder preferences. No metadata reads or connection/query closure.
+- Three serialized EditorExplorerRegressionTests passed (`/tmp/mssql-collapse-keep-folders-verified-tests.log`), including two nested organization folders staying open before/after native collapse and reload, server/DB branches remaining closed, unchanged preferences and no reconnect. Initial fixture incorrectly required explicit true preferences for folders expanded by default; final assertion verifies unchanged optional stored preferences and actual native expansion.
+- Release build succeeded (`/tmp/mssql-collapse-keep-folders-release.log`); architecture/source sync/diff checks passed. No installed-app change or publication.
+
 ## Release 0.2.194 / build 195 preparation — 2026-10-18
 
 - Explicit user request to publish without additional tests. Existing focused test/native/core and Release evidence below reused; exact v0.2.194 workflow exception skips only the package test-suite step. Signing/audit, package/hash/frozen-helper and public updater-feed verification remain required.

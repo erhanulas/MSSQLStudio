@@ -195,7 +195,8 @@ extension WorkbenchController {
   @objc func collapseExplorerBranches() {
     let previous=restoringTree
     restoringTree=true
-    outline.collapseItem(nil,collapseChildren:true)
+    if showingSearch {outline.collapseItem(nil,collapseChildren:true)}
+    else {for root in roots {outline.collapseItem(root,collapseChildren:true)}}
     restoringTree=previous
     if !showingSearch {
       explorerTree.collapseAllBranches()

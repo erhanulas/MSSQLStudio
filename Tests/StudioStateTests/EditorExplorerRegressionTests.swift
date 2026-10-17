@@ -11,22 +11,30 @@ import Testing
     let state=StudioState();state.explorerTreeDefaults=defaults;state.historyEnabled=false;state.recoveryEnabled=false
     let server=ConnectedServer(profile:.init(name:"Fixture"),password:"")
     server.online=false;server.databases=[CatalogItem(id:5,name:"Demo")];state.servers=[server]
+    try state.changeExplorerOrganization {let parent=try $0.create("Müşteriler");let child=try $0.create("Üretim",parent:parent);try $0.assign(server.id,to:child)}
     let host=WorkbenchController(state:state);_=host.view
     func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
     let button=try #require(descendants(host.view).compactMap {$0 as? NSButton}.first {$0.accessibilityIdentifier()=="collapseExplorerBranches"})
     #expect(button.image != nil)
     let root=try #require(host.roots.first),databases=try #require(root.children.first),db=try #require(databases.children.first)
     databases.loaded=true;db.loaded=true
+    let parent=try #require(host.outline.item(atRow:0) as? TreeNode)
+    host.outline.expandItem(parent)
+    let child=try #require(parent.children.first)
+    host.outline.expandItem(child)
     host.outline.expandItem(root);host.outline.expandItem(databases);host.outline.expandItem(db)
     host.expansionState["remembered-unloaded-descendant"]=true
+    let parentState=host.expansionState[parent.persistenceKey],childState=host.expansionState[child.persistenceKey]
     let generation=server.generation
     #expect(host.outline.isItemExpanded(db))
     #expect(NSApp.sendAction(try #require(button.action),to:button.target,from:button))
     #expect(!host.outline.isItemExpanded(root) && !host.outline.isItemExpanded(databases) && !host.outline.isItemExpanded(db))
-    #expect(host.expansionState.values.allSatisfy {!$0})
+    #expect(host.outline.isItemExpanded(parent) && host.outline.isItemExpanded(child))
+    #expect(host.expansionState[parent.persistenceKey]==parentState && host.expansionState[child.persistenceKey]==childState)
+    #expect(host.expansionState.filter {!$0.key.hasPrefix("connection-group|")}.values.allSatisfy {!$0})
     #expect(defaults.dictionary(forKey:"explorerExpansionState") as? [String:Bool]==host.expansionState)
     host.reloadExplorer()
-    #expect(!host.outline.isItemExpanded(root))
+    #expect(!host.outline.isItemExpanded(root) && host.outline.isItemExpanded(parent) && host.outline.isItemExpanded(child))
     host.outline.expandItem(root)
     #expect(!host.outline.isItemExpanded(databases))
     #expect(server.generation==generation && !server.online && !server.reconnecting && state.documents.isEmpty)

@@ -46,7 +46,7 @@ import Testing
       return output
     }
     doc.sessionProbeFixture = { sql, limits in
-      #expect(sql == "SELECT @@TRANCOUNT, DB_NAME(), XACT_STATE();" && limits.rows == 1 && limits.timeout == 5)
+      #expect(sql == "SELECT @@TRANCOUNT, DB_NAME(), XACT_STATE();" && limits.rows == 2 && limits.timeout == 5)
       probes += 1
       var output = Execution(); output.results = [Rows(values: [["0", "master"]])]; return output
     }

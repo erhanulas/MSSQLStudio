@@ -174,4 +174,22 @@ import Testing
     #expect(doc.transactionStatusKnown && doc.hasClosedTransaction)
   }
 
+  @Test func singleRowSessionProbeHasHeadroomAndKeepsResultEditingAvailableWithoutTransactions() async throws {
+    let doc=readDocument();doc.sql="SELECT ID FROM dbo.T;"
+    doc.executionFixture={_,_ in var result=Execution();result.results=[Rows(fields:[Field("ID")],values:[["1"]])];return result}
+    doc.sessionProbeFixture={_,limits in
+      #expect(limits.rows==2 && limits.timeout==5)
+      var result=Execution();var rows=Rows(values:[["0","master","0"]])
+      // Same exact-boundary policy as the ODBC reader: reaching the cap is partial.
+      if rows.values.count>=limits.rows {result.partial=true;rows.truncated=true}
+      result.results=[rows];return result
+    }
+    doc.execute();await doc.task?.value
+    #expect(doc.transactionCount==0 && doc.transactionStatusKnown && doc.hasClosedTransaction)
+    #expect(doc.canEditLoadedRows && !doc.messages.contains("Transaction durumu doğrulanamadı"))
+    doc.sessionProbeFixture={_,_ in var result=Execution();result.partial=true;result.results=[Rows(values:[["0","master","0"]])];return result}
+    doc.execute();await doc.task?.value
+    #expect(!doc.transactionStatusKnown && !doc.canEditLoadedRows)
+  }
+
 }
