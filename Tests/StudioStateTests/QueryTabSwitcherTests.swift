@@ -187,7 +187,55 @@ import Testing
     preview.cacheDisplay(in:preview.bounds,to:bitmap)
     try bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-preview-last-lines.png"))
   }
-  @Test func incrementalScrollPastLine220KeepsTextVisibleAfterRecoloring() throws {
+  @Test func tabbedPreviewPhysicalLinesFitTheScrollableDocument() throws {
+    let preview=SQLPreviewView(frame:NSRect(x:0,y:0,width:650,height:320))
+    let window=NSWindow(contentRect:preview.bounds,styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=preview;window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
+    defer {window.close()}
+    let line=String(repeating:"\t",count:20)+"SELECT 1 AS Value; -- "+String(repeating:"x",count:120)+"\r\n"
+    let source=String(repeating:line,count:700)+"SELECT 'FINAL_SOURCE_LINE';"
+    preview.display(source,lexicalSnapshot:[]);preview.layoutSubtreeIfNeeded()
+    let content=try #require(preview.textView.textContentStorage),layout=try #require(preview.textView.textLayoutManager)
+    layout.ensureLayout(for:content.documentRange)
+    var bottom:CGFloat=0,visualLines=0
+    layout.enumerateTextLayoutFragments(from:content.documentRange.location,options:[]) {fragment in
+      bottom=max(bottom,fragment.layoutFragmentFrame.maxY)
+      visualLines+=fragment.textLineFragments.count
+      return true
+    }
+    #expect(visualLines==701)
+    #expect(bottom+preview.textView.textContainerInset.height<=preview.textView.frame.height)
+    #expect(preview.textView.string==source)
+  }
+  @Test func hostedTabbedPreviewCanScrollToTheExactFinalLine() async throws {
+    let (state,owner,window)=fixture();defer {owner.tabSwitcher.dismiss(commit:false);window.close()}
+    let line=String(repeating:"\t",count:20)+"SELECT 1 AS Value; -- "+String(repeating:"x",count:120)+"\r\n"
+    let source=String(repeating:line,count:700)+"SELECT 'FINAL_SOURCE_LINE';"
+    state.documents[1].sql=source;owner.tabSwitcher.present(in:window)
+    for _ in 0..<300 where owner.tabSwitcher.previewBusy {try await Task.sleep(for:.milliseconds(3))}
+    let panel=try #require(owner.tabSwitcher.panel)
+    panel.contentView?.layoutSubtreeIfNeeded()
+    func children(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(children)}
+    let host=try #require(panel.contentView)
+    let preview=try #require(children(host).compactMap {$0 as? SQLPreviewView}.first)
+    for row in stride(from:0,through:700,by:13) {
+      preview.scroll.contentView.scroll(to:NSPoint(x:0,y:CGFloat(row)*20))
+      preview.scroll.reflectScrolledClipView(preview.scroll.contentView)
+      try await Task.sleep(for:.milliseconds(1))
+    }
+    let bottom=max(0,preview.textView.frame.height-preview.scroll.contentView.bounds.height)
+    preview.scroll.contentView.scroll(to:NSPoint(x:0,y:bottom));preview.scroll.reflectScrolledClipView(preview.scroll.contentView)
+    try await Task.sleep(for:.milliseconds(40))
+    let content=try #require(preview.textView.textContentStorage),viewport=try #require(preview.textView.textLayoutManager?.textViewportLayoutController.viewportRange)
+    let end=content.offset(from:content.documentRange.location,to:viewport.endLocation)
+    #expect(end==source.utf16.count)
+    let start=try #require(content.location(content.documentRange.location,offsetBy:source.utf16.count-26))
+    let range=try #require(NSTextRange(location:start,end:content.documentRange.endLocation))
+    var finalRect:NSRect = .zero
+    preview.textView.textLayoutManager?.enumerateTextSegments(in:range,type:.standard,options:[]) {_,rect,_,_ in finalRect=finalRect.union(rect);return true}
+    #expect(finalRect.maxY+preview.textView.textContainerOrigin.y<=preview.scroll.documentVisibleRect.maxY)
+  }
+  @Test func incrementalScrollPastLine430KeepsTextVisibleAfterRecoloringAndResize() throws {
     _=NSApplication.shared
     let mode=StudioTheme.mode;defer {StudioTheme.apply(mode)}
     for theme in ["light","dark"] {
@@ -196,13 +244,16 @@ import Testing
       let window=NSPanel(contentRect:preview.bounds,styleMask:[.titled,.nonactivatingPanel],backing:.buffered,defer:false)
       window.isReleasedWhenClosed=false;window.contentView=preview;window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
       defer {window.close()}
-      let line="SELECT 123 AS VisibleValue;\n",source=String(repeating:line,count:600)
+      let line="SELECT 123 AS VisibleValue;\n",source=String(repeating:line,count:1600)
       preview.display(source,lexicalSnapshot:[]);preview.layoutSubtreeIfNeeded()
       let content=try #require(preview.textView.textContentStorage)
-      for row in stride(from:0,through:300,by:10) {
+      for row in stride(from:0,through:1500,by:10) {
         preview.scroll.contentView.scroll(to:NSPoint(x:0,y:CGFloat(row)*20))
         preview.scroll.reflectScrolledClipView(preview.scroll.contentView)
-        if row==210 {preview.display(source,lexicalSnapshot:TSQL.lex(source))}
+        if row==430 {
+          preview.display(source,lexicalSnapshot:TSQL.lex(source))
+          window.setContentSize(NSSize(width:800,height:450));preview.layoutSubtreeIfNeeded()
+        }
         let viewport=try #require(preview.textView.textLayoutManager?.textViewportLayoutController.viewportRange)
         let start=content.offset(from:content.documentRange.location,to:viewport.location)
         let end=content.offset(from:content.documentRange.location,to:viewport.endLocation)
@@ -217,7 +268,7 @@ import Testing
         }
       }
       #expect(ink>100)
-      try bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-preview-line300-"+theme+".png"))
+      try bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-preview-line1500-"+theme+".png"))
     }
   }
   @Test func previewFitsBothThemesAndShortcutIsDiscoverable() throws {

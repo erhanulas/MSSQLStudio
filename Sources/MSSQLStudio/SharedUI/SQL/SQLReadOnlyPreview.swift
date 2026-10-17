@@ -129,6 +129,10 @@ import SwiftUI
     preview.backgroundColor=StudioTheme.editorCanvas;scroll.backgroundColor=StudioTheme.editorCanvas
     let attributed=NSMutableAttributedString(attributedString:SQLSourceHighlighting.attributed(sql,lexicalSnapshot:lexicalSnapshot))
     let paragraph=NSMutableParagraphStyle();paragraph.minimumLineHeight=20;paragraph.maximumLineHeight=20
+    // Document height counts source lines. Paragraph wrapping would put later
+    // code below that scroll range even though the full source is in storage.
+    paragraph.lineBreakMode = .byClipping;paragraph.tabStops=[]
+    paragraph.defaultTabInterval=(" " as NSString).size(withAttributes:[.font:StudioTheme.codeFont]).width*4
     attributed.addAttribute(.paragraphStyle,value:paragraph,range:NSRange(location:0,length:attributed.length))
     preview.textContentStorage?.textStorage?.setAttributedString(attributed)
     lineStarts=[0]
@@ -138,7 +142,7 @@ import SwiftUI
       else if unit==10 {if index==0 || units[index-1] != 13 {lineStarts.append(index+1)}}
       else if [UInt16(0x85),0x2028,0x2029].contains(unit) {lineStarts.append(index+1)}
     }
-    measuredWidth=max(40,(sql.components(separatedBy:.newlines).map {($0 as NSString).size(withAttributes:[.font:StudioTheme.codeFont]).width}.max() ?? 0)+40)
+    measuredWidth=max(40,(sql.components(separatedBy:.newlines).map {($0 as NSString).size(withAttributes:[.font:StudioTheme.codeFont,.paragraphStyle:paragraph]).width}.max() ?? 0)+40)
     updateGeometry()
     if same {preview.selectedRanges=selection;scroll.contentView.scroll(to:origin)}
     else {preview.setSelectedRange(NSRange(location:0,length:0));scroll.contentView.scroll(to:.zero)}

@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.179",
+    "date": "2026-10-17",
+    "title": "Uzun SQL önizlemelerinde kaydırma düzeltildi",
+    "changes": [
+      "Uzun ve tablı SQL satırlarının önizlemede kaydırma alanını erken bitirmesine neden olan satır sarma sorunu düzeltildi.",
+      "SQL metni kesilmeden korunur; uzun satırlarda yatay kaydırma kullanılır."
+    ]
+  },
+  {
     "version": "0.2.178",
     "date": "2026-10-17",
     "title": "Sekme önizlemesinin sürüklenmesi düzenlendi",
