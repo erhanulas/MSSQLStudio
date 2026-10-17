@@ -4,6 +4,29 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct LoadingNavigationTests {
+  @Test func closingDefinitionBesideThirdTabReturnsToSourceInsteadOfLastTab() throws {
+    _=NSApplication.shared
+    let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false
+    let server=ConnectedServer(profile:ServerProfile(),password:"");server.online=true
+    let tabs=(1...10).map {state.newQuery(server:server,title:"Query \($0)",startConnection:false)}
+    let host=WorkbenchController(state:state),source=tabs[2]
+    state.active=source
+    let target=state.newQuery(server:server,title:"Definition",startConnection:false)
+    target.definitionSymbol=CatalogSymbol(schema:"dbo",name:"Example",columns:[],kind:"SQL_STORED_PROCEDURE")
+    host.moveQueryTab(target.id,to:3)
+    #expect(state.documents[3] === target && state.active === target)
+    #expect(state.close(target,discardChanges:true))
+    #expect(state.active === source && state.documents.count==10)
+    // Background closes leave the current editor alone; first and last closes
+    // choose a surviving neighbor, and closing the final tab clears selection.
+    #expect(state.close(tabs[8],discardChanges:true) && state.active === source)
+    state.active=tabs[0]
+    #expect(state.close(tabs[0],discardChanges:true) && state.active === tabs[1])
+    state.active=tabs[9]
+    #expect(state.close(tabs[9],discardChanges:true) && state.active === tabs[7])
+    for tab in Array(state.documents) {#expect(state.close(tab,discardChanges:true))}
+    #expect(state.active == nil && state.documents.isEmpty)
+  }
   @Test func definitionLoadingUsesSharedCardInBothThemesAndRemovesItOnSuccess() throws {
     _=NSApplication.shared
     let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}

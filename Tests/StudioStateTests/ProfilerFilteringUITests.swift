@@ -151,6 +151,10 @@ private actor ProfilerFilteringProbe {
     #expect(children(host.view).compactMap {$0 as? NSTextField}.filter {$0.isEditable}.count>=7)
     #expect(split.bounds.width>=900)
     #expect(split.arrangedSubviews[0].frame.width<320)
+    let sidebar=split.arrangedSubviews[0]
+    let bitmap=try #require(sidebar.bitmapImageRepForCachingDisplay(in:sidebar.bounds))
+    sidebar.cacheDisplay(in:sidebar.bounds,to:bitmap)
+    try bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-profiler-sidebar-layout.png"))
     split.adjustSubviews();split.setPosition(460,ofDividerAt:0)
     try await Task.sleep(for:.milliseconds(50));host.view.layoutSubtreeIfNeeded()
     #expect(split.arrangedSubviews[0].frame.width>420)

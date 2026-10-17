@@ -1,3 +1,19 @@
+## v0.2.183 / build 184 release preparation - 2026-10-17
+
+- Explicit user request to publish without additional tests: reused completed 52 native tab-close tests, 16 native + 1 core Profiler tests and corresponding Release builds. No new test run. Exact-tag v0.2.183 package suite is skipped under this request only; future tags retain tests. Signed package, stable helper/identity and public feed verification remain required.
+
+## Profiler compact actions and filter grouping - 2026-10-17 (unpublished)
+
+- Start caption shortened; Sessions moved into the same compact action row with stop/start, clear and background controls. Session count, refresh, popover and capture lifecycle unchanged. Session label remains on one line; small shared button sizing prevents wrapping in the default sidebar.
+- Global template controls moved above local SQL search/grid rules under a Filtering heading. Shared Olaylar/Yoğun istemciler navigation width increased from 280 to 320 pt so the longer label has room; common tab component unchanged.
+- /tmp/mssql-profiler-layout-final-tests.log: 16 native tests / 3 suites plus 1 core test / 1 suite passed. Existing sidebar test exports /tmp/mssql-profiler-sidebar-layout.png; inspected native action alignment at default sidebar width. Snapshot has transparent hosting background and does not prove physical mouse/popover behavior. /tmp/mssql-profiler-layout-final-release.log: Release BUILD SUCCEEDED. Architecture/source sync and diff checks passed. No live SQL, installed application changes or publication.
+
+## Active tab close selects its neighbor - 2026-10-17 (unpublished)
+
+- Root cause: StudioState.close always selected documents.last when closing the active document, even after definition navigation inserted it beside its source. It now captures the preceding document in current tab order; after a successful close it selects that neighbor, or the first remaining document when closing the first tab. Background closes do not change active selection. Existing save/transaction/busy guards remain ahead of mutation.
+- Added native regression with ten tabs and a definition inserted after the third: closing returns to the source, not the rightmost tab. Also covers background close, first/last neighbors and final nil selection. Existing definition-loading/cancellation, workspace close protections and tab presentation paths retained.
+- /tmp/mssql-tab-close-tests.log: 52 native tests / 5 suites passed. /tmp/mssql-tab-close-release.log: Release BUILD SUCCEEDED. Architecture/source sync and diff checks passed. No live SQL or installed-app interaction; not published.
+
 ## v0.2.182 / build 183 public release - 2026-10-17
 
 - Source/tag d2838ee42933404c104e9bb11482c3f97e8c18d6; Actions 39029903286 succeeded. Public latest v0.2.182 includes global Profiler filter templates and ODBC encrypted packet-size negotiation protection. Failed v180/v181 tags were not published or moved.

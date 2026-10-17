@@ -11,8 +11,6 @@ struct ProfilerFilters:View {
   var body:some View {
     ScrollView {
       VStack(alignment:.leading,spacing:8) {
-        ProfilerFilterTemplateControls(model:model)
-        Divider()
         Toggle("Bilgi bildirimlerini gizle",isOn:$model.displayFilter.hideInformational)
           .toggleStyle(.checkbox).accessibilityIdentifier("profilerHideInformational")
           .studioHelp("Bilgi düzeyindeki error_reported olaylarını görünümden gizler. Hata, uyarı ve düzeyi bilinmeyen olaylar korunur; yakalama ve tüm olayları dışa aktarma değişmez.")
@@ -43,6 +41,9 @@ struct ProfilerFilters:View {
         if choices.loading {ProgressView().controlSize(.small)}
         if !choices.error.isEmpty {StudioFeedback(message:choices.error,tone:.warning)}
         Divider()
+        Label("Filtreleme",systemImage:"line.3.horizontal.decrease")
+          .font(.system(size:StudioMetrics.detailFont,weight:.semibold)).foregroundStyle(.secondary)
+        ProfilerFilterTemplateControls(model:model)
         HStack(spacing:8) {
           Image(systemName:"magnifyingglass").foregroundStyle(.secondary)
           TextField("Yakalanan SQL’de ara…",text:$model.displayFilter.sqlSearch).textFieldStyle(.roundedBorder)

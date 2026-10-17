@@ -46,7 +46,7 @@ struct ProfilerSessionsButton:View {
     let count=model.activeCount(excluding:currentSession)
     Button {expanded.toggle();if expanded {Task {await model.refresh()}}} label:{
       HStack(spacing:8) {
-        Label("Sunucu Oturumları",systemImage:"list.bullet.rectangle")
+        Label("Oturumlar",systemImage:"list.bullet.rectangle").fixedSize(horizontal:true,vertical:false)
         if count>0 {
           Text(String(count)).font(.system(size:StudioMetrics.detailFont,weight:.semibold)).monospacedDigit()
             .foregroundStyle(Color(nsColor:StudioTheme.accent)).padding(.horizontal,6).padding(.vertical,2)

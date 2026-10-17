@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.183",
+    "date": "2026-10-17",
+    "title": "Sekme kapanışı ve Profiler yerleşimi iyileştirildi",
+    "changes": [
+      "Kaynak sorgunun yanında açılan nesne sekmesini kapatınca artık kaynak sekmeye dönülür.",
+      "Profiler’da Başlat ve Oturumlar düğmeleri aynı satırda toplandı; filtre şablonları Filtreleme bölümüne taşındı.",
+      "Profiler’daki Yoğun istemciler başlığı için daha geniş alan ayrıldı."
+    ]
+  },
+  {
     "version": "0.2.182",
     "date": "2026-10-17",
     "title": "Profiler filtre şablonları eklendi",

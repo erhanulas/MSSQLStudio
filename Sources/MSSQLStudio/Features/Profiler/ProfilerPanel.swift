@@ -35,7 +35,7 @@ struct ProfilerPanel:View {
           .foregroundStyle(Color(nsColor:model.running ? StudioTheme.success:StudioTheme.muted))
         if model.busy {ProgressView().controlSize(.small)}
       }
-      HStack {
+      HStack(spacing:4) {
         if model.hasSession {
           Button {Task {await model.stop()}} label:{Label(model.running ? "Durdur":"Temizle",systemImage:"stop.fill")}
             .buttonStyle(StudioSecondaryButton()).disabled(model.busy)
@@ -44,7 +44,7 @@ struct ProfilerPanel:View {
             let name=SQLProfiler.sessionName(UUID())
             do {let sql=try model.preview(name:name);validationError="";Task {await model.start(name:name,confirmedSQL:sql)}}
             catch {validationError=error.localizedDescription}
-          } label:{Label("İzlemeyi Başlat",systemImage:"play.fill")}
+          } label:{Label("Başlat",systemImage:"play.fill")}
             .buttonStyle(StudioPrimaryButton()).disabled(model.busy)
             .studioHelp("Sunucuda bu pencereye ait Extended Events oturumu oluşturur. Sunucu izinleri gerekir. Yoğunlukta olay kaybı olabilir; zorla kapanma veya ağ kaybında oturum sunucuda kalabilir. Durdur işlemi oturumu kaldırır.")
         }
@@ -53,14 +53,14 @@ struct ProfilerPanel:View {
         Button(action:background) {Image(systemName:"rectangle.on.rectangle").accessibilityLabel("Arka Planda İzle")}
           .buttonStyle(StudioSecondaryButton())
           .studioHelp("Pencereyi gizler. İzleme ve olay toplama devam eder; üstteki Profiler düğmesiyle geri açın.")
-      }
-          ProfilerSessionsButton(model:model.sessions,currentSession:model.sessionName)
+        ProfilerSessionsButton(model:model.sessions,currentSession:model.sessionName)
+      }.controlSize(.small)
           ProfilerFilters(model:model,showClients:$showClients)
         }.padding(8).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
       } content: {
         VStack(spacing:4) {
         HStack {
-          StudioTabBar(items:[.init(id:0,title:"Olaylar",icon:"list.bullet"),.init(id:1,title:"Yoğun istemciler",icon:"desktopcomputer")],selection:Binding(get:{showClients ? 1:0},set:{showClients=$0==1})).frame(width:280)
+          StudioTabBar(items:[.init(id:0,title:"Olaylar",icon:"list.bullet"),.init(id:1,title:"Yoğun istemciler",icon:"desktopcomputer")],selection:Binding(get:{showClients ? 1:0},set:{showClients=$0==1})).frame(width:320)
           Spacer()
           Menu {
             ForEach(ProfilerExport.Format.allCases) {format in

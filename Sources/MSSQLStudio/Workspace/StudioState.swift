@@ -499,8 +499,10 @@ import UniformTypeIdentifiers
     rememberClosedTab(doc)
     doc.definitionTask?.cancel();doc.definitionTask=nil
     doc.disconnect()
+    let closingIndex=documents.firstIndex(where:{$0 === doc})
+    let previous=closingIndex.flatMap {$0 > 0 ? documents[$0-1]:nil}
     documents.removeAll { $0.id == doc.id }
-    if active === doc { active = documents.last }
+    if active === doc { active = previous ?? documents.first }
     changed?()
     scheduleSnapshot()
     return true
