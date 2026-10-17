@@ -1,3 +1,14 @@
+## v0.2.184 / build 185 public release - 2026-10-17
+
+- Source/tag feccff436a2baa06e6acf2992082bfbaf17d7193; Actions 39034608006 succeeded; public latest v0.2.184. Pending Profiler filtering/export and Activity Monitor/window cycling changes included.
+- No additional tests run under explicit user instruction; completed targeted regressions/Release/CUA evidence reused. Exact-tag package suite skipped; signed build, stable identity/helper, manifest and public updater checks passed.
+- Four downloaded assets verified against GitHub digests/manifest; exact version/build, strict app/helper signatures, frozen helper bytes, Icon Composer appearances and packaged/public notes matched. Signed application Foundation feed check passed for exact 0.2.184.
+- MSSQLStudio-0.2.184.pkg SHA-256: `ea6952cc4db85563c89b07180daebcdea666c9379c5026e8ba7244147e8c404a`.
+- MSSQLStudio-0.2.184.zip SHA-256: `0b2c21aea4106e8fe24f21f49679864fa17acab6f10f43af1c71699cbc455dd4`.
+- MSSQLStudio-CredentialAgent-v1.zip SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- update.json SHA-256: `e481af48bc6f9fe256b6ba7c5426f18c5f9ebbdf6314a87ae0d44772192c27f2`.
+- Evidence /tmp/MSSQLStudio-184-public-verification/. Installer not run; installed app/user SQL sessions untouched. Live application-lock termination/preflight was not exercised.
+
 ## v0.2.184 / build 185 release preparation - 2026-10-17
 
 - Explicit user request to publish without new tests. Completed Profiler tests, 40 native/31 core Activity regressions, 23 native window/switcher tests, empty-grid regression and final Release build reused; isolated CUA window cycling/filter selection evidence retained. No additional suite run; exact-tag v0.2.184 package suite skipped only for this request. Signing/helper/package/public updater checks remain required.
