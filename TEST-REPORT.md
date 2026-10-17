@@ -1,3 +1,12 @@
+## Public 0.2.195 receipt — 2026-10-18
+
+- Published latest [v0.2.195](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.195), build 196; source 2fc05d1d1311ec30dc0d95796be880a2eab2bb64. [Release workflow](https://github.com/erhanulas/MSSQLStudio/actions/runs/39079828444) succeeded. No additional test suite executed, per user request; completed development evidence reused.
+- Downloaded ZIP, PKG, update.json and frozen helper match GitHub digests; manifest matches payload hashes. Exact bundle version/build, tagged source release notes and GitHub notes agree. App/helper strict signatures and frozen helper bytes passed; icon appearances preserved.
+- ZIP SHA-256: c22ce98a6ed32a93e9ff6b783b65d255a314b3c60151a384f85e99c1dfa3858d
+- PKG SHA-256: a7d207574746b870cf888f93aaa939d9c1ecdd2f3cc96ac1b85aa326331cb0a4
+- Signed downloaded application Foundation updater-feed check passed: 0.2.195. Evidence /tmp/MSSQLStudio-195-public-verification/verification.json and /tmp/mssql195-feed-check.log.
+- Installed application, real SQL sessions and Keychain not changed. Interactive Installer completion and live SQL rollback not tested.
+
 ## Public 0.2.195 preparation — 2026-10-18
 
 - User explicitly requested publication without rerunning tests. Reused completed targeted regression and isolated Release evidence for collapse, session-probe headroom, status presentation, column search and transaction-close exit recorded below. No new suite executed for this release; release-package suite excluded only for exact v0.2.195 tag.
