@@ -1,7 +1,14 @@
+## 0.2.189 public release verified — 2026-10-17
+
+- Public latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.189 ; build 190, source `b7f0668b08f10846025f4f0607cfa74d4dcae9a9`.
+- Actions 39068468450 succeeded. Package test suite skipped only for this tag per explicit user request; existing targeted development evidence reused. Stable signing identity audit, signed ZIP/PKG build, manifest/package validation and CI signed Foundation updater feed check passed.
+- Downloaded all four assets and verified GitHub digests against SHA-256. Exact app version/build/bundled notes, ZIP/PKG equality, strict app/helper signatures, frozen helper archive/binary equivalence and Icon Composer light/dark/tinted variants passed. Exact downloaded signed application's Foundation feed check also passed locally.
+- Evidence: `/tmp/MSSQLStudio-189-public-verification/verification.json`, `feed-check.log`, `/tmp/mssql189-verification.log`. No installation, actual Installer run, installed-app restart or live SQL performed.
+
 ## 0.2.189 publication preparation — 2026-10-17
 
 - Explicit user instruction: publish without rerunning tests. Reused the targeted native/core/layout and Release build evidence below for pending table keyboard navigation, Explorer reveal, result toolbar and typed AND/IN query copy. Package suite exception is restricted to v0.2.189; stable signing audit, package signatures/manifest/frozen-helper verification and signed updater feed checks remain enabled.
-- Version 0.2.189 / build 190; public verification pending. No installed-app changes or real SQL testing requested/performed.
+- Version 0.2.189 / build 190; public verification completed; final receipt above. No installed-app changes or real SQL testing requested/performed.
 
 ## Vertical result selection to IN query copy — 2026-10-17 (unpublished)
 
