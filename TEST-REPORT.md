@@ -3360,3 +3360,14 @@ Son görsel kontrolde firstRect tabanlı popup konumunun hatalı olduğu görül
 - /tmp/mssql-picker-switcher-final-tests.log: 18 native tests / 3 suites passed. Covers equal widths, SwiftUI/native selection action, Search staying active with empty text, mouse-vs-keyboard reveal, pointer focus/other-window cancellation, saved resize, Enter/Escape, long preview scrolling and both themes. Architecture/source sync/diff passed. /tmp/mssql-picker-native-surface-release.log: Release BUILD SUCCEEDED.
 - Actual CUA validation used only /tmp/MSSQLStudio-controls-qa/MSSQLStudioUITest.app (local.mssqlstudio.uitest, synthetic Object/Explorer fixtures). Native corner attempts exposed a tiny transparent hit area; native side drag worked, then visible sibling grip enabled simultaneous width/height drag from 2024x1200 to 1774x980 screenshot pixels. Escape/reopen retained the smaller size. Clicked rows remained at the same list positions; no automatic recentering. Native Explorer menu selection to Views kept Search visible. Settings/Explorer blue selector surfaces visually inspected. Test app quit normally; installed user app and DB sessions untouched.
 - Earlier unit-only resize checks did not cover actual corner tracking; this entry records the added real mouse validation. No live SQL executed and no publication performed.
+
+## 2026-10-17 - v0.2.176 / build 177 public release
+
+- Source/tag `8627c358fa6b0a9881a2119506f34930af313354`; Actions `38985102067` succeeded; public latest `v0.2.176`.
+- Existing 18 native tests, Release build and isolated CUA corner/menu/list interaction evidence reused. Exact-tag CI suite skipped under user no-retest preference; package/signature/helper/feed checks completed.
+- Downloaded ZIP/PKG matched GitHub digests and manifest; exact version/build, notes, strict app/helper signatures, frozen helper bytes and icon appearances verified.
+- `MSSQLStudio-0.2.176.pkg` SHA-256: `5076c702f19d99452626e04b651be9c475d80f3a76db3546fa7d797a19cf6aa3`.
+- `MSSQLStudio-0.2.176.zip` SHA-256: `be2afc7b3c903ceb4cc3aead544cc83097d2d1de6839e079f98f4822f4ec1d7c`.
+- `MSSQLStudio-CredentialAgent-v1.zip` SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- `update.json` SHA-256: `7813864ccc42eb3ca652a9b6340b28cf0528e07077e5fbbad06e366292c4c6ce`.
+- Downloaded signed app --check-update-feed 0.2.176 succeeded; exact-tag public notes matched source bytes. Evidence /tmp/MSSQLStudio-176-public-verification/. Installer not run; installed app/user DB sessions untouched.
