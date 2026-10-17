@@ -1,3 +1,14 @@
+## v0.2.186 / build 187 public release - 2026-10-17
+
+- Source/tag 8defb9112daae328c2d470054651ed6ad17b36c2; Actions 39045324575 succeeded; public latest v0.2.186. All pending History, Control+Tab, trigger state and menu icon changes included.
+- No new suite run under explicit user instruction; exact-tag package suite skipped. Completed targeted native/core/Release evidence reused, including the documented combined-native-process Profiler layout failure and isolated successful recheck. CI stable identity/package/manifest/feed verification passed.
+- Downloaded four assets verified against GitHub digests/manifest; exact version/build and packaged/public exact-tag notes matched. Strict app/helper signatures, frozen helper archive/bytes and Icon Composer appearances passed. Downloaded signed application's Foundation feed check passed for 0.2.186.
+- MSSQLStudio-0.2.186.pkg SHA-256: `bb463b8927a699b1c0110d268a6ee42dd1882876212535e7e2aadfdf75abb749`.
+- MSSQLStudio-0.2.186.zip SHA-256: `f2d1b4389e61150fa4d6d57d7d335414afe532cb18d0c95700f0c19bebfee55c`.
+- MSSQLStudio-CredentialAgent-v1.zip SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- update.json SHA-256: `d2921386b48a2adff3f71e94f6bd930e18707ba41b8d0f69f5a4b4253e7aeeec`.
+- Evidence /tmp/MSSQLStudio-186-public-verification/. Installer/live DB writes not run; installed app and user SQL sessions unchanged.
+
 ## v0.2.186 / build 187 release preparation - 2026-10-17
 
 - Explicit user request: publish without further tests. No new suite run; completed targeted native/core and Release evidence below reused, including the documented combined-process Profiler layout limitation and successful isolated recheck. Only exact v0.2.186 package-suite step is exempted; signing/helper/package/manifest/feed verification remains required.
