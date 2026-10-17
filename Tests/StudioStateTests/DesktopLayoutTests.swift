@@ -15,10 +15,14 @@ import Testing
       StudioTheme.apply(theme)
       for size in [NSSize(width:820,height:560),NSSize(width:1400,height:900)] {
         let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false
-        state.history=(0..<40).map {QueryRecord(server:"Fixture",database:$0 % 2 == 0 ? "DemoDB":"Reporting",text:"SELECT \($0) AS Value;",seconds:0.125,status:"Başarılı")}
+        state.history=(0..<40).map {index in
+          var record=QueryRecord(server:"Fixture",database:index % 2 == 0 ? "DemoDB":"Reporting",text:"SELECT \(index) AS Value;",seconds:0.125,status:index==39 ? "Hata":"Başarılı")
+          record.time=Date().addingTimeInterval(Double(index)-40);return record
+        }
         let host=NSHostingController(rootView:HistoryPanel(state:state,open:{_ in}));host.sizingOptions=[]
         let window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false
         window.setContentSize(size);host.view.frame=NSRect(origin:.zero,size:size)
+        window.setFrameOrigin(NSPoint(x:-20000,y:0));window.makeKeyAndOrderFront(nil)
         defer {window.close()}
         for _ in 0..<20 where !views(host.view).contains(where:{$0 is StudioSearchablePopUpButton}) {try await Task.sleep(for:.milliseconds(10));host.view.layoutSubtreeIfNeeded()}
         try await Task.sleep(for:.milliseconds(90));host.view.layoutSubtreeIfNeeded()
@@ -33,8 +37,18 @@ import Testing
         let split=try #require(views(host.view).compactMap {$0 as? NSSplitView}.first)
         #expect(!split.isVertical && split.arrangedSubviews.count==2 && split.bounds.height>size.height-210)
         let table=try #require(views(host.view).compactMap {$0 as? NSTableView}.first {$0.tableColumns.count==6})
+        let errorCell=try #require(table.view(atColumn:4,row:0,makeIfNecessary:true) as? StudioGridStatusCell)
+        let successCell=try #require(table.view(atColumn:4,row:1,makeIfNecessary:true) as? StudioGridStatusCell)
+        #expect(errorCell.textField?.stringValue=="Hata" && errorCell.selected)
+        let emphasized=errorCell.backgroundStyle == .emphasized || errorCell.backgroundStyle == .dark
+        #expect(errorCell.textField?.textColor==(emphasized ? NSColor.selectedControlTextColor:NSColor.labelColor))
+        #expect(successCell.textField?.stringValue=="Başarılı" && successCell.textField?.textColor==StudioTheme.success)
+        if size.width==820,let bitmap=host.view.bitmapImageRepForCachingDisplay(in:host.view.bounds) {
+          host.view.cacheDisplay(in:host.view.bounds,to:bitmap)
+          try bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-history-grid-\(theme).png"))
+        }
         let tableWidth=table.tableColumns.reduce(CGFloat(0)) {$0+$1.width+table.intercellSpacing.width}
-        #expect(tableWidth<=table.enclosingScrollView!.contentSize.width+2)
+        #expect(tableWidth<=table.enclosingScrollView!.contentSize.width+2,"Column widths: \(table.tableColumns.map {"\($0.title):\($0.width)"})")
         let firstHeight=split.arrangedSubviews[0].frame.height
         split.setPosition(firstHeight+25,ofDividerAt:0);host.view.layoutSubtreeIfNeeded()
         #expect(abs(split.arrangedSubviews[0].frame.height-firstHeight)>10)

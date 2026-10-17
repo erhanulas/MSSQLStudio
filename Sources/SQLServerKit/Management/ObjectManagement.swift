@@ -387,6 +387,12 @@ public struct TriggerDefinition: Sendable {
     guard databaseScope || !parent.isEmpty else {throw SQLFailure("Trigger'ın bağlı olduğu tablo/view bulunamadı.")}
     return "\(enabled ? "ENABLE" : "DISABLE") TRIGGER \(qualified) ON \(scope);"
   }
+  public func guardedStateScript(id:Int,enabled:Bool) throws -> String {
+    guard id>0 else {throw SQLFailure("Trigger kimliği geçersiz.")}
+    let identity="t.object_id=\(id) AND t.parent_class=\(databaseScope ? 0:1) AND t.is_disabled=\(disabled ? 1:0) AND (CASE WHEN t.parent_class=0 THEN QUOTENAME(t.name) ELSE QUOTENAME(OBJECT_SCHEMA_NAME(t.object_id))+N'.'+QUOTENAME(t.name) END)=\(SQL.literal(qualified))"
+    let parentIdentity=databaseScope ? "":" AND COALESCE(QUOTENAME(OBJECT_SCHEMA_NAME(t.parent_id))+N'.'+QUOTENAME(OBJECT_NAME(t.parent_id)),N'')=\(SQL.literal(parent))"
+    return "IF @@TRANCOUNT<>0 THROW 51082,N'Trigger durumunu değiştirmek için açık transaction olmamalı.',1;\nIF NOT EXISTS(SELECT 1 FROM sys.triggers t WHERE "+identity+parentIdentity+") THROW 51083,N'Trigger değişmiş veya kaldırılmış. Explorer listesini yenileyin.',1;\n"+(try stateScript(enabled:enabled))
+  }
   public var dropScript:String {"DROP TRIGGER \(qualified)\(databaseScope ? " ON DATABASE" : "");"}
   public static func metadata(_ id:Int) -> String {
     "SELECT t.name,COALESCE(OBJECT_SCHEMA_NAME(t.object_id),N''),t.parent_class,COALESCE(QUOTENAME(OBJECT_SCHEMA_NAME(t.parent_id))+N'.'+QUOTENAME(OBJECT_NAME(t.parent_id)),N''),t.is_disabled FROM sys.triggers t WHERE t.object_id=\(id);"

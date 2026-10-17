@@ -6,6 +6,50 @@ import SQLServerKit
 
 @MainActor @Suite(.serialized) struct ActivityDataGridTests {
   private struct Row:Identifiable {let id:Int;let value:String?}
+  @Test func semanticStatusUsesReadableSelectionColorInBothThemes() throws {
+    _=NSApplication.shared
+    let old=UserDefaults.standard.string(forKey:"ssmsTheme");defer {StudioTheme.apply(old ?? "light")}
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      let cell=StudioGridStatusCell()
+      for tone in [StudioGridTone.success,.danger,.warning] {
+        cell.show(tone == .success ? "Başarılı":"Hata",tone:tone,symbol:"checkmark.circle")
+        cell.backgroundStyle = .normal
+        #expect(cell.textField?.textColor==tone.color)
+        cell.selected=true;cell.backgroundStyle = .emphasized
+        #expect(cell.textField?.textColor==NSColor.selectedControlTextColor)
+        cell.selected=false;cell.backgroundStyle = .normal
+        #expect(cell.textField?.textColor==tone.color)
+      }
+    }
+  }
+  @Test func revisionSkipsFormattingWhileContextAndActivationUseFilteredRow() async throws {
+    _=NSApplication.shared
+    var selected:Int?=nil,formats=0,opened:Int?,activated:Int?
+    let table=NSTableView(),column=NSTableColumn(identifier:.init("0"));table.addTableColumn(column)
+    let owner=StudioDataGrid<Row>.Coordinator(selection:Binding(get:{selected},set:{selected=$0}))
+    table.dataSource=owner;table.delegate=owner
+    let rows=[Row(id:1,value:"1"),Row(id:2,value:"12")]
+    let columns:[StudioDataGrid<Row>.Column]=[.init(title:"Value",numeric:true,value:{$0.value},display:{formats+=1;return $0.value ?? ""})]
+    let revision=UUID()
+    owner.update(rows:rows,columns:columns,table:table,revision:revision)
+    let firstCount=formats
+    owner.update(rows:rows,columns:columns,table:table,revision:revision)
+    #expect(formats==firstCount)
+    owner.menu={row in [.init(title:"Aç",perform:{opened=row.id})]}
+    owner.activate={activated=$0.id}
+    var rule=ColumnRule();rule.operation = .atLeast;rule.first="10"
+    try owner.setRule(rule,column:0,table:table)
+    for _ in 0..<100 where table.numberOfRows != 1 {try await Task.sleep(for:.milliseconds(5))}
+    table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
+    owner.activateRow(table)
+    let item=try #require(owner.menuForRow(0)?.items.first)
+    owner.invokeMenuAction(item)
+    #expect(activated==2 && opened==2 && selected==2)
+    owner.update(rows:rows,columns:columns,table:table,revision:UUID())
+    #expect(formats>firstCount)
+    owner.cancel()
+  }
   @Test func headerSortUsesRawDurationAndPreservesSelectionThroughThreeStates() async throws {
     _=NSApplication.shared
     let rows=[Row(id:1,value:"120000"),Row(id:2,value:"9000"),Row(id:3,value:nil)]

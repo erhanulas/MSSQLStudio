@@ -13,6 +13,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   var explorerTransferBusy=false
   var updateInProgress=false
   var updateProgress:UpdateProgressController?
+  let triggerStateAction=TriggerStateAction()
   let split = NSSplitViewController()
   let explorer = NSViewController()
   let center = NSViewController()

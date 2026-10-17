@@ -3,6 +3,33 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct StudioWindowCyclerTests {
+  @Test func nativePickerKeepsNamesVisibleWithManyWindowsInBothThemes() async throws {
+    _=NSApplication.shared
+    let old=UserDefaults.standard.string(forKey:"ssmsTheme");defer {StudioTheme.apply(old ?? "light")}
+    for theme in ["light","dark"] {
+      StudioTheme.apply(theme)
+      let entries=(0..<20).map {i in StudioWindowSwitcherView.Entry(title:i==1 ? "SQL Profiler · DİNAMİK — Üretim Sunucusu":"Activity Monitor · Sunucu \(i+1)",context:"ADAGRUP2026 · SQL Server",type:"SQL Profiler",symbol:i==1 ? "list.bullet.rectangle":"waveform.path.ecg",status:i==2 ? "Küçültülmüş":"Açık")}
+      var selected = -1,accepted = -1
+      let view=StudioWindowSwitcherView(entries:entries,selected:1,select:{selected=$0},accept:{accepted=$0})
+      let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:620,height:600),styleMask:[.titled],backing:.buffered,defer:false)
+      window.isReleasedWhenClosed=false;window.contentView=view;window.orderFront(nil)
+      defer {window.close()}
+      view.layoutSubtreeIfNeeded();try await Task.sleep(for:.milliseconds(50));view.layoutSubtreeIfNeeded()
+      let cell=try #require(view.table.view(atColumn:0,row:1,makeIfNecessary:true) as? NSTableCellView)
+      let title=try #require(cell.textField)
+      #expect(title.stringValue==entries[1].title && title.frame.width>250 && title.frame.height>12)
+      #expect(view.table.numberOfRows==20 && view.table.selectedRow==1 && selected == -1 && accepted == -1)
+      view.table.selectRowIndexes(IndexSet(integer:2),byExtendingSelection:false)
+      #expect(selected==2 && accepted == -1)
+      view.updateSelection(19,reveal:true)
+      #expect(view.table.selectedRow==19 && selected==2 && accepted == -1)
+      view.updateSelection(1,reveal:true);view.layoutSubtreeIfNeeded()
+      if let bitmap=view.bitmapImageRepForCachingDisplay(in:view.bounds) {
+        view.cacheDisplay(in:view.bounds,to:bitmap)
+        try bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-window-picker-\(theme).png"))
+      }
+    }
+  }
   @Test func controlTabCyclesOwnedWindowsBothWaysAndLeavesSheetsAlone() throws {
     _=NSApplication.shared
     func window(_ managed:Bool)->NSWindow {

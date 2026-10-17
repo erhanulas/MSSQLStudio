@@ -8,6 +8,7 @@ struct HistoryPanel: View {
   var open: (QueryRecord) -> Void
   var insert: ((QueryRecord) throws -> Void)?
   @State private var insertError=""
+  @State private var gridRevision=UUID()
   @State private var records: [QueryRecord] = []
   @State private var search = ""
   @State private var selected: UUID?
@@ -26,6 +27,7 @@ struct HistoryPanel: View {
     }.sorted { slowest ? $0.seconds > $1.seconds : $0.time > $1.time }
   }
   private func refreshRecords() {
+    gridRevision=UUID()
     var ids=Set<UUID>()
     records=(state.history+(state.historyEnabled ? []:state.closedTabs)).filter {ids.insert($0.id).inserted}
   }
@@ -37,7 +39,7 @@ struct HistoryPanel: View {
     VStack(alignment: .leading, spacing: StudioMetrics.small) {
       HStack {
         StudioPanelHeading(title: "History", icon: "clock.arrow.circlepath", subtitle: "Sorgu ve kapatılan sekme geçmişi")
-        StudioTabBar(items:[.init(id:0,title:"Sorgular",icon:"text.alignleft"),.init(id:1,title:"Kapatılan Sekmeler",icon:"rectangle.stack")],selection:$tab).frame(width:300)
+        StudioTabBar(items:[.init(id:0,title:"Sorgular",icon:"text.alignleft"),.init(id:1,title:"Kapatılan Sekmeler",icon:"rectangle.stack")],selection:$tab).frame(width:380)
       }.fixedSize(horizontal: false, vertical: true)
       TextField("SQL, sunucu veya veritabanında ara", text: $search)
         .accessibilityIdentifier("historySearch")
@@ -88,26 +90,22 @@ struct HistoryPanel: View {
     }.fixedSize(horizontal: true, vertical: true)
   }
   private func historyTable(_ rows: [QueryRecord]) -> some View {
-    Table(rows, selection: $selected) {
-      TableColumn("Zaman") { Text($0.time.formatted(date: .abbreviated, time: .standard)) }.width(145)
-      TableColumn("Sunucu", value: \.server).width(90)
-      TableColumn("Veritabanı", value: \.database).width(100)
-      TableColumn("Sorgu") { Text(($0.tabTitle.map { $0 + " · " } ?? "") + $0.text.replacingOccurrences(of: "\n", with: " ")).lineLimit(1) }.width(min: 120, ideal: 180)
-      TableColumn("Durum") { row in
-        Label(row.status, systemImage: row.tabTitle != nil ? "clock.arrow.circlepath" : row.status == "Hata" ? "xmark.circle" : row.status == "Kısmi" ? "exclamationmark.circle" : "checkmark.circle")
-          .foregroundStyle(Color(nsColor: row.status == "Hata" ? StudioTheme.danger : row.status == "Kısmi" ? StudioTheme.warning : StudioTheme.muted))
-          .lineLimit(1)
-      }.width(85)
-      TableColumn("Süre") { Text(String(format: "%.3f sn", $0.seconds)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }.width(75)
-    }.controlSize(.small).accessibilityIdentifier("historyTable")
-      .contextMenu(forSelectionType: UUID.self) { ids in
-        if let id = ids.first, let record = rows.first(where: { $0.id == id }) {
-          Button(record.tabTitle == nil ? "Yeni Sekmede Aç" : "Kapatılan Sekmeyi Aç") { open(record) }.disabled(state.historyServer(record) == nil)
-        }
-      } primaryAction: { ids in
-        if let id = ids.first, let record = rows.first(where: { $0.id == id }) { insertRecord(record) }
-      }
+    StudioDataGrid(rows:rows,columns:[
+      .init(title:"Zaman",width:145,value:{$0.time.ISO8601Format()},display:{$0.time.formatted(date:.abbreviated,time:.standard)}),
+      .init(title:"Sunucu",width:90,value:{$0.server}),
+      .init(title:"Veritabanı",width:100,value:{$0.database}),
+      .init(title:"Sorgu",width:142,value:{($0.tabTitle.map {$0+" · "} ?? "")+$0.text},display:{($0.tabTitle.map {$0+" · "} ?? "")+String($0.text.prefix(240)).replacingOccurrences(of:"\n",with:" ")}),
+      .init(title:"Durum",width:142,value:{$0.status},tone:{row in
+        row.status=="Hata" ? .danger:row.status=="Kısmi" ? .warning:row.status=="Başarılı" ? .success:.neutral
+      },symbol:{row in
+        row.tabTitle != nil ? "clock.arrow.circlepath":row.status=="Hata" ? "xmark.circle":row.status=="Kısmi" ? "exclamationmark.circle":"checkmark.circle"
+      }),
+      .init(title:"Süre",width:86,numeric:true,value:{String($0.seconds)},display:{String(format:"%.3f sn",$0.seconds)})
+    ],selection:$selected,identifier:"historyTable",revision:gridRevision,menu:{record in
+      [.init(title:record.tabTitle == nil ? "Yeni Sekmede Aç":"Kapatılan Sekmeyi Aç",enabled:state.historyServer(record) != nil,perform:{open(record)})]
+    },activate:{record in insertRecord(record)})
   }
+
   @ViewBuilder private func preview(_ record: QueryRecord?) -> some View {
     if let record {
       VStack(alignment: .leading, spacing: 6) {

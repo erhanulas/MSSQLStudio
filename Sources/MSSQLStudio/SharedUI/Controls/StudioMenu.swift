@@ -40,6 +40,24 @@ import SwiftUI
 
 /// Keep native menu selection, accessibility and keyboard navigation.
 @MainActor final class StudioMenu:NSMenu {
+  /// Opt-in semantic colors for action menus; custom swatches keep their own colors.
+  func applySemanticActionColors() {
+    for item in items where !item.isSeparatorItem {
+      (item.submenu as? StudioMenu)?.applySemanticActionColors()
+      let title=item.title.lowercased()
+      let color:NSColor?
+      if ["delete","drop","sil","kaldır"].contains(where:title.contains) {color = .systemRed}
+      else if ["disable","durdur","stop","disconnect","bağlantıyı kes"].contains(where:title.contains) {color = .systemOrange}
+      else if ["enable","başlat","start","connect","bağlan"].contains(where:title.contains) {color = .systemGreen}
+      else if ["refresh","yenile","new","yeni","modify","düzenle","properties","özellik","script","select"].contains(where:title.contains) {color = .systemBlue}
+      else {color=nil}
+      guard let color else {continue}
+      let symbol=title.contains("disable") ? "bolt.slash":title.contains("enable") ? "bolt":nil
+      let source=symbol.flatMap {NSImage(systemSymbolName:$0,accessibilityDescription:nil)} ?? item.image
+      guard let image=source?.withSymbolConfiguration(.init(paletteColors:[color])) else {continue}
+      image.isTemplate=false;image.size=NSSize(width:16,height:16);item.image=image
+    }
+  }
   static func adopting(_ source:NSMenu?)->StudioMenu {
     if let source=source as? StudioMenu {return source}
     let menu=StudioMenu(title:source?.title ?? "")

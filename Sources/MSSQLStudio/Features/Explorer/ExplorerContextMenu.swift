@@ -62,6 +62,7 @@ extension WorkbenchController {
     populateExplorerMenu(menu,for:outline.item(atRow:outline.clickedRow) as? TreeNode)
   }
   func populateExplorerMenu(_ menu:NSMenu,for node:TreeNode?) {
+    defer {(menu as? StudioMenu)?.applySemanticActionColors()}
     menu.removeAllItems()
     menu.autoenablesItems=false
     contextNode=node

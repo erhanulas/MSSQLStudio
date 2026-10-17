@@ -113,11 +113,7 @@ extension WorkbenchController {
     guard !execution.partial,let source=execution.results.first?.values.first?.first,let source else {throw SQLFailure("T-SQL tanımı alınamadı; şifreli/CLR modülü veya VIEW DEFINITION iznini kontrol edin.")}
     let settings=try await node.server.catalog("SELECT uses_ansi_nulls,uses_quoted_identifier FROM sys.sql_modules WHERE object_id=\(item.id);",database:node.database)
     guard !settings.partial,let row=settings.results.first?.values.first,row.count == 2 else {throw SQLFailure("Modül session ayarları okunamadı.")}
-    var script=try ExplorerScripts.module(source,verb:verb,qualified:item.qualified,ansi:row[0]=="1",quoted:row[1]=="1")
-    if node.objectFolder == .triggers {
-      let trigger=try TriggerDefinition.decode(await node.server.catalog(TriggerDefinition.metadata(item.id),database:node.database))
-      script += "\nGO\n"+(try trigger.stateScript(enabled:!trigger.disabled))
-    }
+    let script=try ExplorerScripts.module(source,verb:verb,qualified:item.qualified,ansi:row[0]=="1",quoted:row[1]=="1")
     if node.server.allowsDefinitionIndex(node.database) {
       let preview=try ExplorerScripts.module(source,verb:"CREATE",qualified:item.qualified,ansi:row[0]=="1",quoted:row[1]=="1")
       let type:String
@@ -175,12 +171,22 @@ extension WorkbenchController {
     }
   }
   func stageTriggerState(_ node:TreeNode?,enabled:Bool) {
-    guard let node,let item=node.item else {return}
-    Task { [weak self] in do {
+    guard let node else {return}
+    Task { [weak self] in
       guard let self else {return}
-      let trigger=try TriggerDefinition.decode(await node.server.catalog(TriggerDefinition.metadata(item.id),database:node.database))
-      openManagedSQL(try trigger.stateScript(enabled:enabled),node:node,title:(enabled ? "Enable" : "Disable")+" Trigger · "+item.name)
-    } catch {self?.state.showError(error.localizedDescription)} }
+      do {
+        try await triggerStateAction.apply(node,enabled:enabled,confirm:{trigger in
+          let alert=StudioAlert()
+          alert.messageText=enabled ? "Trigger etkinleştirilsin mi?":"Trigger devre dışı bırakılsın mı?"
+          alert.informativeText="\(node.server.profile.name) / \(node.database)\n\(trigger.qualified) · \(trigger.scope)\n"+(enabled ? "İlgili işlemlerde trigger yeniden çalışacaktır.":"İlgili işlemlerde trigger çalışmayacaktır.")
+          alert.addButton(withTitle:enabled ? "Etkinleştir":"Devre Dışı Bırak");alert.addButton(withTitle:"Vazgeç")
+          return alert.runModal() == .alertFirstButtonReturn
+        },refreshed:{ [weak self] in
+          self?.refreshManagedObject(Notification(name:.init("studioManagedObjectCompleted"),object:node))
+          if node.server.allowsDefinitionIndex(node.database) {node.server.definitionIndex.refreshAfterDDL(database:node.database)}
+        })
+      } catch is CancellationError {} catch {state.showError(error.localizedDescription)}
+    }
   }
   func showRoutineInvocation(_ node:TreeNode?) {
     guard let node,let item=node.item else {return}

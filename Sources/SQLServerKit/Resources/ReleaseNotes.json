@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.186",
+    "date": "2026-10-17",
+    "title": "Geçmiş ve pencere seçimi daha okunaklı",
+    "changes": [
+      "Geçmiş ve kapatılan sekme listelerinde kolonlara göre sıralama ve filtreleme yapabilirsiniz.",
+      "Kapatılan Sekmeler başlığı sığdırıldı. Başarılı işlemler yeşil gösterilir; seçili hata satırlarının durum metni daha okunaklıdır.",
+      "Control+Tab pencere seçicisi yenilendi: pencere adları, bağlantı bilgileri ve açık/küçültülmüş durumları daha belirgin gösterilir.",
+      "Trigger tanımları açılırken sona ENABLE/DISABLE komutu eklenmez. SQL Server’ın ALTER TRIGGER ile etkinleştirme davranışı devam eder.",
+      "Explorer’da trigger etkinleştirme/devre dışı bırakma onay sonrası doğrudan uygulanır ve durum yenilenir. Sağ tık menüsündeki işlem ikonları renklendirildi."
+    ]
+  },
+  {
     "version": "0.2.185",
     "date": "2026-10-17",
     "title": "Sorgu hataları ve izleme ekranları iyileştirildi",
