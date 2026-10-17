@@ -1,3 +1,10 @@
+## 0.2.191 public verification — 2026-10-18
+
+- Published latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.191 (build 192, source `2707ba10269cd85c29d8a8e0112a42b41731afc0`). Release workflow https://github.com/erhanulas/MSSQLStudio/actions/runs/39070545309 completed successfully. Package test suite was explicitly skipped at user request; existing development evidence was reused, and no new test suite was run for the footer text follow-up.
+- Downloaded public ZIP/PKG/update.json/frozen-helper archive into `/tmp/MSSQLStudio-191-public-verification`. Asset SHA-256 matches GitHub digests/manifest; exact bundle/version/build/tag release notes, strict app/helper signatures, frozen archive/binary pins, PKG/ZIP executable/metadata/icon/notes equality and Icon Composer appearances passed. Verification receipt: `verification.json` in that folder.
+- Exact downloaded signed executable passed `--check-update-feed 0.2.191` (`/tmp/mssql191-feed.log`). User installation, native visual/live SQL behavior and Installer completion were not exercised.
+- Earlier v0.2.190 was already pushed before interruption. Its workflow 39070251696 was cancelled during the publish step after public assets became visible; it is not recorded as CI success. Those published assets passed independent signature/hash/frozen/package verification and the downloaded app's exact Foundation 0.2.190 feed check before 0.2.191 became latest. Evidence: `/tmp/MSSQLStudio-190-public-verification`, `/tmp/mssql190-verify.log`, `/tmp/mssql190-feed.log`. No old tag/asset was rewritten.
+
 ## Explorer/query status correction — 2026-10-18 (0.2.191 preparation)
 
 - Root cause: both main and detached footers used QueryDocument.state alone for the disconnected phase. Explorer ready notifications already refreshed both footers, but their text ignored ConnectedServer.online.
