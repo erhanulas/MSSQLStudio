@@ -1,3 +1,9 @@
+## 0.2.192 public verification — 2026-10-18
+
+- Published latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.192 (build 193, source `a92446d8fb0aee392ad1ed5d0b92fc9395060530`). Workflow https://github.com/erhanulas/MSSQLStudio/actions/runs/39071526203 completed successfully; package test suite was explicitly skipped at user request. Existing 24 native + 9 core tests and Release build evidence were reused without rerunning suites.
+- Downloaded public ZIP/PKG/update.json/frozen-helper archive to `/tmp/MSSQLStudio-192-public-verification`. SHA-256 matches GitHub asset digests and manifest. Exact version/build/tag notes, strict app/helper signatures, frozen helper archive/binary pins, PKG/ZIP executable/metadata/icon/notes equality and Icon Composer appearances verified. Full receipt: `verification.json` in that folder.
+- Downloaded signed executable passed `--check-update-feed 0.2.192` (`/tmp/mssql192-feed.log`). No installed-app replacement/restart, live SQL or Installer completion performed.
+
 ## 0.2.192 release preparation — 2026-10-18
 
 - User explicitly requested publication without rerunning tests. Reused the final 24 native + 9 core passing tests and Release build evidence for disjoint Command-click selection. Exact v0.2.192 package suite is skipped; signing audit, signed packaging, frozen-helper, manifest/hash and public Foundation feed checks remain required.
