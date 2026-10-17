@@ -1,3 +1,14 @@
+## v0.2.183 / build 184 public release - 2026-10-17
+
+- Source/tag f0b66ed2db976fb712b3ce56f47128acda2b2d58; Actions 39031506727 succeeded; public latest v0.2.183. Tab close neighbor selection and compact Profiler layout included.
+- No additional tests run under explicit user request; prior targeted native/core tests and Release builds reused. Exact-tag package suite skipped; signed build, identity/helper, manifest and public updater checks passed.
+- Downloaded exact version/build and four assets verified against GitHub digests/manifest; strict app/helper signatures, frozen helper bytes, icon appearances and packaged/public notes matched. Signed application Foundation feed check passed for 0.2.183.
+- MSSQLStudio-0.2.183.pkg SHA-256: `64e952929874a0ec72ea360d82e989db24c979dc906e93854e7604ad0b007310`.
+- MSSQLStudio-0.2.183.zip SHA-256: `1eafb3ad4472778c66105194d5f17d58218611185323aea4818632810fb073b7`.
+- MSSQLStudio-CredentialAgent-v1.zip SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- update.json SHA-256: `4f2ab4423c66e2453a209fcbafdec487ea8fc18c4a31b1ad0659105015b10325`.
+- Evidence /tmp/MSSQLStudio-183-public-verification/. Installer not run; installed app and user SQL sessions untouched.
+
 ## v0.2.183 / build 184 release preparation - 2026-10-17
 
 - Explicit user request to publish without additional tests: reused completed 52 native tab-close tests, 16 native + 1 core Profiler tests and corresponding Release builds. No new test run. Exact-tag v0.2.183 package suite is skipped under this request only; future tags retain tests. Signed package, stable helper/identity and public feed verification remain required.
