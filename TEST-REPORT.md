@@ -1,3 +1,9 @@
+## v0.2.177 public yayın doğrulaması — 17 Ekim 2026
+
+- **0.2.177 / derleme 178**, kaynak `bdc771689686734bbb9b91da117f0494c923bcf0`; [public/latest yayın](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.177), [Actions 38986198123](https://github.com/erhanulas/MSSQLStudio/actions/runs/38986198123) başarılı. Önceki 12 hedefli native test ve Release kanıtı yeniden kullanıldı; kullanıcı tekrar test istemediği için exact-tag paket testi atlandı.
+- ZIP/PKG/update.json hash’leri GitHub digest/manifestle eşleşti. Exact sürüm/derleme/notlar, app/helper strict imza, frozen helper byte eşliği ve ikon görünümleri doğrulandı. İndirilen signed app’in Foundation güncelleme kontrolü 0.2.177 için geçti; public exact-tag notları kaynakla aynı.
+- Kanıt: `/tmp/MSSQLStudio-177-public-verification/{verification.json,verification.log,foundation-feed.log,public-notes.json}`. Kurulu uygulama değiştirilmedi veya yeniden başlatılmadı. Gerçek Installer ve fiziksel sürükleme kare hızı doğrulanmadı; bu sınırlama önceki yerel kayıtta korunur.
+
 ## 17 Ekim 2026 — Option+Tab pencere taşıma yükü (yerel)
 
 - Sekme değiştiricinin saydam/nonopaque pencere zemini ve tüm SwiftUI/SQL hostunu kapsayan rounded clip/overlay kaldırıldı. Panel opak yüzey kullanır; native pencere köşeleri/gölgesi korunur. Üst 44 pt başlık için ayrı native NSView, mouseDown olayını doğrudan NSWindow.performDrag’e gönderir; taşıma sırasında model/SQL yenilemesi eklenmedi. Boyutlandırma grip’i ve ortak konum kaydı korunur.
