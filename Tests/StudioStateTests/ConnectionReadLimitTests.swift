@@ -83,10 +83,14 @@ import Testing
   @Test func executionCapturesAllReadBudgetsBeforeTheAsyncTaskStarts() async throws {
     let doc=readDocument()
     doc.limits.rows=100;doc.limits.totalBytes=16384;doc.limits.cellBytes=2048
-    doc.limits.resultSets=4;doc.limits.timeout=9;doc.limits.diskResults=true
+    let oldTimeout=UserDefaults.standard.object(forKey:QueryExecutionPreferences.timeoutKey)
+    defer {UserDefaults.standard.set(oldTimeout,forKey:QueryExecutionPreferences.timeoutKey)}
+    QueryExecutionPreferences.save(timeout:9)
+    doc.limits.resultSets=4;doc.limits.diskResults=true
     var budgets:[Limits]=[]
     doc.executionFixture={_,limits in budgets.append(limits);return output(rows:limits.rows)}
     doc.execute()
+    QueryExecutionPreferences.save(timeout:0)
     // External observers/preferences can change while the execution task is queued.
     doc.limits=ResultReadPreferences.limits(rows:10)
     await doc.task?.value
@@ -118,4 +122,56 @@ import Testing
     doc.execute();await doc.task?.value
     #expect(requests == [100,10,5,5])
   }
+  @Test func manualTimeoutIsIndependentFromRowsAndBackgroundReadsRemainBounded() async throws {
+    let previous=UserDefaults.standard.object(forKey:QueryExecutionPreferences.timeoutKey)
+    defer {UserDefaults.standard.set(previous,forKey:QueryExecutionPreferences.timeoutKey)}
+    UserDefaults.standard.removeObject(forKey:QueryExecutionPreferences.timeoutKey)
+    #expect(QueryExecutionPreferences.timeoutSeconds==0 && Limits().timeout==60)
+    let doc=readDocument();doc.sql="ALTER TABLE dbo.T ALTER COLUMN C varchar(35) NULL;"
+    var captured:[Limits]=[]
+    doc.executionFixture={_,limits in captured.append(limits);return Execution()}
+    for rows in [1000,100_000,Int.max] {
+      doc.limits=ResultReadPreferences.limits(rows:rows);doc.execute();await doc.task?.value
+    }
+    #expect(captured.map(\.timeout)==[0,0,0])
+    QueryExecutionPreferences.save(timeout:120)
+    doc.execute();await doc.task?.value
+    #expect(captured.last?.timeout==120)
+    doc.limits=ResultReadPreferences.limits(rows:1000);doc.execute(automaticRefresh:true);await doc.task?.value
+    #expect(captured.last?.timeout==60)
+    #expect(SettingsSearch.results("timeout").contains {$0.id=="queryTimeout"})
+  }
+  @Test func timeoutOrCancellationStillProbesTransactionAndNeverRetriesTheWrite() async throws {
+    let previous=UserDefaults.standard.object(forKey:QueryExecutionPreferences.timeoutKey)
+    defer {UserDefaults.standard.set(previous,forKey:QueryExecutionPreferences.timeoutKey)}
+    QueryExecutionPreferences.save(timeout:0)
+    for cancel in [false,true] {
+      let doc=readDocument();doc.sql="ALTER TABLE dbo.T ALTER COLUMN C varchar(35) NULL;"
+      var executions=0,probes=0
+      doc.executionFixture={_,_ in
+        executions+=1
+        if cancel {doc.cancel()}
+        throw SQLFailure(cancel ? "Canceled":"Query timeout expired",diagnostics:[.init(state:cancel ? "HY008":"HYT00",code:0,message:"Synthetic timeout/cancellation")])
+      }
+      doc.sessionProbeFixture={sql,limits in
+        probes+=1;#expect(sql.contains("XACT_STATE()") && limits.timeout==5)
+        var output=Execution();output.results=[Rows(values:[["1","master","-1"]])];return output
+      }
+      doc.execute();await doc.task?.value
+      #expect(executions==1 && probes==1 && doc.transactionCount==1 && doc.state == .ready)
+      #expect(doc.messages.contains("COMMIT yapılamaz") && !doc.lastExecutionSucceeded)
+    }
+    let doc=readDocument();doc.sql="SELECT 1;"
+    doc.executionFixture={_,_ in Execution()}
+    doc.sessionProbeFixture={_,_ in throw SQLFailure("Probe failed")}
+    var applied=false;doc.managedObjectApplied={applied=true}
+    doc.execute();await doc.task?.value
+    #expect(doc.messages.contains("Transaction durumu doğrulanamadı") && !applied && !doc.hasClosedTransaction && !doc.canRefresh)
+    let state=StudioState();state.documents=[doc];state.closeErrorFixture={_ in}
+    #expect(!state.canBeginBulkClose() && state.confirmBulkClose()==nil)
+    doc.sessionProbeFixture={_,_ in var output=Execution();output.results=[Rows(values:[["0","master","0"]])];return output}
+    doc.execute();await doc.task?.value
+    #expect(doc.transactionStatusKnown && doc.hasClosedTransaction)
+  }
+
 }

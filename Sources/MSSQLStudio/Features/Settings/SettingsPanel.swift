@@ -40,6 +40,7 @@ struct SettingsPanel: View {
   @State private var validation = UserDefaults.standard.object(forKey:"sqlValidateReferences") as? Bool ?? true
   @State private var aliases = UserDefaults.standard.object(forKey:"sqlAutomaticAliases") as? Bool ?? true
   @State private var noLock = UserDefaults.standard.bool(forKey:"sqlAutomaticNoLock")
+  @State private var queryTimeout = QueryExecutionPreferences.timeoutSeconds
   @State private var history = false
   @State private var closedTabLimit = QueryHistoryPolicy.defaultClosedTabLimit
   @State private var historyDays = QueryHistoryPolicy.defaultDays
@@ -175,6 +176,15 @@ struct SettingsPanel: View {
           }) { message = $0 }
         }
         settingsPage(.workspace, subtitle: "Bu Mac’te tutulan sorgu geçmişini ve oturum kurtarmayı yönetin.") {
+          settingsCard("Sorgu çalıştırma",icon:"play.circle") {
+            StudioFormField("Sorgu zaman aşımı") {
+              HStack {
+                SettingsIntegerInput("Saniye",value:$queryTimeout).accessibilityIdentifier("queryExecutionTimeout")
+                Text("sn").foregroundStyle(.secondary)
+              }
+            }.id("queryTimeout")
+            settingsNote("0 = sınırsız (varsayılan). Manuel sorgular tamamlanana veya İptal’e basılana kadar bekler. 1–86.400 saniye sınır belirleyebilirsiniz. Satır sınırından bağımsızdır; sonraki çalıştırmalarda uygulanır. Explorer, izleme ve otomatik yenileme süre sınırları değişmez.",icon:"info.circle")
+          }
           settingsCard("Nesne tanım indeksi",icon:"externaldrive") {
             StudioFormField("Toplam disk kotası") {
               HStack {
@@ -407,6 +417,7 @@ struct SettingsPanel: View {
   }
   private func applySettings() {
     Task {
+          guard QueryExecutionPreferences.timeoutRange.contains(queryTimeout) else {message="Sorgu zaman aşımı 0–86.400 saniye arasında olmalı (0 = sınırsız).";return}
           guard (1...3650).contains(historyDays) else { message = "Saklama süresi 1–3650 gün arasında olmalı."; return }
           guard (1...1000).contains(closedTabLimit) else {message="Kapatılan sekme sayısı 1–1000 arasında olmalı.";return}
           let source=updateRepository.trimmingCharacters(in:.whitespacesAndNewlines)
@@ -418,6 +429,7 @@ struct SettingsPanel: View {
           else {UserDefaults.standard.set(updateRepository,forKey:"githubUpdateRepository")}
           UserDefaults.standard.set(explorerDensity.rawValue,forKey:ExplorerDensity.key)
           NotificationCenter.default.post(name:ExplorerDensity.changed,object:nil)
+          QueryExecutionPreferences.save(timeout:queryTimeout)
           StudioTheme.apply(theme)
           UserDefaults.standard.set(completion,forKey:"sqlAutomaticCompletion")
           UserDefaults.standard.set(Int(completionDelay),forKey:SQLEditorPreferences.completionDelayKey)

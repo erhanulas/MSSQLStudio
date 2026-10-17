@@ -511,7 +511,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       status.toolTip=doc.connectionError ?? state.connectionErrors[doc.server.id] ?? doc.server.startupError
       status.setAccessibilityIdentifier("queryStatus")
       status.stringValue =
-        "\(displayPhase)   |   \(doc.database)   |   \(rows)   |   \(String(format:"%.3f",doc.elapsed)) s\(doc.partial ? "   |   PARTIAL" : "")\(doc.transactionCount > 0 ? "   |   TRAN: \(doc.transactionCount)" : "")"
+        "\(displayPhase)   |   \(doc.database)   |   \(rows)   |   \(String(format:"%.3f",doc.elapsed)) s\(doc.partial ? "   |   PARTIAL" : "")\(!doc.transactionStatusKnown ? "   |   TRAN: bilinmiyor":doc.transactionCount > 0 ? "   |   TRAN: \(doc.transactionCount)" : "")"
     } else {
       database.updateChoices([],selected:nil,contextID:nil,enabled:false)
       context.stringValue = ""
@@ -613,7 +613,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     owner.showWindow(nil);owner.window?.makeKeyAndOrderFront(nil)
   }
   @objc func closeAllWithoutSaving() {
-    guard state.documents.allSatisfy({!$0.busy && $0.transactionCount == 0 && $0.closeOperationBlocked?() != true}) else {
+    guard state.documents.allSatisfy({!$0.busy && $0.hasClosedTransaction && $0.closeOperationBlocked?() != true}) else {
       state.showError("Tüm sekmeleri kapatmadan önce çalışan sorguları ve açık transaction’ları tamamlayın.");return
     }
     for target in state.documents {

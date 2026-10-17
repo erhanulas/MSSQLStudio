@@ -52,6 +52,7 @@ struct ObjectEditorKey: Codable, Equatable {
     case .ready: break
     }
     guard lastExecutionSucceeded, let lastExecutedSQL else { return "Önce bu sekmede bir okuma sorgusunu başarıyla çalıştırın." }
+    guard transactionStatusKnown else {return "Transaction durumu doğrulanamadı. Aynı sekmede @@TRANCOUNT ve XACT_STATE() kontrolü yapın."}
     guard transactionCount == 0 else { return "Açık transaction var (\(transactionCount)). Yenilemeden önce COMMIT veya ROLLBACK ile tamamlayın." }
     guard lastExecutedDatabase == database else { return "Veritabanı değişti. Bu veritabanında sorguyu yeniden çalıştırın." }
     guard TSQL.canRepeatRead(lastExecutedSQL) else { return "Bu sorgu güvenli bir salt okunur sorgu olarak tekrarlanamıyor. Çalıştır düğmesini kullanın." }
@@ -79,6 +80,8 @@ struct ObjectEditorKey: Codable, Equatable {
   var errorSourceSQL:String?
   var selectedResult = 0
   var transactionCount = 0
+  private(set) var transactionStatusKnown=true
+  var hasClosedTransaction:Bool {transactionCount==0 && (transactionStatusKnown || state == .disconnected)}
   var symbols: [CatalogSymbol] = []
   var intelligenceCatalog: SQLIntelligence.Catalog?
   var catalogDatabase: String?
@@ -147,7 +150,7 @@ struct ObjectEditorKey: Codable, Equatable {
   var dirty: Bool { sql != savedText }
   var hasPendingDatabaseChanges: Bool { moduleInitialSQL.map {sql != $0} ?? false }
   var canSubmitModule: Bool {
-    server.online && canExecute && transactionCount == 0 &&
+    server.online && canExecute && hasClosedTransaction &&
       moduleObjectID != nil && objectEditorKey?.database == database &&
       moduleOriginal != nil && hasPendingDatabaseChanges
   }
@@ -284,7 +287,7 @@ struct ObjectEditorKey: Codable, Equatable {
     }
   }
 
-  func execute(override: String? = nil, estimated: Bool = false, repeatRead: Bool = false, sourceRange:NSRange?=nil) {
+  func execute(override: String? = nil, estimated: Bool = false, repeatRead: Bool = false, automaticRefresh:Bool = false, sourceRange:NSRange?=nil) {
     guard canExecute, confirmDiscardResultEdits?() != false else { return }
     let source = sql as NSString
     let query =
@@ -295,11 +298,12 @@ struct ObjectEditorKey: Codable, Equatable {
     let sourceSnapshot=sql
     let queryRange: NSRange? = sourceRange ?? (override == nil && selectedRange.length>0 ? selectedRange:query==sql ? NSRange(location:0,length:source.length):nil)
     if state == .disconnected {
-      connect { [weak self] in self?.execute(override:query,estimated:estimated,repeatRead:repeatRead,sourceRange:queryRange) }
+      connect { [weak self] in self?.execute(override:query,estimated:estimated,repeatRead:repeatRead,automaticRefresh:automaticRefresh,sourceRange:queryRange) }
       return
     }
     let executionServer=server,executionServerGeneration=server.generation,executionDatabase=database
     var executionLimits=limits
+    executionLimits.timeout=automaticRefresh ? (limits.rows<=50_000 ? 60:600):QueryExecutionPreferences.timeoutSeconds
     executionLimits.readOnlyRowLimit=true
     let appliesRowLimit=TSQL.usesResultRowLimit(query)
     if !appliesRowLimit {executionLimits.rows=Int.max}
@@ -330,10 +334,11 @@ struct ObjectEditorKey: Codable, Equatable {
     task = Task { [weak self] in
       guard let self else { return }
       var ddlSessionVerified = executionFixture != nil && sessionProbeFixture == nil
+      transactionStatusKnown=ddlSessionVerified
       defer {
         task = nil
         if state != .disconnected {state = .ready}
-        if applyingModule && lastExecutionSucceeded && !partial && transactionCount == 0 { moduleApplied?() }
+        if applyingModule && ddlSessionVerified && lastExecutionSucceeded && !partial && transactionCount == 0 { moduleApplied?() }
         if !estimated,server === executionServer,server.generation==executionServerGeneration {
           if pendingDDLGeneration != executionServerGeneration {
             pendingDDLChanges=[];pendingDDLGeneration=executionServerGeneration
@@ -348,7 +353,7 @@ struct ObjectEditorKey: Codable, Equatable {
             pendingDDLChanges=[]
           }
         }
-        if !estimated && lastExecutionSucceeded && !partial && transactionCount == 0 {managedObjectApplied?()}
+        if !estimated && ddlSessionVerified && lastExecutionSucceeded && !partial && transactionCount == 0 {managedObjectApplied?()}
         applyingModule = false
         changed?()
       }
@@ -413,8 +418,8 @@ struct ObjectEditorKey: Codable, Equatable {
         do {
           var limits=Limits();limits.rows=1;limits.timeout=5
           let result:Execution
-          if let sessionProbeFixture {result=try await sessionProbeFixture("SELECT @@TRANCOUNT, DB_NAME();",limits)}
-          else {result=try await connection.execute("SELECT @@TRANCOUNT, DB_NAME();",limits:limits)}
+          if let sessionProbeFixture {result=try await sessionProbeFixture("SELECT @@TRANCOUNT, DB_NAME(), XACT_STATE();",limits)}
+          else {result=try await connection.execute("SELECT @@TRANCOUNT, DB_NAME(), XACT_STATE();",limits:limits)}
           // This response belongs to the session that just executed the SQL.
           // A late reply must not authorize refresh or overwrite another target.
           guard executionID==token,server === executionServer,server.generation==executionServerGeneration,self.database==executionDatabase else {
@@ -422,8 +427,15 @@ struct ObjectEditorKey: Codable, Equatable {
             return
           }
           if let row = result.results.first?.values.first, row.count > 1 {
-            ddlSessionVerified = !result.partial && row[0].flatMap(Int.init).map {$0>=0} == true && row[1].map {!$0.isEmpty} == true
+            ddlSessionVerified = result.failure==nil && !result.partial && !result.stoppedEarly && result.results.count==1 && result.results[0].values.count==1 && !result.results[0].truncated && row[0].flatMap(Int.init).map {$0>=0} == true && row[1].map {!$0.isEmpty} == true
+            if row.count>2 {ddlSessionVerified = ddlSessionVerified && ["-1","0","1"].contains(row[2] ?? "") && ((row[0]=="0") == (row[2]=="0"))}
+            guard ddlSessionVerified else {throw SQLFailure("Sorgu sonrası oturum yanıtı eksik veya geçersiz.")}
+            transactionStatusKnown=true
             transactionCount = row[0].flatMap(Int.init) ?? 0
+            if transactionCount>0 {
+              let uncommittable=row.count>2 && row[2]=="-1"
+              messages += uncommittable ? "Açık transaction var; hata nedeniyle COMMIT yapılamaz. ROLLBACK ile tamamlayın.\n":"Açık transaction var (\(transactionCount)); COMMIT veya ROLLBACK ile tamamlayın.\n"
+            }
             if let database = row[1] {
               // DB_NAME is the actual SQL session identity, not a case-insensitive
               // guess from profile text. Read-only SQL cannot change that identity.
@@ -436,8 +448,9 @@ struct ObjectEditorKey: Codable, Equatable {
                 Task { [weak self] in await self?.loadSymbols() }
               }
             }
-          }
+          } else {throw SQLFailure("Sorgu sonrası oturum yanıtı eksik.")}
         } catch {
+          if executionID==token,server === executionServer,server.generation==executionServerGeneration {transactionStatusKnown=false;messages += "Transaction durumu doğrulanamadı. Aynı sekmede @@TRANCOUNT ve XACT_STATE() değerlerini kontrol edin.\n"}
           if executionID==token,server === executionServer,server.generation==executionServerGeneration,self.database==executionDatabase {await recordConnectionFailure(error)}
           else if executionID==token {lastExecutedDatabase=nil}
         }

@@ -564,10 +564,10 @@ import SwiftUI
       let controller = DataReviewWindowController(window: window); controller.canClose = { [weak self] in self?.submittingData != true }; window.delegate = controller; dataReview = controller; controller.showWindow(nil)
     } catch { dataError(error) }
   }
-  @objc private func refreshResults() {
+  @objc private func refreshResults() {repeatResults(automatic:false)}
+  private func repeatResults(automatic:Bool) {
     guard document.canRefresh, let sql = document.lastExecutedSQL else { return }
-    refreshSelection = resultTabs.selectedTabViewItem?.identifier
-    document.execute(override: sql, repeatRead: true)
+    refreshSelection = resultTabs.selectedTabViewItem?.identifier;document.execute(override: sql, repeatRead: true, automaticRefresh:automatic)
   }
   func setAutoRefresh(_ seconds:Int) {
     guard !document.busy,!submittingData,!tables.values.contains(where:{$0.editDefinition != nil}),(0...3600).contains(seconds) else {return}
@@ -593,7 +593,7 @@ import SwiftUI
         guard let self else { return }
         if document.busy { continue }
         guard document.canRefresh else { applyRefreshSeconds(0); return }
-        refreshResults()
+        repeatResults(automatic:true)
       }
     }
   }
@@ -856,7 +856,7 @@ import SwiftUI
   }
   @objc private func compareModule() {modulePreview()}
   @objc private func applyModule() {
-    guard document.transactionCount == 0 else {
+    guard document.hasClosedTransaction else {
       let alert=StudioAlert(role:"moduleTransactionWarning");alert.messageText="Önce COMMIT veya ROLLBACK çalıştırın.";alert.runModal();return
     }
     guard document.canSubmitModule else {return}

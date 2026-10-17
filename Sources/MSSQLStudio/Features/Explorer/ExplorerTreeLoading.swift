@@ -5,6 +5,18 @@ import UniformTypeIdentifiers
 
 extension WorkbenchController {
   func serverTree(_ server:ConnectedServer) -> TreeNode {explorerTree.serverTree(server)}
+  func invalidateLoadedObjectChildren(_ node:TreeNode) {
+    // Keep folder identities/expansion. Replacing the folders made an expanded
+    // Indexes branch disappear without ever reading its updated contents.
+    for child in node.children {
+      guard case .folder = child.kind else {continue}
+      child.item=node.item;child.loaded=false;child.error=nil
+      if child.loading {child.refreshAfterLoad=true;continue}
+      child.children=[]
+      if outline.isItemExpanded(child) {load(child)}
+      else {reloadExplorer(item:child,children:true)}
+    }
+  }
   func load(_ node: TreeNode) {
     guard !node.loading, !node.loaded, node.server.online || node.server.catalogFixture != nil || node.server.allowsDefinitionIndex(node.database) else { return }
     if node.linked != nil || node.objectFolder == .linkedServers {loadLinked(node);return}
@@ -43,6 +55,11 @@ extension WorkbenchController {
           rows=try await node.server.definitionIndex.items(database:node.database,folder:folder,parentID:node.item?.id)
         }
         guard generation==node.server.generation,!Task.isCancelled else {throw CancellationError()}
+        if node.refreshAfterLoad {
+          node.refreshAfterLoad=false;node.loading=false;node.loaded=false
+          if outline.isItemExpanded(node) {load(node)} else {reloadExplorer(item:node,children:true)}
+          return
+        }
         node.children = rows.map { item in
           TreeNode(
             item.schema.isEmpty
@@ -53,10 +70,16 @@ extension WorkbenchController {
         node.loaded = true
         node.error = nil
       } catch is CancellationError {
+        node.refreshAfterLoad=false
         node.loading=false;node.loaded=false
         reloadExplorer(item:node)
         return
       } catch {
+        if node.refreshAfterLoad {
+          node.refreshAfterLoad=false;node.loading=false;node.loaded=false
+          if outline.isItemExpanded(node) {load(node)} else {reloadExplorer(item:node,children:true)}
+          return
+        }
         node.error = error.localizedDescription
         node.loaded = true
         node.children = [

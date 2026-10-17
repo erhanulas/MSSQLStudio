@@ -37,7 +37,7 @@ import UniformTypeIdentifiers
     _ = try profile.connectionString(password:password)
     let reset = !server.profile.hasSameConnectionSettings(as:profile) || server.password != password
     let affected=documents.filter {$0.server === server}
-    guard !reset || affected.allSatisfy({!$0.busy && $0.transactionCount==0 && $0.closeOperationBlocked?() != true}) else {throw SQLFailure("Bağlantı bilgilerini değiştirmeden önce çalışan sorguları ve açık transaction’ları tamamlayın.")}
+    guard !reset || affected.allSatisfy({!$0.busy && $0.hasClosedTransaction && $0.closeOperationBlocked?() != true}) else {throw SQLFailure("Bağlantı bilgilerini değiştirmeden önce çalışan sorguları ve açık transaction’ları tamamlayın.")}
     if reset,affected.contains(where:{$0.confirmDiscardResultEdits?() == false}) {throw CancellationError()}
     let previous=affected.map(\.state)
     server.updatingProfile=true
@@ -151,7 +151,7 @@ import UniformTypeIdentifiers
       func checkSessions() throws {
         guard
           !self.documents.contains(where: {
-            $0.server === old && ($0.busy || $0.transactionCount > 0)
+            $0.server === old && ($0.busy || !$0.hasClosedTransaction)
           })
         else {
           throw SQLFailure(
@@ -491,8 +491,8 @@ import UniformTypeIdentifiers
       showError("Önce çalışan sorguyu durdurun.")
       return false
     }
-    guard doc.transactionCount == 0 else {
-      showError("Önce COMMIT veya ROLLBACK çalıştırın.")
+    guard doc.hasClosedTransaction else {
+      showError(doc.transactionStatusKnown ? "Önce COMMIT veya ROLLBACK çalıştırın.":"Transaction durumu doğrulanamadı. Aynı sekmede SELECT @@TRANCOUNT, XACT_STATE(); çalıştırın.")
       return false
     }
     guard discardChanges || confirmSave(doc) else { return false }
@@ -559,7 +559,7 @@ import UniformTypeIdentifiers
   var closeErrorFixture:((String)->Void)?
   /// nil cancels, true authorizes a single discard pass (no per-tab dialogs).
   func confirmBulkClose()->Bool? {
-    guard documents.allSatisfy({!$0.busy && $0.transactionCount==0 && $0.closeOperationBlocked?() != true}) else {
+    guard documents.allSatisfy({!$0.busy && $0.hasClosedTransaction && $0.closeOperationBlocked?() != true}) else {
       if let fixture=closeErrorFixture {fixture("Çalışan sorguları ve açık transaction’ları tamamlayın.")}
       else {showError("Çalışan sorguları ve açık transaction’ları tamamlayın.")}
       return nil
@@ -578,7 +578,7 @@ import UniformTypeIdentifiers
   }
   var needsBulkCloseConfirmation:Bool {documents.contains {requiresCloseConfirmation($0) || $0.hasResultEdits?() == true}}
   func canBeginBulkClose()->Bool {
-    guard documents.allSatisfy({!$0.busy && $0.transactionCount==0 && $0.closeOperationBlocked?() != true}) else {
+    guard documents.allSatisfy({!$0.busy && $0.hasClosedTransaction && $0.closeOperationBlocked?() != true}) else {
       if let fixture=closeErrorFixture {fixture("Çalışan sorguları ve açık transaction’ları tamamlayın.")}
       else {showError("Çalışan sorguları ve açık transaction’ları tamamlayın.")}
       return false

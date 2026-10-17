@@ -13,13 +13,15 @@ extension WorkbenchController {
     let refresh = symbolButton("arrow.clockwise", tip: "Seçili dalı ve kapsamındaki yerel indeksleri yenile", action: #selector(refreshExplorer))
     let connect = symbolButton("network", tip: "Bağlantı işlemleri", action: #selector(showExplorerConnections(_:)))
     connect.setAccessibilityIdentifier("explorerConnectionActions")
+    let collapseBranches=symbolButton("arrow.up.left.and.arrow.down.right",tip:"Tüm dalları daralt",action:#selector(collapseExplorerBranches))
+    collapseBranches.setAccessibilityIdentifier("collapseExplorerBranches")
     let collapse = symbolButton("sidebar.left", tip: "Object Explorer’ı gizle", action: #selector(toggleExplorer))
     indexStatus.target=self; indexStatus.action=#selector(showIndexStatus(_:))
     indexStatus.image=NSImage(systemSymbolName:"externaldrive",accessibilityDescription:nil)
     indexStatus.imagePosition = .imageOnly; indexStatus.bezelStyle = .inline
     indexStatus.setAccessibilityIdentifier("ddlIndexStatus")
     indexStatus.setAccessibilityLabel("Yerel indeks durumu ve işlemleri")
-    let header = NSStackView(views: [label, NSView(), connect, indexStatus, refresh, collapse])
+    let header = NSStackView(views: [label, NSView(), connect, indexStatus, refresh, collapseBranches, collapse])
     header.orientation = .horizontal
     header.spacing = 2
     header.heightAnchor.constraint(equalToConstant: 32).isActive = true
@@ -98,7 +100,7 @@ extension WorkbenchController {
     explorerTabs.selectedSegment = 0
     explorerTabs.target = self; explorerTabs.action = #selector(changeExplorerTab)
     explorerTabs.setAccessibilityLabel("Explorer sekmeleri")
-    for button in [connect,indexStatus,refresh,collapse] { (button as? StudioToolbarButton)?.flat=true }
+    for button in [connect,indexStatus,refresh,collapseBranches,collapse] { (button as? StudioToolbarButton)?.flat=true }
     searchFilters.orientation = .vertical;searchFilters.alignment = .leading;searchFilters.spacing=4
     searchFilters.addArrangedSubview(searchScopePicker);searchFilters.addArrangedSubview(searchOptions)
     searchFilters.isHidden = !showingSearch
@@ -189,6 +191,16 @@ extension WorkbenchController {
     restoringTree=previous
     if item == nil || children {restoreExplorerExpansion()}
     outline.enclosingScrollView?.needsLayout=true
+  }
+  @objc func collapseExplorerBranches() {
+    let previous=restoringTree
+    restoringTree=true
+    outline.collapseItem(nil,collapseChildren:true)
+    restoringTree=previous
+    if !showingSearch {
+      explorerTree.collapseAllBranches()
+      state.explorerTreeDefaults.set(expansionState,forKey:"explorerExpansionState")
+    }
   }
   func restoreExplorerExpansion() {
     guard !showingSearch,!restoringTree else {return}

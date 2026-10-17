@@ -140,4 +140,63 @@ import Testing
       #expect(observer.changes.count==1 && observer.changes.first?.first?.name=="NewObject" && observer.changes.first?.first?.database=="FirstDB")
     }
   }
+  @Test func indexDDLRefreshesExpandedOwnerFoldersWithoutReplacingThemOrPublishingAnOldRead() async throws {
+    _=NSApplication.shared
+    let url=URL(fileURLWithPath:"/tmp/StudioDDL-index-owner-\(UUID())");defer {try? FileManager.default.removeItem(at:url)}
+    let disk=CatalogDiskIndex(url:url.appendingPathComponent("catalog.sqlite")),index=CatalogIndexService(index:disk),catalog=SQLCatalogService(index:disk)
+    let server=ConnectedServer(profile:.init(),password:"",diskIndex:disk,objectIndexService:index,completionIndexService:catalog);server.online=false
+    let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false;state.servers=[server]
+    let host=WorkbenchController(state:state),window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false
+    defer {server.online=false;window.close()}
+    let outline=try #require(views(host.view).compactMap {$0 as? NSOutlineView}.first)
+    let root=try #require(outline.item(atRow:0) as? TreeNode)
+    let tables=TreeNode("Tables",kind:.folder(.tables),server:server,database:"master");tables.loaded=true
+    let table=TreeNode("dbo.News",kind:.object(.tables),server:server,database:"master",item:.init(id:1,name:"News",schema:"dbo",detail:"USER_TABLE"));table.loaded=true
+    let indexes=TreeNode("Indexes",kind:.folder(.indexes),server:server,database:"master",item:table.item);indexes.loaded=true
+    indexes.children=[TreeNode("Old",kind:.object(.indexes),server:server,database:"master",item:.init(id:1,name:"Old"))]
+    table.children=[indexes];tables.children=[table];root.children=[tables];root.loaded=true
+    outline.reloadData();for node in [root,tables,table,indexes] {outline.expandItem(node)}
+    var reads=0,continuation:CheckedContinuation<Execution,Never>?
+    server.asyncCatalogFixture={sql in
+      var output=Execution()
+      if sql.contains("StudioSchemaTargetRefresh") {output.results=[Rows(values:[["1","News","dbo","USER_TABLE","ID","0"]])];return output}
+      #expect(sql.contains("sys.indexes"));reads+=1
+      if reads==1 {return await withCheckedContinuation {continuation=$0}}
+      output.results=[Rows(values:[["2","NewIndex","","NONCLUSTERED"]])];return output
+    };server.online=true
+    indexes.loaded=false;host.load(indexes)
+    for _ in 0..<100 where continuation==nil {try await Task.sleep(for:.milliseconds(2))}
+    #expect(continuation != nil)
+    await host.refreshDDLChanges(ModuleEditing.changes("DROP INDEX Old ON dbo.News; CREATE NONCLUSTERED INDEX NewIndex ON dbo.News(ID);"),server:server,database:"master",indexService:index,catalogService:catalog)
+    #expect(table.children.first === indexes && outline.isItemExpanded(indexes) && indexes.refreshAfterLoad && reads==1)
+    var stale=Execution();stale.results=[Rows(values:[["1","Old","","NONCLUSTERED"]])];continuation?.resume(returning:stale);continuation=nil
+    for _ in 0..<100 where indexes.loading {try await Task.sleep(for:.milliseconds(2))}
+    #expect(reads==2 && indexes.loaded && !indexes.refreshAfterLoad)
+    #expect(indexes.children.map {$0.item?.name}==["NewIndex"] && outline.isItemExpanded(indexes))
+  }
+
+  @Test func principalChangesRefreshOnlyTheirLoadedCatalogBranches() async throws {
+    _=NSApplication.shared
+    let url=URL(fileURLWithPath:"/tmp/StudioDDL-principals-\(UUID())");defer {try? FileManager.default.removeItem(at:url)}
+    let disk=CatalogDiskIndex(url:url.appendingPathComponent("catalog.sqlite")),index=CatalogIndexService(index:disk),catalog=SQLCatalogService(index:disk)
+    let server=ConnectedServer(profile:.init(),password:"");server.online=false
+    let state=StudioState();state.historyEnabled=false;state.recoveryEnabled=false;state.servers=[server]
+    let host=WorkbenchController(state:state),window=NSWindow(contentViewController:host);window.isReleasedWhenClosed=false;defer {server.online=false;window.close()}
+    let outline=try #require(views(host.view).compactMap {$0 as? NSOutlineView}.first),root=try #require(outline.item(atRow:0) as? TreeNode)
+    let users=TreeNode("Users",kind:.folder(.users),server:server,database:"master");users.loaded=true
+    let other=TreeNode("Users",kind:.folder(.users),server:server,database:"Other");other.loaded=true
+    let logins=TreeNode("Logins",kind:.folder(.logins),server:server,database:"Other");logins.loaded=true
+    let roles=TreeNode("Roles",kind:.folder(.roles),server:server,database:"Other");roles.loaded=true
+    roles.children=[TreeNode("Ops",kind:.object(.roles),server:server,item:.init(id:12,name:"Ops"))]
+    root.children=[users,other,logins,roles]
+    var reads:[String]=[]
+    server.asyncCatalogFixture={sql in
+      reads.append(sql);#expect(sql.contains("StudioSchemaTargetRefresh"));var output=Execution()
+      output.results=[Rows(values:sql.contains("N'Ops'") ? []:[["10",sql.contains("sys.database_principals") ? "NewUser":"AppLogin","","SQL_USER",nil,"0"]])];return output
+    };server.online=true
+    await host.refreshDDLChanges(ModuleEditing.changes("CREATE USER NewUser FOR LOGIN AppLogin; ALTER LOGIN AppLogin ENABLE; DROP SERVER ROLE Ops;"),server:server,database:"master",indexService:index,catalogService:catalog)
+    #expect(reads.count==3 && users.children.first?.item?.name=="NewUser" && other.children.isEmpty)
+    #expect(logins.children.first?.item?.name=="AppLogin" && roles.children.isEmpty)
+  }
+
 }

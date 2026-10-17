@@ -1,5 +1,20 @@
 [
   {
+    "version": "0.2.193",
+    "date": "2026-10-18",
+    "title": "Uzun sorgular ve nesne yenilemeleri daha güvenilir",
+    "changes": [
+      "Manuel sorgular artık varsayılan olarak süre sınırı olmadan çalışır. Ayarlardan ayrı bir sorgu zaman aşımı belirleyebilirsiniz; sonuç satır sınırı bekleme süresini değiştirmez.",
+      "İptal veya hata sonrasında açık transaction bilgisi gösterilir. Transaction durumu doğrulanamıyorsa kapatma ve ilgili işlemler öncesinde kontrol gerekir.",
+      "Activity Monitor’de seçilen sorgunun uzun SQL metni tamamı yüklenerek gösterilir ve kopyalanır.",
+      "Index oluşturma, değiştirme ve silme sonrasında ilgili Explorer nesnesi yenilenir. Açık alt klasörler korunur; desteklenen diğer nesne değişiklikleri de aynı yenileme yolunu kullanır.",
+      "Tablo tasarımında yeni kolon adı boş başlar ve imleç ad alanına gelir. Kolon adları genişletildi, başlık ve alan hizaları düzeltildi.",
+      "MERGE sorgularında hedef ve kaynak kolon önerileri geliştirildi.",
+      "Explorer’a tüm dalları daraltma düğmesi eklendi. Nesneye git işlemi hedef satırı ortalar ve arama kapsamını ilgili veritabanına geçirir.",
+      "Sonuç alanını boyutlandırırken SQL editörünün yerleşimi iyileştirildi. Hata mesajlarındaki alt çizgiler kaldırıldı."
+    ]
+  },
+  {
     "version": "0.2.192",
     "date": "2026-10-18",
     "title": "Sonuç hücrelerini tek tek seçin",

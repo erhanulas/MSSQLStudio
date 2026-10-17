@@ -193,6 +193,39 @@ import Testing
     #expect(selected?.item?.name=="Example" && selected?.database=="DemoDB")
     #expect(doc.sql=="SELECT * FROM dbo.Example;" && doc.state == .disconnected)
   }
+  @Test(arguments:[false,true]) func explorerRevealCentersLoadedRowAndUsesTargetDatabaseScope(searchOpen:Bool) async throws {
+    let (state,server)=fixture()
+    let key="explorerSearchScope",old=UserDefaults.standard.object(forKey:key)
+    defer {if let old {UserDefaults.standard.set(old,forKey:key)} else {UserDefaults.standard.removeObject(forKey:key)}}
+    let host=WorkbenchController(state:state),window=NSWindow(contentViewController:host)
+    window.isReleasedWhenClosed=false;window.setFrameOrigin(NSPoint(x:-20000,y:0));window.setContentSize(NSSize(width:1100,height:650));defer {window.close()}
+    let doc=state.newQuery(server:server,database:"Other",text:"SELECT 1;")
+    let db=try #require(host.explorerTree.databaseNode(server:server,database:"DemoDB"))
+    let branch=try #require(db.children.first {if case .folder(.tables)=$0.kind {return true};return false})
+    db.loaded=true;branch.loaded=true
+    branch.children=(0..<200).map {index in
+      let name=String(format:"Object%03d",index)
+      return TreeNode("dbo."+name,kind:.object(.tables),server:server,database:"DemoDB",item:.init(id:1000+index,name:name,schema:"dbo",detail:"USER_TABLE"))
+    }
+    host.rebuildSearchScopes(selecting:host.roots.first);host.filterExplorer()
+    if searchOpen {host.showExplorerSearch(true)}
+    var errors:[String]=[];state.errorFixture={errors.append($0)}
+    for index in [100,0,199] {
+      host.revealExplorerObject(["DemoDB","dbo",String(format:"Object%03d",index)],document:doc)
+      await host.explorerRevealTask?.value
+      host.explorer.view.layoutSubtreeIfNeeded()
+      let row=host.outline.selectedRow,selected=host.outline.item(atRow:row) as? TreeNode
+      #expect(errors.isEmpty && selected === branch.children[index] && !host.showingSearch)
+      let clip=try #require(host.outline.enclosingScrollView?.contentView),rect=host.outline.rect(ofRow:row)
+      var proposed=clip.bounds;proposed.origin.y=rect.midY-proposed.height/2
+      #expect(abs(clip.bounds.minY-clip.constrainBoundsRect(proposed).minY)<1)
+      if index==100 {#expect(abs(rect.midY-clip.bounds.midY)<1)}
+      #expect(host.searchScope?.server === server && host.searchScope?.database=="DemoDB")
+      #expect(host.searchStatus.stringValue=="Arama kapsamı: DemoDB" && host.searchDatabaseByServer[server.id]=="DemoDB")
+      #expect(UserDefaults.standard.string(forKey:key)==server.id.uuidString+"|DemoDB")
+    }
+    #expect(doc.database=="Other" && doc.sql=="SELECT 1;" && doc.state == .disconnected)
+  }
   @Test func offlineExplorerNavigationUsesDefinitionIndexWithoutConnecting() async throws {
     let (state,server)=fixture()
     server.profile.indexObjectDefinitions=true;server.online=true

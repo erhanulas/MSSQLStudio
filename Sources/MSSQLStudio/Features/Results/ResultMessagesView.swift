@@ -29,9 +29,9 @@ import AppKit
       offset=NSMaxRange(range);count+=1
     }
     for (index,location) in locations.enumerated() where NSMaxRange(location.message)<=result.length {
-      result.addAttributes([.link:URL(string:"studio-error://\(index)")!,.underlineStyle:NSUnderlineStyle.single.rawValue],range:location.message)
+      result.addAttributes([.link:URL(string:"studio-error://\(index)")!,.underlineStyle:0],range:location.message)
     }
-    linkTextAttributes=[.foregroundColor:StudioTheme.danger,.underlineStyle:NSUnderlineStyle.single.rawValue]
+    linkTextAttributes=[.foregroundColor:StudioTheme.danger,.underlineStyle:0]
     let selection=selectedRange(),origin=enclosingScrollView?.contentView.bounds.origin
     textStorage?.setAttributedString(result)
     if NSMaxRange(selection)<=result.length {setSelectedRange(selection)}

@@ -46,7 +46,7 @@ import Testing
       return output
     }
     doc.sessionProbeFixture = { sql, limits in
-      #expect(sql == "SELECT @@TRANCOUNT, DB_NAME();" && limits.rows == 1 && limits.timeout == 5)
+      #expect(sql == "SELECT @@TRANCOUNT, DB_NAME(), XACT_STATE();" && limits.rows == 1 && limits.timeout == 5)
       probes += 1
       var output = Execution(); output.results = [Rows(values: [["0", "master"]])]; return output
     }
@@ -143,6 +143,9 @@ import Testing
   }
 
   @Test func pastedParameterizedMonitoringRefreshRepeatsCompleteExecutedSnapshot() async throws {
+    let oldTimeout=UserDefaults.standard.object(forKey:QueryExecutionPreferences.timeoutKey)
+    defer {UserDefaults.standard.set(oldTimeout,forKey:QueryExecutionPreferences.timeoutKey)}
+    QueryExecutionPreferences.save(timeout:9)
     _ = NSApplication.shared
     let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
       .appendingPathComponent("Fixtures/ParameterizedMonitoring.sql")
@@ -178,6 +181,9 @@ import Testing
   }
 
   @Test func CTERefreshUsesExecutedSelectionAndPreservesMultiResultSnapshotAndLimits() async throws {
+    let oldTimeout=UserDefaults.standard.object(forKey:QueryExecutionPreferences.timeoutKey)
+    defer {UserDefaults.standard.set(oldTimeout,forKey:QueryExecutionPreferences.timeoutKey)}
+    QueryExecutionPreferences.save(timeout:7)
     _ = NSApplication.shared
     let script = ";WITH c AS (SELECT 1 AS n) SELECT * FROM c; SELECT 2 AS n; SELECT 3 AS n;"
     let doc = QueryDocument(server: ConnectedServer(profile: ServerProfile(), password: ""), database: "master", title: "CTE refresh")

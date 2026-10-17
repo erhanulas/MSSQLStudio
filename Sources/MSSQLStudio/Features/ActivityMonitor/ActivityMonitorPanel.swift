@@ -316,8 +316,7 @@ struct ActivityMonitorPanel:View {
           Label("Oturum \(selected.sessionID) · \(selected.status)",systemImage:"text.alignleft").fontWeight(.medium)
           Text("Fiziksel okuma \(ActivityFormat.count(selected.reads)) · Yazma \(ActivityFormat.count(selected.writes)) · Tx \(ActivityFormat.count(selected.openTransactions))").foregroundStyle(.secondary)
           Spacer(minLength:0)
-          StudioActionButton("SQL’i Kopyala",icon:"doc.on.doc") {NSPasteboard.general.clearContents();NSPasteboard.general.setString(String(selected.sql.prefix(2000)),forType:.string)}
-            .disabled(selected.sql.isEmpty).accessibilityIdentifier("activityCopySQL")
+
         }.font(.system(size:11))
         if let percent=selected.percentComplete {
           HStack {ProgressView(value:min(100,max(0,percent)),total:100);Text(ActivityFormat.number(percent)+" %").monospacedDigit()}
@@ -325,9 +324,8 @@ struct ActivityMonitorPanel:View {
         }
         Text("Login: \(selected.login) · Host: \(selected.host) · Uygulama: \(selected.program)").font(.caption).textSelection(.enabled)
         Text("Mantıksal okuma: \(ActivityFormat.count(selected.logicalReads)) · Bekleme: \(ActivityFormat.duration(selected.waitMS)) · Kaynak: \(selected.waitResource.isEmpty ? "—":selected.waitResource)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-        Text("SQL · İlk 2.000 karakter").font(.system(size:10)).foregroundStyle(.secondary)
-        SQLReadOnlyPreview(sql:selected.sql.isEmpty ? "-- SQL metni sağlanmadı veya görüntüleme yetkisi yok.":String(selected.sql.prefix(2000)))
-          .frame(minHeight:100,idealHeight:140,maxHeight:190).accessibilityIdentifier("activityRequestSQL")
+        ActivitySQLTextPreview(server:model.server,handle:selected.sqlHandle,prefix:selected.sql)
+          .accessibilityIdentifier("activityRequestSQL")
       }.studioCard(padding:12)
     } else {
       Label("SQL metnini ve işlem ayrıntılarını görmek için bir satır seçin.",systemImage:"cursorarrow.click")
@@ -378,7 +376,7 @@ struct ActivityMonitorPanel:View {
       }.fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("activityBlockingChain")
       if let notice=chain.notice {Text(notice).font(.system(size:10)).foregroundStyle(Color(nsColor:StudioTheme.warning)).lineLimit(2).studioHelp(notice)}
       HStack(alignment:.top,spacing:10) {
-        blockingSQLPane(title:"Bekleyen · Oturum \(request.sessionID)",subtitle:"\(request.database) · \(request.wait) · Tx \(ActivityFormat.count(request.openTransactions))",sql:request.sql,help:"Bloklanan isteğin o anda çalıştırdığı ifade; ilk 2.000 karakter.")
+        blockingSQLPane(title:"Bekleyen · Oturum \(request.sessionID)",subtitle:"\(request.database) · \(request.wait) · Tx \(ActivityFormat.count(request.openTransactions))",request:request,help:"Tam batch / modül metni; kilidi alan ifade olduğu kesin değildir.")
         VStack(alignment:.leading,spacing:5) {
           HStack(spacing:5) {
             Text(session.map {"Bloklayan · Oturum \($0)"} ?? "Bloklayan oturum").font(.system(size:11,weight:.semibold))
@@ -392,32 +390,31 @@ struct ActivityMonitorPanel:View {
                 .font(.system(size:10)).studioHelp("Aynı oturumdaki etkin istekler; SQL metnini açıkça seçin")
                 .accessibilityIdentifier("activityBlockingRequestChoice")
             }
-            copySQLButton(context?.sql ?? "")
           }
           Text(context.map {"\($0.login) · \($0.host) · \($0.program) · Tx \(ActivityFormat.count($0.openTransactions))"} ?? (choices.count>1 ? "Birden fazla etkin istek var; sorguyu seçin.":"Oturum ayrıntısı okunamadı veya sonlandı."))
             .font(.system(size:10)).foregroundStyle(.secondary).lineLimit(1)
             .studioHelp(context.map {"\($0.database) · \($0.status)\n\($0.login) · \($0.host) · \($0.program)\nBekleme: \($0.wait) · \(ActivityFormat.duration($0.waitMS))\nKaynak: \($0.waitResource)"} ?? "")
-          Text(context?.sqlSource == .recent ? "Bağlantının son batch’i · kilidi alan ifade olduğu kesin değil":context?.sqlSource == .current ? "O anda çalışan ifade · ilk 2.000 karakter":"SQL bağlamı okunamadı")
+          Text(context?.sqlSource == .recent ? "Bağlantının son batch’i · kilidi alan ifade olduğu kesin değil":context?.sqlSource == .current ? "Etkin isteğin batch / modül metni":"SQL bağlamı okunamadı")
             .font(.system(size:9)).foregroundStyle(context?.sqlSource == .recent ? Color(nsColor:StudioTheme.warning):.secondary)
             .lineLimit(1).studioHelp("Açık transaction içindeki önceki bir ifade kilidi tutuyor olabilir. SQL metni salt okunur bağlamdır.")
-          SQLReadOnlyPreview(sql:context?.sql.isEmpty == false ? context!.sql:"-- Gösterilecek SQL yok; oturum/istek bağlamını kontrol edin.")
-            .frame(minHeight:100,idealHeight:115,maxHeight:150).accessibilityIdentifier("activityBlockerSQL")
+          if let context {
+            ActivitySQLTextPreview(server:model.server,handle:context.sqlHandle,prefix:context.sql)
+              .accessibilityIdentifier("activityBlockerSQL")
+          } else {
+            SQLReadOnlyPreview(sql:"-- Gösterilecek SQL yok; oturum/istek bağlamını kontrol edin.")
+              .frame(minHeight:100,idealHeight:115,maxHeight:150)
+          }
         }.frame(maxWidth:.infinity,alignment:.leading)
       }
     }.studioCard(padding:10)
   }
-  private func blockingSQLPane(title:String,subtitle:String,sql:String,help:String) -> some View {
+  private func blockingSQLPane(title:String,subtitle:String,request:ActivityMonitoring.Request,help:String) -> some View {
     VStack(alignment:.leading,spacing:5) {
-      HStack {Text(title).font(.system(size:11,weight:.semibold));Spacer(minLength:0);copySQLButton(sql)}
+      Text(title).font(.system(size:11,weight:.semibold))
       Text(subtitle).font(.system(size:10)).foregroundStyle(.secondary).lineLimit(1).studioHelp(subtitle)
-      Text("O anda çalışan ifade · ilk 2.000 karakter").font(.system(size:9)).foregroundStyle(.secondary)
-      SQLReadOnlyPreview(sql:sql.isEmpty ? "-- SQL metni sağlanmadı veya görüntüleme yetkisi yok.":sql)
-        .frame(minHeight:100,idealHeight:115,maxHeight:150).accessibilityIdentifier("activityBlockedSQL")
+      ActivitySQLTextPreview(server:model.server,handle:request.sqlHandle,prefix:request.sql)
+        .accessibilityIdentifier("activityBlockedSQL")
     }.frame(maxWidth:.infinity,alignment:.leading).studioHelp(help)
-  }
-  private func copySQLButton(_ sql:String) -> some View {
-    Button {NSPasteboard.general.clearContents();NSPasteboard.general.setString(sql,forType:.string)} label: {Image(systemName:"doc.on.doc")}
-      .buttonStyle(.borderless).disabled(sql.isEmpty).studioHelp("SQL’i kopyala").accessibilityLabel("SQL’i kopyala")
   }
   private var footer:some View {
     VStack(alignment:.leading,spacing:7) {

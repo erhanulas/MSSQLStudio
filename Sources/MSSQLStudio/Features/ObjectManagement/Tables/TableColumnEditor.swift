@@ -2,6 +2,12 @@ import AppKit
 import SQLServerKit
 import SwiftUI
 
+enum TableColumnLayout {
+  static let spacing:CGFloat=8
+  static let widths:[CGFloat]=[28,260,224,45,40,70,240]
+  static var width:CGFloat {widths.reduce(0,+)+spacing*CGFloat(widths.count-1)}
+}
+
 /// One native key-view chain keeps row navigation independent of system button-navigation preferences.
 struct TableColumnEditor:NSViewRepresentable {
   @Binding var column:SQLServerKit.TableColumn
@@ -10,13 +16,17 @@ struct TableColumnEditor:NSViewRepresentable {
   let selected:Bool
   let existing:Bool
   let generated:Bool
+  var focusRequested=false
+  var focused:()->Void={}
   let select:()->Void
   @Environment(\.isEnabled) private var enabled
   func makeNSView(context:Context)->TableColumnEditorView {TableColumnEditorView()}
   func updateNSView(_ view:TableColumnEditorView,context:Context) {
     view.changed={value,key in column=value;primary=key;select()}
     view.selected=select
+    view.focused=focused
     view.update(column:column,primary:primary,choices:choices,selected:selected,existing:existing,generated:generated,enabled:enabled)
+    view.requestNameFocus(focusRequested)
   }
 }
 
@@ -32,13 +42,21 @@ struct TableColumnEditor:NSViewRepresentable {
   private var isPrimary=false
   var changed:((SQLServerKit.TableColumn,Bool)->Void)?
   var selected:(()->Void)?
+  var focused:(()->Void)?
+  private var pendingNameFocus=false
   override init(frame:NSRect) {
     super.init(frame:frame)
-    let stack=NSStackView(views:[selectButton,name,typeGroup,nullable,primary,identity,defaultSQL])
-    stack.orientation = .horizontal;stack.spacing=8;stack.alignment = .centerY
+    let flags=[nullable,primary,identity].map {button -> NSView in
+      let group=NSView();group.addSubview(button);button.translatesAutoresizingMaskIntoConstraints=false
+      NSLayoutConstraint.activate([button.centerXAnchor.constraint(equalTo:group.centerXAnchor),button.centerYAnchor.constraint(equalTo:group.centerYAnchor),group.heightAnchor.constraint(equalToConstant:StudioMetrics.controlHeight)])
+      return group
+    }
+    let controls:[NSView]=[selectButton,name,typeGroup]+flags+[defaultSQL]
+    let stack=NSStackView(views:controls)
+    stack.orientation = .horizontal;stack.spacing=TableColumnLayout.spacing;stack.alignment = .centerY
     stack.translatesAutoresizingMaskIntoConstraints=false;addSubview(stack)
     NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:leadingAnchor),stack.trailingAnchor.constraint(equalTo:trailingAnchor),stack.centerYAnchor.constraint(equalTo:centerYAnchor)])
-    for (view,width) in [(selectButton,28.0),(name,150),(typeGroup,224),(nullable,45),(primary,40),(identity,70),(defaultSQL,240)] {
+    for (view,width) in zip(controls,TableColumnLayout.widths) {
       view.translatesAutoresizingMaskIntoConstraints=false;view.widthAnchor.constraint(equalToConstant:width).isActive=true
     }
     typeGroup.heightAnchor.constraint(equalToConstant:StudioMetrics.controlHeight).isActive=true
@@ -85,6 +103,20 @@ struct TableColumnEditor:NSViewRepresentable {
     selectButton.contentTintColor=primary ? StudioTheme.warning:selected ? StudioTheme.accent:StudioTheme.muted
     selectButton.setAccessibilityLabel(column.name+" kolonunu seç")
     selectButton.setAccessibilityIdentifier("selectDesignerColumn_\(column.id)")
+  }
+  func requestNameFocus(_ requested:Bool) {
+    pendingNameFocus=requested
+    if requested {scheduleNameFocus()}
+  }
+  override func viewDidMoveToWindow() {super.viewDidMoveToWindow();if pendingNameFocus {scheduleNameFocus()}}
+  private func scheduleNameFocus() {
+    let id=column.id
+    DispatchQueue.main.async { [weak self] in
+      guard let self,pendingNameFocus,column.id==id,let window,name.isEnabled else {return}
+      name.scrollToVisible(name.bounds)
+      guard window.makeFirstResponder(name) else {return}
+      pendingNameFocus=false;focused?()
+    }
   }
   private var tabFields:[NSControl] {
     [name,type,size,scale,nullable,primary,identity,defaultSQL].filter {$0.isEnabled && !$0.isHiddenOrHasHiddenAncestor}

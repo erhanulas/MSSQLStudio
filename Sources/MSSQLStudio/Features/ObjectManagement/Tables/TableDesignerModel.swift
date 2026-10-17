@@ -26,6 +26,7 @@ struct TableDesignPlan:Identifiable {
   @Published private(set) var unverified=false
   @Published var error=""
   @Published var message=""
+  @Published var requestedColumnFocus:Int?
   private var structureBaseline=TableStructureDraft()
   private var revision=UUID()
   private var closed=false
@@ -53,7 +54,15 @@ struct TableDesignPlan:Identifiable {
   var columnsChanged:Bool {original.map {$0.columns != columns || $0.primaryKey != primaryNames} ?? true}
   var structureChanged:Bool {structure != structureBaseline}
   var hasChanges:Bool {columnsChanged || structureChanged}
-  var canPrepare:Bool {!closed && ready && !busy && !unverified && hasChanges}
+  private var hasUnnamedColumn:Bool {columns.contains {$0.name.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty}}
+  var canAddColumn:Bool {ready && !closed && !busy && !unverified && !hasUnnamedColumn}
+  @discardableResult func addColumn()->Int? {
+    guard canAddColumn else {return nil}
+    let id=min(0,columns.map(\.id).min() ?? 0)-1
+    columns.append(.init(id:id,name:""));requestedColumnFocus=id
+    return id
+  }
+  var canPrepare:Bool {!closed && ready && !busy && !unverified && !hasUnnamedColumn && hasChanges}
   var canApply:Bool {canPrepare && writer != nil}
   var isNew:Bool {original==nil && loadTable==nil}
   func isCurrent(_ plan:TableDesignPlan)->Bool {!closed && plan.revision==revision && !attempted.contains(plan.id)}
@@ -72,6 +81,7 @@ struct TableDesignPlan:Identifiable {
     } catch is CancellationError {} catch {self.error=error.localizedDescription}
   }
   private func accept(_ table:TableDefinition,preferredSelection:String?=nil) {
+    requestedColumnFocus=nil
     original=table;schema=table.schema;name=table.name;columns=table.columns
     primary=Set(table.columns.filter {table.primaryKey.contains($0.name)}.map(\.id))
     let selected=preferredSelection ?? selectedDefinition?.name

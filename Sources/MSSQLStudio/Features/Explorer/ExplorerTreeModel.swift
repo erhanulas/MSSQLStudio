@@ -10,6 +10,15 @@ import SQLServerKit
   private(set) var displayRoots: [TreeNode] = []
   var expansionState: [String:Bool] = [:]
 
+  func collapseAllBranches() {
+    for key in expansionState.keys {expansionState[key]=false}
+    func collapse(_ node:TreeNode) {
+      if node.expandable {expansionState[node.persistenceKey]=false}
+      for child in node.children {collapse(child)}
+    }
+    for root in displayRoots {collapse(root)}
+  }
+
   @discardableResult func synchronizeServers(_ servers:[ConnectedServer]) -> Bool {
     let removed = roots.filter {root in !servers.contains(where:{$0 === root.server})}
     roots.removeAll {root in removed.contains(where:{$0 === root})}

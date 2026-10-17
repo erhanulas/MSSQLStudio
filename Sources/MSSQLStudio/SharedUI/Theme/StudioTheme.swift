@@ -141,7 +141,8 @@ import SwiftUI
       table.headerView?.needsDisplay = true
       table.enumerateAvailableRowViews { row, _ in row.needsDisplay = true }
     } else if let scroll = view as? NSScrollView {
-      scroll.backgroundColor = scroll.documentView is NSOutlineView ? explorerCanvas : scroll.documentView is CopyTable || scroll.identifier?.rawValue == "studio.results" ? resultCanvas : scroll.identifier?.rawValue == "studio.chrome" ? panel : canvas
+      if let editorScroll=scroll as? SQLEditorScrollView {editorScroll.refreshBackground()}
+      else {scroll.backgroundColor = scroll.documentView is NSOutlineView ? explorerCanvas : scroll.documentView is CopyTable || scroll.identifier?.rawValue == "studio.results" ? resultCanvas : scroll.identifier?.rawValue == "studio.chrome" ? panel : canvas}
     } else if let textView = view as? NSTextView, !textView.isFieldEditor, !(textView is SQLTextView), !["sqlSourcePreview","agentCommandEditor"].contains(textView.identifier?.rawValue ?? "") {
       textView.backgroundColor = canvas
       textView.textColor = text

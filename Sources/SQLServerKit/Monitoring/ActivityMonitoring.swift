@@ -139,17 +139,17 @@ public enum ActivityMonitoring {
   SET NOCOUNT ON;
   \(permissionSQL)
   DECLARE @issues TABLE(metric nvarchar(40),message nvarchar(4000));
-  DECLARE @requests TABLE(category tinyint,session_id int,request_id int,database_name nvarchar(128),status nvarchar(60),command nvarchar(60),elapsed_ms bigint,cpu_ms bigint,reads bigint,writes bigint,blocker int,wait_type nvarchar(60),open_transactions bigint,percent_complete real,remaining_ms bigint,sql_text nvarchar(4000),login_name nvarchar(128),host_name nvarchar(128),program_name nvarchar(128),logical_reads bigint,wait_ms bigint,wait_resource nvarchar(256),session_login_time varchar(23),request_start_time varchar(23));
+  DECLARE @requests TABLE(category tinyint,session_id int,request_id int,database_name nvarchar(128),status nvarchar(60),command nvarchar(60),elapsed_ms bigint,cpu_ms bigint,reads bigint,writes bigint,blocker int,wait_type nvarchar(60),open_transactions bigint,percent_complete real,remaining_ms bigint,sql_text nvarchar(4000),login_name nvarchar(128),host_name nvarchar(128),program_name nvarchar(128),logical_reads bigint,wait_ms bigint,wait_resource nvarchar(256),session_login_time varchar(23),request_start_time varchar(23),sql_handle varchar(130));
   \(diagnosticSection(category:0,title:"Bloklanan istekler",condition:"r.blocking_session_id>0",order:"r.wait_time DESC,r.total_elapsed_time DESC,r.session_id,r.request_id"))
   \(diagnosticSection(category:1,title:"Uzun süren istekler",condition:"r.total_elapsed_time>=30000 AND r.command NOT IN (N'BACKUP DATABASE',N'BACKUP LOG')",order:"r.total_elapsed_time DESC,r.session_id,r.request_id"))
   \(diagnosticSection(category:2,title:"Yedeklemeler",condition:"r.command IN (N'BACKUP DATABASE',N'BACKUP LOG')",order:"r.total_elapsed_time DESC,r.session_id,r.request_id"))
   \(diagnosticSection(category:3,title:"Aktif sorgular",condition:"1=1",order:"r.total_elapsed_time DESC,r.session_id,r.request_id"))
   \(blockingContextSQL)
-  SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text,login_name,host_name,program_name,logical_reads,wait_ms,wait_resource,session_login_time,request_start_time FROM @requests WHERE category=0 ORDER BY elapsed_ms DESC,session_id,request_id;
-  SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text,login_name,host_name,program_name,logical_reads,wait_ms,wait_resource,session_login_time,request_start_time FROM @requests WHERE category=1 ORDER BY elapsed_ms DESC,session_id,request_id;
-  SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text,login_name,host_name,program_name,logical_reads,wait_ms,wait_resource,session_login_time,request_start_time FROM @requests WHERE category=2 ORDER BY elapsed_ms DESC,session_id,request_id;
-  SELECT session_id,request_id,request_count,database_name,status,command,blocker,wait_type,wait_ms,wait_resource,open_transactions,login_name,host_name,program_name,sql_source,sql_text FROM @blockingContext ORDER BY session_id,request_id;
-  SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text,login_name,host_name,program_name,logical_reads,wait_ms,wait_resource,session_login_time,request_start_time FROM @requests WHERE category=3 ORDER BY elapsed_ms DESC,session_id,request_id;
+  SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text,login_name,host_name,program_name,logical_reads,wait_ms,wait_resource,session_login_time,request_start_time,sql_handle FROM @requests WHERE category=0 ORDER BY elapsed_ms DESC,session_id,request_id;
+  SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text,login_name,host_name,program_name,logical_reads,wait_ms,wait_resource,session_login_time,request_start_time,sql_handle FROM @requests WHERE category=1 ORDER BY elapsed_ms DESC,session_id,request_id;
+  SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text,login_name,host_name,program_name,logical_reads,wait_ms,wait_resource,session_login_time,request_start_time,sql_handle FROM @requests WHERE category=2 ORDER BY elapsed_ms DESC,session_id,request_id;
+  SELECT session_id,request_id,request_count,database_name,status,command,blocker,wait_type,wait_ms,wait_resource,open_transactions,login_name,host_name,program_name,sql_source,sql_text,sql_handle FROM @blockingContext ORDER BY session_id,request_id;
+  SELECT session_id,request_id,database_name,status,command,elapsed_ms,cpu_ms,reads,writes,blocker,wait_type,open_transactions,percent_complete,remaining_ms,sql_text,login_name,host_name,program_name,logical_reads,wait_ms,wait_resource,session_login_time,request_start_time,sql_handle FROM @requests WHERE category=3 ORDER BY elapsed_ms DESC,session_id,request_id;
   SELECT metric,message FROM @issues;
   """
   // Walk only ancestors of the bounded blocked list. TOP(4) text rows per
@@ -158,7 +158,7 @@ public enum ActivityMonitoring {
   // context, never proof that this batch acquired the retained locks.
   private static let blockingContextSQL = """
   DECLARE @blockingIDs TABLE(session_id int PRIMARY KEY,depth int);
-  DECLARE @blockingContext TABLE(session_id int,request_id int,request_count bigint,database_name nvarchar(128),status nvarchar(60),command nvarchar(60),blocker int,wait_type nvarchar(60),wait_ms bigint,wait_resource nvarchar(256),open_transactions bigint,login_name nvarchar(128),host_name nvarchar(128),program_name nvarchar(128),sql_source nvarchar(20),sql_text nvarchar(4000));
+  DECLARE @blockingContext TABLE(session_id int,request_id int,request_count bigint,database_name nvarchar(128),status nvarchar(60),command nvarchar(60),blocker int,wait_type nvarchar(60),wait_ms bigint,wait_resource nvarchar(256),open_transactions bigint,login_name nvarchar(128),host_name nvarchar(128),program_name nvarchar(128),sql_source nvarchar(20),sql_text nvarchar(4000),sql_handle varchar(130));
   BEGIN TRY
     IF @canMonitor=0 THROW 51000,@permissionMessage,1;
     INSERT @blockingIDs SELECT DISTINCT blocker,0 FROM @requests WHERE category=0 AND blocker>0;
@@ -181,7 +181,8 @@ public enum ActivityMonitoring {
     SELECT s.session_id,r.request_id,COALESCE(r.request_count,0),DB_NAME(COALESCE(r.database_id,s.database_id)),COALESCE(r.status,s.status),r.command,r.blocking_session_id,r.wait_type,CONVERT(bigint,r.wait_time),r.wait_resource,CONVERT(bigint,s.open_transaction_count),s.login_name,s.host_name,s.program_name,
       CASE WHEN r.request_id IS NOT NULL THEN N'current' WHEN c.most_recent_sql_handle IS NOT NULL THEN N'recent' ELSE N'unavailable' END,
       CASE WHEN r.request_id IS NOT NULL THEN LEFT(CONVERT(nvarchar(max),SUBSTRING(CONVERT(varbinary(max),t.text),r.statement_start_offset+1,CASE WHEN r.statement_end_offset=-1 OR r.statement_end_offset-r.statement_start_offset>=7998 THEN 8000 ELSE r.statement_end_offset-r.statement_start_offset+2 END)) COLLATE Latin1_General_100_CI_AS_SC,2000)
-        ELSE LEFT(t.text COLLATE Latin1_General_100_CI_AS_SC,2000) END
+        ELSE LEFT(t.text COLLATE Latin1_General_100_CI_AS_SC,2000) END,
+      CONVERT(varchar(130),CASE WHEN r.request_id IS NOT NULL THEN r.sql_handle ELSE c.most_recent_sql_handle END,1)
     FROM @blockingIDs b JOIN sys.dm_exec_sessions s ON s.session_id=b.session_id
     OUTER APPLY(SELECT TOP(4) q.*,COUNT_BIG(*) OVER() AS request_count FROM sys.dm_exec_requests q WHERE q.session_id=s.session_id ORDER BY q.request_id) r
     OUTER APPLY(SELECT TOP(1) c.most_recent_sql_handle FROM sys.dm_exec_connections c WHERE c.session_id=s.session_id AND r.request_id IS NULL ORDER BY c.connect_time DESC,c.connection_id) c
@@ -194,7 +195,7 @@ public enum ActivityMonitoring {
     BEGIN TRY
       IF @canMonitor=0 THROW 51000,@permissionMessage,1;
       INSERT @requests
-      SELECT \(category),r.session_id,r.request_id,DB_NAME(r.database_id),r.status,r.command,CONVERT(bigint,r.total_elapsed_time),CONVERT(bigint,r.cpu_time),r.reads,r.writes,CASE WHEN r.blocking_session_id>0 THEN r.blocking_session_id ELSE NULL END,ISNULL(r.wait_type,N''),CONVERT(bigint,r.open_transaction_count),CASE WHEN r.command IN (N'BACKUP DATABASE',N'BACKUP LOG') THEN r.percent_complete ELSE NULL END,CONVERT(bigint,NULL),LEFT(CONVERT(nvarchar(max),SUBSTRING(CONVERT(varbinary(max),t.text),r.statement_start_offset+1,CASE WHEN r.statement_end_offset=-1 OR r.statement_end_offset-r.statement_start_offset>=7998 THEN 8000 ELSE r.statement_end_offset-r.statement_start_offset+2 END)) COLLATE Latin1_General_100_CI_AS_SC,2000),s.login_name,s.host_name,s.program_name,r.logical_reads,CONVERT(bigint,r.wait_time),r.wait_resource,CONVERT(varchar(23),s.login_time,121),CONVERT(varchar(23),r.start_time,121)
+      SELECT \(category),r.session_id,r.request_id,DB_NAME(r.database_id),r.status,r.command,CONVERT(bigint,r.total_elapsed_time),CONVERT(bigint,r.cpu_time),r.reads,r.writes,CASE WHEN r.blocking_session_id>0 THEN r.blocking_session_id ELSE NULL END,ISNULL(r.wait_type,N''),CONVERT(bigint,r.open_transaction_count),CASE WHEN r.command IN (N'BACKUP DATABASE',N'BACKUP LOG') THEN r.percent_complete ELSE NULL END,CONVERT(bigint,NULL),LEFT(CONVERT(nvarchar(max),SUBSTRING(CONVERT(varbinary(max),t.text),r.statement_start_offset+1,CASE WHEN r.statement_end_offset=-1 OR r.statement_end_offset-r.statement_start_offset>=7998 THEN 8000 ELSE r.statement_end_offset-r.statement_start_offset+2 END)) COLLATE Latin1_General_100_CI_AS_SC,2000),s.login_name,s.host_name,s.program_name,r.logical_reads,CONVERT(bigint,r.wait_time),r.wait_resource,CONVERT(varchar(23),s.login_time,121),CONVERT(varchar(23),r.start_time,121),CONVERT(varchar(130),r.sql_handle,1)
       FROM (SELECT TOP(30) r.* FROM sys.dm_exec_requests r JOIN sys.dm_exec_sessions s ON s.session_id=r.session_id WHERE \(category==3 ? "s.is_user_process=1 AND r.session_id<>@@SPID":requestPredicate) AND \(condition) ORDER BY \(order)) r
       JOIN sys.dm_exec_sessions s ON s.session_id=r.session_id
       OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) t;
@@ -250,11 +251,12 @@ public enum ActivityMonitoring {
     public var login,host,program,waitResource:String
     public var sessionLoginTime:String?
     public var requestStartTime:String?
+    public var sqlHandle:String?
     public var logicalReads,waitMS:Int64?
     public var elapsedMS,cpuMS,reads,writes,blocker,openTransactions,remainingMS:Int64?
     public var percentComplete:Double?
-    public init(sessionID:Int64,requestID:Int64,database:String="",status:String="",command:String="",elapsedMS:Int64?=nil,cpuMS:Int64?=nil,reads:Int64?=nil,writes:Int64?=nil,blocker:Int64?=nil,wait:String="",openTransactions:Int64?=nil,percentComplete:Double?=nil,remainingMS:Int64?=nil,sql:String="",login:String="",host:String="",program:String="",logicalReads:Int64?=nil,waitMS:Int64?=nil,waitResource:String="",sessionLoginTime:String?=nil,requestStartTime:String?=nil) {
-      self.sessionLoginTime=sessionLoginTime;self.requestStartTime=requestStartTime
+    public init(sessionID:Int64,requestID:Int64,database:String="",status:String="",command:String="",elapsedMS:Int64?=nil,cpuMS:Int64?=nil,reads:Int64?=nil,writes:Int64?=nil,blocker:Int64?=nil,wait:String="",openTransactions:Int64?=nil,percentComplete:Double?=nil,remainingMS:Int64?=nil,sql:String="",login:String="",host:String="",program:String="",logicalReads:Int64?=nil,waitMS:Int64?=nil,waitResource:String="",sessionLoginTime:String?=nil,requestStartTime:String?=nil,sqlHandle:String?=nil) {
+      self.sessionLoginTime=sessionLoginTime;self.requestStartTime=requestStartTime;self.sqlHandle=sqlHandle
       self.sessionID=sessionID;self.requestID=requestID;self.database=database;self.status=status;self.command=command;self.elapsedMS=elapsedMS;self.cpuMS=cpuMS;self.reads=reads;self.writes=writes;self.blocker=blocker;self.wait=wait;self.openTransactions=openTransactions;self.percentComplete=percentComplete;self.remainingMS=remainingMS;self.sql=sql;self.login=login;self.host=host;self.program=program;self.logicalReads=logicalReads;self.waitMS=waitMS;self.waitResource=waitResource
     }
   }
@@ -295,8 +297,9 @@ public enum ActivityMonitoring {
     public var database,status,command,wait,waitResource,login,host,program,sql:String
     public var blocker,waitMS,openTransactions:Int64?
     public var sqlSource:SQLSource
-    public init(sessionID:Int64,requestID:Int64?=nil,requestCount:Int64=0,database:String="",status:String="",command:String="",blocker:Int64?=nil,wait:String="",waitMS:Int64?=nil,waitResource:String="",openTransactions:Int64?=nil,login:String="",host:String="",program:String="",sqlSource:SQLSource = .unavailable,sql:String="") {
-      self.sessionID=sessionID;self.requestID=requestID;self.requestCount=requestCount;self.database=database;self.status=status;self.command=command;self.blocker=blocker;self.wait=wait;self.waitMS=waitMS;self.waitResource=waitResource;self.openTransactions=openTransactions;self.login=login;self.host=host;self.program=program;self.sqlSource=sqlSource;self.sql=sql
+    public var sqlHandle:String?
+    public init(sessionID:Int64,requestID:Int64?=nil,requestCount:Int64=0,database:String="",status:String="",command:String="",blocker:Int64?=nil,wait:String="",waitMS:Int64?=nil,waitResource:String="",openTransactions:Int64?=nil,login:String="",host:String="",program:String="",sqlSource:SQLSource = .unavailable,sql:String="",sqlHandle:String?=nil) {
+      self.sessionID=sessionID;self.requestID=requestID;self.requestCount=requestCount;self.database=database;self.status=status;self.command=command;self.blocker=blocker;self.wait=wait;self.waitMS=waitMS;self.waitResource=waitResource;self.openTransactions=openTransactions;self.login=login;self.host=host;self.program=program;self.sqlSource=sqlSource;self.sql=sql;self.sqlHandle=sqlHandle
     }
   }
   public struct BlockingChain:Sendable,Equatable {
@@ -352,26 +355,28 @@ public enum ActivityMonitoring {
     try validate(execution)
     guard execution.results.count == 5 || execution.results.count == 6 else {throw SQLFailure("Activity Monitor DBA sonucu eksik; istek listeleri, bloklayan oturumlar ve tanı sonucu gerekli.")}
     func requests(_ rows:Rows) throws -> [Request] {
-      let hasIdentity=rows.values.first?.count==23 || rows.fields.count==23
-      try schema(rows,hasIdentity ? requestColumns+["session_login_time","request_start_time"]:requestColumns)
+      let width=rows.values.first?.count ?? rows.fields.count
+      let hasHandle=width==24,hasIdentity=hasHandle || width==23
+      try schema(rows,requestColumns+(hasIdentity ? ["session_login_time","request_start_time"]:[])+(hasHandle ? ["sql_handle"]:[]))
       guard rows.values.count<=30 else {throw SQLFailure("Activity Monitor DBA istek listesi sınırı aşıldı.")}
       var ids=Set<String>()
       return try rows.values.map {row in
         guard let sessionID=counter(row[0]),sessionID>0,let requestID=counter(row[1]) else {throw SQLFailure("Activity Monitor DBA istek kimliği geçersiz.")}
-        let request=Request(sessionID:sessionID,requestID:requestID,database:row[2] ?? "",status:row[3] ?? "",command:row[4] ?? "",elapsedMS:counter(row[5]),cpuMS:counter(row[6]),reads:counter(row[7]),writes:counter(row[8]),blocker:counter(row[9]).flatMap {$0>0 ? $0:nil},wait:row[10] ?? "",openTransactions:counter(row[11]),percentComplete:percentage(row[12]),remainingMS:counter(row[13]),sql:String((row[14] ?? "").prefix(2000)),login:row[15] ?? "",host:row[16] ?? "",program:row[17] ?? "",logicalReads:counter(row[18]),waitMS:counter(row[19]),waitResource:row[20] ?? "",sessionLoginTime:hasIdentity ? row[21]:nil,requestStartTime:hasIdentity ? row[22]:nil)
+        let request=Request(sessionID:sessionID,requestID:requestID,database:row[2] ?? "",status:row[3] ?? "",command:row[4] ?? "",elapsedMS:counter(row[5]),cpuMS:counter(row[6]),reads:counter(row[7]),writes:counter(row[8]),blocker:counter(row[9]).flatMap {$0>0 ? $0:nil},wait:row[10] ?? "",openTransactions:counter(row[11]),percentComplete:percentage(row[12]),remainingMS:counter(row[13]),sql:String((row[14] ?? "").prefix(2000)),login:row[15] ?? "",host:row[16] ?? "",program:row[17] ?? "",logicalReads:counter(row[18]),waitMS:counter(row[19]),waitResource:row[20] ?? "",sessionLoginTime:hasIdentity ? row[21]:nil,requestStartTime:hasIdentity ? row[22]:nil,sqlHandle:hasHandle ? row[23]:nil)
         guard ids.insert(request.id).inserted else {throw SQLFailure("Activity Monitor DBA istek kimliği yinelendi.")}
         return request
       }
     }
     let rows=execution.results[3]
-    try schema(rows,blockingColumns)
+    let hasHandle=(rows.values.first?.count ?? rows.fields.count)==17
+    try schema(rows,blockingColumns+(hasHandle ? ["sql_handle"]:[]))
     guard rows.values.count<=240 else {throw SQLFailure("Activity Monitor bloklayan oturum sınırı aşıldı.")}
     var ids=Set<String>()
     let contexts=try rows.values.map {row in
       guard let session=counter(row[0]),session>0,let count=counter(row[2]),let source=BlockingContext.SQLSource(rawValue:row[14] ?? ""),row[1] == nil || counter(row[1]) != nil,row[6] == nil || row[6].flatMap(Int64.init) != nil else {throw SQLFailure("Activity Monitor bloklayan oturum bilgisi geçersiz.")}
       let request=counter(row[1])
       guard (request == nil && count == 0 && source != .current) || (request != nil && count>0 && source == .current) else {throw SQLFailure("Activity Monitor bloklayan istek bağlamı tutarsız.")}
-      let context=BlockingContext(sessionID:session,requestID:request,requestCount:count,database:row[3] ?? "",status:row[4] ?? "",command:row[5] ?? "",blocker:row[6].flatMap(Int64.init),wait:row[7] ?? "",waitMS:counter(row[8]),waitResource:row[9] ?? "",openTransactions:counter(row[10]),login:row[11] ?? "",host:row[12] ?? "",program:row[13] ?? "",sqlSource:source,sql:String((row[15] ?? "").prefix(2000)))
+      let context=BlockingContext(sessionID:session,requestID:request,requestCount:count,database:row[3] ?? "",status:row[4] ?? "",command:row[5] ?? "",blocker:row[6].flatMap(Int64.init),wait:row[7] ?? "",waitMS:counter(row[8]),waitResource:row[9] ?? "",openTransactions:counter(row[10]),login:row[11] ?? "",host:row[12] ?? "",program:row[13] ?? "",sqlSource:source,sql:String((row[15] ?? "").prefix(2000)),sqlHandle:hasHandle ? row[16]:nil)
       guard ids.insert(context.id).inserted else {throw SQLFailure("Activity Monitor bloklayan istek kimliği yinelendi.")}
       return context
     }

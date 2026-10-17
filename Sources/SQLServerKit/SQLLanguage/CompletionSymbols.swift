@@ -253,7 +253,18 @@ public enum SQLIntelligence {
     }
     // SQL Server also permits consecutive SELECT statements without semicolons.
     // Each SELECT arm owns its FROM bindings, including UNION and nested queries.
-    let selects=tokens.indices.filter {tokens[$0].kind == .keyword && ["SELECT","UPDATE","DELETE","INSERT","MERGE"].contains(tokens[$0].text.uppercased())}
+    // WHEN actions belong to their MERGE statement, not independent DML scopes.
+    var mergeAt:[Int:Int]=[:],currentMerge:[Int:Int]=[:]
+    for i in tokens.indices {
+      let parent=parents[i] ?? -1,word=tokens[i].text.uppercased()
+      if word=="MERGE" {currentMerge[parent]=i}
+      if let merge=currentMerge[parent] {mergeAt[i]=merge}
+      if tokens[i].text==";" || SQLRoutineDefinition.isBatchSeparator(tokens[i],source:original) {currentMerge[parent]=nil}
+    }
+    let selects=tokens.indices.filter {
+      tokens[$0].kind == .keyword && ["SELECT","UPDATE","DELETE","INSERT","MERGE"].contains(tokens[$0].text.uppercased())
+        && !(mergeAt[$0] != nil && ["UPDATE","DELETE","INSERT"].contains(tokens[$0].text.uppercased()))
+    }
     var starts = [Int](repeating:0,count:tokens.count), ends = [Int](repeating:original.length,count:tokens.count), start = 0
     for i in tokens.indices {
       starts[i] = start
@@ -318,7 +329,8 @@ public enum SQLIntelligence {
     var references: [(Int,[String],NSRange)] = []
     var targets:[(index:Int,verb:String)]=[]
     var insertLists: [(open: Int, binding: Int)] = []
-    for i in tokens.indices where ["FROM","JOIN","UPDATE","DELETE","INSERT","INTO","APPLY","EXEC","EXECUTE"].contains(tokens[i].text.uppercased()) {
+    var mergeSources:[(binding:Int,body:NSRange?)]=[]
+    for i in tokens.indices where ["FROM","JOIN","UPDATE","DELETE","INSERT","INTO","APPLY","EXEC","EXECUTE","MERGE","USING"].contains(tokens[i].text.uppercased()) {
       try Task.checkCancellation()
       var j = i+1, parts: [String] = [], indices: [Int] = []
       let verb=tokens[i].text.uppercased()
@@ -328,12 +340,15 @@ public enum SQLIntelligence {
         else if j < tokens.count,tokens[j].kind == .number {j+=1}
         if j < tokens.count,tokens[j].text.uppercased() == "PERCENT" {j+=1}
       }
-      if ["DELETE","INSERT"].contains(verb),j < tokens.count,["FROM","INTO"].contains(tokens[j].text.uppercased()) {continue}
+      if ["DELETE","INSERT","MERGE"].contains(verb),j < tokens.count,["FROM","INTO"].contains(tokens[j].text.uppercased()) {continue}
+      if verb=="USING",mergeAt[i]==nil {continue}
       if j < tokens.count, tokens[j].text == "(", let close = closes[j] {
+        let body=NSRange(location:NSMaxRange(tokens[j].range),length:max(0,tokens[close].range.location-NSMaxRange(tokens[j].range)))
         j = close+1; if j < tokens.count && tokens[j].text.uppercased() == "AS" { j += 1 }
         if j < tokens.count, tokens[j].kind == .word {
           let name = raw(tokens[j].text); ignored.insert(j)
           bindings.append(Binding(alias:name,explicitAlias:true,parts:[name],columns:local[name.lowercased()],scope:scope(i)))
+          if verb=="USING" {mergeSources.append((bindings.count-1,body))}
         }
         continue
       }
@@ -350,16 +365,24 @@ public enum SQLIntelligence {
       if insertTarget, columnStart < tokens.count, tokens[columnStart].text.uppercased() == "WITH",
         columnStart + 1 < tokens.count, tokens[columnStart + 1].text == "(", let close = closes[columnStart + 1] { columnStart = close + 1 }
       let insertOpen = insertTarget && columnStart < tokens.count && tokens[columnStart].text == "(" ? columnStart : nil
+      let mergeTarget=verb=="MERGE" || verb=="INTO" && head.map {tokens[$0].text.uppercased()=="MERGE"} == true
+      if mergeTarget,j+1<tokens.count,tokens[j].text.uppercased()=="WITH",tokens[j+1].text=="(",let close=closes[j+1] {j=close+1}
       var alias = parts.last!, explicitAlias = false
       if j < tokens.count && tokens[j].text == "(", let close = closes[j] { j = close+1 }
       if j < tokens.count && tokens[j].text.uppercased() == "AS" { ignored.insert(j); j += 1 }
       if j < tokens.count && tokens[j].kind == .word { alias = raw(tokens[j].text); explicitAlias = true; ignored.insert(j) }
       let columns = local[name] ?? (resolved?.kind == "SYNONYM" ? nil : resolved?.columns)
       bindings.append(Binding(alias:alias,explicitAlias:explicitAlias,parts:parts,columns:columns,scope:scope(i)))
+      if verb=="USING" {mergeSources.append((bindings.count-1,nil))}
       if let insertOpen { insertLists.append((insertOpen, bindings.count - 1)) }
-      if ["UPDATE","DELETE","INSERT","INTO"].contains(verb) {targets.append((bindings.count-1,verb))}
+      if ["UPDATE","DELETE","INSERT","INTO","MERGE"].contains(verb) {targets.append((bindings.count-1,mergeTarget ? "MERGE":verb))}
       if verb == "FROM",let head=tokens.indices.last(where:{$0<i && parents[$0]==parents[i] && tokens[$0].range.location>=starts[i] && ["SELECT","UPDATE","DELETE","INSERT"].contains(tokens[$0].text.uppercased())}),tokens[head].text.uppercased() == "DELETE",!targets.contains(where:{$0.verb == "DELETE" && bindings[$0.index].scope == scope(i)}) {targets.append((bindings.count-1,"DELETE"))}
       references.append((i,parts,NSRange(location:tokens[indices[0]].range.location,length:NSMaxRange(tokens[indices.last!].range)-tokens[indices[0]].range.location)))
+    }
+    for i in tokens.indices where tokens[i].text.uppercased()=="INSERT" && mergeAt[i] != nil {
+      guard i+1<tokens.count,tokens[i+1].text=="(",
+        let target=targets.first(where:{$0.verb=="MERGE" && bindings[$0.index].scope==scope(i)}) else {continue}
+      insertLists.append((i+1,target.index))
     }
     // An UPDATE/DELETE target may name a FROM alias. Resolve that target from
     // the same statement before de-duplicating; an unresolved target must not
@@ -381,15 +404,40 @@ public enum SQLIntelligence {
     }
     let targetBindings=targets.map {($0.verb,bindings[$0.index])}
     for (verb,binding) in targetBindings {
-      let names=verb == "UPDATE" ? ["inserted","deleted"] : verb == "DELETE" ? ["deleted"] : ["inserted"]
+      let names=["UPDATE","MERGE"].contains(verb) ? ["inserted","deleted"] : verb == "DELETE" ? ["deleted"] : ["inserted"]
       // OUTPUT pseudo-tables are offered only after an OUTPUT in this scope.
       if tokens.contains(where:{$0.text.uppercased() == "OUTPUT" && contains(binding.scope,$0.range.location) && $0.range.location < caret}) {
         for name in names {bindings.append(Binding(alias:name,explicitAlias:true,parts:binding.parts,columns:binding.columns,scope:binding.scope))}
       }
     }
     guard bindings.count <= 128 else { return Analysis(tokens:all,diagnostics:[],suggestions:[],replacement:replacement) }
+    var mergeExclusions:[(range:NSRange,indices:Set<Int>)]=[]
+    for source in mergeSources {
+      let binding=bindings[source.binding]
+      if let body=source.body {
+        // USING derived SELECTs cannot reference their own alias or the target.
+        mergeExclusions.append((body,Set(bindings.indices.filter {bindings[$0].scope==binding.scope})))
+      }
+      guard let target=targets.first(where:{$0.verb=="MERGE" && bindings[$0.index].scope==binding.scope}),
+        let merge=tokens.indices.first(where:{tokens[$0].range.location==binding.scope.location && tokens[$0].text.uppercased()=="MERGE"}) else {continue}
+      let peers=tokens.indices.filter {mergeAt[$0]==merge}
+      let actions=peers.filter {tokens[$0].text.uppercased()=="WHEN"}
+      for (offset,action) in actions.enumerated() {
+        var end=offset+1<actions.count ? tokens[actions[offset+1]].range.location:NSMaxRange(binding.scope)
+        let body=peers.filter {$0>=action && tokens[$0].range.location<end}
+        if let output=body.first(where:{["OUTPUT","OPTION"].contains(tokens[$0].text.uppercased())}) {end=tokens[output].range.location}
+        if body.contains(where:{$0>0 && tokens[$0].text.uppercased()=="SOURCE" && tokens[$0-1].text.uppercased()=="BY"}) {
+          mergeExclusions.append((NSRange(location:tokens[action].range.location,length:max(0,end-tokens[action].range.location)),[source.binding]))
+        }
+        if body.contains(where:{tokens[$0].text.uppercased()=="INSERT"}),let values=body.first(where:{tokens[$0].text.uppercased()=="VALUES"}) {
+          mergeExclusions.append((NSRange(location:tokens[values].range.location,length:max(0,end-tokens[values].range.location)),[target.index]))
+        }
+      }
+    }
     func activeBindings(_ location: Int) -> [Binding] {
-      let visible = bindings.filter { contains($0.scope,location) }.sorted { $0.scope.length < $1.scope.length }
+      var excluded=Set<Int>()
+      for exclusion in mergeExclusions where contains(exclusion.range,location) {excluded.formUnion(exclusion.indices)}
+      let visible=bindings.indices.filter { !excluded.contains($0) && contains(bindings[$0].scope,location) }.map {bindings[$0]}.sorted {$0.scope.length<$1.scope.length}
       var seen = Set<String>()
       return visible.filter { seen.insert($0.alias.lowercased()).inserted }
     }
@@ -555,13 +603,18 @@ public enum SQLIntelligence {
       else if token.kind == .keyword,clauseWords.contains(token.text.uppercased()) {clauses[clauses.count-1]=token.text.uppercased()}
     }
     let clause=clauses.last ?? ""
-    let readPosition=["FROM","JOIN","APPLY"].contains(context.last?.text.uppercased() ?? "") || context.last?.text == "," && clause == "FROM"
-    let objectPosition = execution || readPosition || ["UPDATE","DELETE","INSERT","INTO"].contains(context.last?.text.uppercased() ?? "")
+    let readPosition=["FROM","JOIN","APPLY","USING"].contains(context.last?.text.uppercased() ?? "") || context.last?.text == "," && clause == "FROM"
+    let objectPosition = execution || readPosition || ["UPDATE","DELETE","INSERT","INTO","MERGE"].contains(context.last?.text.uppercased() ?? "")
     let prior=qualifier == nil ? all.last {![.space,.comment].contains($0.kind) && NSMaxRange($0.range)<=replacement.location}:context.last
     let priorIsOperand=prior.map {[Lexeme.Kind.word,.variable,.number,.string].contains($0.kind) || $0.text == ")"} ?? false
     let topNumber=context.count>=2 && context[context.count-2].text.uppercased() == "TOP"
     let topParenthesis=prior?.text == ")" && closes.contains {open,close in open>0 && tokens[open-1].text.uppercased() == "TOP" && tokens[close].range == prior?.range}
     let scalarPosition = !remoteQualifier && !inDefinitionHeader && context.last?.text.uppercased() != "AS" && ["SELECT","WHERE","ON","HAVING","SET","ORDER","GROUP","BY","OUTPUT","VALUES","RETURN","CALL"].contains(clause) && (!priorIsOperand || topNumber || topParenthesis)
+    let mergeTarget=targetBindings.first {$0.0=="MERGE" && contains($0.1.scope,caret)}?.1
+    let mergeAssignment=mergeTarget != nil && clause=="SET" && context.last.map {token in
+      guard token.text=="," || token.text.uppercased()=="SET",let index=tokens.firstIndex(where:{$0.range==token.range}),let merge=mergeAt[index] else {return false}
+      return parents[index]==parents[merge]
+    } == true
     let nextToken=tokens.first {$0.range.location>=NSMaxRange(replacement) && $0.range.location>replacement.location}
     func objectSuggestion(_ item:CatalogSymbol,call:Bool)->Suggestion {
       let schemaRequired=includeSchema || catalog?.needsSchema(item) == true
@@ -627,6 +680,10 @@ public enum SQLIntelligence {
         if execution,qualifier == nil || ["sys","dbo"].contains(qualifier?.lowercased() ?? "") {
           let existing=Set(suggestions.map {$0.label.uppercased()})
           suggestions += TSQL.systemProcedures.sorted().filter {$0.lowercased().contains(needle) && !existing.contains($0)}.prefix(max(0,100-suggestions.count)).map {Suggestion(text:$0,label:$0,kind:.procedure,detail:"SQL Server sistem yordamı")}
+        }
+      } else if mergeAssignment,let mergeTarget {
+        if qualifier==nil || qualifier?.lowercased()==mergeTarget.alias.lowercased() {
+          try appendColumns(from:[mergeTarget],alreadyQualified:qualifier != nil)
         }
       } else if let qualifier {
         if let binding = visible.first(where: { $0.alias.lowercased() == qualifier.lowercased() }) {

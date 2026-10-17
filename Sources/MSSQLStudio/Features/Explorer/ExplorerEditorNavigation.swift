@@ -80,7 +80,17 @@ extension WorkbenchController {
         outline.layoutSubtreeIfNeeded()
         let row=outline.row(forItem:node)
         guard row>=0 else {throw SQLFailure("Nesne satırı görüntülenemedi.")}
-        outline.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false);outline.scrollRowToVisible(row)
+        outline.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)
+        rebuildSearchScopes(selecting:db)
+        changeSearchScope()
+        explorer.view.layoutSubtreeIfNeeded()
+        if let scroll=outline.enclosingScrollView {
+          let clip=scroll.contentView,rect=outline.rect(ofRow:row)
+          var proposed=clip.bounds
+          proposed.origin.y=rect.midY-proposed.height/2
+          clip.scroll(to:clip.constrainBoundsRect(proposed).origin)
+          scroll.reflectScrolledClipView(clip)
+        }
         view.window?.makeKeyAndOrderFront(nil);view.window?.makeFirstResponder(outline)
       } catch {if current() {state.showError(error.localizedDescription)}}
     }

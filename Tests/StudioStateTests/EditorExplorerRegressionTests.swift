@@ -4,6 +4,33 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct EditorExplorerRegressionTests {
+  @Test func explorerHeaderCollapseAllPersistsWithoutDisconnectingOrReloading() throws {
+    _=NSApplication.shared
+    let suite="collapse-explorer-"+UUID().uuidString
+    let defaults=try #require(UserDefaults(suiteName:suite));defer {defaults.removePersistentDomain(forName:suite)}
+    let state=StudioState();state.explorerTreeDefaults=defaults;state.historyEnabled=false;state.recoveryEnabled=false
+    let server=ConnectedServer(profile:.init(name:"Fixture"),password:"")
+    server.online=false;server.databases=[CatalogItem(id:5,name:"Demo")];state.servers=[server]
+    let host=WorkbenchController(state:state);_=host.view
+    func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+    let button=try #require(descendants(host.view).compactMap {$0 as? NSButton}.first {$0.accessibilityIdentifier()=="collapseExplorerBranches"})
+    #expect(button.image != nil)
+    let root=try #require(host.roots.first),databases=try #require(root.children.first),db=try #require(databases.children.first)
+    databases.loaded=true;db.loaded=true
+    host.outline.expandItem(root);host.outline.expandItem(databases);host.outline.expandItem(db)
+    host.expansionState["remembered-unloaded-descendant"]=true
+    let generation=server.generation
+    #expect(host.outline.isItemExpanded(db))
+    #expect(NSApp.sendAction(try #require(button.action),to:button.target,from:button))
+    #expect(!host.outline.isItemExpanded(root) && !host.outline.isItemExpanded(databases) && !host.outline.isItemExpanded(db))
+    #expect(host.expansionState.values.allSatisfy {!$0})
+    #expect(defaults.dictionary(forKey:"explorerExpansionState") as? [String:Bool]==host.expansionState)
+    host.reloadExplorer()
+    #expect(!host.outline.isItemExpanded(root))
+    host.outline.expandItem(root)
+    #expect(!host.outline.isItemExpanded(databases))
+    #expect(server.generation==generation && !server.online && !server.reconnecting && state.documents.isEmpty)
+  }
   @Test func literalColorsStayCorrectAfterEveryNativeEditWithoutCompletionDelay() throws {
     _=NSApplication.shared
     let previous=UserDefaults.standard.string(forKey:"ssmsTheme");defer {StudioTheme.apply(previous ?? "light")}

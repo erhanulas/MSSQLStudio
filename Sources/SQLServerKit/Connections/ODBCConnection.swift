@@ -90,6 +90,7 @@ public final class ODBCConnection: @unchecked Sendable {
   public func execute(
     _ text: String, limits: Limits = Limits(), events: (@Sendable (QueryEvent) -> Void)? = nil
   ) async throws -> Execution {
+    guard limits.timeout>=0,UInt64(limits.timeout)<=UInt64(UInt32.max) else {throw SQLFailure("Sorgu zaman aşımı geçersiz.")}
     guard !text.isEmpty, !text.contains("\0"), text.utf16.count < Int(Int32.max) else {
       throw SQLFailure("SQL metni boş, geçersiz veya çok uzun.")
     }
@@ -161,7 +162,7 @@ public final class ODBCConnection: @unchecked Sendable {
     try check(
       SQLSetStmtAttr(
         handle, SQLINTEGER(SQL_ATTR_QUERY_TIMEOUT),
-        UnsafeMutableRawPointer(bitPattern: max(1, limits.timeout)), 0),
+        UnsafeMutableRawPointer(bitPattern: limits.timeout), 0),
       kind: SQLSMALLINT(SQL_HANDLE_STMT), handle: handle)
     func cancelledCheck() throws {
       if lock.withLock({ cancelled }) { throw SQLFailure("Sorgu iptal edildi.") }

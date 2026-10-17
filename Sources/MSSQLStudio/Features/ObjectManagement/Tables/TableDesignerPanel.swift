@@ -67,11 +67,9 @@ struct TableDesignerPanel: View {
     VStack(alignment:.leading,spacing:8) {
       HStack {
         Button {
-          let id=min(0,model.columns.map(\.id).min() ?? 0)-1
-          var name="NewColumn",suffix=2
-          while model.columns.contains(where:{$0.name.caseInsensitiveCompare(name) == .orderedSame}) {name="NewColumn\(suffix)";suffix+=1}
-          model.columns.append(SQLServerKit.TableColumn(id:id,name:name));selectedColumn=id
-        } label:{Label("Kolon Ekle",systemImage:"plus")}.accessibilityIdentifier("addDesignerColumn")
+          commitFields()
+          if let id=model.addColumn() {selectedColumn=id}
+        } label:{Label("Kolon Ekle",systemImage:"plus")}.disabled(!model.canAddColumn).accessibilityIdentifier("addDesignerColumn")
         Button(role:.destructive) {commitFields();model.columns.removeAll {$0.id==selectedColumn};model.primary.remove(selectedColumn);selectedColumn=Int.min} label:{Label("Seçili Kolonu Kaldır",systemImage:"minus.circle")}.disabled(!model.columns.contains {$0.id==selectedColumn}).accessibilityIdentifier("removeDesignerColumn")
         Spacer()
         Text(model.columns.first(where:{$0.id==selectedColumn}).map {"Seçili: "+$0.name} ?? "Düzenlemek için satıra tıklayın").font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -80,10 +78,15 @@ struct TableDesignerPanel: View {
       ScrollViewReader { proxy in
       ScrollView([.horizontal,.vertical]) {
         LazyVStack(alignment:.leading,spacing:6) {
-          HStack {Color.clear.frame(width:28,height:1);Text("Kolon adı").frame(width:150);Text("Veri tipi / boyut").frame(width:224);Text("NULL").frame(width:45);Text("PK").frame(width:40);Text("Identity").frame(width:70);Text("Default / computed").frame(width:240,alignment:.leading)}.font(.caption).foregroundStyle(.secondary)
+          HStack(spacing:TableColumnLayout.spacing) {
+            Color.clear.frame(width:TableColumnLayout.widths[0],height:1)
+            ForEach(Array(["Kolon adı","Veri tipi / boyut","NULL","PK","Identity","Default / computed"].enumerated()),id:\.offset) {index,title in
+              Text(title).frame(width:TableColumnLayout.widths[index+1],alignment:[0,1,5].contains(index) ? .leading:.center)
+            }
+          }.frame(width:TableColumnLayout.width,alignment:.leading).font(.caption).foregroundStyle(.secondary)
           ForEach($model.columns) { $column in
-            TableColumnEditor(column:$column,primary:Binding(get:{model.primary.contains(column.id)},set:{if $0 {model.primary.insert(column.id)} else {model.primary.remove(column.id)}}),choices:model.types,selected:selectedColumn==column.id,existing:model.original?.columns.contains(where:{$0.id==column.id}) == true,generated:model.original?.columns.first(where:{$0.id==column.id})?.generated == true,select:{selectedColumn=column.id})
-              .frame(width:945,height:30)
+            TableColumnEditor(column:$column,primary:Binding(get:{model.primary.contains(column.id)},set:{if $0 {model.primary.insert(column.id)} else {model.primary.remove(column.id)}}),choices:model.types,selected:selectedColumn==column.id,existing:model.original?.columns.contains(where:{$0.id==column.id}) == true,generated:model.original?.columns.first(where:{$0.id==column.id})?.generated == true,focusRequested:model.requestedColumnFocus==column.id,focused:{if model.requestedColumnFocus==column.id {model.requestedColumnFocus=nil}},select:{selectedColumn=column.id})
+              .frame(width:TableColumnLayout.width,height:30)
               .padding(.vertical,3).background(selectedColumn == column.id ? Color.accentColor.opacity(0.13) : Color.clear).overlay(alignment:.leading) {if selectedColumn == column.id {Rectangle().fill(Color.accentColor).frame(width:2)}}.contentShape(Rectangle()).simultaneousGesture(TapGesture().onEnded {selectedColumn=column.id}).id(column.id)
           }
         }.padding(.vertical,8)

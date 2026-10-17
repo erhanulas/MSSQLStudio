@@ -30,6 +30,7 @@ import UniformTypeIdentifiers
   var databaseIdentity:[String]?
   var loaded = false
   var loading = false
+  var refreshAfterLoad = false
   var error: String?
   init(
     _ title: String, kind: Kind, server: ConnectedServer, database: String = "master",

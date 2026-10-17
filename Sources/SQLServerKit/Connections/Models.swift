@@ -189,6 +189,7 @@ public struct Limits: Sendable {
   public var cellBytes = 2_097_152
   public var totalBytes = 67_108_864
   public var resultSets = 100
+  /// Statement execution timeout in seconds; 0 means unlimited, independently of login timeout.
   public var timeout = 60
   public init() {}
 }

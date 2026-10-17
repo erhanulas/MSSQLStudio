@@ -24,6 +24,8 @@ import SQLServerKit
   private var sourceLineCount=1
   private var displayLineCount=1
   private var lastClipOrigin=NSPoint.zero
+  private var resizingViewport=false
+  private var laidOutViewport:NSRect?
   private var occurrenceTask: Task<Void,Never>?
   private let parameterPopover=NSPopover()
   private var parameterTask:Task<Void,Never>?
@@ -160,6 +162,7 @@ import SQLServerKit
     ruler.translatesAutoresizingMaskIntoConstraints = false; findContainer.translatesAutoresizingMaskIntoConstraints = false
     rulerTop=ruler.topAnchor.constraint(equalTo:surface.topAnchor)
     findContainer.heightChanged = { [weak self] height in self?.rulerTop?.constant=height }
+    findContainer.viewportChanged = { [weak self] origin in self?.resizeToViewport(preserving:origin) }
     rulerWidth=ruler.widthAnchor.constraint(equalToConstant:44)
     NSLayoutConstraint.activate([
       ruler.leadingAnchor.constraint(equalTo:surface.leadingAnchor), rulerTop!,
@@ -262,11 +265,16 @@ import SQLServerKit
     ]
     editor.typingAttributes[.font] = StudioTheme.codeFont
     editor.typingAttributes[.foregroundColor] = StudioTheme.editorText
-    scroll.backgroundColor = StudioTheme.editorCanvas
+    scroll.refreshBackground()
+    surface.layer?.backgroundColor=StudioTheme.editorCanvas.cgColor
+    findContainer.wantsLayer=true;findContainer.layer?.backgroundColor=StudioTheme.editorCanvas.cgColor
     highlight()
     ruler.needsDisplay = true
   }
-  func resizeToViewport() {
+  func resizeToViewport(preserving origin:NSPoint?=nil) {
+    guard !resizingViewport else {return}
+    resizingViewport=true;defer {resizingViewport=false}
+    let anchor=origin ?? scroll.contentView.bounds.origin
     let font=editor.font ?? StudioTheme.codeFont
     var geometryChanged=false
     if measuredSource != document.sql || measuredFont != font {
@@ -307,21 +315,24 @@ import SQLServerKit
     // under the pointer. Ordinary SQL must not gain a viewport of empty scroll.
     let trailingHeight=folded.isEmpty ? 0:scroll.contentView.bounds.height
     let height=max(scroll.contentView.bounds.height,textHeight+trailingHeight)
-    if editor.frame.size != NSSize(width: width, height: height) {
-      editor.setFrameSize(NSSize(width: width, height: height))
-      editor.needsDisplay = true
-    }
-    // Populate newly exposed TextKit fragments within this resize transaction.
-    editor.layoutSubtreeIfNeeded()
-    editor.textLayoutManager?.textViewportLayoutController.layoutViewport()
-    if width <= scroll.contentView.bounds.width + 0.5 && scroll.contentView.bounds.origin.x != 0 {
-      scroll.contentView.scroll(to: NSPoint(x: 0, y: scroll.contentView.bounds.origin.y))
-      scroll.reflectScrolledClipView(scroll.contentView)
+    let frameChanged=editor.frame.size != NSSize(width:width,height:height)
+    if frameChanged {
+      editor.setFrameSize(NSSize(width:width,height:height))
+      editor.needsDisplay=true
     }
     let clip=scroll.contentView
-    let constrained=clip.constrainBoundsRect(clip.bounds)
+    var proposed=clip.bounds;proposed.origin=anchor
+    if width<=clip.bounds.width+0.5 {proposed.origin.x=0}
+    let constrained=clip.constrainBoundsRect(proposed)
     if constrained.origin != clip.bounds.origin {
       clip.scroll(to:constrained.origin);scroll.reflectScrolledClipView(clip)
+    }
+    // Prepare exposed fragments in the child resize, before its layers are displayed.
+    // The owner's later layout must not repeat an identical TextKit viewport pass.
+    if geometryChanged || frameChanged || laidOutViewport != clip.bounds {
+      editor.layoutSubtreeIfNeeded()
+      editor.textLayoutManager?.textViewportLayoutController.layoutViewport()
+      laidOutViewport=clip.bounds
     }
     occurrenceHighlights.frame=scroll.contentView.bounds
     occurrenceHighlights.needsDisplay=true

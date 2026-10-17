@@ -9,6 +9,48 @@ import SQLServerKit
     var value=TableDefinition(schema:"dbo",name:"T",columns:[.init(id:1,name:"A",type:"int",nullable:false),.init(id:2,name:"B",type:"int",nullable:false),.init(id:3,name:"Name",type:"nvarchar(50)")],primaryKey:["B","A"],primaryKeyName:"PK_T",definitions:[.init(name:"IX_Name",kind:"INDEX",sql:"CREATE NONCLUSTERED INDEX [IX_Name] ON [dbo].[T] ([Name] DESC) WITH (FILLFACTOR = 80) ON [PRIMARY];")])
     value.objectID=42;return value
   }
+  @Test func addingColumnStartsBlankFocusesNameAndBlocksAnotherUntilNamed() async throws {
+    _=NSApplication.shared
+    let model=TableDesignerModel(load:{self.table()},apply:{_ in self.table()})
+    await model.load()
+    let host=NSHostingController(rootView:TableDesignerPanel(server:"Fixture",database:"Demo",model:model,open:{_ in}))
+    host.sizingOptions=[]
+    let window=StudioPanelWindow(contentViewController:host)
+    window.isReleasedWhenClosed=false;window.setContentSize(NSSize(width:1100,height:750));window.makeKeyAndOrderFront(nil)
+    defer {window.close()}
+    func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
+    try await Task.sleep(for:.milliseconds(120));host.view.layoutSubtreeIfNeeded()
+    #expect(model.canAddColumn)
+    let added=try #require(model.addColumn())
+    #expect(model.columns.last?.id==added)
+    for _ in 0..<100 where model.requestedColumnFocus != nil {try await Task.sleep(for:.milliseconds(10))}
+    host.view.layoutSubtreeIfNeeded()
+    let row=try #require(descendants(host.view).compactMap {$0 as? TableColumnEditorView}.first {$0.name.stringValue.isEmpty})
+    #expect(model.columns.count==4 && model.columns.last?.name=="" && model.requestedColumnFocus==nil)
+    #expect((window.firstResponder as? NSTextView)?.delegate as? NSTextField === row.name)
+    #expect(!model.canAddColumn && !model.canPrepare && model.addColumn()==nil)
+    row.name.stringValue="   "
+    row.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:row.name))
+    #expect(!model.canAddColumn && model.addColumn()==nil)
+    row.name.stringValue="A_LONG_COLUMN_NAME_FOR_THE_NEW_COLUMN"
+    row.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:row.name))
+    #expect(model.canAddColumn && model.canPrepare)
+    #expect(abs(row.name.frame.width-260)<1)
+    let fields:[NSView]=[row.name,row.type,row.defaultSQL]
+    let expected:[CGFloat]=[36,304,715]
+    for (field,x) in zip(fields,expected) {
+      let alignment=field.alignmentRect(forFrame:field.frame)
+      #expect(abs(row.convert(alignment,from:field.superview).minX-x)<1)
+    }
+    for (label,index) in [("NULL",3),("PK",4),("Identity",5)] {
+      let flag=try #require(descendants(row).compactMap {$0 as? NSButton}.first {$0.accessibilityLabel()==label})
+      let center=TableColumnLayout.widths.prefix(index).reduce(0,+)+CGFloat(index)*TableColumnLayout.spacing+TableColumnLayout.widths[index]/2
+      #expect(abs(row.convert(flag.bounds,from:flag).midX-center)<1)
+    }
+    let bitmap=try #require(host.view.bitmapImageRepForCachingDisplay(in:host.view.bounds))
+    host.view.cacheDisplay(in:host.view.bounds,to:bitmap)
+    try bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-designer-column-layout.png"))
+  }
   @Test func columnNameTabsToDataTypeAndSizeAndBack() async throws {
     _=NSApplication.shared
     let model=TableDesignerModel(load:{self.table()},apply:{_ in self.table()})

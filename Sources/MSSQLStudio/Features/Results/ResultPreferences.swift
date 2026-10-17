@@ -14,7 +14,7 @@ import SwiftUI
     var limits = Limits(); limits.diskResults = true
     limits.rows = rows==0 || rows==Int.max ? Int.max:bounded(rows,range:1...5_000_000,fallback:500)
     limits.totalBytes = limits.rows <= 50_000 ? 67_108_864 : 2_147_483_648
-    limits.timeout = limits.rows <= 50_000 ? 60 : 600
+    limits.timeout = QueryExecutionPreferences.timeoutSeconds
     return limits
   }
   static func save(rows: Int, refresh: Int) {

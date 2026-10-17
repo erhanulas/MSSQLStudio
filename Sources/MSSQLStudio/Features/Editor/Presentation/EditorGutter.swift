@@ -1,8 +1,18 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 import SQLServerKit
 
 @MainActor final class SQLEditorScrollView: NSScrollView {
+  func refreshBackground() {
+    let color=StudioTheme.editorCanvas
+    backgroundColor=color;contentView.backgroundColor=color
+    contentView.wantsLayer=true
+    CATransaction.begin();CATransaction.setDisableActions(true)
+    layer?.backgroundColor=color.cgColor;contentView.layer?.backgroundColor=color.cgColor
+    CATransaction.commit()
+  }
+  override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance();refreshBackground()}
   override func hitTest(_ point: NSPoint) -> NSView? {
     let hit = super.hitTest(point)
     let local = convert(point, from: superview)
@@ -21,6 +31,7 @@ import SQLServerKit
   // NSTextFinder also uses the protocol content view for its wrap indicator.
   func contentView()->NSView? {scroll.contentView}
   var heightChanged:((CGFloat)->Void)?
+  var viewportChanged:((NSPoint)->Void)?
   var findBarView:NSView? {didSet {
     if oldValue !== findBarView {oldValue?.removeFromSuperview();if let findBarView {addSubview(findBarView)}}
     retile()
@@ -40,8 +51,10 @@ import SQLServerKit
     super.layout()
     let height=min(bounds.height,barHeight)
     if let bar=findBarView {bar.setFrameOrigin(.zero);bar.setFrameSize(NSSize(width:bounds.width,height:bar.frame.height))}
+    let origin=scroll.contentView.bounds.origin
     scroll.frame=NSRect(x:0,y:height,width:bounds.width,height:max(0,bounds.height-height))
     scroll.tile()
+    viewportChanged?(origin)
   }
 }
 @MainActor final class SQLClipView: NSClipView {

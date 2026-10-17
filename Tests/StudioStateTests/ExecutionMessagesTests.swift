@@ -28,6 +28,10 @@ import Testing
     #expect(source.substring(with:target.source)=="SELEC broken;" && target.source.location==source.range(of:"SELEC broken;").location)
     func descendants(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(descendants)}
     let messages=try #require(descendants(controller.view).compactMap {$0 as? ResultMessagesView}.first)
+    #expect(messages.textStorage?.attribute(.link,at:target.message.location,effectiveRange:nil) != nil)
+    #expect(messages.textStorage?.attribute(.underlineStyle,at:target.message.location,effectiveRange:nil) as? Int == 0)
+    #expect(messages.linkTextAttributes?[.underlineStyle] as? Int == 0)
+    #expect(messages.linkTextAttributes?[.foregroundColor] as? NSColor == StudioTheme.danger)
     #expect(messages.textView(messages,clickedOnLink:URL(string:"studio-error://1")!,at:target.message.location))
     #expect(doc.selectedRange==target.source)
     controller.toggleResults();controller.update()
