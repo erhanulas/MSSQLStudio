@@ -1,3 +1,9 @@
+## v0.2.181 yayın hazırlığı — 17 Ekim 2026
+
+- v0.2.180 Actions 39028097048 paket testlerinde başarısız oldu; public release açılmadı, latest v0.2.179 olarak kaldı. Native 580 test/97 suite içinden üç testte beş issue; SQLServerKit 415/77 ve SQLTextCore 8/2 tamamlandı.
+- CI ekranı 1008 pt içerik genişliği sağladı. Profiler testinin >1200 ekran varsayımı kaldırıldı; gerçek panel genişlemesi eski 420 pt sınırını aşacak şekilde güçlendirildi. Sekme taşıma testi 680×400 içerikle görünür ekranın güvenli bölgesinde aynı 80 pt hareketi ve 60 ara hareketin state değişmezliğini sınar; title bar ekran sınırına çarptığı koordinatlar kullanılmaz.
+- Hover testi sabit 250 ms yerine en fazla 2 saniye gerçek tooltip koşulunu bekler. Ürün kodu ve kullanıcı davranışı değişmedi. İlk hedefli derlemedeki CGFloat/Int test hatası düzeltildi; `/tmp/mssql181-ui-tests.log`: 39 native test / 3 suite geçti. Architecture/source eşliği ve diff kontrolü geçti. Tam paket testleri yeni tag CI akışında çalışacaktır.
+
 ## v0.2.180 yayın hazırlığı ve tam kapsam denetimi — 17 Ekim 2026
 
 - Profiler genel filtre şablonları ve önceki ODBC paket boyutu düzeltmesi birlikte hazırlanır; derleme 181. Önceki 61 Profiler testi/Release ve ODBC hedefli kanıtları korunur. Güncel AGENTS.md yayın kapsamı nedeniyle tam suite çalıştırıldı; başarısız/eksik özetler başarı sayılmadı.

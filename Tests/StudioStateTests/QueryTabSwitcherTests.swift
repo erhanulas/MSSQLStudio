@@ -109,6 +109,10 @@ import Testing
     panel.contentView?.layoutSubtreeIfNeeded()
     let dragArea=try #require(panel.contentView?.subviews.first {$0.identifier?.rawValue=="tabSwitcherDragArea"})
     #expect(dragArea.frame.height==44 && dragArea.frame.width==panel.contentView?.bounds.width)
+    // Keep the drag inside the CI screen; AppKit clamps titled windows at its top edge.
+    panel.setContentSize(NSSize(width:680,height:400))
+    let screen=try #require(panel.screen ?? NSScreen.main).visibleFrame
+    panel.setFrameOrigin(NSPoint(x:screen.minX+20,y:screen.minY+20))
     let selected=switcher.previewID,source=switcher.previewSQL,revision=switcher.keyboardRevealRevision,size=panel.frame.size
     let origin=panel.frame.origin,autosave=panel.frameAutosaveName
     func mouse(_ type:NSEvent.EventType,_ point:NSPoint)->NSEvent {
@@ -120,8 +124,8 @@ import Testing
     dragArea.mouseUp(with:mouse(.leftMouseUp,NSPoint(x:100,y:100)))
     #expect(panel.frame.origin==NSPoint(x:origin.x+80,y:origin.y+80))
     #expect(panel.frameAutosaveName==autosave && !dragArea.mouseDownCanMoveWindow)
-    for offset in 0..<60 {panel.setFrameOrigin(NSPoint(x:100+offset,y:100+offset))}
-    #expect(panel.frame.origin==NSPoint(x:159,y:159) && panel.frame.size==size)
+    for offset in 0..<60 {panel.setFrameOrigin(NSPoint(x:origin.x+CGFloat(offset),y:origin.y+CGFloat(offset)))}
+    #expect(panel.frame.origin==NSPoint(x:origin.x+59,y:origin.y+59) && panel.frame.size==size)
     #expect(switcher.previewID==selected && switcher.previewSQL==source && switcher.keyboardRevealRevision==revision)
     #expect(state.active === original)
   }

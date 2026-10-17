@@ -119,7 +119,10 @@ import Testing
     button.mouseEntered(with:event)
     #expect(button.layer?.borderWidth==0 && button.clipsToBounds)
     #expect((button.cell as? NSButtonCell)?.highlightsBy.isEmpty==true)
-    try await Task.sleep(for:.milliseconds(250))
+    for _ in 0..<100 {
+      if StudioHoverHelp.shared.visibleTitle != nil {break}
+      try await Task.sleep(for:.milliseconds(20))
+    }
     #expect(StudioHoverHelp.shared.visibleTitle=="Çalıştır · ⌃R")
     #expect(window.childWindows?.count==1)
     button.toolTip="Yeni açıklama"

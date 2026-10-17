@@ -149,11 +149,11 @@ private actor ProfilerFilteringProbe {
     let modes=children(host.view).compactMap {$0 as? ProfilerInputModeButton.Button}
     #expect(modes.filter {$0.title=="Liste"}.count==4 && modes.filter {$0.title=="Elle"}.count==2)
     #expect(children(host.view).compactMap {$0 as? NSTextField}.filter {$0.isEditable}.count>=7)
-    #expect(split.bounds.width>1200)
+    #expect(split.bounds.width>=900)
     #expect(split.arrangedSubviews[0].frame.width<320)
-    split.adjustSubviews();split.setPosition(440,ofDividerAt:0)
+    split.adjustSubviews();split.setPosition(460,ofDividerAt:0)
     try await Task.sleep(for:.milliseconds(50));host.view.layoutSubtreeIfNeeded()
-    #expect(split.arrangedSubviews[0].frame.width>350)
+    #expect(split.arrangedSubviews[0].frame.width>420)
     #expect(await model.stop())
     var manual=false
     let choice=NSHostingController(rootView:ProfilerCaptureChoice(title:"Veritabanı",values:["","Demo"],text:.constant("Demo"),manual:Binding(get:{manual},set:{manual=$0})))
