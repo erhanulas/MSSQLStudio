@@ -1,7 +1,14 @@
+## 0.2.188 public release verified — 2026-10-17
+
+- Public latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.188 ; build 189, source `18d8a71580c0a32526183dc8cff28894ba4b955f`.
+- Actions 39065917862 succeeded. Package suite skipped only for this tag per explicit user instruction; no tests rerun for publication. Prior full/targeted/native evidence remains below. CI stable-identity audit, signed app/installer packaging, manifest validation and signed Foundation feed check passed.
+- Downloaded all four public assets; GitHub digests matched SHA-256. ZIP/PKG versions, binaries, bundled notes, strict app/helper signatures and frozen helper archive/binary equivalence passed prepare-release verification. Icon Composer light/dark/tinted variants present. Exact downloaded signed application Foundation feed check passed locally.
+- Evidence: `/tmp/MSSQLStudio-188-public-verification/verification.json`, `feed-check.log`; `/tmp/mssql188-verification.log`. No installation, real Installer run, installed-app restart or live SQL performed.
+
 ## 0.2.188 publication preparation — 2026-10-17
 
 - Explicit user request: publish without rerunning tests. Existing full and targeted evidence below reused; package suite exception applies only to v0.2.188. Stable signing identity/audit, package manifest/hash/frozen-helper checks and signed Foundation update-feed verification remain enabled.
-- Version 0.2.188 / build 189; user-facing notes cover pending table designer, shared window placement, Explorer label/search scope and same-table window reuse. Public verification pending.
+- Version 0.2.188 / build 189; user-facing notes cover pending table designer, shared window placement, Explorer label/search scope and same-table window reuse. Public verification completed; see final receipt above.
 
 ## Explorer click-driven search scope — 2026-10-17 (unpublished)
 
