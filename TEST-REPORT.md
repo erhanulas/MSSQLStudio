@@ -1,3 +1,14 @@
+## v0.2.182 / build 183 public release - 2026-10-17
+
+- Source/tag d2838ee42933404c104e9bb11482c3f97e8c18d6; Actions 39029903286 succeeded. Public latest v0.2.182 includes global Profiler filter templates and ODBC encrypted packet-size negotiation protection. Failed v180/v181 tags were not published or moved.
+- Full signed-package CI summaries: native 580 tests / 97 suites; SQLServerKit 415 / 77; SQLTextCore 8 / 2; isolated modal 1 / 1, all completed successfully. Opt-in live SQL/AI/Keychain skips remain explicit in CI log; these are not live database verification. Targeted native regressions passed before publication.
+- Downloaded four assets: exact version/build, GitHub digests/manifest, release body and packaged/public notes, strict app/helper signatures, frozen helper bytes and all three Icon Composer appearances verified. Downloaded signed application Foundation feed check passed for exact v0.2.182.
+- MSSQLStudio-0.2.182.pkg SHA-256: `a2bea62c8efed2eb7db9b9b2f6f3b9169a311edbccb8a4aa651a74171eeb0331`.
+- MSSQLStudio-0.2.182.zip SHA-256: `adbbe1a51310a042338da44d1791df7c47bd6740639a14ee78d8c736b2b94e0d`.
+- MSSQLStudio-CredentialAgent-v1.zip SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- update.json SHA-256: `1a3e42c38e835af5575866d12124c44783530e276a94576898c86defcc59fad6`.
+- Evidence: /tmp/MSSQLStudio-182-public-verification/ and /tmp/mssql182-ci.log. Installer not run; installed application and user DB sessions untouched. Large ALTER live TLS reproduction and physical-pointer hover were not performed.
+
 ## v0.2.182 release preparation - 2026-10-17
 
 - v0.2.181 Actions 39029151061 stopped before publication: only two synthetic offscreen hover assertions failed. Remaining native tests, core 415/77 and text 8/2 completed; small-screen geometry checks passed.
