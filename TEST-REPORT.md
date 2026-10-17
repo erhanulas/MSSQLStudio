@@ -1,3 +1,9 @@
+## Explorer/query status correction — 2026-10-18 (0.2.191 preparation)
+
+- Root cause: both main and detached footers used QueryDocument.state alone for the disconnected phase. Explorer ready notifications already refreshed both footers, but their text ignored ConnectedServer.online.
+- Shared QueryDocument.disconnectedStatus now distinguishes an online Explorer with a lazy unopened query session; explicit query connection errors retain priority. Neither ODBC session ownership nor lazy connection/execution/catalog synchronization changes. Existing explorerConnectionChanged → updateControls → detached.updateConnectionAppearance/updateStatus routing is preserved.
+- Per the user's active no-tests publication instruction, no new test suite was run. Architecture/source sync/diff checks passed; Release compilation succeeded (`/tmp/mssql-connection-status-release.log`). Live SQL/native visual behavior not revalidated. v0.2.190 was already pushed before the turn interruption; its tag/assets are not rewritten. This follow-up uses 0.2.191/build 192 with the same explicit package-suite exception and mandatory signing/package/feed checks.
+
 ## 0.2.190 release preparation — 2026-10-18
 
 - User explicitly requested publication without rerunning tests. Existing targeted development evidence above is reused for the copy-query shortcut, result spool contention fix and copy success confetti. The exact v0.2.190 package-suite step is skipped; signing audit, signed packaging, frozen-helper, manifest/hash and public feed verification remain required.

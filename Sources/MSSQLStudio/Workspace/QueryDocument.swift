@@ -30,6 +30,10 @@ struct ObjectEditorKey: Codable, Equatable {
   // In-process test injection; normal documents always use their independent ODBC session.
   var databaseChangeFixture: ((String) async throws -> Void)?
   var connectionFixture: ((ServerProfile, String) async throws -> Void)?
+  var disconnectedStatus:String {
+    if let connectionError {return "Bağlantı başarısız: " + connectionError}
+    return server.online ? "Explorer bağlı · Sorgu oturumu beklemede":"Çalıştırıldığında bağlanacak"
+  }
   var connectionError: String?
   var offlinePreviewRequest=UUID()
   var offlinePreview: OfflineDefinitionPreview? {didSet {offlinePreviewRequest=UUID()}}

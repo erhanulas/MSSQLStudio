@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.191",
+    "date": "2026-10-18",
+    "title": "Explorer bağlantısı sorgu durumunda da görünür",
+    "changes": [
+      "Explorer bağlantısı kurulduğunda sorgu penceresinin altındaki durum bilgisi güncellenir. Henüz açılmamış sorgu oturumu ile Explorer bağlantısı ayrı belirtilir.",
+      "Aynı bağlantı bilgisi ayrılmış sorgu pencerelerinde de gösterilir; sorguya ait bağlantı hataları görünür kalır."
+    ]
+  },
+  {
     "version": "0.2.190",
     "date": "2026-10-18",
     "title": "Sonuçlarla sorgu hazırlamak daha pratik",

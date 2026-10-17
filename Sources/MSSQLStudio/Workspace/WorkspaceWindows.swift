@@ -92,7 +92,7 @@ import AppKit
     case .running:phase="Executing…"
     case .connecting:phase="Connecting…"
     case .cancelling:phase="Cancelling…"
-    case .disconnected:phase="Çalıştırıldığında bağlanacak"
+    case .disconnected:phase=doc.disconnectedStatus
     }
     status.stringValue="\(phase) · \(doc.database) · Son çalıştırma: \(doc.lastExecutionDate?.formatted(date:.numeric,time:.standard) ?? "—")"
     selection.stringValue=query.selectionStatus?.text ?? ""

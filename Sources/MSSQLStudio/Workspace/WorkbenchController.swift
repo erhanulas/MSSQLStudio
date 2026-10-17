@@ -497,7 +497,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       context.textColor = .secondaryLabelColor
       let phase: String
       switch doc.state {
-      case .disconnected: phase = doc.connectionError.map {"Bağlantı başarısız: " + $0} ?? "Çalıştırıldığında bağlanacak"
+      case .disconnected: phase = doc.disconnectedStatus
       case .connecting: phase = "Connecting…"
       case .ready: phase = doc.offlinePreview != nil ? "Çevrimdışı tanım · Salt okunur" : doc.definitionLoading ? "Nesne tanımı yükleniyor…" : "Ready"
       case .running: phase = "Executing…"
