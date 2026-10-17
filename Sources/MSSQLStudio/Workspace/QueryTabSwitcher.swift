@@ -13,6 +13,12 @@ private final class TabSwitcherMonitor {
   override var canBecomeMain:Bool {false}
 }
 
+/// Keep window movement in AppKit's native drag loop, outside the SwiftUI/SQL surface.
+@MainActor private final class TabSwitcherDragArea:NSView {
+  override func acceptsFirstMouse(for event:NSEvent?)->Bool {true}
+  override func mouseDown(with event:NSEvent) {window?.performDrag(with:event)}
+}
+
 /// A visible corner target avoids the transparent rounded panel corner's tiny native hit area.
 @MainActor private final class TabSwitcherResizeGrip:NSView {
   override init(frame:NSRect) {
@@ -142,7 +148,8 @@ private final class TabSwitcherMonitor {
     panel.isReleasedWhenClosed=false;panel.isFloatingPanel=true;panel.level = .floating
     panel.titleVisibility = .hidden;panel.titlebarAppearsTransparent=true
     for kind in [NSWindow.ButtonType.closeButton,.miniaturizeButton,.zoomButton] {panel.standardWindowButton(kind)?.isHidden=true}
-    panel.backgroundColor = .clear;panel.isOpaque=false;panel.hasShadow=true
+    // Native window corners/shadow must not depend on an alpha mask of the SQL host.
+    panel.backgroundColor = StudioTheme.panel;panel.isOpaque=true;panel.hasShadow=true
     let content=NSView(),host=NSHostingView(rootView:QueryTabSwitcherView(model:self))
     host.sizingOptions=[];host.translatesAutoresizingMaskIntoConstraints=false
     content.addSubview(host);panel.contentView=content
@@ -151,6 +158,10 @@ private final class TabSwitcherMonitor {
     let size=NSSize(width:min(1040,window.frame.width-48),height:min(600,window.frame.height-80))
     panel.setFrame(NSRect(x:window.frame.midX-size.width/2,y:window.frame.midY-size.height/2,width:size.width,height:size.height),display:true)
     StudioWindowPlacement.restore(panel,role:placementRole,owner:window)
+    let dragArea=TabSwitcherDragArea(frame:.zero)
+    dragArea.identifier = .init("tabSwitcherDragArea")
+    content.addSubview(dragArea);dragArea.translatesAutoresizingMaskIntoConstraints=false
+    NSLayoutConstraint.activate([dragArea.leadingAnchor.constraint(equalTo:content.leadingAnchor),dragArea.trailingAnchor.constraint(equalTo:content.trailingAnchor),dragArea.topAnchor.constraint(equalTo:content.topAnchor),dragArea.heightAnchor.constraint(equalToConstant:44)])
     let grip=TabSwitcherResizeGrip(frame:.zero)
     content.addSubview(grip);grip.translatesAutoresizingMaskIntoConstraints=false
     NSLayoutConstraint.activate([grip.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-2),grip.bottomAnchor.constraint(equalTo:content.bottomAnchor,constant:-2),grip.widthAnchor.constraint(equalToConstant:20),grip.heightAnchor.constraint(equalToConstant:20)])
@@ -275,8 +286,7 @@ private struct QueryTabSwitcherView:View {
         Spacer()
         Text(model.acceptanceHint+"     esc · Vazgeç").foregroundStyle(.secondary)
       }.font(.system(size:11)).padding(.trailing,12)
-    }.padding(16).background(Color(nsColor:StudioTheme.panel)).clipShape(RoundedRectangle(cornerRadius:12))
-      .overlay(RoundedRectangle(cornerRadius:12).stroke(Color(nsColor:StudioTheme.border),lineWidth:1).allowsHitTesting(false))
+    }.padding(16).background(Color(nsColor:StudioTheme.panel))
       .animation(reduceMotion ? nil:.easeOut(duration:0.10),value:selected?.id)
       .ignoresSafeArea()
   }

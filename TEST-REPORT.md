@@ -1,3 +1,9 @@
+## 17 Ekim 2026 — Option+Tab pencere taşıma yükü (yerel)
+
+- Sekme değiştiricinin saydam/nonopaque pencere zemini ve tüm SwiftUI/SQL hostunu kapsayan rounded clip/overlay kaldırıldı. Panel opak yüzey kullanır; native pencere köşeleri/gölgesi korunur. Üst 44 pt başlık için ayrı native NSView, mouseDown olayını doğrudan NSWindow.performDrag’e gönderir; taşıma sırasında model/SQL yenilemesi eklenmedi. Boyutlandırma grip’i ve ortak konum kaydı korunur.
+- `/tmp/mssql-switcher-movement-tests.log`: **12 native test/1 suite geçti**. Opak yüzey, başlık geometry, 60 konum değişikliğinde sabit boyut/aday/SQL/klavye revision ve aktif belgenin korunması; mevcut boyut restorasyonu, odak, Enter/Escape ve uzun SQL/renklendirme/kaydırma regresyonları sınandı. `/tmp/mssql-switcher-movement-release.log`: izole Release BUILD SUCCEEDED. Mimari/kaynak eşliği ve diff kontrolü geçti.
+- İzole `local.mssqlstudio.uitest` uygulamasında CUA ile panel açılışı, renkli kısa SQL ve Escape kontrol edildi. Başlık sürükleme girişimi yapıldı; ekran koordinatı ölçümünde hareket doğrulanamadığından bu kontrol başarılı fiziksel sürükleme/FPS kanıtı değildir. Önceki sürüm sample’ında ana thread çoğunlukla olay bekliyordu; ağır SQL analizi veya kesin tek kök neden gösterilmedi. Gerçek cihazda taşıma akıcılığı henüz doğrulanmadı. Kurulu uygulama/DB/Keychain değiştirilmedi; yayın yapılmadı.
+
 ## 16 Ekim 2026 — Profiler merkezî açılış ilerlemesi (yerel)
 
 - ProfilerLauncher ilk ağ await’inden önce ana çalışma alanı ortasına ortak StudioLoadingCard yerleştirir. Native indeterminate spinner, SQL Profiler açılıyor başlığı, sunucu bağlamı ve Explorer kontrolü / mevcut bağlantıyı bekleme / SQL Server bağlantısı kurma / arayüz hazırlama aşamaları görünürdür. Yapay yüzde/minimum bekleme yoktur; hatada mevcut ayrıntılı bildirim yolu korunur.

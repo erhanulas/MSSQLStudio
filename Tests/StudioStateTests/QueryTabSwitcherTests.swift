@@ -90,6 +90,7 @@ import Testing
     owner.tabSwitcher.present(in:window)
     let panel=try #require(owner.tabSwitcher.panel),original=state.active
     #expect(panel.styleMask.contains(.resizable) && panel.styleMask.contains(.titled) && panel.styleMask.contains(.fullSizeContentView))
+    #expect(panel.isOpaque && panel.backgroundColor != .clear)
     #expect(panel.contentMinSize==NSSize(width:680,height:400))
     panel.setContentSize(NSSize(width:880,height:480));panel.contentView?.layoutSubtreeIfNeeded()
     let saved=panel.frame.size
@@ -99,6 +100,20 @@ import Testing
     let reopened=try #require(next.panel)
     #expect(abs(reopened.frame.width-saved.width)<1 && abs(reopened.frame.height-saved.height)<1)
     #expect(!reopened.isKeyWindow && state.active === original)
+  }
+  @Test func movingPanelKeepsPreviewAndDocumentState() throws {
+    let (state,owner,window)=fixture();defer {owner.tabSwitcher.dismiss(commit:false);window.close()}
+    let switcher=owner.tabSwitcher,original=state.active
+    switcher.present(in:window)
+    let panel=try #require(switcher.panel)
+    panel.contentView?.layoutSubtreeIfNeeded()
+    let dragArea=try #require(panel.contentView?.subviews.first {$0.identifier?.rawValue=="tabSwitcherDragArea"})
+    #expect(dragArea.frame.height==44 && dragArea.frame.width==panel.contentView?.bounds.width)
+    let selected=switcher.previewID,source=switcher.previewSQL,revision=switcher.keyboardRevealRevision,size=panel.frame.size
+    for offset in 0..<60 {panel.setFrameOrigin(NSPoint(x:100+offset,y:100+offset))}
+    #expect(panel.frame.origin==NSPoint(x:159,y:159) && panel.frame.size==size)
+    #expect(switcher.previewID==selected && switcher.previewSQL==source && switcher.keyboardRevealRevision==revision)
+    #expect(state.active === original)
   }
   @Test func pointerFocusOnPanelIsAllowedAndOtherWindowFocusCancels() async throws {
     let (state,owner,window)=fixture();defer {owner.tabSwitcher.dismiss(commit:false);window.close()}
