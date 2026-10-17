@@ -1,3 +1,16 @@
+## 0.2.192 release preparation — 2026-10-18
+
+- User explicitly requested publication without rerunning tests. Reused the final 24 native + 9 core passing tests and Release build evidence for disjoint Command-click selection. Exact v0.2.192 package suite is skipped; signing audit, signed packaging, frozen-helper, manifest/hash and public Foundation feed checks remain required.
+- Version 0.2.192/build 193; user-facing notes updated. Public verification pending.
+
+## Command-click disjoint result cells — 2026-10-18 (unpublished)
+
+- Root cause: CopyTable supported only selectedRowIndexes × cellColumns and mouseDown handled Shift, not Command. Added a canonical disjoint selection snapshot: existing rectangular IndexSets plus per-row column overrides for toggled cells; large rectangles are not expanded into per-cell arrays on MainActor.
+- Command-click adds/removes only the hit cell (including frozen columns); ordinary click replaces selection and Shift/drag remains rectangular. Command-drag does not create intermediate selections; invalid native field-editor exit cannot change selection. Drawing/right-click/Enter/NULL/navigation use actual cell membership. Column moves remap canonical columns; native row/page/snapshot clears discard overrides.
+- Clipboard TSV keeps selected column alignment with empty placeholders for unselected intersections; unselected values are never copied. Canonical ordinal positions are resolved once per copy. Selection summaries accept immutable default/override column snapshots, count only actual cells, preserve numeric precision/cancellation/projection/draft behavior and apply the existing 5M-cell limit to the actual sparse cell count.
+- 24 native tests / 9 suites and 9 core tests / 1 suite passed (`/tmp/mssql-disjoint-final-tests.log`). Includes real Command/Shift mouse events, add/remove without cross-product cells, frozen pane canonical mapping, exact sparse TSV, rectangle-to-disjoint numeric sum/count, deselection cleanup and existing edit/query-copy/summary regressions. New core test checks sparse count and invalid column mapping. Architecture/source sync/diff checks passed; final Release build succeeded (`/tmp/mssql-disjoint-final-release.log`).
+- No live SQL, installed-app changes or publication; live pointer interaction/visual screenshot not separately inspected.
+
 ## 0.2.191 public verification — 2026-10-18
 
 - Published latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.191 (build 192, source `2707ba10269cd85c29d8a8e0112a42b41731afc0`). Release workflow https://github.com/erhanulas/MSSQLStudio/actions/runs/39070545309 completed successfully. Package test suite was explicitly skipped at user request; existing development evidence was reused, and no new test suite was run for the footer text follow-up.

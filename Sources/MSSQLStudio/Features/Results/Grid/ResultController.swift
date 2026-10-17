@@ -113,7 +113,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   private func moveSelectedCell(_ step:Int) {
     let order=visibleColumnOrdinals
     guard !order.isEmpty, table.selectedRow >= 0 else {return}
-    let current=table.cellColumns.first.flatMap {table.tableColumns.indices.contains($0) ? Int(table.tableColumns[$0].identifier.rawValue):nil}
+    let current=table.selectedColumns(in:table.selectedRow).first.flatMap {table.tableColumns.indices.contains($0) ? Int(table.tableColumns[$0].identifier.rawValue):nil}
     let index=current.flatMap {order.firstIndex(of:$0)} ?? (step>0 ? -1:order.count)
     let ordinal=order[max(0,min(order.count-1,index+step))]
     guard let canonical=table.tableColumns.firstIndex(where:{$0.identifier.rawValue == String(ordinal)}), let (target,position)=presentationColumn(ordinal) else {return}
@@ -232,7 +232,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     hasSelectedRows && table.selectedRowIndexes.filter { $0 < pageCount }.allSatisfy { pendingEdits[sourceIndex($0)]?.deleted == true }
   }
   var canSetSelectedNull: Bool {
-    guard let position = table.cellColumns.first, table.tableColumns.indices.contains(position),
+    guard let position = table.selectedColumns(in:table.selectedRow).first, table.tableColumns.indices.contains(position),
       let ordinal = Int(table.tableColumns[position].identifier.rawValue),
       canEdit(row: table.selectedRow, column: ordinal), let definition = editDefinition
     else { return false }
@@ -338,7 +338,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     return staged?.deleted != true && c.editableValue && !c.generated
   }
   func setSelectedNull() {
-    guard canSetSelectedNull, let column = table.cellColumns.first, let ordinal = Int(table.tableColumns[column].identifier.rawValue) else { return }
+    guard canSetSelectedNull, let column = table.selectedColumns(in:table.selectedRow).first, let ordinal = Int(table.tableColumns[column].identifier.rawValue) else { return }
     setEditValue(nil, row: table.selectedRow, column: ordinal)
   }
   private(set) var result = Rows()
@@ -835,9 +835,15 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       table.tableColumns.indices.contains(position) ? Int(table.tableColumns[position].identifier.rawValue):nil
     })
     let columns=visibleColumnOrdinals.filter {table.cellColumns.isEmpty || selected.contains($0)}
+    func ordinals(_ positions:IndexSet)->[Int] {
+      let chosen=Set(positions.compactMap {table.tableColumns.indices.contains($0) ? Int(table.tableColumns[$0].identifier.rawValue):nil})
+      return columns.filter {chosen.contains($0)}
+    }
     selectionSummary.update(.init(rows:result,selection:table.selectedRowIndexes,columns:columns,
       projection:visibleIndices,pageStart:pageStart,basePageCount:basePageCount,newRows:newRowOrder,
-      overrides:pendingEdits.mapValues(\.values),sumEnabled:columns.count==1))
+      overrides:pendingEdits.mapValues(\.values),sumEnabled:columns.count==1,
+      defaultColumns:table.selectionDefaultColumns.map(ordinals),
+      columnOverrides:table.selectionColumnOverrides.mapValues {IndexSet(ordinals($0))}))
   }
   override func viewDidDisappear() {super.viewDidDisappear();selectionSummary.cancel()}
   override func viewDidAppear() {super.viewDidAppear();scheduleSelectionSummary()}
@@ -912,6 +918,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     let ordinals=visibleColumnOrdinals.filter {ordinal in
       table.cellColumns.isEmpty || table.tableColumns.firstIndex(where:{$0.identifier.rawValue == String(ordinal)}).map {table.cellColumns.contains($0)} == true
     }
+    let positions=Dictionary(uniqueKeysWithValues:ordinals.map {($0,table.column(withIdentifier:.init(String($0))))})
     guard chosen.count <= 10_000 else {
       let a = StudioAlert(role:"copyRowLimit")
       a.messageText = "Kopyalama sınırı: 10.000 satır"
@@ -922,7 +929,10 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     var bytes = includeHeaders ? ordinals.reduce(0) { $0 + result.fields[$1].name.utf8.count * 2 + 4 } : 0
     for row in chosen where row < pageCount {
       let values = values(at: sourceIndex(row))
-      bytes += ordinals.reduce(0) { $0 + (values[$1]?.utf8.count ?? 4) * 2 + 4 }
+      bytes += ordinals.reduce(0) {total,ordinal in
+        let position=positions[ordinal] ?? -1
+        return total + (table.isCellSelected(row:row,column:position) ? (values[ordinal]?.utf8.count ?? 4)*2+4:1)
+      }
       if bytes > 16_777_216 {
         let alert = StudioAlert(role:"copyByteLimit")
         alert.messageText = "Kopyalama boyutu 16 MB sınırını aşıyor."
@@ -933,6 +943,8 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     }
     let body = chosen.filter { $0 < pageCount }.map { row in
       ordinals.map { ordinal in
+        let position=positions[ordinal] ?? -1
+        guard table.isCellSelected(row:row,column:position) else {return ""}
         let value = (values(at: sourceIndex(row)))[ordinal]
         let v = value ?? "NULL"
         return v.contains("\t") || v.contains("\n") || v.contains("\"")

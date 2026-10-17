@@ -30,6 +30,40 @@ import Testing
     for _ in 0..<500 where grid.isProcessing {try await Task.sleep(for:.milliseconds(5))}
     #expect(!grid.isProcessing)
   }
+  @Test func commandClickTogglesOnlyHitCellsAcrossFrozenPaneAndCopyUsesNoGaps() async throws {
+    let (grid,window)=fixture();defer {window.close()}
+    func click(_ target:CopyTable,row:Int,column:Int,flags:NSEvent.ModifierFlags=[]) throws {
+      let rect=target.frameOfCell(atColumn:column,row:row)
+      let event=try #require(NSEvent.mouseEvent(with:.leftMouseDown,location:target.convert(NSPoint(x:rect.midX,y:rect.midY),to:nil),modifierFlags:flags,timestamp:0,windowNumber:window.windowNumber,context:nil,eventNumber:0,clickCount:1,pressure:1))
+      target.mouseDown(with:event)
+    }
+    try click(grid.table,row:0,column:1)
+    try click(grid.table,row:3,column:3,flags:.command)
+    #expect(grid.table.selectedRowIndexes==IndexSet([0,3]))
+    #expect(grid.table.isCellSelected(row:0,column:1) && grid.table.isCellSelected(row:3,column:3))
+    #expect(!grid.table.isCellSelected(row:0,column:3) && !grid.table.isCellSelected(row:3,column:1))
+    #expect(!grid.table.isCellSelected(row:1,column:2))
+    try await wait(grid.selectionSummary,"Toplam: —   ·   Sayı: 2")
+    grid.copySelectionData()
+    #expect(NSPasteboard.general.string(forType:.string)=="1\t\n\ty")
+    try click(grid.table,row:3,column:3,flags:.command)
+    try await wait(grid.selectionSummary,"Toplam: 1   ·   Sayı: 1")
+    grid.setColumnPinned(1,pinned:true)
+    try click(grid.frozenTable,row:3,column:1,flags:.command)
+    #expect(grid.table.isCellSelected(row:3,column:2) && !grid.table.isCellSelected(row:0,column:2))
+    try await wait(grid.selectionSummary,"Toplam: —   ·   Sayı: 2")
+    // A normal click replaces disjoint selection; Shift retains rectangular extension.
+    try click(grid.frozenTable,row:0,column:1)
+    try click(grid.frozenTable,row:3,column:1,flags:.shift)
+    try await wait(grid.selectionSummary,"Toplam: 71.50   ·   Sayı: 3")
+    try click(grid.frozenTable,row:1,column:1,flags:.command)
+    try await wait(grid.selectionSummary,"Toplam: 51.00   ·   Sayı: 2")
+    #expect(!grid.table.isCellSelected(row:1,column:2))
+    grid.copySelectionData()
+    #expect(NSPasteboard.general.string(forType:.string)=="10.25\nNULL\n40.75")
+    grid.table.deselectAll(nil)
+    #expect(grid.table.selectedRowIndexes.isEmpty && grid.table.selectionColumnOverrides.isEmpty)
+  }
   @Test func selectionChangesBetweenRowsInSameColumnAndRectangleUpdateFooter() async throws {
     let (grid,window)=fixture();defer {window.close()}
     grid.table.selectCell(row:0,column:2)

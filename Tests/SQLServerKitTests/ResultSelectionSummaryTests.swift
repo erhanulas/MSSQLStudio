@@ -7,6 +7,18 @@ import Testing
     let rows=Rows(fields:[Field("N",type:type)],values:values.map {[$0]})
     return try .compute(.init(rows:rows,selection:IndexSet(integersIn:0..<values.count),columns:[0]))
   }
+  @Test func disjointCellOverridesNeverCountOrSumUnselectedCrossProduct() throws {
+    let rows=Rows(fields:[Field("A",type:4),Field("B",type:4)],values:[["1","100"],["2","200"],["3","300"]])
+    let result=try ResultSelectionSummary.compute(.init(rows:rows,selection:IndexSet([0,2]),columns:[0,1],sumEnabled:false,
+      defaultColumns:[0],columnOverrides:[2:IndexSet(integer:1)]))
+    #expect(result.count==2 && result.sum==nil)
+    let vertical=try ResultSelectionSummary.compute(.init(rows:rows,selection:IndexSet([0,2]),columns:[0],
+      defaultColumns:[0],columnOverrides:[1:IndexSet()]))
+    #expect(vertical.count==2 && vertical.sum=="4")
+    #expect(throws:SQLFailure.self) {
+      try ResultSelectionSummary.compute(.init(rows:rows,selection:IndexSet(integer:0),columns:[0],columnOverrides:[0:IndexSet(integer:1)]))
+    }
+  }
   @Test func preservesBigintFullPrecisionCarryBorrowAndScale() throws {
     #expect(try sum(["9223372036854775807","9223372036854775807"],type:-5).sum=="18446744073709551614")
     #expect(try sum([String(repeating:"9",count:38),"1"]).sum=="1"+String(repeating:"0",count:38))

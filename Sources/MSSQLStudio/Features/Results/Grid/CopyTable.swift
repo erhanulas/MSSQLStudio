@@ -23,6 +23,48 @@ import SwiftUI
     guard let start=order.firstIndex(of:from), let end=order.firstIndex(of:to) else { return IndexSet(integer:to) }
     return IndexSet(order[min(start,end)...max(start,end)])
   }
+  private struct DisjointSelection {
+    let rows:IndexSet
+    var columns:IndexSet
+    var overrides:[Int:IndexSet]=[:]
+    func columns(in row:Int)->IndexSet {overrides[row] ?? (rows.contains(row) ? columns:IndexSet())}
+  }
+  private var disjoint:DisjointSelection?
+  private var applyingCellSelection=false
+  var selectionDefaultColumns:IndexSet? {disjoint?.columns}
+  var selectionColumnOverrides:[Int:IndexSet] {disjoint?.overrides ?? [:]}
+  func selectedColumns(in row:Int)->IndexSet {
+    guard owner.selectedRowIndexes.contains(row) else {return []}
+    return owner.disjoint?.columns(in:row) ?? owner.cellColumns
+  }
+  func isCellSelected(row:Int,column:Int)->Bool {
+    guard owner.selectedRowIndexes.contains(row) else {return false}
+    if let disjoint=owner.disjoint {return disjoint.columns(in:row).contains(column)}
+    return owner.cellColumns.isEmpty || owner.cellColumns.contains(column)
+  }
+  override func selectRowIndexes(_ indexes:IndexSet,byExtendingSelection extend:Bool) {
+    let clearing=disjoint != nil && !applyingCellSelection
+    if clearing {disjoint=nil}
+    super.selectRowIndexes(indexes,byExtendingSelection:extend)
+    if clearing {needsDisplay=true;cellSelectionChanged?()}
+  }
+  override func deselectAll(_ sender:Any?) {disjoint=nil;super.deselectAll(sender);cellSelectionChanged?()}
+  func toggleCell(row:Int,column:Int) {
+    guard row>=0,row<numberOfRows,column>0,tableColumns.indices.contains(column) else {return}
+    var selection=disjoint ?? DisjointSelection(rows:cellColumns.isEmpty ? []:selectedRowIndexes,columns:cellColumns)
+    var columns=selection.columns(in:row)
+    if columns.contains(column) {columns.remove(column)} else {columns.insert(column)}
+    selection.overrides[row]=columns;disjoint=selection
+    var rows=selectedRowIndexes
+    if columns.isEmpty {rows.remove(row)} else {rows.insert(row)}
+    var allColumns=selection.rows.subtracting(IndexSet(selection.overrides.keys)).isEmpty ? IndexSet():selection.columns
+    for values in selection.overrides.values {allColumns.formUnion(values)}
+    applyingCellSelection=true
+    selectRowIndexes(rows,byExtendingSelection:false)
+    applyingCellSelection=false
+    cellColumns=allColumns;anchor=(row,column)
+    needsDisplay=true;cellSelectionChanged?()
+  }
   func selectCell(row:Int,column:Int,extending:Bool=false) {
     guard row >= 0, row < numberOfRows else { return }
     if extending, let anchor {
@@ -41,11 +83,17 @@ import SwiftUI
       if from > to && position >= to && position < from {return position+1}
       return position
     }
+    if var selection=disjoint {
+      selection.columns=IndexSet(selection.columns.map(moved))
+      selection.overrides=selection.overrides.mapValues {IndexSet($0.map(moved))}
+      disjoint=selection
+    }
     cellColumns=IndexSet(cellColumns.map(moved))
     if let anchor {self.anchor=(anchor.row,moved(anchor.column))}
   }
   @objc func selectAllCells(_ sender:Any?=nil) {
     if let window,!window.makeFirstResponder(self) {return}
+    owner.disjoint=nil
     owner.cellColumns=IndexSet()
     owner.selectAll(sender)
     owner.cellSelectionChanged?()
@@ -129,9 +177,9 @@ import SwiftUI
     guard visible.location != NSNotFound, visible.length>0 else {return}
     for row in selectedRowIndexes.intersection(IndexSet(integersIn:visible.location..<NSMaxRange(visible))) {
       let rowRect=rect(ofRow:row)
-      if owner.cellColumns.isEmpty {NSIntersectionRect(rowRect,clip).fill()}
+      if owner.disjoint == nil && owner.cellColumns.isEmpty {NSIntersectionRect(rowRect,clip).fill()}
       else {
-        for column in columnIndexes(in:clip) where canonicalPosition(column).map({owner.cellColumns.contains($0)}) == true {
+        for column in columnIndexes(in:clip) where canonicalPosition(column).map({owner.isCellSelected(row:row,column:$0)}) == true {
           NSIntersectionRect(NSIntersectionRect(rect(ofColumn:column),rowRect),clip).fill()
         }
       }
@@ -141,11 +189,15 @@ import SwiftUI
   override func mouseDown(with event:NSEvent) {
     let point=convert(event.locationInWindow,from:nil), row=row(at:convert(event.locationInWindow,from:nil))
     guard row >= 0, let column=canonicalPosition(column(at:point)) else {super.mouseDown(with:event);return}
-    window?.makeFirstResponder(self)
+    guard window?.makeFirstResponder(self) != false else {return}
+    if event.modifierFlags.contains(.command),column>0 {
+      owner.toggleCell(row:row,column:column);return
+    }
     owner.selectCell(row:row,column:column,extending:event.modifierFlags.contains(.shift))
     if event.clickCount == 2 {editCell?(row,self.column(at:point))}
   }
   override func mouseDragged(with event:NSEvent) {
+    if event.modifierFlags.contains(.command) {return}
     if dragSelection?(event) == true {return}
     guard owner.anchor != nil else {return}
     _ = autoscroll(with:event)
@@ -156,7 +208,7 @@ import SwiftUI
   override func rightMouseDown(with event:NSEvent) {
     let point=convert(event.locationInWindow,from:nil), row=row(at:convert(event.locationInWindow,from:nil))
     guard row >= 0, let column=canonicalPosition(column(at:point)) else {return}
-    if !owner.selectedRowIndexes.contains(row) || (!owner.cellColumns.isEmpty && !owner.cellColumns.contains(column)) {owner.selectCell(row:row,column:column)}
+    if !owner.isCellSelected(row:row,column:column) {owner.selectCell(row:row,column:column)}
     showSelectionMenu(with:event)
   }
   private func showSelectionMenu(with event:NSEvent) {
@@ -190,7 +242,7 @@ import SwiftUI
     if GridShortcuts.matches(.gridCopyQuery,event) {return}
     if GridShortcuts.matches(.columns,event) { searchColumns?(); return }
     if event.keyCode == 36 || event.keyCode == 76 {
-      if let c=owner.cellColumns.first, let position=tableColumns.indices.first(where:{canonicalPosition($0) == c}), selectedRow >= 0 {editCell?(selectedRow,position);return}
+      if let c=owner.selectedColumns(in:selectedRow).first, let position=tableColumns.indices.first(where:{canonicalPosition($0) == c}), selectedRow >= 0 {editCell?(selectedRow,position);return}
     }
     if GridShortcuts.matchesHeaders(event) { copyHeaders?(); return }
     if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "c" { copyRows?(); return }

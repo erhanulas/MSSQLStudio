@@ -15,17 +15,22 @@ public struct ResultSelectionSummary:Sendable,Equatable {
     public let basePageCount:Int
     public let newRows:[Int]
     public let overrides:[Int:[String?]]
+    public let defaultColumns:[Int]?
+    public let columnOverrides:[Int:IndexSet]
     public let sumEnabled:Bool
     public init(rows:Rows,selection:IndexSet,columns:[Int],projection:[Int]?=nil,pageStart:Int=0,
-                basePageCount:Int?=nil,newRows:[Int]=[],overrides:[Int:[String?]]=[:],sumEnabled:Bool=true) {
+                basePageCount:Int?=nil,newRows:[Int]=[],overrides:[Int:[String?]]=[:],sumEnabled:Bool=true,
+                defaultColumns:[Int]?=nil,columnOverrides:[Int:IndexSet]=[:]) {
       self.rows=rows;self.selection=selection;self.columns=columns;self.projection=projection
       self.pageStart=pageStart;self.basePageCount=basePageCount ?? rows.values.count
       self.newRows=newRows;self.overrides=overrides;self.sumEnabled=sumEnabled
+      self.defaultColumns=defaultColumns;self.columnOverrides=columnOverrides
     }
   }
   public static func compute(_ request:Request) throws -> Self {
     try Task.checkCancellation()
-    let columns=Array(Set(request.columns)).sorted()
+    let columnSet=Set(request.columns)
+    let columns=Array(columnSet).sorted()
     guard columns.allSatisfy({request.rows.fields.indices.contains($0)}),request.pageStart>=0,request.basePageCount>=0 else {
       throw SQLFailure("Seçim kapsamı geçersiz.")
     }
@@ -36,7 +41,17 @@ public struct ResultSelectionSummary:Sendable,Equatable {
     let (pageCount,overflow)=request.basePageCount.addingReportingOverflow(request.newRows.count)
     guard !overflow,request.selection.last.map({$0<pageCount}) ?? true else {throw SQLFailure("Seçim kapsamı değişti.")}
     guard !columns.isEmpty,!request.selection.isEmpty else {return Self(sum:nil,count:0,numericCount:0)}
-    guard request.selection.count<=5_000_000/columns.count else {
+    let defaults=Array(Set(request.defaultColumns ?? columns)).sorted()
+    guard defaults.allSatisfy({columnSet.contains($0)}),request.columnOverrides.values.allSatisfy({$0.allSatisfy {columnSet.contains($0)}}) else {
+      throw SQLFailure("Seçili kolon kapsamı değişti.")
+    }
+    let untouched=request.selection.subtracting(IndexSet(request.columnOverrides.keys)).count
+    var cellCount=untouched.multipliedReportingOverflow(by:defaults.count)
+    for (row,selected) in request.columnOverrides where request.selection.contains(row) {
+      let next=cellCount.partialValue.addingReportingOverflow(selected.count)
+      cellCount=(next.partialValue,cellCount.overflow || next.overflow)
+    }
+    guard !cellCount.overflow,cellCount.partialValue<=5_000_000 else {
       throw SQLFailure("Seçim özeti en fazla 5.000.000 hücre için hesaplanabilir. Daha küçük bir alan seçin.")
     }
     let numeric=Set(columns.filter {request.sumEnabled && request.rows.fields[$0].numeric && request.rows.fields[$0].type != -7})
@@ -66,7 +81,7 @@ public struct ResultSelectionSummary:Sendable,Equatable {
         guard request.rows.values.indices.contains(index) else {throw SQLFailure("Seçim satırı okunamadı.")}
         values=request.rows.values[index]
       }
-      for column in columns {
+      for column in request.columnOverrides[row].map(Array.init) ?? defaults {
         guard values.indices.contains(column) else {throw SQLFailure("Seçim hücresi okunamadı.")}
         guard let value=values[column] else {continue}
         count+=1
