@@ -100,31 +100,35 @@ struct AgentPropertiesPanel:View {
         if let job,title != job.name || description != job.description || enabled != job.enabled || owner != job.owner || category != job.category || startStep != job.startStep || emailLevel != job.emailLevel || emailOperator != job.emailOperator || eventLogLevel != job.eventLogLevel || deleteLevel != job.deleteLevel {confirmRefresh=true}
         else {generation+=1}
       }
-      .confirmationDialog("Job değişiklikleri sunucuya kaydedilsin mi?",isPresented:$confirmSave,titleVisibility:.visible) {
-        Button("Kaydet") {save()}
-        Button("Vazgeç",role:.cancel) {pendingStatements=[]}
-      } message: {Text(server.profile.name+" / msdb · "+(job?.name ?? name))}
-      .confirmationDialog("Kaydedilmemiş alanlar sunucudaki değerlerle değiştirilsin mi?",isPresented:$confirmRefresh) {Button("Sunucudan Yenile",role:.destructive) {generation+=1}}
-      .confirmationDialog("Adım silinirse adım numaraları ve akış hedefleri değişebilir; adımın çıktı günlüğü de silinir.",isPresented:$confirmDeleteStep) {Button("Adımı Sil",role:.destructive) {if let job,let selected {stage {try SQLAgent.deleteStep(jobID:job.id,stepID:selected)}}}}
-      .confirmationDialog("Zamanlamanın yalnız bu işle bağlantısı kaldırılacak. Paylaşılan zamanlama silinmez.",isPresented:$confirmDetach) {Button("İşten Ayır") {if let job,let selectedSchedule {stage {try SQLAgent.detachSchedule(jobID:job.id,scheduleID:selectedSchedule)}}}}
+      .studioConfirmation("Job değişiklikleri sunucuya kaydedilsin mi?",isPresented:$confirmSave,role:"saveAgentJob",
+        message:server.profile.name+" / msdb · "+(job?.name ?? name),
+        actions:[StudioConfirmationAction(title:"Kaydet") {save()}],cancel:{pendingStatements=[]})
+      .studioConfirmation("Kaydedilmemiş alanlar sunucudaki değerlerle değiştirilsin mi?",isPresented:$confirmRefresh,role:"refreshAgentJob",message:"",
+        actions:[StudioConfirmationAction(title:"Sunucudan Yenile",destructive:true) {generation+=1}])
+      .studioConfirmation("Adım silinsin mi?",isPresented:$confirmDeleteStep,role:"deleteAgentStep",
+        message:"Adım numaraları ve akış hedefleri değişebilir; adımın çıktı günlüğü de silinir.",
+        actions:[StudioConfirmationAction(title:"Adımı Sil",destructive:true) {if let job,let selected {stage {try SQLAgent.deleteStep(jobID:job.id,stepID:selected)}}}])
+      .studioConfirmation("Zamanlama işten ayrılsın mı?",isPresented:$confirmDetach,role:"detachAgentSchedule",
+        message:"Yalnız bu işle bağlantısı kaldırılacak. Paylaşılan zamanlama silinmez.",
+        actions:[StudioConfirmationAction(title:"İşten Ayır") {if let job,let selectedSchedule {stage {try SQLAgent.detachSchedule(jobID:job.id,scheduleID:selectedSchedule)}}}])
       .sheet(isPresented:$pickSchedule) {
         AgentPickSchedule(server:server,attached:Set(schedules.map(\.id))) {schedule in
           guard let job else {return};stage {try SQLAgent.attachSchedule(jobID:job.id,scheduleID:schedule.id)};pickSchedule=false
-        }
+        }.studioSheetPlacement(role:"agentPickSchedule",minimum:NSSize(width:620,height:420))
       }
       .sheet(item:$editingStep) {step in
         AgentStepEditor(server:server,step:step,steps:steps,isNew:newStep) {edited in
           guard let job else {return}
           stage {try SQLAgent.stepScript(jobID:job.id,step:edited,existingIDs:Set(steps.map(\.id)),isNew:newStep)}
           selected=edited.id;editingStep=nil
-        }
+        }.studioSheetPlacement(role:"agentStepEditor",minimum:NSSize(width:700,height:500))
       }
       .sheet(item:$editingSchedule) {schedule in
         AgentScheduleEditor(schedule:schedule,isNew:newSchedule,submitTitle:"Kaydet") {edited in
           guard let job else {return}
           stage {try SQLAgent.scheduleScript(edited,jobID:newSchedule ? job.id:nil)}
           editingSchedule=nil
-        }
+        }.studioSheetPlacement(role:"agentScheduleEditor",minimum:NSSize(width:620,height:480))
       }
   }
   private var generalPage:some View {

@@ -7,9 +7,15 @@ import Testing
   let alert:StudioAlert
   var moveTo:NSPoint?
   var origin:NSPoint?
+  var resizeTo:NSSize?
+  var frame:NSRect?
+  var initialFrame:NSRect?
   init(_ alert:StudioAlert,moveTo:NSPoint?=nil) {self.alert=alert;self.moveTo=moveTo}
   @objc func fire(_ timer:Timer) {
+    initialFrame=alert.window.frame
     if let moveTo {alert.window.setFrameOrigin(moveTo)} else {origin=alert.window.frame.origin}
+    if let resizeTo {alert.window.setFrame(NSRect(origin:alert.window.frame.origin,size:resizeTo),display:true)}
+    frame=alert.window.frame
     NSApp.stopModal(withCode:.abort)
   }
 }
@@ -22,13 +28,15 @@ import Testing
     let screen=try #require(NSScreen.main?.visibleFrame)
     let position=NSPoint(x:screen.minX+48,y:screen.minY+48)
     func make(_ version:String)->StudioAlert {
-      let alert=StudioAlert();alert.framePersistenceRole=role
+      let alert=StudioAlert(role:role)
       alert.messageText="MSSQL Studio \(version) kuruluma hazır"
       alert.addButton(withTitle:"Vazgeç")
       return alert
     }
     let first=make("0.0.1")
     let mover=AlertPositionProbe(first,moveTo:position)
+    first.layout()
+    mover.resizeTo=NSSize(width:first.window.frame.width+120,height:first.window.frame.height+100)
     let move=Timer(timeInterval:0.15,target:mover,selector:#selector(AlertPositionProbe.fire(_:)),userInfo:nil,repeats:false)
     RunLoop.main.add(move,forMode:.modalPanel)
     _=first.runModal();move.invalidate();first.window.orderOut(nil)
@@ -39,6 +47,10 @@ import Testing
     _=second.runModal();inspect.invalidate();second.window.orderOut(nil)
     let origin=try #require(probe.origin)
     #expect(abs(origin.x-position.x)<1 && abs(origin.y-position.y)<1)
+    #expect(probe.frame?.size==mover.frame?.size)
+    #expect(second.window.styleMask.contains(.resizable))
+    let initial=try #require(mover.initialFrame)
+    #expect(abs(initial.midX-screen.midX)<1 && abs(initial.midY-screen.midY)<1)
   }
   @Test func auxiliaryWindowRestoresMovedAndResizedFrameAfterRecreation() throws {
     _=NSApplication.shared

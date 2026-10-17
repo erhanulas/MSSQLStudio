@@ -76,11 +76,8 @@ struct DriverSetupView: View {
       Link("Microsoft kurulum yönergeleri", destination: URL(string: "https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos")!).font(.caption)
     }.padding(12).background(Color(nsColor: StudioTheme.panel), in: RoundedRectangle(cornerRadius: 8))
       .task { await model.refresh() }
-      .alert("ODBC Driver 18 kurulsun mu?", isPresented: $confirmation) {
-        Button("Vazgeç", role: .cancel) { }
-        Button("Lisansı Kabul Et ve Kur") { Task { await model.install(approved: true) } }
-      } message: {
-        Text("Homebrew, resmî Microsoft kaynağını ekleyip gerekiyorsa bu kaynağa güven izni verecek ve msodbcsql18 ile bağımlılıklarını kuracak. Microsoft lisansını kabul etmiş olursunuz. Yönetici yetkisi otomatik istenmez; gerekirse işlem hata gösterir.")
-      }
+      .studioConfirmation("ODBC Driver 18 kurulsun mu?",isPresented:$confirmation,role:"installODBCDriver",
+        message:"Homebrew, resmî Microsoft kaynağını ekleyip gerekiyorsa bu kaynağa güven izni verecek ve msodbcsql18 ile bağımlılıklarını kuracak. Microsoft lisansını kabul etmiş olursunuz. Yönetici yetkisi otomatik istenmez; gerekirse işlem hata gösterir.",
+        actions:[StudioConfirmationAction(title:"Lisansı Kabul Et ve Kur") {Task {await model.install(approved:true)}}])
   }
 }

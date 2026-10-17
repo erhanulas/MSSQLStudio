@@ -31,7 +31,7 @@ struct ProfilerSessionsPanel:View {
   }
   private func removeSelected() {
     guard let session=model.sessions.first(where:{$0.name==selection}),session.name != currentSession else {return}
-    let alert=StudioAlert();alert.messageText="Sunucu izleme oturumu kaldırılsın mı?"
+    let alert=StudioAlert(role:"deleteProfilerSession");alert.messageText="Sunucu izleme oturumu kaldırılsın mı?"
     alert.informativeText=session.name+"\nBu oturum başka bir kullanıcının etkin izlemesi olabilir. Yakalama durur ve sunucu arabelleğindeki olaylar silinir."
     alert.addButton(withTitle:"Oturumu Kaldır");alert.addButton(withTitle:"Vazgeç")
     if alert.runModal() == .alertFirstButtonReturn {Task {await model.remove(session,currentSession:currentSession)}}

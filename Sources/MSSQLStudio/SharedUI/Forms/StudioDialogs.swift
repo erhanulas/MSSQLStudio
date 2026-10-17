@@ -103,7 +103,7 @@ import SwiftUI
   var closed:(()->Void)?
   init(title:String,value:String,save:@escaping (String) async throws->Void) {
     submit=save
-    let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:480,height:210),styleMask:[.titled,.closable],backing:.buffered,defer:false)
+    let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:480,height:210),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
     window.animationBehavior = .none
     window.isReleasedWhenClosed=false;window.title=title
     super.init(window:window);window.delegate=self
@@ -123,6 +123,7 @@ import SwiftUI
     nameField.nextKeyView=saveButton;saveButton.nextKeyView=cancelButton;cancelButton.nextKeyView=nameField
     window.focusOrder=[nameField,saveButton,cancelButton]
     window.framePersistenceRole="nameEntry"
+    window.contentMinSize=NSSize(width:480,height:210)
     window.initialFirstResponder=nameField;window.center()
   }
   required init?(coder:NSCoder) {fatalError("init(coder:) has not been implemented")}
@@ -130,6 +131,8 @@ import SwiftUI
     guard let window else {return}
     var frame=window.frame
     let target=window.frameRect(forContentRect:NSRect(x:0,y:0,width:480,height:height)).height
+    window.contentMinSize=NSSize(width:480,height:height)
+    guard frame.height<target else {return}
     frame.origin.y+=frame.height-target;frame.size.height=target
     window.setFrame(frame,display:true,animate:false)
   }
@@ -163,9 +166,10 @@ import SwiftUI
   var closed:(()->Void)?
   init(title:String,count:Int,decision:@escaping (StudioState.BulkCloseChoice)->Bool) {
     self.decision=decision
-    let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:540,height:198),styleMask:[.titled,.closable],backing:.buffered,defer:false)
+    let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:540,height:198),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
     window.animationBehavior = .none
     window.framePersistenceRole="bulkClose"
+    window.contentMinSize=NSSize(width:540,height:198)
     window.title=title;window.identifier = .init("studio.bulkClose");window.isReleasedWhenClosed=false
     super.init(window:window);window.delegate=self
     let body=NSView();StudioTheme.surface(body,card:true);window.contentView=body
@@ -197,8 +201,9 @@ import SwiftUI
 @MainActor final class StudioNoticeWindowController:NSWindowController,NSWindowDelegate {
   var closed:(()->Void)?
   init(message:String) {
-    let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:520,height:300),styleMask:[.titled,.closable],backing:.buffered,defer:false);window.title="MSSQL Studio";window.framePersistenceRole="notice";window.animationBehavior = .none;window.isReleasedWhenClosed=false
+    let window=StudioPanelWindow(contentRect:NSRect(x:0,y:0,width:520,height:300),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false);window.title="MSSQL Studio";window.framePersistenceRole="notice";window.animationBehavior = .none;window.isReleasedWhenClosed=false
     super.init(window:window);window.delegate=self
+    window.contentMinSize=NSSize(width:520,height:300)
     let body=NSView();StudioTheme.surface(body,card:true);window.contentView=body
     let heading=NSTextField(labelWithString:"İşlem tamamlanamadı");heading.font = .systemFont(ofSize:16,weight:.semibold);heading.textColor=StudioTheme.text
     let messageView=StudioTextView();messageView.isEditable=false;messageView.isSelectable=true;messageView.string=String(message.prefix(16_000));messageView.font = .systemFont(ofSize:12);messageView.textColor=StudioTheme.text;messageView.backgroundColor=StudioTheme.canvas;messageView.textContainerInset=NSSize(width:8,height:8);messageView.isVerticallyResizable=true;messageView.autoresizingMask=[.width];messageView.textContainer?.widthTracksTextView=true
@@ -213,41 +218,4 @@ import SwiftUI
   required init?(coder:NSCoder) {fatalError("init(coder:) has not been implemented")}
   @objc func closeNotice() {window?.performClose(nil)}
   func windowWillClose(_ notification:Notification) {closed?()}
-}
-
-/// Shared presentation for legacy confirmations; button semantics stay native.
-@MainActor final class StudioAlert:NSAlert {
-  var framePersistenceRole:String?
-  private var desiredModalFrame:NSRect?
-  @objc private func restoreModalFrame(_ timer:Timer) {
-    if let desiredModalFrame {window.setFrame(desiredModalFrame,display:true)}
-  }
-  @discardableResult override func runModal()->NSApplication.ModalResponse {
-    layout();window.animationBehavior = .none;window.backgroundColor=StudioTheme.canvas
-    func style(_ view:NSView) {
-      if let label=view as? NSTextField,!label.isEditable {
-        label.textColor=label.stringValue==messageText ? StudioTheme.text:StudioTheme.muted
-        label.font = .systemFont(ofSize:label.stringValue==messageText ? 15:12,weight:label.stringValue==messageText ? .semibold:.regular)
-      }
-      for child in view.subviews {style(child)}
-    }
-    if let content=window.contentView {style(content)}
-    let parent=NSApp.keyWindow ?? NSApp.mainWindow
-    if let parent,parent !== window {parent.addChildWindow(window,ordered:.above)}
-    var placementTimer:Timer?
-    if let role=framePersistenceRole {
-      StudioWindowPlacement.restore(window,role:role,owner:parent)
-      // NSAlert positions itself again before its modal loop. Keep the desired
-      // frame before native autosave sees that move, then restore once in that loop.
-      desiredModalFrame=window.frame
-      let timer=Timer(timeInterval:0,target:self,selector:#selector(restoreModalFrame(_:)),userInfo:nil,repeats:false)
-      placementTimer=timer;RunLoop.main.add(timer,forMode:.modalPanel)
-    }
-    defer {
-      placementTimer?.invalidate();desiredModalFrame=nil
-      if let role=framePersistenceRole {StudioWindowPlacement.save(window,role:role);window.setFrameAutosaveName("")}
-      window.parent?.removeChildWindow(window)
-    }
-    return super.runModal()
-  }
 }

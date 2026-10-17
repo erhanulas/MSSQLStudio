@@ -40,7 +40,7 @@ extension WorkbenchController {
     guard let node=contextNode,let id=node.connectionGroupID else {return}
     Task {[weak self] in
       guard let self else {return}
-      let alert=StudioAlert();alert.messageText="\(node.title) klasörü kaldırılsın mı?"
+      let alert=StudioAlert(role:"deleteExplorerFolder");alert.messageText="\(node.title) klasörü kaldırılsın mı?"
       alert.informativeText="Bağlantılar ve alt klasörler bir üst konuma taşınır. Kayıtlı bağlantılar silinmez."
       alert.addButton(withTitle:"Klasörü Kaldır");alert.addButton(withTitle:"Vazgeç")
       guard alert.runModal() == .alertFirstButtonReturn else {return}
@@ -83,7 +83,7 @@ extension WorkbenchController {
     guard let server=contextNode?.server,!server.updatingProfile,!server.reconnecting else {return}
     Task {[weak self] in
       guard let self else {return}
-      let alert=StudioAlert();alert.messageText="\(server.profile.name) bağlantısı silinsin mi?"
+      let alert=StudioAlert(role:"deleteConnectionConfirmation");alert.messageText="\(server.profile.name) bağlantısı silinsin mi?"
       alert.informativeText="Kayıtlı profil ve bu profile ait parola silinir. Açık sorgu sekmeleri korunur."
       alert.addButton(withTitle:"Bağlantıyı Sil");alert.addButton(withTitle:"Vazgeç")
       guard alert.runModal() == .alertFirstButtonReturn else {return}

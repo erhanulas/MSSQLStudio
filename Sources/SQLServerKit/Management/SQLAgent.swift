@@ -264,9 +264,11 @@ public enum SQLAgent {
     SET XACT_ABORT ON;
     BEGIN TRY
       BEGIN TRANSACTION;
+
       \(guardSQL)
       DECLARE @studio_agent_rc int;
       \(body)
+
       COMMIT TRANSACTION;
     END TRY
     BEGIN CATCH

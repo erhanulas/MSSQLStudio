@@ -45,7 +45,7 @@ struct ProfilerFilterTemplateControls:View {
     try ProfilerFilterTemplate(id:id,name:name,configuration:model.configuration,displayFilter:model.displayFilter)
   }
   private func saveAs() {
-    let alert=StudioAlert();alert.messageText="Filtre şablonunu kaydet"
+    let alert=StudioAlert(role:"saveProfilerTemplate");alert.messageText="Filtre şablonunu kaydet"
     alert.informativeText="Yakalama ve grid filtreleri bu Mac’teki tüm bağlantılarda kullanılabilir. Şablonu uygulamak izlemeyi başlatmaz."
     let field=NSTextField(frame:NSRect(x:0,y:0,width:300,height:26))
     field.placeholderString="Şablon adı";field.setAccessibilityLabel("Şablon adı")
@@ -66,7 +66,7 @@ struct ProfilerFilterTemplateControls:View {
   }
   private func remove() {
     guard let current else {return}
-    let alert=StudioAlert();alert.messageText="Genel şablon silinsin mi?"
+    let alert=StudioAlert(role:"deleteProfilerTemplate");alert.messageText="Genel şablon silinsin mi?"
     alert.informativeText="“\(current.name)” tüm bağlantıların şablon listesinden kaldırılacak. Mevcut filtreler ve izleme değişmez."
     alert.addButton(withTitle:"Sil");alert.addButton(withTitle:"Vazgeç")
     guard alert.runModal() == .alertFirstButtonReturn else {return}

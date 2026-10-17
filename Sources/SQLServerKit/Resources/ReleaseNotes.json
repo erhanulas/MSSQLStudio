@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.188",
+    "date": "2026-10-17",
+    "title": "Tablo tasarımı ve pencere kullanımı iyileştirildi",
+    "changes": [
+      "Tablo tasarımında veri tiplerini arayarak seçebilir, anahtar ve indeks özelliklerini düzenleyebilirsiniz. Değişiklikleri önizleyip Uygula ile sunucuya gönderebilirsiniz.",
+      "Aynı tablo için Design tekrar açıldığında mevcut pencereye dönülür; kaydedilmemiş değişiklikler korunur.",
+      "Yardımcı pencereler ve onay ekranları daha tutarlı konumlarda açılır; değiştirdiğiniz konum ve boyutlar hatırlanır.",
+      "Explorer’da veritabanına tıklamak nesne aramasını o veritabanıyla sınırlar; bağlantıya tıklamak tüm seçili veritabanlarını kapsar.",
+      "Explorer’daki Nesneler sekmesinin adı Bağlantılar olarak değiştirildi. Oluşturulan değişiklik SQL’lerinin okunabilirliği artırıldı."
+    ]
+  },
+  {
     "version": "0.2.187",
     "date": "2026-10-17",
     "title": "Pencere seçicisi renkli kartlarla yenilendi",

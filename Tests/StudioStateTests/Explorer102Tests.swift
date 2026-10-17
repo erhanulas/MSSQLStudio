@@ -11,6 +11,33 @@ import Testing
     value.explorerTreeDefaults=UserDefaults(suiteName:"Studio102-\(UUID())")!
     return value
   }
+  @Test func treeSelectionChangesSearchDatabaseAndServerScope() throws {
+    _=NSApplication.shared
+    let previous=UserDefaults.standard.object(forKey:"explorerSearchScope")
+    defer {if let previous {UserDefaults.standard.set(previous,forKey:"explorerSearchScope")} else {UserDefaults.standard.removeObject(forKey:"explorerSearchScope")}}
+    let server=ConnectedServer(profile:ServerProfile(),password:"")
+    server.databases=[.init(id:1,name:"One"),.init(id:2,name:"Two")]
+    let workspace=state();workspace.servers=[server]
+    let host=WorkbenchController(state:workspace);_=host.view
+    let root=TreeNode("Server",kind:.server,server:server)
+    let one=TreeNode("One",kind:.database,server:server,database:"One")
+    let two=TreeNode("Two",kind:.database,server:server,database:"Two")
+    root.loaded=true;one.loaded=true;two.loaded=true;root.children=[one,two]
+    host.roots=[root];host.explorerTree.rebuildOrganizationRoots(workspace.explorerOrganization);host.outline.reloadData();host.outline.expandItem(root)
+    func select(_ node:TreeNode) {
+      host.outline.selectRowIndexes(IndexSet(integer:host.outline.row(forItem:node)),byExtendingSelection:false)
+    }
+    select(one)
+    #expect(host.searchScope?.database == "One" && host.searchDatabases(host.searchScope ?? root) == ["One"])
+    select(two)
+    #expect(host.searchScope?.database == "Two")
+    select(root)
+    #expect(host.searchScope?.database == "*" && host.searchDatabases(host.searchScope ?? root) == ["One","Two"])
+    host.restoringTree=true;select(one);host.restoringTree=false
+    #expect(host.searchScope?.database == "*")
+    host.showingSearch=true;select(two)
+    #expect(host.searchScope?.database == "*")
+  }
   @Test func realFolderMenuCreatesNamedFolderAndInvalidDuplicateKeepsInputVisible() async throws {
     _=NSApplication.shared
     let state=state(),server=ConnectedServer(profile:ServerProfile(name:"Offline"),password:"");server.online=false;state.servers=[server]

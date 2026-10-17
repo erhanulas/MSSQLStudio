@@ -870,7 +870,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       table.cellColumns.isEmpty || table.tableColumns.firstIndex(where:{$0.identifier.rawValue == String(ordinal)}).map {table.cellColumns.contains($0)} == true
     }
     guard chosen.count <= 10_000 else {
-      let a = StudioAlert()
+      let a = StudioAlert(role:"copyRowLimit")
       a.messageText = "Kopyalama sınırı: 10.000 satır"
       a.informativeText = "Daha büyük sonuçlar için Dışa Aktar kullanın veya daha az satır seçin."
       a.runModal()
@@ -881,7 +881,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       let values = values(at: sourceIndex(row))
       bytes += ordinals.reduce(0) { $0 + (values[$1]?.utf8.count ?? 4) * 2 + 4 }
       if bytes > 16_777_216 {
-        let alert = StudioAlert()
+        let alert = StudioAlert(role:"copyByteLimit")
         alert.messageText = "Kopyalama boyutu 16 MB sınırını aşıyor."
         alert.informativeText = "Dışa Aktar kullanın veya daha az satır seçin."
         alert.runModal()
@@ -917,7 +917,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     if canEdit(row:r,column:i), let (target,position)=presentationColumn(i) {target.editColumn(position,row:r,with:nil,select:true);return}
     let values = values(at: sourceIndex(r))
     guard values.indices.contains(i) else { return }
-    let alert = StudioAlert()
+    let alert = StudioAlert(role:"readOnlyCell")
     alert.messageText = result.fields[i].name
     alert.informativeText = readOnlyReason(column: i) ?? "Bu hücre salt okunur."
     let text = StudioTextView()

@@ -35,7 +35,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   var lastIndexStatusScope = ""
   let searchStatus = NSTextField(labelWithString: "Seçili veritabanı / nesne türünde ara")
   var searchScope: TreeNode?
-  let explorerTabs = StudioTabControl(items:[.init(id:0,title:"Nesneler",icon:"square.stack.3d.up"),.init(id:1,title:"Arama",icon:"magnifyingglass")])
+  let explorerTabs = StudioTabControl(items:[.init(id:0,title:"Bağlantılar",icon:"square.stack.3d.up"),.init(id:1,title:"Arama",icon:"magnifyingglass")])
   var showingSearch = false
   var savedExpanded: [TreeNode] = []
   var savedTreeSelection: TreeNode?

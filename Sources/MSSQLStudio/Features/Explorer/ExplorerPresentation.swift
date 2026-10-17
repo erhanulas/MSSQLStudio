@@ -244,12 +244,18 @@ extension WorkbenchController {
     auxiliaryWindows.append(owner);owner.showWindow(nil)
   }
   func outlineViewSelectionDidChange(_ notification: Notification) {
-    if !showingSearch, let node=selected,node.connectionGroupID == nil, node.server !== searchScope?.server {
-      rebuildSearchScopes()
-      filterExplorer()
+    if !showingSearch, !restoringTree, let node=selected,node.connectionGroupID == nil {
+      let followsSelection:Bool
+      switch node.kind {
+      case .server, .database: followsSelection=true
+      default: followsSelection=node.server !== searchScope?.server
+      }
+      if followsSelection {
+        rebuildSearchScopes(selecting:node)
+        filterExplorer()
+      }
     }
     updateControls()
-    // Database scope stays explicit within the selected Explorer connection.
   }
   func outlineView(_ outlineView:NSOutlineView,didAdd rowView:NSTableRowView,forRow row:Int) {
     (outlineView.view(atColumn:1,row:row,makeIfNecessary:true) as? ExplorerIndexCell)?.pinToViewport()

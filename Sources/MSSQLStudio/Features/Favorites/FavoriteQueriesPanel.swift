@@ -264,10 +264,8 @@ struct FavoriteQueriesPanel:View {
       }
       Text("Çift tıklama mevcut editörde imlece ekler. Sorguda Aç yeni bir sekme açar; SQL otomatik çalıştırılmaz.").font(.caption).foregroundStyle(.secondary)
     }.padding(StudioMetrics.gap).studioPanel().task {await model.load()}
-      .confirmationDialog("Seçili favori silinsin mi?",isPresented:$deleting,titleVisibility:.visible) {
-        Button("Favoriyi Sil",role:.destructive) {if let current {Task {await model.remove(current.id);selected=nil}}}
-        Button("Vazgeç",role:.cancel) {}
-      }
+      .studioConfirmation("Seçili favori silinsin mi?",isPresented:$deleting,role:"deleteFavoriteConfirmation",message:current?.name ?? "",
+        actions:[StudioConfirmationAction(title:"Favoriyi Sil",destructive:true) {if let current {Task {await model.remove(current.id);selected=nil}}}])
   }
   private func insertFavorite(_ favorite:FavoriteQuery) {
     do {try insert?(favorite);openError=""} catch {openError=error.localizedDescription}

@@ -57,10 +57,9 @@ struct ConnectionManager: View {
         loadingChanged: { busy = $0; loadingChanged($0) }, cancel: cancel, draftChanged: { dirty = true })
         .transaction { $0.animation = nil; $0.disablesAnimations = true }
     }.studioPanel()
-      .alert("Kaydedilmemiş bağlantı değişiklikleri", isPresented: $switching) {
-        Button("Vazgeç", role: .cancel) { }
-        Button("Değişiklikleri Bırak", role: .destructive) { selected = pending; dirty = false }
-      } message: { Text("Başka bir bağlantıya geçerseniz bu formdaki değişiklikler bırakılacak.") }
+      .studioConfirmation("Kaydedilmemiş bağlantı değişiklikleri",isPresented:$switching,role:"discardConnectionDraft",
+        message:"Başka bir bağlantıya geçerseniz bu formdaki değişiklikler bırakılacak.",
+        actions:[StudioConfirmationAction(title:"Değişiklikleri Bırak",destructive:true) {selected=pending;dirty=false}])
   }
   private func choose(_ id: UUID?) {
     guard !busy, id != selected else { return }

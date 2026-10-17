@@ -89,7 +89,7 @@ import SwiftUI
       guard !submittingData else { return false }
       guard hasDataEdits else { return true }
       if let field=view.window?.firstResponder as? NSTextView,field.isFieldEditor {view.window?.makeFirstResponder(nil)}
-      let alert = StudioAlert(); alert.messageText = "Gönderilmemiş sonuç düzenlemeleri var"
+      let alert = StudioAlert(role:"discardResultEdits"); alert.messageText = "Gönderilmemiş sonuç düzenlemeleri var"
       alert.informativeText = "Devam ederseniz bu yerel değişiklikler silinir. Veritabanına göndermek için Önizle'yi kullanın."
       alert.addButton(withTitle: "Düzenlemeleri Sil ve Devam Et"); alert.addButton(withTitle: "Geri Dön")
       guard alert.runModal() == .alertFirstButtonReturn else { return false }
@@ -452,7 +452,7 @@ import SwiftUI
     deleteRowButton.toolTip = restoring ? "Seçili satırların silme işaretini kaldır" : "Seçili satırları silinmek üzere işaretle · SQL önizlemesinden onayla uygulanır"
   }
   private func dataError(_ error: Error) {
-    let alert = StudioAlert(); alert.messageText = "Veri düzenleme"; alert.informativeText = error.localizedDescription
+    let alert = StudioAlert(role:"resultEditingError"); alert.messageText = "Veri düzenleme"; alert.informativeText = error.localizedDescription
     if let window = view.window { alert.beginSheetModal(for: window) } else { alert.runModal() }
   }
   @objc private func beginDataEditing() {
@@ -520,7 +520,7 @@ import SwiftUI
     guard let grid = selectedGrid, !submittingData else { return }
     view.window?.makeFirstResponder(nil)
     if grid.pendingEdits.isEmpty { grid.discardEdits(); return }
-    let alert = StudioAlert(); alert.messageText = "Bekleyen düzenlemelerden vazgeçilsin mi?"; alert.addButton(withTitle: "Vazgeç"); alert.addButton(withTitle: "Düzenlemeye Devam Et")
+    let alert = StudioAlert(role:"discardResultEditsConfirmation"); alert.messageText = "Bekleyen düzenlemelerden vazgeçilsin mi?"; alert.addButton(withTitle: "Vazgeç"); alert.addButton(withTitle: "Düzenlemeye Devam Et")
     if let window = view.window { alert.beginSheetModal(for: window) { response in if response == .alertFirstButtonReturn { grid.discardEdits() } } }
   }
   @objc private func previewDataEditing() {
@@ -855,7 +855,7 @@ import SwiftUI
   @objc private func compareModule() {modulePreview()}
   @objc private func applyModule() {
     guard document.transactionCount == 0 else {
-      let alert=StudioAlert();alert.messageText="Önce COMMIT veya ROLLBACK çalıştırın.";alert.runModal();return
+      let alert=StudioAlert(role:"moduleTransactionWarning");alert.messageText="Önce COMMIT veya ROLLBACK çalıştırın.";alert.runModal();return
     }
     guard document.canSubmitModule else {return}
     modulePreview()
@@ -891,7 +891,7 @@ import SwiftUI
         }
         document.applyingModule=true;document.execute(override:sql)
       } catch {
-        let alert=StudioAlert();alert.messageText="Değişiklik uygulanamadı";alert.informativeText=error.localizedDescription;alert.runModal()
+        let alert=StudioAlert(role:"moduleSubmissionError");alert.messageText="Değişiklik uygulanamadı";alert.informativeText=error.localizedDescription;alert.runModal()
       }
     }
   }
@@ -1033,7 +1033,7 @@ import SwiftUI
         try await favorites.delete(favorite.id)
         if self?.document.favoriteID == favorite.id {self?.document.favoriteID=nil}
       } catch {
-        if let window=self?.view.window {let alert=StudioAlert();alert.messageText="Favori kaldırılamadı";alert.informativeText=error.localizedDescription;_ = await alert.beginSheetModal(for:window)}
+        if let window=self?.view.window {let alert=StudioAlert(role:"favoriteRemovalError");alert.messageText="Favori kaldırılamadı";alert.informativeText=error.localizedDescription;_ = await alert.beginSheetModal(for:window)}
       }
       self?.removingFavorite=false;self?.syncFavoriteButton()
     }
@@ -1055,7 +1055,7 @@ import SwiftUI
       document.results.indices.contains(index), let controller = tables[index]
     else { return }
     guard !controller.isProcessing else {
-      let a = StudioAlert()
+      let a = StudioAlert(role:"resultExportBusy")
       a.messageText = "Önce filtreleme veya sıralamanın tamamlanmasını bekleyin."
       a.runModal()
       return
@@ -1079,7 +1079,7 @@ import SwiftUI
         } onCancel: {
           worker.cancel()
         }
-      } catch is CancellationError {} catch { NSAlert(error: error).runModal() }
+      } catch is CancellationError {} catch { StudioAlert(role:"resultExportError",error:error).runModal() }
       self?.cancelExport.isHidden = true
       self?.exportJob = nil
       self?.syncNavigation()

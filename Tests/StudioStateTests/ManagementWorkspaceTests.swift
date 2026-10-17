@@ -5,6 +5,27 @@ import SwiftUI
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct ManagementWorkspaceTests {
+  @Test func tableDesignerReusesWindowAndDraftForSameObject() throws {
+    _=NSApplication.shared
+    let host=WorkbenchController(state:StudioState());_=host.view
+    let server=ConnectedServer(profile:ServerProfile(),password:"")
+    let node=TreeNode("T",kind:.object(.tables),server:server,database:"Demo",item:.init(id:42,name:"T",schema:"dbo"))
+    defer {for owner in host.auxiliaryWindows {owner.window?.close()}}
+    host.showManagedTable(node)
+    let first=try #require(host.auxiliaryWindows.first?.window)
+    let model=try #require(first.delegate as? TableDesignerModel)
+    model.name="Unsaved draft"
+    host.showManagedTable(node,initialKind:"FK")
+    #expect(host.auxiliaryWindows.count == 1)
+    #expect(host.auxiliaryWindows.first?.window === first)
+    #expect(first.delegate === model && model.name == "Unsaved draft")
+    let other=TreeNode("T",kind:.object(.tables),server:server,database:"Other",item:.init(id:42,name:"T",schema:"dbo"))
+    host.showManagedTable(other)
+    #expect(host.auxiliaryWindows.count == 2)
+    host.showManagedTable(node,create:true)
+    host.showManagedTable(node,create:true)
+    #expect(host.auxiliaryWindows.count == 4)
+  }
   @Test func submitEligibilityTracksConnectionTransactionAndPendingChanges() {
     let server=ConnectedServer(profile:ServerProfile(),password:"")
     server.online=true

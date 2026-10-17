@@ -6,6 +6,15 @@ import UniformTypeIdentifiers
 extension WorkbenchController {
   @objc func refreshManagedObject(_ notification:Notification) {
     guard let node=notification.object as? TreeNode else {return}
+    if notification.userInfo?["refreshTable"] as? Bool == true {
+      guard notification.userInfo?["generation"] as? UUID == node.server.generation else {return}
+      if node.server.allowsCatalogIndex(node.database),state.servers.contains(where:{$0 === node.server}),
+        let schema=notification.userInfo?["schema"] as? String,let name=notification.userInfo?["name"] as? String {
+        Task { [weak self] in await self?.refreshComparedObject(server:node.server,database:node.database,key:.init(schema:schema,name:name),type:"U") }
+        return
+      }
+      if node.item != nil,node.objectFolder == .tables {refresh(node);return}
+    }
     if case .folder = node.kind {refresh(node)} else {refresh(node.parent ?? node)}
   }
   func refresh(_ node: TreeNode,indexForce:Bool=false) {
@@ -129,7 +138,7 @@ extension WorkbenchController {
   @objc func disconnectServer() {
     guard let server = contextNode?.server else { return }
     guard !server.reconnecting, let window = view.window else { return }
-    let alert = StudioAlert()
+    let alert = StudioAlert(role:"disconnectConfirmation")
     alert.messageText = "Bağlantı Explorer’dan kaldırılsın mı?"
     alert.informativeText = "\(server.profile.name) bağlantısı Explorer’dan ve yerel nesne/kolon/tanım indeksleri diskten kaldırılacak. Kayıtlı bağlantı bilgileri ve açık sorgu sekmeleri korunur."
     alert.addButton(withTitle:"Kaldır"); alert.addButton(withTitle:"Vazgeç")

@@ -3,83 +3,114 @@ import SQLServerKit
 import SwiftUI
 
 struct StructureObjectsPanel:View {
-  let table:TableDefinition
-  let initialKind:String
+  @ObservedObject var model:TableDesignerModel
   let open:(String)->Void
-  @State private var kind="INDEX"
-  @State private var name="IX_NewIndex"
-  @State private var selected:Set<String>=[]
-  @State private var includes:Set<String>=[]
-  @State private var unique=false
-  @State private var expression=""
-  @State private var targetSchema="dbo"
-  @State private var targetTable=""
-  @State private var targetColumns=""
-  @State private var deleteAction="NO ACTION"
-  @State private var updateAction="NO ACTION"
-  @State private var error=""
+  @State private var discardDraft=false
+  @State private var pendingObject:ManagedDefinition?
+  private let kinds=["INDEX","PK","UQ","FK","CHECK"]
   var body:some View {
     HSplitView {
       VStack(alignment:.leading,spacing:8) {
-        Text("Mevcut nesneler").font(.headline)
-        List(table.definitions) { object in
-          VStack(alignment:.leading) {
-            Text(object.name+" · "+object.kind)
-            HStack {
-              Button("Script") { open(object.sql) }
-              Button("DROP + CREATE") { open(drop(object)+"\nGO\n"+object.sql) }
-              Button("Drop Script") { open(drop(object)) }
-            }.buttonStyle(.borderless).font(.caption)
-          }.padding(.vertical,4)
+        HStack {
+          Text("Mevcut nesneler").font(.headline)
+          Spacer()
+          StudioActionButton("Yeni",icon:"plus") {choose(nil)}
+            .accessibilityIdentifier("newTableStructureObject")
+        }.fixedSize(horizontal:false,vertical:true)
+        List(model.original?.definitions ?? []) {object in
+          Button {choose(object)} label:{
+            HStack(alignment:.top,spacing:8) {
+              Image(systemName:object.kind == "PK" || object.kind == "UQ" ? "key.fill":object.kind == "FK" ? "link":"list.bullet.rectangle")
+                .foregroundStyle(Color(nsColor:object.kind == "PK" ? StudioTheme.warning:StudioTheme.accent))
+              VStack(alignment:.leading,spacing:3) {Text(object.name).lineLimit(2);Text(object.kind).font(.caption).foregroundStyle(.secondary)}
+              Spacer(minLength:0)
+            }.padding(6).frame(maxWidth:.infinity,alignment:.leading).contentShape(Rectangle())
+              .background(model.selectedDefinition?.id==object.id ? Color(nsColor:StudioTheme.selection):.clear,in:RoundedRectangle(cornerRadius:6))
+          }.buttonStyle(.plain).accessibilityIdentifier("tableStructure_"+object.name)
         }
-      }.frame(minWidth:330)
-      VStack(alignment:.leading,spacing:8) {
-       ScrollView {
+        if let selected=model.selectedDefinition {
+          StudioActionButton("Mevcut SQL’i Aç",icon:"doc.text") {open(selected.sql)}
+        }
+      }.padding(8).frame(minWidth:180,idealWidth:240,maxWidth:320)
+      ScrollView {
         VStack(alignment:.leading,spacing:12) {
-          Text("Yeni nesne").font(.headline)
-          StudioFormField("Tür") {Picker("Tür",selection:$kind) { Text("Index").tag("INDEX"); Text("Unique Key").tag("UQ"); Text("Foreign Key / Relationship").tag("FK"); Text("Check Constraint").tag("CHECK") }.labelsHidden()}
-          StudioFormField("Ad") {TextField("Ad",text:$name)}
-          if kind != "CHECK" {
-            Text("Anahtar kolonları (tablo sırası)").font(.caption)
-            ForEach(table.columns) { c in HStack {
-              Toggle(c.name,isOn:membership(c.name,in:$selected))
-              if kind == "INDEX" { Toggle("Include",isOn:membership(c.name,in:$includes)) }
-            } }
+          HStack {
+            Text(model.selectedDefinition == nil ? "Yeni nesne":"Nesne özellikleri").font(.headline)
+            Spacer()
+            if model.selectedDefinition != nil {Text("Düzenleme").font(.caption).foregroundStyle(.secondary)}
           }
-          if kind == "INDEX" { Toggle("UNIQUE",isOn:$unique); StudioFormField("Filtre") {TextField("Filtre: isteğe bağlı WHERE",text:$expression)} }
-          if kind == "CHECK" { StudioFormField("CHECK koşulu") {TextField("Koşul: [Amount] >= 0",text:$expression)} }
-          if kind == "FK" {
-            StudioFormField("Hedef şema") {TextField("Hedef şema",text:$targetSchema)}; StudioFormField("Hedef tablo") {TextField("Hedef tablo",text:$targetTable)}; StudioFormField("Hedef kolonlar") {TextField("Hedef kolonlar: Id, Code",text:$targetColumns)}
-            StudioFormField("ON DELETE") {Picker("ON DELETE",selection:$deleteAction) { ForEach(["NO ACTION","CASCADE","SET NULL","SET DEFAULT"],id:\.self) { Text($0) } }.labelsHidden()}
-            StudioFormField("ON UPDATE") {Picker("ON UPDATE",selection:$updateAction) { ForEach(["NO ACTION","CASCADE","SET NULL","SET DEFAULT"],id:\.self) { Text($0) } }.labelsHidden()}
+          if model.structureEditable {
+            StudioFormField("Tür") {
+              StudioSelectionPicker(title:"Nesne türü",selection:$model.structure.kind,options:kinds,label:{kind in
+                switch kind {case "PK":return "Primary Key";case "UQ":return "Unique Key";case "FK":return "Foreign Key";case "CHECK":return "Check Constraint";default:return "Index"}
+              }).disabled(model.selectedDefinition != nil)
+            }
+            StudioFormField("Ad") {TextField("Nesne adı",text:$model.structure.name)}
+            if model.structure.kind != "CHECK" {keyColumns}
+            if model.structure.kind == "INDEX" {
+              StudioFormField("Benzersiz") {Toggle("UNIQUE",isOn:$model.structure.unique)}
+              StudioFormField("Filtre") {TextField("İsteğe bağlı WHERE koşulu",text:$model.structure.expression)}
+            }
+            if model.structure.kind == "CHECK" {StudioFormField("CHECK koşulu") {TextField("[Amount] >= 0",text:$model.structure.expression)}}
+            if model.structure.kind == "FK" {
+              StudioFormField("Hedef şema") {TextField("dbo",text:$model.structure.targetSchema)}
+              StudioFormField("Hedef tablo") {TextField("Tablo adı",text:$model.structure.targetTable)}
+              StudioFormField("Hedef kolonlar") {TextField("[Id], [Code]",text:$model.structure.targetColumns)}
+              StudioFormField("ON DELETE") {actionPicker($model.structure.deleteAction)}
+              StudioFormField("ON UPDATE") {actionPicker($model.structure.updateAction)}
+            }
+            if model.selectedDefinition != nil {
+              Text("Görünmeyen indeks/depolama, güven ve devre dışı durum özellikleri korunur. Değişiklik SQL’i mevcut nesneyi kaldırıp yeniden oluşturur.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            }
+          } else {
+            StudioEmptyState(title:"SQL editöründe düzenleyin",icon:"doc.text",detail:"Bu nesnenin görsel düzenlemesi desteklenmiyor; mevcut SQL’i açabilirsiniz.")
           }
         }.padding(12)
-       }
-       Divider()
-       Text(error).foregroundStyle(.red)
-       StudioActionButton("SQL Editöründe İncele", icon:"doc.text.magnifyingglass", tint:.accentColor) {generate()}.padding(.horizontal,12)
-       Text("SQL hazırlanır; bu pencereden veritabanına yazılmaz.").font(.caption).foregroundStyle(.secondary).padding(.horizontal,12)
-      }.frame(minWidth:350)
-    }.padding(8).onAppear { if !initialKind.isEmpty { kind=initialKind }; name=kind == "FK" ? "FK_NewRelationship" : kind == "CHECK" ? "CK_NewConstraint" : "IX_NewIndex" }
+      }.frame(minWidth:420)
+    }.studioConfirmation("Nesne taslağı bırakılsın mı?",isPresented:$discardDraft,role:"discardTableStructureDraft",message:"Başka bir nesneye geçmek bu nesnenin uygulanmamış değişikliklerini bırakır. Columns taslağınız korunur.",actions:[StudioConfirmationAction(title:"Taslağı Bırak",destructive:true) {activate(pendingObject);pendingObject=nil}],cancel:{pendingObject=nil})
+      .onChange(of:model.structure.kind) {_,kind in if model.selectedDefinition==nil {model.newStructure(kind:kind)}}
   }
-  private func membership(_ name:String,in set:Binding<Set<String>>) -> Binding<Bool> { Binding(get:{set.wrappedValue.contains(name)},set:{ if $0 { set.wrappedValue.insert(name) } else { set.wrappedValue.remove(name) } }) }
-  private func drop(_ object:ManagedDefinition) -> String {
-    if object.kind == "INDEX" { return "DROP INDEX \(SQL.identifier(object.name)) ON \(table.qualified);" }
-    if object.kind == "TRIGGER" { return "DROP TRIGGER \(SQL.identifier(table.schema)).\(SQL.identifier(object.name));" }
-    return "ALTER TABLE \(table.qualified) DROP CONSTRAINT \(SQL.identifier(object.name));"
+  private func choose(_ object:ManagedDefinition?) {
+    if let object,object.id==model.selectedDefinition?.id {return}
+    if model.structureChanged {pendingObject=object;discardDraft=true} else {activate(object)}
   }
-  private func generate() {
-    do {
-      let keys=table.columns.filter { selected.contains($0.name) }.map(\.name)
-      guard !name.isEmpty else { throw SQLFailure("Nesne adı gerekli.") }
-      let sql:String
-      switch kind {
-      case "INDEX": sql=try Scripts.index(table:table.qualified,name:name,keys:keys,included:table.columns.filter { includes.contains($0.name) }.map(\.name),unique:unique,filter:expression)
-      case "UQ": guard !keys.isEmpty else { throw SQLFailure("Anahtar kolonu seçin.") }; sql="ALTER TABLE \(table.qualified) ADD CONSTRAINT \(SQL.identifier(name)) UNIQUE (\(keys.map(SQL.identifier).joined(separator:", ")));"
-      case "FK": sql=try ObjectScripts.foreignKey(table:table.qualified,name:name,columns:keys,referencedSchema:targetSchema,referencedTable:targetTable,referencedColumns:targetColumns.split(separator:",").map { $0.trimmingCharacters(in:.whitespaces) },onDelete:deleteAction,onUpdate:updateAction)
-      default: guard !expression.isEmpty else { throw SQLFailure("CHECK koşulu gerekli.") }; sql="ALTER TABLE \(table.qualified) WITH CHECK ADD CONSTRAINT \(SQL.identifier(name)) CHECK (\(expression));"
+  private func activate(_ object:ManagedDefinition?) {
+    if let object {model.select(object)}
+    else {model.newStructure(kind:kinds.contains(model.structure.kind) ? model.structure.kind:"INDEX")}
+  }
+  private var keyColumns:some View {
+    LazyVStack(alignment:.leading,spacing:6) {
+      HStack {
+        Text("Anahtar kolonları · seçim sırası").font(.caption).frame(maxWidth:.infinity,alignment:.leading)
+        if model.structure.kind != "FK" {Text("DESC").font(.caption).frame(width:56)}
+        if model.structure.kind == "INDEX" {Text("Include").font(.caption).frame(width:68)}
+      }.foregroundStyle(.secondary)
+      ForEach(model.columns) {column in
+        HStack(spacing:8) {
+          Toggle(isOn:membership(column.name,key:true)) {
+            HStack(spacing:6) {Text(column.name);if let i=model.structure.keys.firstIndex(of:column.name) {Text("\(i+1)").font(.caption).foregroundStyle(.secondary)}}
+          }.frame(maxWidth:.infinity,alignment:.leading)
+          if model.structure.kind != "FK" {
+            Toggle("Azalan",isOn:Binding(get:{model.structure.descending.contains(column.name)},set:{if $0 {model.structure.descending.insert(column.name)} else {model.structure.descending.remove(column.name)}}))
+              .labelsHidden().frame(width:56).disabled(!model.structure.keys.contains(column.name))
+          }
+          if model.structure.kind == "INDEX" {Toggle("Include",isOn:membership(column.name,key:false)).labelsHidden().frame(width:68)}
+        }.padding(.vertical,2)
       }
-      open(sql); error=""
-    } catch { self.error=error.localizedDescription }
+    }.studioCard(padding:8)
+  }
+  private func membership(_ name:String,key:Bool)->Binding<Bool> {
+    Binding(get:{key ? model.structure.keys.contains(name):model.structure.included.contains(name)},set:{value in
+      if key {
+        if value {model.structure.keys.append(name);model.structure.included.removeAll {$0==name}}
+        else {model.structure.keys.removeAll {$0==name};model.structure.descending.remove(name)}
+      } else {
+        if value {model.structure.included.append(name);model.structure.keys.removeAll {$0==name};model.structure.descending.remove(name)}
+        else {model.structure.included.removeAll {$0==name}}
+      }
+    })
+  }
+  private func actionPicker(_ selection:Binding<String>)->some View {
+    StudioSelectionPicker(title:"İlişki eylemi",selection:selection,options:["NO ACTION","CASCADE","SET NULL","SET DEFAULT"],label:{$0})
   }
 }

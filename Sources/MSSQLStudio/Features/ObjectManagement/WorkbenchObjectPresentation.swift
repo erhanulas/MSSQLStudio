@@ -26,7 +26,8 @@ extension WorkbenchController {
   func loadManagedTable(_ node:TreeNode) async throws -> TableDefinition {
     guard let item=node.item else { throw SQLFailure("Tablo seçin.") }
     let fetched=Date(),generation=node.server.generation
-    let table=try ObjectMetadata.decode(await node.server.catalog(ObjectMetadata.table(item.id),database:node.database),schema:item.schema,name:item.name)
+    var table=try ObjectMetadata.decode(await node.server.catalog(ObjectMetadata.table(item.id),database:node.database),schema:item.schema,name:item.name)
+    table.objectID=item.id
     if node.server.allowsDefinitionIndex(node.database) {
       let indexed=try? await Task.detached(priority:.utility) {
         IndexedObjectDefinition(id:item.id,schema:item.schema,name:item.name,type:"U",sql:try table.createScript(),fetchedAt:fetched)
@@ -37,8 +38,29 @@ extension WorkbenchController {
   }
   func showManagedTable(_ node:TreeNode?,create:Bool=false,initialKind:String="") {
     guard let node else { return }
+    let identity: String?
+    if !create, let item=node.item {
+      identity="studio.tableDesign.\(node.server.id).\(node.database).\(item.id)"
+    } else {identity=nil}
+    if let identity, let existing=auxiliaryWindows.compactMap(\.window).first(where:{
+      $0.identifier?.rawValue == identity && ($0.isVisible || $0.isMiniaturized)
+    }) {
+      if existing.isMiniaturized {existing.deminiaturize(nil)}
+      existing.makeKeyAndOrderFront(nil)
+      return
+    }
     let open:(String)->Void = { [weak self] sql in self?.openManagedSQL(sql,node:node,title:create ? "CREATE TABLE" : "ALTER TABLE · "+(node.item?.name ?? "")) }
-    present(TableDesignerPanel(server:node.server.profile.name,database:node.database,initialKind:initialKind,load:create ? nil : { try await self.loadManagedTable(node) },open:open),title:create ? "New Table" : "Design · "+(node.item?.qualified ?? ""),width:1080,height:720,minWidth:800,minHeight:600)
+    let application=TableDesignerApplication(node:node)
+    let model=TableDesignerModel(initialKind:initialKind,objectID:create ? nil:node.item?.id,
+      load:create ? nil:{
+        guard let item=node.item else {throw SQLFailure("Tablo seçin.")}
+        return try await application.load(schema:item.schema,name:item.name)
+      },loadTypes:{try await application.loadTypes()},
+      reload:{schema,name in try await application.load(schema:schema,name:name)},
+      apply:{plan in try await application.apply(plan)})
+    if !create,let item=node.item {model.schema=item.schema;model.name=item.name}
+    let window=present(TableDesignerPanel(server:node.server.profile.name,database:node.database,initialKind:initialKind,model:model,open:open),title:create ? "New Table":"Design · "+(node.item?.qualified ?? ""),width:1080,height:720,minWidth:800,minHeight:600,identity:identity)
+    window.delegate=model
   }
   func showManagedView(_ node:TreeNode?,create:Bool=false) {
     guard let node else { return }
@@ -176,7 +198,7 @@ extension WorkbenchController {
       guard let self else {return}
       do {
         try await triggerStateAction.apply(node,enabled:enabled,confirm:{trigger in
-          let alert=StudioAlert()
+          let alert=StudioAlert(role:"triggerStateConfirmation")
           alert.messageText=enabled ? "Trigger etkinleştirilsin mi?":"Trigger devre dışı bırakılsın mı?"
           alert.informativeText="\(node.server.profile.name) / \(node.database)\n\(trigger.qualified) · \(trigger.scope)\n"+(enabled ? "İlgili işlemlerde trigger yeniden çalışacaktır.":"İlgili işlemlerde trigger çalışmayacaktır.")
           alert.addButton(withTitle:enabled ? "Etkinleştir":"Devre Dışı Bırak");alert.addButton(withTitle:"Vazgeç")

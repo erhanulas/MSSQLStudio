@@ -12,17 +12,29 @@ import AppKit
     _ = window.setFrameAutosaveName(key)
     let restored=window.setFrameUsingName(key)
     if !window.styleMask.contains(.resizable) {window.setFrame(NSRect(origin:window.frame.origin,size:initialSize),display:false)}
-    if !restored,let owner {
-      let origin=NSPoint(x:owner.frame.midX-window.frame.width/2,y:owner.frame.midY-window.frame.height/2)
-      window.setFrameOrigin(origin)
-    }
     let screens=NSScreen.screens.map(\.visibleFrame)
     let preferred=owner?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
+    if !restored,let reference=owner?.frame ?? preferred {
+      window.setFrameOrigin(centered(window.frame.size,in:reference).origin)
+    }
     let contentMinimum=window.frameRect(forContentRect:NSRect(origin:.zero,size:window.contentMinSize)).size
     let minimum=NSSize(width:max(window.minSize.width,contentMinimum.width),height:max(window.minSize.height,contentMinimum.height))
     window.setFrame(fitted(window.frame,minimum:minimum,screens:screens,preferred:preferred),display:false)
   }
   static func save(_ window:NSWindow,role:String) {window.saveFrame(usingName:name(role))}
+  /// A native sheet owns its attachment position; only its user-selected size is restored.
+  static func restoreSheetSize(_ window:NSWindow,role:String,owner:NSWindow) {
+    let origin=window.frame.origin
+    _ = window.setFrameUsingName(name(role))
+    let screen=owner.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
+    let contentMinimum=window.frameRect(forContentRect:NSRect(origin:.zero,size:window.contentMinSize)).size
+    let minimum=NSSize(width:max(window.minSize.width,contentMinimum.width),height:max(window.minSize.height,contentMinimum.height))
+    let frame=fitted(window.frame,minimum:minimum,screens:screen.map {[$0]} ?? [],preferred:screen)
+    window.setFrame(NSRect(origin:origin,size:frame.size),display:false)
+  }
+  static func centered(_ size:NSSize,in reference:NSRect)->NSRect {
+    NSRect(x:reference.midX-size.width/2,y:reference.midY-size.height/2,width:size.width,height:size.height)
+  }
   static func fitted(_ frame:NSRect,minimum:NSSize,screens:[NSRect],preferred:NSRect?)->NSRect {
     guard !screens.isEmpty else {return frame}
     func area(_ screen:NSRect)->CGFloat {

@@ -52,7 +52,7 @@ extension WorkbenchController {
   }
   @objc private func deleteFavoriteMenu(_ item:NSMenuItem) {
     guard let node=item.representedObject as? TreeNode,let favorite=state.favorites.items.first(where:{$0.id == node.favorite?.id}),let window=view.window else {return}
-    let alert=StudioAlert();alert.messageText="Favori sorgu silinsin mi?";alert.informativeText=favorite.name
+    let alert=StudioAlert(role:"deleteFavoriteConfirmation");alert.messageText="Favori sorgu silinsin mi?";alert.informativeText=favorite.name
     alert.addButton(withTitle:"Favoriyi Sil");alert.addButton(withTitle:"Vazgeç")
     alert.beginSheetModal(for:window) { [weak self] response in
       guard response == .alertFirstButtonReturn else {return}

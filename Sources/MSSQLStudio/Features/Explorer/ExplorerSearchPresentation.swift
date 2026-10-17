@@ -29,10 +29,17 @@ extension WorkbenchController {
     if case .server = scope.kind { return scope.server.databases.map(\.name) }
     return [scope.database]
   }
-  func rebuildSearchScopes() {
+  func rebuildSearchScopes(selecting node:TreeNode? = nil) {
     if let scope=searchScope {searchDatabaseByServer[scope.server.id]=scope.database}
-    let candidate = (showingSearch ? searchScope?.server : selected?.server) ?? searchScope?.server ?? selectedServer
+    let candidate = node?.server ?? (showingSearch ? searchScope?.server : selected?.server) ?? searchScope?.server ?? selectedServer
     let server = roots.first {$0.server === candidate}?.server ?? roots.first?.server
+    if let node {
+      switch node.kind {
+      case .server: searchDatabaseByServer[node.server.id]="*"
+      case .database: searchDatabaseByServer[node.server.id]=node.database
+      default: break
+      }
+    }
     searchScopes = server.map { server in
       [TreeNode("Tüm seçili veritabanları",kind:.server,server:server,database:"*")] + server.databases.map { item in
         TreeNode(item.name,kind:.database,server:server,database:item.name,item:item)
@@ -74,7 +81,11 @@ extension WorkbenchController {
       restoreExplorerExpansion()
       if let node = savedTreeSelection {
         let row = outline.row(forItem:node)
-        if row >= 0 { outline.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false) }
+        if row >= 0 {
+          restoringTree=true
+          outline.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)
+          restoringTree=false
+        }
       }
       if let scroll = outline.enclosingScrollView {
         scroll.contentView.scroll(to:savedTreeOrigin)

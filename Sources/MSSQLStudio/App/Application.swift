@@ -51,7 +51,7 @@ import SwiftUI
        !ApplicationUpdate.consumeCompletedInstallation(in: .standard,
          runningVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0",
          bundleURL: Bundle.main.bundleURL) {
-      let alert=StudioAlert()
+      let alert=StudioAlert(role:"incompleteUpdate")
       alert.messageText="Güncelleme henüz tamamlanmadı"
       alert.informativeText="macOS Kurulum penceresinde kurulumu tamamlayıp Uygulamalar’daki MSSQL Studio’yu açın. Beklenen sürüm: \(expected)."
       alert.runModal()
@@ -240,18 +240,18 @@ import SwiftUI
   }
   private func completeTermination(_ sender:NSApplication) {
     termination.prepare(prepareTools:{ [self] in await workbench.stopProfilersForTermination() },flush:{ [self] in await studio.flushHistory() },discardHistory:{
-      let alert=StudioAlert();alert.messageText="Geçmiş kaydedilemedi"
+      let alert=StudioAlert(role:"historySaveFailure");alert.messageText="Geçmiş kaydedilemedi"
       alert.informativeText="Son geçmiş ve kapatılan sekme kayıtları diske yazılamadı. Mevcut dosya korunur. Kaydetmeden çıkarsanız bu oturumdaki yeni geçmiş kayıtları kaybolabilir."
       alert.addButton(withTitle:"Çıkışı İptal Et");alert.addButton(withTitle:"Geçmişi Kaydetmeden Çık")
       return alert.runModal() == .alertSecondButtonReturn
     },mayTerminate:{ [self] in
-      SchemaComparisonModel.activeApplications==0 && !workbench.hasActiveProfilers && (Self.updateTerminationApproved
+      SchemaComparisonModel.activeApplications==0 && TableDesignerModel.activeApplications==0 && !workbench.hasActiveProfilers && (Self.updateTerminationApproved
         ? studio.canBeginBulkClose() && studio.saveSnapshot()
         : studio.canQuit())
     },terminate:{sender.terminate(nil)},cancelled:{ [self] in cancelUpdateTermination() })
   }
   func applicationShouldTerminate(_ sender:NSApplication)->NSApplication.TerminateReply {
-    guard SchemaComparisonModel.activeApplications==0 else {cancelUpdateTermination();NSSound.beep();return .terminateCancel}
+    guard SchemaComparisonModel.activeApplications==0 && TableDesignerModel.activeApplications==0 else {cancelUpdateTermination();NSSound.beep();return .terminateCancel}
     if termination.consumeApproval() {return .terminateNow}
     // Cancel this request while asynchronous preparation uses the regular loop;
     // the coordinator requests termination again only after persistence succeeds.

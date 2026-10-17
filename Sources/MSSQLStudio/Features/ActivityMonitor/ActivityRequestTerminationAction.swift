@@ -158,7 +158,7 @@ struct ActivityRequestTerminationAction:View {
               model.completeStaleRefresh(updated)
             }
           }
-        })
+        }).studioSheetPlacement(role:"activityTerminationConfirmation",minimum:NSSize(width:620,height:600))
       }
   }
 }

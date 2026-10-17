@@ -111,7 +111,7 @@ final class PlanController: NSViewController, NSOutlineViewDataSource, NSOutline
     panel.nameFieldStringValue = "Query.sqlplan"
     if panel.runModal() == .OK, let url = panel.url {
       do { try plan.xml.write(to: url, atomically: true, encoding: .utf8) } catch {
-        NSAlert(error: error).runModal()
+        StudioAlert(role:"planExportError",error:error).runModal()
       }
     }
   }

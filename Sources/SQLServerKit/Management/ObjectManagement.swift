@@ -24,14 +24,15 @@ public struct TableColumn: Identifiable, Equatable, Sendable, Codable {
   public var editableValue: Bool { comparable || ["text", "ntext", "image", "xml"].contains(valueType.lowercased()) }
   public var comparable: Bool { !["text","ntext","image","xml","geography","geometry","hierarchyid","sql_variant"].contains(valueType.lowercased()) && !valueType.hasPrefix("[") }
 }
-public struct ManagedDefinition: Identifiable, Sendable {
+public struct ManagedDefinition: Identifiable, Equatable, Sendable {
   public var id: String { name }
   public var name: String
   public var kind: String
   public var sql: String
   public init(name:String,kind:String,sql:String) { self.name=name; self.kind=kind; self.sql=sql }
 }
-public struct TableDefinition: Sendable {
+public struct TableDefinition: Equatable, Sendable {
+  public var objectID:Int?=nil
   public var schema: String
   public var name: String
   public var columns: [TableColumn]
@@ -53,16 +54,32 @@ public enum ObjectScripts {
   public static func collation(_ value:String) throws -> String {
     guard value.range(of:#"^[A-Za-z0-9_]+$"#,options:.regularExpression) != nil else { throw SQLFailure("Collation adı geçersiz.") }; return value
   }
-  public static func validatedType(_ value:String) throws -> String {
+  public static func validatedType(_ value:String,allowedTypes:Set<String>=[]) throws -> String {
     let value=value.trimmingCharacters(in:.whitespacesAndNewlines)
-    let pattern = #"^(?:(?:bigint|int|smallint|tinyint|bit|money|smallmoney|real|date|datetime|smalldatetime|uniqueidentifier|xml|sql_variant|rowversion|timestamp)|(?:nvarchar|varchar|varbinary)\((?:max|[1-9][0-9]{0,4})\)|(?:nchar|char|binary)\([1-9][0-9]{0,4}\)|(?:decimal|numeric)\([1-9][0-9]?,[0-9]{1,2}\)|(?:datetime2|datetimeoffset|time)(?:\([0-7]\))?|float(?:\((?:[1-9]|[1-4][0-9]|5[0-3])\))?)$"#
+    if allowedTypes.contains(value),value.hasPrefix("[") {
+      let tokens=TSQL.lex(value).filter {$0.kind != .space}
+      guard tokens.count==3,tokens[1].text==".",tokens[0].text.hasPrefix("["),tokens[0].text.hasSuffix("]"),tokens[2].text.hasPrefix("["),tokens[2].text.hasSuffix("]") else {throw SQLFailure("Kullanıcı veri tipi geçersiz.")}
+      return value
+    }
+    let pattern = #"^(?:(?:text|ntext|image|sysname|geography|geometry|hierarchyid|bigint|int|smallint|tinyint|bit|money|smallmoney|real|date|datetime|smalldatetime|uniqueidentifier|xml|sql_variant|rowversion|timestamp)|(?:nvarchar|varchar|varbinary)\((?:max|[1-9][0-9]{0,4})\)|(?:nchar|char|binary)\([1-9][0-9]{0,4}\)|(?:decimal|numeric)\([1-9][0-9]?,[0-9]{1,2}\)|(?:datetime2|datetimeoffset|time)(?:\([0-7]\))?|float(?:\((?:[1-9]|[1-4][0-9]|5[0-3])\))?)$"#
     guard value.range(of:pattern,options:[.regularExpression,.caseInsensitive]) != nil else { throw SQLFailure("Veri tipi desteklenen SQL Server tipi ve boyutuyla girilmeli: nvarchar(100), decimal(18,2), int…") }
+    let base=TableDataType.baseName(value).lowercased()
+    if let open=value.firstIndex(of:"("),value.hasSuffix(")") {
+      let parts=value[value.index(after:open)..<value.index(before:value.endIndex)].split(separator:",").map(String.init)
+      if ["varchar","char","binary","varbinary","nvarchar","nchar"].contains(base),parts.first?.lowercased() != "max" {
+        let limit=["nvarchar","nchar"].contains(base) ? 4000:8000
+        guard let length=parts.first.flatMap(Int.init),(1...limit).contains(length) else {throw SQLFailure("Veri tipi uzunluğu geçersiz.")}
+      }
+      if ["decimal","numeric"].contains(base) {
+        guard parts.count==2,let p=Int(parts[0]),let scale=Int(parts[1]),(1...38).contains(p),(0...p).contains(scale) else {throw SQLFailure("Precision 1–38, scale ise 0–precision aralığında olmalı.")}
+      }
+    }
     return value
   }
-  public static func column(_ c:TableColumn,validateType:Bool=true) throws -> String {
+  public static func column(_ c:TableColumn,validateType:Bool=true,allowedTypes:Set<String>=[]) throws -> String {
     guard !c.name.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { throw SQLFailure("Kolon adı boş olamaz.") }
     if !c.computed.isEmpty { return SQL.identifier(c.name)+" AS "+c.computed+(c.persisted ? " PERSISTED" : "") }
-    let type = validateType ? try validatedType(c.type) : c.type
+    let type = validateType ? try validatedType(c.type,allowedTypes:allowedTypes) : c.type
     if c.identity && (c.nullable || c.seed.range(of:#"^-?[0-9]+$"#,options:.regularExpression) == nil || c.increment.range(of:#"^-?[0-9]+$"#,options:.regularExpression) == nil || Decimal(string:c.increment) == 0) { throw SQLFailure("Identity seed / increment sayısal olmalı.") }
     return SQL.identifier(c.name)+" "+type+(c.collation.isEmpty ? "" : " COLLATE "+(try collation(c.collation)))+(c.sparse ? " SPARSE" : "")+(c.identity ? " IDENTITY(\(c.seed),\(c.increment))" : "")+(c.rowGUID ? " ROWGUIDCOL" : "")+(c.nullable ? " NULL" : " NOT NULL")+(c.defaultSQL.isEmpty ? "" : (c.defaultName.isEmpty ? " DEFAULT " : " CONSTRAINT "+SQL.identifier(c.defaultName)+" DEFAULT ")+c.defaultSQL)
   }
@@ -72,7 +89,9 @@ public enum ObjectScripts {
     SET XACT_ABORT ON;
     BEGIN TRY
         BEGIN TRANSACTION;
+
     \(sql)
+
         COMMIT TRANSACTION;
     END TRY
     BEGIN CATCH
@@ -81,14 +100,17 @@ public enum ObjectScripts {
     END CATCH;
     """
   }
-  public static func tableChanges(original:TableDefinition?,schema:String,name:String,columns:[TableColumn],primaryKey:[String]) throws -> String {
+  public static func tableChanges(original:TableDefinition?,schema:String,name:String,columns:[TableColumn],primaryKey:[String],allowedTypes:Set<String>=[]) throws -> String {
+    transaction(try tableChangeBody(original:original,schema:schema,name:name,columns:columns,primaryKey:primaryKey,allowedTypes:allowedTypes))
+  }
+  public static func tableChangeBody(original:TableDefinition?,schema:String,name:String,columns:[TableColumn],primaryKey:[String],allowedTypes:Set<String>=[]) throws -> String {
     guard !schema.isEmpty, !name.isEmpty, !columns.isEmpty, columns.count <= 1024, Set(columns.map { $0.name.lowercased() }).count == columns.count else { throw SQLFailure("Şema, tablo ve benzersiz kolon adları gerekli.") }
     guard primaryKey.allSatisfy({ key in columns.contains { $0.name == key && !$0.nullable } }) else { throw SQLFailure("Primary key kolonları NOT NULL olmalı.") }
     let table=SQL.identifier(schema)+"."+SQL.identifier(name)
     guard let original else {
-      let body=try columns.map { try column($0) }.joined(separator:",\n    ")
+      let body=try columns.map { try column($0,allowedTypes:allowedTypes) }.joined(separator:",\n    ")
       let pk=primaryKey.isEmpty ? "" : ",\n    CONSTRAINT \(SQL.identifier("PK_"+name)) PRIMARY KEY (\(primaryKey.map(SQL.identifier).joined(separator:", ")))"
-      return transaction("CREATE TABLE \(table) (\n    \(body)\(pk)\n);")
+      return "CREATE TABLE \(table) (\n    \(body)\(pk)\n);"
     }
     guard original.schema == schema, original.name == name else { throw SQLFailure("Tablo adını Rename penceresinden değiştirin.") }
     var actions:[String]=[]
@@ -102,15 +124,27 @@ public enum ObjectScripts {
       if c.name != old.name { actions.append("EXEC sys.sp_rename @objname=\(SQL.literal(table+"."+SQL.identifier(old.name))), @newname=\(SQL.literal(c.name)), @objtype=N'COLUMN';") }
       if c.type != old.type || c.nullable != old.nullable {
         guard !old.generated else { throw SQLFailure("Üretilen kolonun tipi/NULL özelliği tasarım ekranından değiştirilemez.") }
-        let type=c.type == old.type ? c.type : try validatedType(c.type)
+        let type=c.type == old.type ? c.type : try validatedType(c.type,allowedTypes:allowedTypes)
         actions.append("ALTER TABLE \(table) ALTER COLUMN \(SQL.identifier(c.name)) \(type)\(c.collation.isEmpty ? "" : " COLLATE "+(try collation(c.collation)))\(c.nullable ? " NULL" : " NOT NULL");")
       }
       if c.defaultSQL != old.defaultSQL && !c.defaultSQL.isEmpty { actions.append("ALTER TABLE \(table) ADD DEFAULT \(c.defaultSQL) FOR \(SQL.identifier(c.name));") }
     }
-    for c in columns where !original.columns.contains(where: { $0.id == c.id }) { actions.append("ALTER TABLE \(table) ADD \(try column(c));") }
-    if pkChanged && !primaryKey.isEmpty { actions.append("ALTER TABLE \(table) ADD CONSTRAINT \(SQL.identifier(original.primaryKeyName.isEmpty ? "PK_"+name : original.primaryKeyName)) PRIMARY KEY (\(primaryKey.map(SQL.identifier).joined(separator:", ")));") }
+    for c in columns where !original.columns.contains(where: { $0.id == c.id }) { actions.append("ALTER TABLE \(table) ADD \(try column(c,allowedTypes:allowedTypes));") }
+    if pkChanged && !primaryKey.isEmpty {
+      if let definition=original.definitions.first(where:{$0.kind=="PK"}) {
+        var draft=try TableStructureDraft(definition)
+        draft.keys=primaryKey
+        draft.descending=Set(draft.descending.compactMap {name in
+          guard let id=original.columns.first(where:{$0.name==name})?.id else {return nil}
+          return columns.first(where:{$0.id==id && primaryKey.contains($0.name)})?.name
+        })
+        actions.append(try draft.createSQL(table:table,columns:columns.map(\.name)))
+      } else {
+        actions.append("ALTER TABLE \(table) ADD CONSTRAINT \(SQL.identifier(original.primaryKeyName.isEmpty ? "PK_"+name : original.primaryKeyName)) PRIMARY KEY (\(primaryKey.map(SQL.identifier).joined(separator:", ")));")
+      }
+    }
     guard !actions.isEmpty else { throw SQLFailure("Değişiklik yok.") }
-    return transaction(actions.joined(separator:"\n"))
+    return actions.joined(separator:"\n")
   }
   public static func module(_ source:String,verb:String) throws -> String {
     let tokens=TSQL.lex(source).filter { ![.space,.comment].contains($0.kind) }
@@ -137,7 +171,7 @@ public enum ObjectMetadata {
     return "SELECT object_id FROM sys.tables WHERE object_id=\(objectID);\n" + tableSQL(objectID, includeDefinitions: false)
   }
   public static func decodeEditing(_ result: Execution, schema: String, name: String) throws -> (objectID: Int, table: TableDefinition) {
-    guard !result.partial, result.results.count == 4, result.results[0].values.count == 1,
+    guard !result.partial,!result.stoppedEarly,result.failure==nil,!result.results.contains(where:{$0.truncated}), result.results.count == 4, result.results[0].values.count == 1,
       let objectID = result.results[0].values.first?.first.flatMap({ $0 }).flatMap(Int.init), objectID > 0 else { throw SQLFailure("Kaynak bir yerel kullanıcı tablosu değil veya metadata eksik.") }
     var compatible = Execution()
     compatible.results = [result.results[1], result.results[2], Rows(), Rows(), Rows(), Rows(), result.results[3]]
@@ -201,7 +235,7 @@ public enum ObjectMetadata {
     return columns + "\n" + (includeDefinitions ? definitions + "\n" : "") + flags
   }
   public static func decode(_ result:Execution,schema:String,name:String) throws -> TableDefinition {
-    guard !result.partial, result.results.count == 7 else { throw SQLFailure("Tablo metadata eksik/kısmi; script oluşturulmadı.") }
+    guard !result.partial,!result.stoppedEarly,result.failure==nil,!result.results.contains(where:{$0.truncated}), result.results.count == 7 else { throw SQLFailure("Tablo metadata eksik/kısmi; script oluşturulmadı.") }
     func value(_ row:[String?],_ i:Int) -> String { row.indices.contains(i) ? row[i] ?? "" : "" }
     guard let flags=result.results[6].values.first, flags.first != "1", flags.first != nil else { throw SQLFailure("Temporal/graph/memory-optimized/partition/compression gibi özel tablo özellikleri bu tasarım sürümünde desteklenmiyor.") }
     var columns:[TableColumn]=[]

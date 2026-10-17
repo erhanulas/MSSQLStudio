@@ -28,7 +28,7 @@ import SQLServerKit
   func windowShouldClose(_ sender:NSWindow)->Bool {
     guard !closing,!model.busy else {return false}
     guard model.hasSession else {return true}
-    let alert=StudioAlert();alert.messageText="Profiler izlemeye devam ediyor"
+    let alert=StudioAlert(role:"closeActiveProfiler");alert.messageText="Profiler izlemeye devam ediyor"
     alert.informativeText="Arka planda izlemeyi sürdürün veya yalnız bu Profiler’ın sunucu oturumunu kaldırıp kapatın."
     alert.addButton(withTitle:"Arka Planda İzle");alert.addButton(withTitle:"Durdur ve Kapat");alert.addButton(withTitle:"Vazgeç")
     switch alert.runModal() {

@@ -33,6 +33,7 @@ public enum Scripts {
       SET XACT_ABORT ON;
       BEGIN TRY
           BEGIN TRANSACTION;
+
           DECLARE @job_id uniqueidentifier;
           EXEC dbo.sp_add_job @job_name=\(SQL.literal(name)), @enabled=1, @job_id=@job_id OUTPUT;
           EXEC dbo.sp_add_jobstep @job_id=@job_id, @step_name=N'T-SQL Step', @subsystem=N'TSQL',
@@ -44,7 +45,7 @@ public enum Scripts {
         "\n    EXEC dbo.sp_add_jobschedule @job_id=@job_id, @name=\(SQL.literal(name + " Daily")), @freq_type=4, @freq_interval=1, @active_start_time=\(time);"
     }
     return sql
-      + "\n    COMMIT TRANSACTION;\nEND TRY\nBEGIN CATCH\n    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;\n    THROW;\nEND CATCH;"
+      + "\n\n    COMMIT TRANSACTION;\nEND TRY\nBEGIN CATCH\n    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;\n    THROW;\nEND CATCH;"
   }
 }
 public struct SQLTemplate: Codable, Identifiable, Sendable {

@@ -84,7 +84,7 @@ import SwiftUI
     observers.append(NotificationCenter.default.addObserver(forName:StudioTheme.changed,object:nil,queue:.main) { [weak self] _ in
       MainActor.assumeIsolated { self?.refreshSQLTheme(original:previewOriginal,edited:previewEdited,execution:execution) }
     })
-    StudioWindowPlacement.restore(panel,role:"moduleReview",owner:parent)
+    StudioWindowPlacement.restoreSheetSize(panel,role:"moduleReview",owner:parent)
     parent.beginSheet(panel)
     task=Task { [weak self] in
       let comparison=await Task.detached(priority:.userInitiated) {
