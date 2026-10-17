@@ -86,6 +86,7 @@ import AppKit
     .pinTab:.init(title:"Sorgu sekmesini sabitle / kaldır",selector:"pinActiveTab",defaultBinding:.init(key:"",modifiers:NSEvent.ModifierFlags([]).rawValue)),
     .closeLeft:.init(title:"Soldaki sorgu sekmelerini kapat",selector:"closeLeftTabs",defaultBinding:.init(key:"",modifiers:NSEvent.ModifierFlags([]).rawValue)),
     .closeRight:.init(title:"Sağdaki sorgu sekmelerini kapat",selector:"closeRightTabs",defaultBinding:.init(key:"",modifiers:NSEvent.ModifierFlags([]).rawValue)),
+    .gridCopyQuery:.init(title:"Grid · Bu değerlerle sorgu kopyala",selector:"copyQueryWithValues",defaultBinding:.init(key:"",modifiers:0)),
     .gridAdd:.init(title:"Grid · Yeni satır",selector:"addResultRow",defaultBinding:.init(key:"",modifiers:NSEvent.ModifierFlags([]).rawValue)),
     .gridClone:.init(title:"Grid · Satırı çoğalt",selector:"cloneResultRow",defaultBinding:.init(key:"",modifiers:NSEvent.ModifierFlags([]).rawValue)),
     .gridDelete:.init(title:"Grid · Satırı sil / geri al",selector:"deleteResultRow",defaultBinding:.init(key:"",modifiers:NSEvent.ModifierFlags([]).rawValue)),

@@ -19,6 +19,7 @@ import SwiftUI
     case gridPin
     case gridHide
     case gridUnpin
+    case gridCopyQuery
 
     case history, reopenTab, format, headers, newQuery, favorites
     case columns, matchingPair, parameterInfo, undo, redo, comment

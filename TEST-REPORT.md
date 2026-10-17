@@ -1,3 +1,31 @@
+## 0.2.190 release preparation — 2026-10-18
+
+- User explicitly requested publication without rerunning tests. Existing targeted development evidence above is reused for the copy-query shortcut, result spool contention fix and copy success confetti. The exact v0.2.190 package-suite step is skipped; signing audit, signed packaging, frozen-helper, manifest/hash and public feed verification remain required.
+- Version 0.2.190/build 191; release notes describe user-visible changes. Public verification pending.
+
+## Copy-query success confetti — 2026-10-18 (unpublished)
+
+- “Bu değerlerle sorgu kopyala” now checks the pasteboard write result before showing a compact 0.85-second, 32-particle StudioConfetti burst centered on its own window. Generation/write failures retain the existing error path. No query execution is added.
+- Shared native overlay uses Core Animation only, ignores hit testing, retains keyboard focus, replaces previous bursts and removes itself after 0.9 seconds. Reduce Motion uses a static success symbol. Detached window targeting follows the ResultController owner rather than the globally active window.
+- Four serialized ResultQueryCopyUITests passed, including native owner-centering, successful clipboard content, unchanged first responder, pointer pass-through, repeat replacement, reduced-motion presentation and timed cleanup. Existing normal/frozen grid shortcut and typed selection tests passed. Release build and architecture/source synchronization/diff checks passed.
+- Logs: `/tmp/mssql-confetti-final-tests.log`, `/tmp/mssql-confetti-final-release.log`. No live SQL, installed-app changes or publication. Animation aesthetics have not been inspected interactively on the installed app.
+
+## Result loading reader/encoder contention — 2026-10-18 (unpublished)
+
+- Investigated the new row-count display: RowCollection.count is stored metadata and prefixSnapshot is O(1); no row scan is used by the toolbar count. Identified a real contention boundary instead: ResultSpool.append held the same state/file lock as cached row readers while JSON-encoding each incoming batch.
+- Reproduced before the fix with a paused-encoder concurrency fixture: count reads remained available, but an already cached row could not be read until encoding was released (`/tmp/mssql-result-encoding-before.log`, expected regression failure). Added an internal encoder injection boundary; public spool format/API behavior remains unchanged.
+- JSON encoding now runs outside the reader/state lock. A separate writer lock preserves append ordering; file cursor, offsets/records, committed count and immutable snapshots are still protected atomically. Cached/old snapshot reads can proceed during encoding. Existing decoded/page cache limits, unlinked temp-file lifetime and error behavior remain.
+- Real-encoding synthetic benchmark, 64 columns with 256-row batches: cached reader latency during 1,000-row loading changed from 7.712 ms to 0.0025 ms; during 2,000-row loading from 7.600 ms to 0.002583 ms. A 100,000-iteration stored-count loop stayed about 7 ms before/after. These are isolated reader latency measurements, not total query/UI load timings or live SQL evidence.
+- Validation: 8 native tests / 3 suites and 18 core tests / 5 suites reported passing; 1 live numeric ODBC case skipped without credentials. Covers reader responsiveness while encoder is paused, concurrent writers/no lost records, snapshot/count immutability, cache eviction, numeric precision, disk filtering and capped/pinned/query-copy selection paths. Release build succeeded; architecture/source synchronization/diff checks passed.
+- Logs: `/tmp/mssql-result-encoding-baseline-benchmark.log`, `/tmp/mssql-result-encoding-after-tests.log`, `/tmp/mssql-result-encoding-release.log`. No live SQL, actual user reproduction, installed-app changes or publication performed.
+
+## Assignable copy-query shortcut — 2026-10-18 (unpublished)
+
+- Added stable gridCopyQuery command to the existing command catalog and Results shortcut category, with an unassigned default. Settings search/category/assignment/conflict handling use existing infrastructure; native result menus show the current binding automatically.
+- Focused normal/frozen CopyTable dispatches the same enabled menu action and selected-cell/typed AND/IN logic. An assigned but ineligible copy-query shortcut is consumed without falling through to ordinary copy (including modified Command+C combinations). Unrelated settings/bindings and query execution behavior are unchanged.
+- 18 native tests / 3 suites passed: ResultQueryCopyUITests, Workspace127Tests, Workspace128Tests. Covers category/search discovery, default/custom/conflict/clear behavior, normal/frozen key-equivalent dispatch, disabled selection with unchanged clipboard and modified-copy keyDown fallback protection. The initial disabled-selection fixture incorrectly targeted the nonfocused main table after pinning; corrected to explicitly retain/verify frozen-table focus and disabled menu state.
+- Release build succeeded; architecture/source synchronization/diff checks passed. No live SQL, installed-app changes or publication performed. Logs: `/tmp/mssql-query-copy-shortcut-final-tests.log`, `/tmp/mssql-query-copy-shortcut-release.log`.
+
 ## 0.2.189 public release verified — 2026-10-17
 
 - Public latest: https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.189 ; build 190, source `b7f0668b08f10846025f4f0607cfa74d4dcae9a9`.

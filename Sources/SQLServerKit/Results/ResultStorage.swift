@@ -65,6 +65,8 @@ public final class ResultSpool: @unchecked Sendable {
     let bytes: Int
   }
   private let lock = NSLock()
+  private let writerLock=NSLock()
+  private let encode:@Sendable ([[String?]]) throws -> (data:Data,sizes:[Int])
   private let handle: FileHandle
   private var pages: [Page] = []
   private var count = 0
@@ -88,7 +90,9 @@ public final class ResultSpool: @unchecked Sendable {
     defer { lock.unlock() }
     return failure
   }
-  public init() throws {
+  public convenience init() throws {try self.init(encode:Self.encodeRows)}
+  init(encode:@escaping @Sendable ([[String?]]) throws -> (data:Data,sizes:[Int])) throws {
+    self.encode=encode
     let path = FileManager.default.temporaryDirectory.appendingPathComponent(
       "MSSQL-result-\(UUID()).tmp"
     ).path
@@ -105,17 +109,27 @@ public final class ResultSpool: @unchecked Sendable {
     try FileManager.default.removeItem(atPath: path)
   }
   deinit { try? handle.close() }
+  private static func encodeRows(_ rows:[[String?]]) throws -> (data:Data,sizes:[Int]) {
+    var data=Data(),sizes:[Int]=[]
+    let encoder=JSONEncoder()
+    for row in rows {
+      let item=try encoder.encode(row)
+      sizes.append(item.count);data.append(item)
+    }
+    return (data,sizes)
+  }
   public func append(_ rows: [[String?]]) throws -> RowCollection {
+    // Keep append order serialized without making UI reads wait for JSON encoding.
+    writerLock.lock()
+    defer {writerLock.unlock()}
+    let encoded=try encode(rows)
     lock.lock()
     defer { lock.unlock() }
     if !rows.isEmpty {
-      var data = Data()
-      var next: [Record] = []
-      let encoder = JSONEncoder()
-      for row in rows {
-        let item = try encoder.encode(row)
-        next.append(Record(offset: offset + UInt64(data.count), bytes: item.count))
-        data.append(item)
+      let data=encoded.data
+      var next:[Record]=[],relative=0
+      for size in encoded.sizes {
+        next.append(Record(offset:offset+UInt64(relative),bytes:size));relative+=size
       }
       try handle.seek(toOffset: offset)
       try handle.write(contentsOf: data)

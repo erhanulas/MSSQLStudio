@@ -182,10 +182,12 @@ import SwiftUI
   @objc func copy(_ sender: Any?) { copyRows?() }
   override func performKeyEquivalent(with event:NSEvent)->Bool {
     if window?.firstResponder === self,StudioCommandCatalog.dispatch(event,to:self,menu:{makeShortcutMenu()}) {return true}
+    if window?.firstResponder === self,GridShortcuts.matches(.gridCopyQuery,event) {return true}
     return super.performKeyEquivalent(with:event)
   }
   override func keyDown(with event: NSEvent) {
     if StudioCommandCatalog.dispatch(event,to:self,menu:{makeShortcutMenu()}) {return}
+    if GridShortcuts.matches(.gridCopyQuery,event) {return}
     if GridShortcuts.matches(.columns,event) { searchColumns?(); return }
     if event.keyCode == 36 || event.keyCode == 76 {
       if let c=owner.cellColumns.first, let position=tableColumns.indices.first(where:{canonicalPosition($0) == c}), selectedRow >= 0 {editCell?(selectedRow,position);return}

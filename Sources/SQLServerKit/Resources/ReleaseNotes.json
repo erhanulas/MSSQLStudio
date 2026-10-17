@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.190",
+    "date": "2026-10-18",
+    "title": "Sonuçlarla sorgu hazırlamak daha pratik",
+    "changes": [
+      "Bu değerlerle sorgu kopyala işlemine Ayarlar → Kısayollar üzerinden tuş atayabilirsiniz.",
+      "Sorgu başarıyla panoya kopyalandığında küçük bir konfeti animasyonu gösterilir. Hareketi azalt açıkken başarı simgesi kullanılır.",
+      "Çok satırlı sonuçlar yüklenirken tablonun okunmasını bekletebilen işlem iyileştirildi."
+    ]
+  },
+  {
     "version": "0.2.189",
     "date": "2026-10-17",
     "title": "Seçili sonuçlarla daha hızlı sorgu hazırlayın",

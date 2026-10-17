@@ -276,7 +276,9 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     do {
       guard let template=queryCopy.template else {throw SQLFailure(queryCopy.reason)}
       let sql=try template.sql(cells:queryCopyCells())
-      NSPasteboard.general.clearContents();NSPasteboard.general.setString(sql,forType:.string)
+      NSPasteboard.general.clearContents()
+      guard NSPasteboard.general.setString(sql,forType:.string) else {throw SQLFailure("SQL panoya yazılamadı.")}
+      if let host=view.window?.contentView {StudioConfetti.show(in:host)}
     } catch {
       let alert=StudioAlert(role:"copyQueryWithValues")
       alert.messageText="Sorgu kopyalanamadı";alert.informativeText=error.localizedDescription
