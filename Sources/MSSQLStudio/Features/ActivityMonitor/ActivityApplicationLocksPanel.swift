@@ -16,17 +16,16 @@ struct ActivityApplicationLocksPanel:View {
       if model.applicationLocks.isEmpty {
         StudioEmptyState(title:model.applicationLocksTime==nil ? "Uygulama kilitleri bekleniyor":!model.applicationLockError.isEmpty || !model.applicationLockIssues.isEmpty ? "Kilit bilgisi doğrulanamadı":"Etkin uygulama kilidi yok",icon:"lock.shield",detail:"Yalnız bu sekme açıkken application lock kaynakları salt okunur olarak alınır.")
       } else {
-        Table(model.applicationLocks,selection:$selected) {
-          TableColumn("Oturum") {Text(String($0.sessionID)).monospacedDigit()}.width(55)
-          TableColumn("Kaynak",value:\.resource).width(min:130,ideal:220)
-          TableColumn("Durum") {Text($0.status).foregroundStyle(Color(nsColor:$0.status=="GRANTED" ? StudioTheme.success:StudioTheme.warning))}.width(min:75,ideal:90)
-          TableColumn("Mod",value:\.mode).width(55)
-          TableColumn("Sahip",value:\.ownerType).width(min:85,ideal:100)
-          TableColumn("Veritabanı",value:\.database).width(min:85,ideal:110)
-          TableColumn("Login",value:\.login).width(min:90,ideal:120)
-          TableColumn("Host",value:\.host).width(min:90,ideal:120)
-          TableColumn("Uygulama",value:\.program).width(min:110,ideal:160)
-        }.frame(minHeight:120).accessibilityIdentifier("activityApplicationLocks")
+        ActivityDataGrid(rows:model.applicationLocks,columns:[
+          .init(title:"Oturum",width:65,numeric:true,value:{String($0.sessionID)}),
+          .init(title:"Kaynak",width:220,value:{$0.resource}),.init(title:"Durum",value:{$0.status}),
+          .init(title:"Mod",width:65,value:{$0.mode}),.init(title:"Sahip",value:{$0.ownerType}),
+          .init(title:"Veritabanı",value:{$0.database}),.init(title:"Login",value:{$0.login}),
+          .init(title:"Host",value:{$0.host}),.init(title:"Uygulama",width:160,value:{$0.program}),
+          .init(title:"Sahip no",numeric:true,value:{$0.ownerID}),.init(title:"SQL kaynağı",value:{$0.sqlSource}),
+          .init(title:"SQL",width:380,value:{$0.sql})
+        ],selection:$selected,identifier:"activityApplicationLocks").frame(minHeight:120)
+
         if let lock {
           VStack(alignment:.leading,spacing:8) {
             HStack {

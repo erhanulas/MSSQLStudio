@@ -44,21 +44,26 @@ import Testing
     let old=try JSONDecoder().decode(SQLProfiler.Event.self,from:JSONSerialization.data(withJSONObject:legacy))
     #expect(old.messageLevel == .unknown && old.message==event.message)
   }
-  @Test func defaultHideOnlyRemovesInformationalNotificationsAndIsReversible() throws {
+  @Test func defaultHideRemovesInformationAndWarningsAndIsReversible() throws {
     let info=try SQLProfiler.decode(Self.execution()).events[0]
     let warning=try SQLProfiler.decode(Self.execution(number:8153)).events[0]
     let error=try SQLProfiler.decode(Self.execution(number:50000,severity:"16",message:"Intentional failure")).events[0]
     let unknown=try SQLProfiler.decode(Self.execution(severity:nil)).events[0]
     let completed=try SQLProfiler.decode(SQLProfilerTests.execution()).events[0]
-    let source=[info,warning,error,unknown,completed]
+    let severeNull=try SQLProfiler.decode(Self.execution(number:8153,severity:"16")).events[0]
+    let unknownNull=try SQLProfiler.decode(Self.execution(number:8153,severity:nil)).events[0]
+    let source=[info,warning,error,unknown,completed,severeNull,unknownNull]
     var filter=SQLProfilerFiltering.Filter()
     #expect(filter.hideInformational)
-    #expect(try SQLProfilerFiltering.project(source,filter:filter).events==[warning,error,unknown,completed])
+    #expect(try SQLProfilerFiltering.project(source,filter:filter).events==[error,unknown,completed,severeNull,unknownNull])
+    #expect(filter.hidesNotification(warning) && warning.messageLevel == .warning)
+    #expect(!filter.hidesNotification(severeNull) && !filter.hidesNotification(unknownNull))
     filter.hideInformational=false
+    #expect(!filter.hidesNotification(warning))
     #expect(try SQLProfilerFiltering.project(source,filter:filter).events==source)
     filter.rules=[.init(column:.message,comparison:.contains,value:"Intentional failure")]
     #expect(try SQLProfilerFiltering.project(source,filter:filter).events==[error])
-    #expect(source.count==5 && SQLProfilerFiltering.Column.message.value(error)=="Intentional failure")
+    #expect(source.count==7 && SQLProfilerFiltering.Column.message.value(error)=="Intentional failure")
   }
   @Test func sameTimeErrorAndCompletionAreRetainedAsSeparateServerEvents() throws {
     let errorExecution=Self.execution(number:50000,severity:"16",message:"Intentional failure",sql:"SELECT 1")

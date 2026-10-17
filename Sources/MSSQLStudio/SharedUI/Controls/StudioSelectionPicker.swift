@@ -12,7 +12,12 @@ import SwiftUI
     let font=NSFont.systemFont(ofSize:StudioMetrics.bodyFont)
     let text=NSAttributedString(string:title,attributes:[.font:font,.foregroundColor:ink,.paragraphStyle:paragraph])
     let height=ceil(font.boundingRectForFont.height)
-    text.draw(in:NSRect(x:frame.minX+10,y:frame.midY-height/2,width:max(0,frame.width-36),height:height))
+    let symbol=(view as? StudioSelectionControl)?.leadingSymbol
+    let inset:CGFloat=symbol == nil ? 10:32
+    if let symbol,let image=NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(paletteColors:[ink])) {
+      StudioSymbolDrawing.draw(image,in:NSRect(x:frame.minX+10,y:frame.midY-7,width:14,height:14))
+    }
+    text.draw(in:NSRect(x:frame.minX+inset,y:frame.midY-height/2,width:max(0,frame.width-inset-26),height:height))
     if let image=NSImage(systemSymbolName:"chevron.up.chevron.down",accessibilityDescription:nil)?.withSymbolConfiguration(.init(paletteColors:[ink])) {
       StudioSymbolDrawing.draw(image,in:NSRect(x:frame.maxX-24,y:frame.midY-7,width:14,height:14))
     }
@@ -20,6 +25,7 @@ import SwiftUI
 }
 
 @MainActor final class StudioSelectionControl:NSPopUpButton {
+  var leadingSymbol:String? {didSet {needsDisplay=true}}
   convenience init() {self.init(frame:.zero,pullsDown:false)}
   override init(frame:NSRect,pullsDown:Bool) {
     super.init(frame:frame,pullsDown:pullsDown)
@@ -41,6 +47,7 @@ struct StudioSelectionPicker<Value:Equatable>:NSViewRepresentable {
   @Binding var selection:Value
   let options:[Value]
   let label:(Value)->String
+  var symbol:String?=nil
   @Environment(\.isEnabled) private var isEnabled
   func makeCoordinator()->Coordinator {Coordinator(self)}
   func makeNSView(context:Context)->StudioSelectionControl {
@@ -53,6 +60,7 @@ struct StudioSelectionPicker<Value:Equatable>:NSViewRepresentable {
     let titles=options.map(label)
     if view.itemTitles != titles {view.removeAllItems();view.addItems(withTitles:titles)}
     view.selectItem(at:options.firstIndex(of:selection) ?? -1)
+    view.leadingSymbol=symbol
     view.isEnabled=isEnabled;view.setAccessibilityLabel(title)
   }
   func sizeThatFits(_ proposal:ProposedViewSize,nsView:StudioSelectionControl,context:Context)->CGSize? {
@@ -64,6 +72,44 @@ struct StudioSelectionPicker<Value:Equatable>:NSViewRepresentable {
     @objc func choose(_ sender:NSPopUpButton) {
       guard parent.options.indices.contains(sender.indexOfSelectedItem) else {return}
       parent.selection=parent.options[sender.indexOfSelectedItem]
+    }
+  }
+}
+
+/// Action menu using the same native selection surface without a persistent selection.
+struct StudioSelectionMenu:NSViewRepresentable {
+  struct Item {
+    let title:String
+    var enabled=true
+    let action:()->Void
+  }
+  let title:String
+  var symbol:String?=nil
+  let items:[Item]
+  @Environment(\.isEnabled) private var isEnabled
+  func makeCoordinator()->Coordinator {Coordinator(self)}
+  func makeNSView(context:Context)->StudioSelectionControl {
+    let view=StudioSelectionControl(frame:.zero,pullsDown:true)
+    view.target=context.coordinator;view.action=#selector(Coordinator.choose(_:))
+    return view
+  }
+  func updateNSView(_ view:StudioSelectionControl,context:Context) {
+    context.coordinator.parent=self
+    view.removeAllItems();view.addItem(withTitle:title)
+    for item in items {view.addItem(withTitle:item.title);view.lastItem?.isEnabled=item.enabled}
+    view.autoenablesItems=false;view.leadingSymbol=symbol;view.isEnabled=isEnabled
+    view.setAccessibilityLabel(title)
+  }
+  func sizeThatFits(_ proposal:ProposedViewSize,nsView:StudioSelectionControl,context:Context)->CGSize? {
+    CGSize(width:proposal.width ?? nsView.intrinsicContentSize.width,height:StudioMetrics.controlHeight)
+  }
+  @MainActor final class Coordinator:NSObject {
+    var parent:StudioSelectionMenu
+    init(_ parent:StudioSelectionMenu) {self.parent=parent}
+    @objc func choose(_ sender:NSPopUpButton) {
+      let index=sender.indexOfSelectedItem-1
+      guard parent.items.indices.contains(index),parent.items[index].enabled,sender.isEnabled else {return}
+      parent.items[index].action()
     }
   }
 }

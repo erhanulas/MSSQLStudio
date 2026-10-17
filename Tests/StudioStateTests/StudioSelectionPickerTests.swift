@@ -4,6 +4,29 @@ import Testing
 @testable import MSSQLStudio
 
 @MainActor @Suite(.serialized) struct StudioSelectionPickerTests {
+  @Test func sharedActionMenuSupportsOptionalIconAndDisabledChoices() throws {
+    _=NSApplication.shared
+    var invoked=0
+    let menu=StudioSelectionMenu(title:"Export",symbol:"square.and.arrow.up",items:[
+      .init(title:"Selected",enabled:false,action:{invoked+=10}),
+      .init(title:"All",action:{invoked+=1})
+    ])
+    let host=NSHostingView(rootView:menu.frame(width:142,height:28))
+    let window=NSWindow(contentRect:NSRect(x:-20000,y:0,width:180,height:50),styleMask:[.titled],backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=host;window.orderFront(nil);defer {window.close()}
+    host.layoutSubtreeIfNeeded()
+    func children(_ view:NSView)->[NSView] {[view]+view.subviews.flatMap(children)}
+    let control=try #require(children(host).compactMap {$0 as? StudioSelectionControl}.first)
+    #expect(control.pullsDown && control.leadingSymbol=="square.and.arrow.up")
+    #expect(control.itemTitles==["Export","Selected","All"] && control.item(at:1)?.isEnabled==false)
+    control.selectItem(at:1)
+    #expect(NSApp.sendAction(try #require(control.action),to:control.target,from:control))
+    #expect(invoked==0)
+    control.selectItem(at:2)
+    #expect(NSApp.sendAction(try #require(control.action),to:control.target,from:control))
+    #expect(invoked==1)
+    #expect(StudioSelectionControl().leadingSymbol==nil)
+  }
   @Test func sharedPickerAndExplorerFillEqualWidthSlotsAcrossThemes() async throws {
     _=NSApplication.shared
     let mode=StudioTheme.mode;defer {StudioTheme.apply(mode)}

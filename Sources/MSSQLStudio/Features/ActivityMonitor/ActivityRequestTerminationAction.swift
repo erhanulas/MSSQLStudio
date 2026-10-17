@@ -7,9 +7,32 @@ import SQLServerKit
   @Published private(set) var busy=false
   @Published private(set) var message=""
   @Published private(set) var failed=false
+  @Published private(set) var phase=""
+  @Published private(set) var operationContext=""
   private let server:ConnectedServer
   private let writer:Writer?
   init(server:ConnectedServer,writer:Writer?=nil) {self.server=server;self.writer=writer}
+  func prepare(_ target:ActivityRequestTermination.Target,generation:UUID) async -> Bool {
+    guard !busy,server.online,server.generation==generation else {return false}
+    busy=true;failed=false;message=""
+    phase="Seçili oturum ve istek sunucudan doğrulanıyor…"
+    operationContext="\(server.profile.name) · Oturum \(target.sessionID)"
+    defer {busy=false}
+    do {
+      var limits=Limits();limits.rows=2;limits.resultSets=2;limits.totalBytes=64_000;limits.timeout=10
+      let result=try await server.catalog(ActivityRequestTermination.validationSQL(for:target),database:"master",limits:limits)
+      try Task.checkCancellation()
+      guard server.online,server.generation==generation else {return false}
+      guard !result.partial,!result.stoppedEarly,result.results.count==1,
+        !result.results[0].truncated,result.results[0].values.count==1,result.results[0].values[0]==["1"] else {
+        throw SQLFailure("Seçili hedef doğrulanamadı; DBA listesini yenileyin.")
+      }
+      return true
+    } catch {
+      guard server.generation==generation,!Task.isCancelled else {return false}
+      failed=true;message=error.localizedDescription;return false
+    }
+  }
   func terminate(_ request:ActivityMonitoring.Request,generation:UUID) async -> Bool {
     await terminate(.request(request),generation:generation)
   }
@@ -19,6 +42,8 @@ import SQLServerKit
       message="Bağlantı değişmiş veya çevrimdışı; DBA listesini yenileyin.";failed=true;return false
     }
     busy=true;message="";failed=false
+    phase="Sonlandırma sunucuya gönderiliyor; yanıt bekleniyor…"
+    operationContext="\(server.profile.name) · Oturum \(target.sessionID)"
     defer {busy=false}
     var connection:ODBCConnection?
     do {
@@ -59,10 +84,14 @@ struct ActivityRequestTerminationAction:View {
   var request:ActivityMonitoring.Request?=nil
   var applicationLock:ActivityApplicationLocks.Lock?=nil
   var applicationLockMode=false
-  @State private var target:ActivityRequestTermination.Target?
-  @State private var generation:UUID?
-  @State private var confirming=false
-  @State private var confirmationServerName=""
+  private struct Confirmation:Identifiable {
+    let id=UUID()
+    let target:ActivityRequestTermination.Target
+    let generation:UUID
+    let serverName:String
+  }
+  @State private var confirmation:Confirmation?
+  @State private var preparation:Task<Void,Never>?
   @State private var presented=true
   private var isApplicationLockAction:Bool {applicationLockMode || applicationLock != nil}
   private var candidate:ActivityRequestTermination.Target? {
@@ -76,32 +105,41 @@ struct ActivityRequestTerminationAction:View {
       && !monitor.diagnostics.backups.contains {$0.sessionID==request.sessionID}
       && !monitor.diagnostics.active.contains {$0.sessionID==request.sessionID && $0.command.uppercased().hasPrefix("BACKUP")}
   }
+  var actionEnabled:Bool {candidate != nil && canTerminateTarget && monitor.server.online && !model.busy}
+  private var unavailableReason:String? {
+    guard let applicationLock else {return nil}
+    do {_=try ActivityRequestTermination.sql(for:.applicationLock(applicationLock));return nil}
+    catch {return error.localizedDescription}
+  }
   var body:some View {
     VStack(alignment:.leading,spacing:8) {
       HStack {
         Spacer()
         if model.busy {ProgressView().controlSize(.small)}
         StudioActionButton(!isApplicationLockAction ? "Sorguyu Sonlandır":"Oturumu Sonlandır",icon:"stop.circle",tint:Color(nsColor:StudioTheme.danger)) {
-          target=candidate;generation=monitor.server.generation;confirmationServerName=monitor.server.profile.name;confirming=true
-        }.disabled(candidate==nil || !canTerminateTarget || !monitor.server.online || model.busy || monitor.loading)
+          guard let target=candidate else {return}
+          let snapshot=Confirmation(target:target,generation:monitor.server.generation,serverName:monitor.server.profile.name)
+          preparation=Task {
+            if await model.prepare(target,generation:snapshot.generation),presented,!Task.isCancelled {confirmation=snapshot}
+            preparation=nil
+          }
+        }.disabled(!actionEnabled)
           .accessibilityIdentifier(!isApplicationLockAction ? "activityTerminateRequest":"activityTerminateApplicationLock")
-          .studioHelp(!isApplicationLockAction ? (request?.command.uppercased().hasPrefix("BACKUP")==true ? "Yedekleme sorguları bu ekrandan sonlandırılamaz.":"Seçili sorgunun oturumunu sonlandırır; bloklayan başka oturumu hedeflemez. Aynı oturumdaki tüm sorgular etkilenir."):"Seçili application lock sahibinin tüm oturumunu sonlandırır. Boşta oturumlar da sonlandırılabilir; diğer sorgu ve kilitler de etkilenir.")
+          .studioHelp(unavailableReason ?? (!isApplicationLockAction ? (request?.command.uppercased().hasPrefix("BACKUP")==true ? "Yedekleme sorguları bu ekrandan sonlandırılamaz.":request?.wait.uppercased().hasPrefix("SP_SERVER_DIAGNOSTICS")==true ? "SQL Server tanılama beklemesindeki oturumlar sonlandırılamaz.":"Seçili sorgunun oturumunu sonlandırır; bloklayan başka oturumu hedeflemez. Aynı oturumdaki tüm sorgular etkilenir."):"Seçili application lock sahibinin tüm oturumunu sonlandırır. Boşta oturumlar da sonlandırılabilir; diğer sorgu ve kilitler de etkilenir."))
       }
+      if model.busy {StudioLoadingView(title:"Oturum işlemi",context:model.operationContext,phase:model.phase).frame(height:124)}
       if !model.message.isEmpty {StudioFeedback(message:model.message,tone:model.failed ? .error:.info)}
-    }.onAppear {presented=true}.onDisappear {presented=false;confirming=false}
-      .sheet(isPresented:$confirming,onDismiss:{target=nil;generation=nil}) {
-        if let target {
-          ActivityTerminationConfirmation(target:target,serverName:confirmationServerName,cancel:{confirming=false},confirm:{
-            guard let generation else {return}
-            confirming=false
-            Task {
-              if await model.terminate(target,generation:generation) {
-                monitor.clearDiagnostics()
-                if presented {await monitor.load(includeDiagnostics:true,includeApplicationLocks:target.isApplicationLock)}
-              }
+    }.onAppear {presented=true}.onDisappear {presented=false;preparation?.cancel();preparation=nil;confirmation=nil}
+      .sheet(item:$confirmation) {snapshot in
+        ActivityTerminationConfirmation(target:snapshot.target,serverName:snapshot.serverName,cancel:{confirmation=nil},confirm:{
+          confirmation=nil
+          Task {
+            if await model.terminate(snapshot.target,generation:snapshot.generation) {
+              monitor.clearDiagnostics()
+              if presented {await monitor.load(includeDiagnostics:true,includeApplicationLocks:snapshot.target.isApplicationLock)}
             }
-          })
-        }
+          }
+        })
       }
   }
 }

@@ -129,6 +129,8 @@ import SwiftUI
       ReservedShortcut(binding:Binding(key:key,modifiers:flags.rawValue),title:title,action:nil)
     }
     return [
+      native("\t",.control,"Uygulama pencereleri arasında geçiş"),
+      native("\t",[.control,.shift],"Uygulama pencereleri arasında geri geçiş"),
       command("\r",.command,.runStatement),
       command(" ",.control,.completion),
       command("b",.command,.definition),

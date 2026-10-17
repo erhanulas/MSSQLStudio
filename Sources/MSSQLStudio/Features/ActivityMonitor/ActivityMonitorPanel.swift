@@ -257,18 +257,19 @@ struct ActivityMonitorPanel:View {
     }.accessibilityIdentifier("activityCharts")
   }
   private var samplesTable:some View {
-    Table(Array(displayedSamples.reversed())) {
-      TableColumn("Zaman") {Text($0.time.formatted(date:.omitted,time:.standard)).monospacedDigit()}.width(min:72,ideal:82,max:100)
-      TableColumn("CPU %") {Text(ActivityFormat.number($0.cpu))}.width(min:50,ideal:60,max:80)
-      TableColumn("Aktif") {Text(ActivityFormat.count($0.health.activeRequests))}.width(min:45,ideal:50,max:70)
-      TableColumn("Blok") {Text(ActivityFormat.count($0.health.blockedRequests))}.width(min:45,ideal:50,max:70)
-      TableColumn("Tx") {Text(ActivityFormat.count($0.health.openTransactions))}.width(min:45,ideal:50,max:70)
-      TableColumn("Bekleyen") {Text(ActivityFormat.number($0.waiting))}.width(min:55,ideal:70,max:90)
-      TableColumn("I/O MiB/sn") {Text(ActivityFormat.number($0.megabytesPerSecond))}.width(min:65,ideal:85,max:120)
-      TableColumn("Okuma ms") {Text(ActivityFormat.number($0.readLatencyMS))}.width(min:65,ideal:85,max:120)
-      TableColumn("Yazma ms") {Text(ActivityFormat.number($0.writeLatencyMS))}.width(min:65,ideal:85,max:120)
-    }.accessibilityIdentifier("activitySamples")
+    ActivityDataGrid(rows:Array(displayedSamples.reversed()),columns:[
+      .init(title:"Zaman",value:{$0.time.formatted(date:.omitted,time:.standard)}),
+      .init(title:"CPU %",numeric:true,value:{$0.cpu.map(String.init(describing:))}),
+      .init(title:"Aktif",numeric:true,value:{$0.health.activeRequests.map(String.init)}),
+      .init(title:"Blok",numeric:true,value:{$0.health.blockedRequests.map(String.init)}),
+      .init(title:"Tx",numeric:true,value:{$0.health.openTransactions.map(String.init)}),
+      .init(title:"Bekleyen",numeric:true,value:{$0.waiting.map(String.init(describing:))}),
+      .init(title:"I/O MiB/sn",numeric:true,value:{$0.megabytesPerSecond.map(String.init(describing:))}),
+      .init(title:"Okuma ms",numeric:true,value:{$0.readLatencyMS.map(String.init(describing:))}),
+      .init(title:"Yazma ms",numeric:true,value:{$0.writeLatencyMS.map(String.init(describing:))})
+    ],selection:.constant(nil),identifier:"activitySamples")
   }
+
   private var diagnosticsPanel:some View {
     VStack(alignment:.leading,spacing:8) {
       HStack {
@@ -286,21 +287,25 @@ struct ActivityMonitorPanel:View {
       if diagnosticRows.isEmpty {
         StudioEmptyState(title:model.diagnosticsTime == nil ? "DBA verisi bekleniyor":!model.diagnosticsError.isEmpty || !model.diagnostics.issues.isEmpty ? "Tanı verisi doğrulanamadı":"Bu grupta istek yok",icon:diagnosticKind == 2 ? "externaldrive.badge.checkmark":"checkmark.shield",detail:model.diagnosticsTime == nil ? "DBA görünümü açıkken sınırlı, salt okunur örnek alınır.":"Yetki ve filtre kapsamı yukarıdaki uyarılarla birlikte değerlendirilmelidir.")
       } else {
-        Table(diagnosticRows,selection:$selectedRequest) {
-          TableColumn("Oturum") {Text(String($0.sessionID)).monospacedDigit()}.width(min:40,ideal:50,max:75)
-          TableColumn("Login") {Text($0.login).lineLimit(1).studioHelp($0.login)}.width(min:55,ideal:65,max:180)
-          TableColumn("Host") {Text($0.host).lineLimit(1).studioHelp($0.host)}.width(min:55,ideal:65,max:180)
-          TableColumn("Uygulama") {Text($0.program).lineLimit(1).studioHelp($0.program)}.width(min:65,ideal:90,max:230)
-          TableColumn("Veritabanı") {Text($0.database).lineLimit(1)}.width(min:50,ideal:70,max:160)
-          TableColumn("Komut") {Text($0.command).lineLimit(1)}.width(min:65,ideal:90,max:210)
-          TableColumn("Süre") {Text(ActivityFormat.duration($0.elapsedMS))}.width(min:45,ideal:60,max:95)
-          TableColumn("CPU") {Text(ActivityFormat.duration($0.cpuMS))}.width(min:40,ideal:55,max:90)
-          TableColumn("Bloklayan") {Text($0.blocker.map(String.init) ?? "—")}.width(min:45,ideal:55,max:85)
-          TableColumn(diagnosticKind == 2 ? "İlerleme":"Bekleme") {request in
-            if diagnosticKind == 2 {Text(ActivityFormat.number(request.percentComplete)+" %").monospacedDigit()}
-            else {Text(request.wait.isEmpty ? "—":request.wait).lineLimit(1).studioHelp(request.wait)}
-          }
-        }.frame(minHeight:120).accessibilityIdentifier("activityRequests")
+        ActivityDataGrid(rows:diagnosticRows,columns:[
+          .init(title:"Oturum",width:65,numeric:true,value:{String($0.sessionID)}),
+          .init(title:"Çalışma süresi (sn)",numeric:true,value:{$0.elapsedMS.map {String(Double($0)/1000)}}),
+          .init(title:"Login",value:{$0.login}),.init(title:"Host",value:{$0.host}),
+          .init(title:"Uygulama",width:160,value:{$0.program}),.init(title:"Veritabanı",value:{$0.database}),
+          .init(title:"Komut",value:{$0.command}),.init(title:"Durum",value:{$0.status}),
+          .init(title:"CPU (ms)",numeric:true,value:{$0.cpuMS.map(String.init)}),
+          .init(title:"Bloklayan",numeric:true,value:{$0.blocker.map(String.init)}),
+          .init(title:"Bekleme",width:180,value:{$0.wait}),
+          .init(title:"Bekleme (ms)",numeric:true,value:{$0.waitMS.map(String.init)}),
+          .init(title:"İlerleme %",numeric:true,value:{$0.percentComplete.map(String.init(describing:))}),
+          .init(title:"Okuma",numeric:true,value:{$0.reads.map(String.init)}),
+          .init(title:"Mantıksal okuma",numeric:true,value:{$0.logicalReads.map(String.init)}),
+          .init(title:"Yazma",numeric:true,value:{$0.writes.map(String.init)}),
+          .init(title:"Transaction",numeric:true,value:{$0.openTransactions.map(String.init)}),
+          .init(title:"Bekleme kaynağı",width:200,value:{$0.waitResource}),
+          .init(title:"SQL",width:380,value:{$0.sql})
+        ],selection:$selectedRequest,identifier:"activityRequests").id(diagnosticKind).frame(minHeight:120)
+
         requestDetail
       }
       }

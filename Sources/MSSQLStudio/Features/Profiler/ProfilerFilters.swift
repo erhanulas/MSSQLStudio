@@ -6,14 +6,14 @@ struct ProfilerFilters:View {
   @ObservedObject var model:ProfilerModel
   @ObservedObject private var choices:ProfilerChoicesModel
   @State private var manualColumns:Set<SQLProfilerFiltering.Column>=[.application,.clientPID,.host,.session]
-  @State private var expanded:Set<String>=["scope","client","sql"]
+  @State private var expanded:Set<String>=["scope","client","sql","filtering"]
   init(model:ProfilerModel,showClients:Binding<Bool>) {self.model=model;choices=model.choices}
   var body:some View {
     ScrollView {
       VStack(alignment:.leading,spacing:8) {
-        Toggle("Bilgi bildirimlerini gizle",isOn:$model.displayFilter.hideInformational)
+        Toggle("Bilgi ve uyarıları gizle",isOn:$model.displayFilter.hideInformational)
           .toggleStyle(.checkbox).accessibilityIdentifier("profilerHideInformational")
-          .studioHelp("Bilgi düzeyindeki error_reported olaylarını görünümden gizler. Hata, uyarı ve düzeyi bilinmeyen olaylar korunur; yakalama ve tüm olayları dışa aktarma değişmez.")
+          .studioHelp("Bilgi bildirimlerini ve uyarıları görünümden gizler. Hatalar ve düzeyi bilinmeyen olaylar korunur; yakalama ve tüm olayları dışa aktarma değişmez.")
         Divider()
         Text(model.hasSession ? "Yakalama · Düzenlemek için durdurun":"Yakalama · Sunucuda uygulanır")
           .font(.system(size:11)).foregroundStyle(.secondary)
@@ -41,49 +41,49 @@ struct ProfilerFilters:View {
         if choices.loading {ProgressView().controlSize(.small)}
         if !choices.error.isEmpty {StudioFeedback(message:choices.error,tone:.warning)}
         Divider()
-        Label("Filtreleme",systemImage:"line.3.horizontal.decrease")
-          .font(.system(size:StudioMetrics.detailFont,weight:.semibold)).foregroundStyle(.secondary)
-        ProfilerFilterTemplateControls(model:model)
-        HStack(spacing:8) {
-          Image(systemName:"magnifyingglass").foregroundStyle(.secondary)
-          TextField("Yakalanan SQL’de ara…",text:$model.displayFilter.sqlSearch).textFieldStyle(.roundedBorder)
-            .accessibilityIdentifier("profilerSQLSearch")
-            .modifier(ProfilerFilterEmphasis(active:!model.displayFilter.sqlSearch.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty))
-          if model.filtering {ProgressView().controlSize(.small)}
-        }
-        HStack {
-          Text("Grid filtreleri · \(model.displayFilter.rules.count+model.displayFilter.columnRules.count)").foregroundStyle(.secondary)
-          Spacer(minLength:0)
-          Button {model.displayFilter = .init()} label:{Image(systemName:"arrow.counterclockwise")}
-            .buttonStyle(StudioSecondaryButton()).accessibilityLabel("Grid filtrelerini sıfırla").studioHelp("Grid filtrelerini ve SQL aramasını sıfırla; yakalamayı değiştirmez")
-        }
-        Text("Kolon başlığına tıklayarak koşul ekleyin. Hücreye sağ tıklayarak değerini filtreleyin.")
-          .font(.system(size:11)).foregroundStyle(.secondary)
-        ForEach(SQLProfilerFiltering.Column.allCases.filter {model.displayFilter.columnRules[$0]?.active==true}) {column in
-          HStack {
-            VStack(alignment:.leading,spacing:4) {
-              Text(column.title).fontWeight(.medium)
-              Text(model.displayFilter.columnRules[column]?.summary ?? "").font(.system(size:11)).lineLimit(2)
-            }
-            Spacer(minLength:0)
-            Button {model.displayFilter.columnRules.removeValue(forKey:column)} label:{Image(systemName:"xmark")}
-              .buttonStyle(StudioSecondaryButton()).accessibilityLabel(column.title+" filtresini kaldır").studioHelp("Bu kolon filtresini kaldır")
+        category("filtering",title:"Filtreleme",symbol:"line.3.horizontal.decrease") {
+          ProfilerFilterTemplateControls(model:model)
+          HStack(spacing:8) {
+            Image(systemName:"magnifyingglass").foregroundStyle(.secondary)
+            TextField("Yakalanan SQL’de ara…",text:$model.displayFilter.sqlSearch).textFieldStyle(.roundedBorder)
+              .accessibilityIdentifier("profilerSQLSearch")
+              .modifier(ProfilerFilterEmphasis(active:!model.displayFilter.sqlSearch.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty))
+            if model.filtering {ProgressView().controlSize(.small)}
           }
-        }
-        ForEach($model.displayFilter.rules) {$rule in
-          VStack(alignment:.leading,spacing:4) {
+          HStack {
+            Text("Grid filtreleri · \(model.displayFilter.rules.count+model.displayFilter.columnRules.count)").foregroundStyle(.secondary)
+            Spacer(minLength:0)
+            Button {model.displayFilter = .init()} label:{Image(systemName:"arrow.counterclockwise")}
+              .buttonStyle(StudioSecondaryButton()).accessibilityLabel("Grid filtrelerini sıfırla").studioHelp("Grid filtrelerini ve SQL aramasını sıfırla; yakalamayı değiştirmez")
+          }
+          Text("Kolon başlığına tıklayarak koşul ekleyin. Hücreye sağ tıklayarak değerini filtreleyin.")
+            .font(.system(size:11)).foregroundStyle(.secondary)
+          ForEach(SQLProfilerFiltering.Column.allCases.filter {model.displayFilter.columnRules[$0]?.active==true}) {column in
             HStack {
-              Text(rule.column.title).fontWeight(.medium)
+              VStack(alignment:.leading,spacing:4) {
+                Text(column.title).fontWeight(.medium)
+                Text(model.displayFilter.columnRules[column]?.summary ?? "").font(.system(size:11)).lineLimit(2)
+              }
               Spacer(minLength:0)
-              Button {model.displayFilter.rules.removeAll {$0.id==rule.id}} label:{Image(systemName:"xmark")}
-                .buttonStyle(StudioSecondaryButton()).accessibilityLabel(rule.column.title+" filtresini kaldır").studioHelp("Bu koşulu kaldır")
+              Button {model.displayFilter.columnRules.removeValue(forKey:column)} label:{Image(systemName:"xmark")}
+                .buttonStyle(StudioSecondaryButton()).accessibilityLabel(column.title+" filtresini kaldır").studioHelp("Bu kolon filtresini kaldır")
             }
-            HStack(spacing:4) {
-              Picker("Karşılaştırma",selection:$rule.comparison) {ForEach(rule.column.operators) {Text($0.title).tag($0)}}.labelsHidden().frame(width:110)
-              TextField("Değer",text:$rule.value).textFieldStyle(.roundedBorder)
-                .modifier(ProfilerFilterEmphasis(active:!rule.value.isEmpty))
-            }
-          }.padding(8).background(Color(nsColor:StudioTheme.controlSurface)).clipShape(RoundedRectangle(cornerRadius:6))
+          }
+          ForEach($model.displayFilter.rules) {$rule in
+            VStack(alignment:.leading,spacing:4) {
+              HStack {
+                Text(rule.column.title).fontWeight(.medium)
+                Spacer(minLength:0)
+                Button {model.displayFilter.rules.removeAll {$0.id==rule.id}} label:{Image(systemName:"xmark")}
+                  .buttonStyle(StudioSecondaryButton()).accessibilityLabel(rule.column.title+" filtresini kaldır").studioHelp("Bu koşulu kaldır")
+              }
+              HStack(spacing:4) {
+                Picker("Karşılaştırma",selection:$rule.comparison) {ForEach(rule.column.operators) {Text($0.title).tag($0)}}.labelsHidden().frame(width:110)
+                TextField("Değer",text:$rule.value).textFieldStyle(.roundedBorder)
+                  .modifier(ProfilerFilterEmphasis(active:!rule.value.isEmpty))
+              }
+            }.padding(8).background(Color(nsColor:StudioTheme.controlSurface)).clipShape(RoundedRectangle(cornerRadius:6))
+          }
         }
       }.padding(.trailing,4)
     }

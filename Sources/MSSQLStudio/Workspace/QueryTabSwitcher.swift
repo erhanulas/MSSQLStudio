@@ -129,6 +129,7 @@ private final class TabSwitcherMonitor {
         return false
       }
       guard event.type == .keyDown,event.window === sourceWindow || event.window === panel else {return false}
+      if event.keyCode==48,event.modifierFlags.contains(.control) {dismiss(commit:false);return false}
       switch event.keyCode {
       case 53:dismiss(commit:false)
       case 36,76:dismiss(commit:true)

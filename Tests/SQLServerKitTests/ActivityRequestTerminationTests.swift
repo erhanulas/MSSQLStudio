@@ -11,8 +11,11 @@ import Testing
     #expect(sql.contains("KILL 71;") && sql.components(separatedBy:"KILL 71;").count==2)
     #expect(sql.contains("s.login_time=CONVERT(datetime") && sql.contains("r.start_time=CONVERT(datetime"))
     #expect(sql.contains("r.request_id=0") && sql.contains("s.is_user_process=1") && sql.contains("IF @@SPID = 71"))
+    let validation=try ActivityRequestTermination.validationSQL(for:.request(request()))
+    #expect(!validation.contains("KILL 71;") && validation.contains("AS target_valid"))
+    #expect(sql.contains("SP_SERVER_DIAGNOSTICS%"))
     #expect(sql.contains("@@TRANCOUNT") && sql.contains("THROW 51081") && !sql.contains("WITH STATUSONLY"))
-    for index in 0..<7 {
+    for index in 0..<8 {
       var value=request()
       switch index {
       case 0:value.sessionID=1
@@ -21,7 +24,8 @@ import Testing
       case 3:value.sessionLoginTime="2026-10-16'; KILL 72;--"
       case 4:value.requestStartTime="2026-02-31 12:01:02.003"
       case 5:value.command="BACKUP DATABASE"
-      default:value.command="KILLED/ROLLBACK"
+      case 6:value.command="KILLED/ROLLBACK"
+      default:value.wait="SP_SERVER_DIAGNOSTICS_SLEEP"
       }
       #expect(throws:SQLFailure.self) {try ActivityRequestTermination.sql(for:value)}
     }

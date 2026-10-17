@@ -1,5 +1,6 @@
 import AppKit
 import QuartzCore
+import SwiftUI
 
 /// A nonblocking, owner-centered progress surface. Pointer and editor focus stay with the workspace.
 @MainActor final class StudioLoadingCard:NSView {
@@ -78,4 +79,12 @@ import QuartzCore
     } else {ring.removeAllAnimations()}
   }
   override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance();needsLayout=true}
+}
+
+struct StudioLoadingView:NSViewRepresentable {
+  let title:String
+  let context:String
+  let phase:String
+  func makeNSView(context:Context)->StudioLoadingCard {StudioLoadingCard(title:title,context:self.context)}
+  func updateNSView(_ view:StudioLoadingCard,context:Context) {view.updatePhase(phase)}
 }

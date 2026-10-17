@@ -244,8 +244,15 @@ import Testing
         #expect(host.view.bounds.size == size)
         let views=descendants(host.view)
         for control in views.compactMap({$0 as? NSControl}) where !control.isHiddenOrHasHiddenAncestor {
-          let rect=host.view.convert(control.bounds,from:control)
+          // Native grids intentionally extend horizontally inside their clip view.
+          let bounds=control.enclosingScrollView == nil ? control.bounds:control.visibleRect
+          if bounds.isEmpty {continue}
+          let rect=host.view.convert(bounds,from:control)
           #expect(rect.minX>=0 && rect.maxX<=size.width+1 && rect.minY>=0 && rect.maxY<=size.height+1,"\(theme) state\(state) control \(rect)")
+        }
+        for scroll in views.compactMap({$0 as? NSScrollView}) where !scroll.isHiddenOrHasHiddenAncestor {
+          let rect=host.view.convert(scroll.bounds,from:scroll)
+          #expect(rect.minX>=0 && rect.maxX<=size.width+1 && rect.minY>=0 && rect.maxY<=size.height+1)
         }
         if mode == 2 {
           let preview=try #require(views.compactMap {$0 as? SQLPreviewView}.first)

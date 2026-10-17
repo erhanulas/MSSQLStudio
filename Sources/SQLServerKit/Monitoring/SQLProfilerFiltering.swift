@@ -69,6 +69,9 @@ public enum SQLProfilerFiltering {
     public var rules:[Rule]=[]
     public var columnRules:[Column:ColumnRule]=[:]
     public init() {}
+    public func hidesNotification(_ event:SQLProfiler.Event)->Bool {
+      hideInformational && (event.messageLevel == .info || event.messageLevel == .warning)
+    }
   }
   public struct Client:Identifiable,Sendable {
     public struct Key:Hashable,Sendable {public let host:String;public let pid:String}
@@ -113,7 +116,7 @@ public enum SQLProfilerFiltering {
     }
     func matches(_ event:SQLProfiler.Event)->Bool {
       if event.isCallStart {return false}
-      if filter.hideInformational,event.messageLevel == .info {return false}
+      if filter.hidesNotification(event) {return false}
       if !filter.sqlSearch.isEmpty,event.sql.range(of:filter.sqlSearch,options:[.caseInsensitive,.literal])==nil {return false}
       return rules.allSatisfy {rule,numeric in
         let value=rule.column.value(event)

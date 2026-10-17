@@ -10,6 +10,7 @@ import SwiftUI
   private var window: NSWindow!
   private let studio = StudioState()
   private var workbench: WorkbenchController!
+  private var windowCycler:StudioWindowCycler?
   static func main() {
     let arguments=ProcessInfo.processInfo.arguments
     // Release smoke uses the actual Foundation updater before UI/Keychain/restore.
@@ -79,12 +80,14 @@ import SwiftUI
     NotificationCenter.default.addObserver(
       self, selector: #selector(styleWindow(_:)), name: NSWindow.didBecomeKeyNotification,
       object: nil)
+    windowCycler=StudioWindowCycler(main:window)
     window.makeKeyAndOrderFront(nil)
     NSApplication.shared.activate(ignoringOtherApps: true)
     // UI checks must never read the user's saved credentials or contact their servers.
     if ProcessInfo.processInfo.arguments.contains("--ui-smoke") || Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" {
       let server = ConnectedServer(profile: ServerProfile(name: "UI Test"), password: "")
       server.online = false
+      server.reconnectFixture={throw SQLFailure("İzole UI önizlemesinde ağ bağlantısı kurulmaz.")}
       if Bundle.main.object(forInfoDictionaryKey:"StudioObjectSmoke") as? Bool == true {
         server.catalogFixture=ObjectManagementUIFixture.catalog
         server.databases=[CatalogItem(id:5,name:"DemoDB")]
@@ -180,7 +183,11 @@ import SwiftUI
       if Bundle.main.object(forInfoDictionaryKey:"StudioActivitySmoke") as? Bool == true {
         server.catalogFixture=ObjectManagementUIFixture.catalog
         if studio.servers.isEmpty {studio.servers.append(server)}
-        workbench.showPerformanceMonitor(server)
+        let model=ActivityMonitorModel(server:server)
+        Task { [weak self] in
+          await model.load(includeDiagnostics:true)
+          self?.workbench.present(ActivityMonitorPanel(model:model,initialMode:2,openTable:{}),title:"Activity Monitor · UI Test",width:1220,height:840,minWidth:920,minHeight:700)
+        }
       }
       if Bundle.main.object(forInfoDictionaryKey:"StudioDatabaseFilesSmoke") as? Bool == true {
         server.catalogFixture=ObjectManagementUIFixture.catalog

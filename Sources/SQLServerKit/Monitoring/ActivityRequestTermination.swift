@@ -11,6 +11,10 @@ public enum ActivityRequestTermination {
   public static func sql(for target:Target) throws -> String {
     switch target {case .request(let value):try sql(for:value);case .applicationLock(let value):try applicationLockSQL(value)}
   }
+  public static func validationSQL(for target:Target) throws -> String {
+    let sql=try sql(for:target)
+    return sql.replacingOccurrences(of:"KILL \(target.sessionID);",with:"SELECT CAST(1 AS int) AS target_valid;")
+  }
   private static func applicationLockSQL(_ lock:ActivityApplicationLocks.Lock) throws -> String {
     guard (51...32767).contains(lock.sessionID),let login=lock.sessionLoginTime,validTimestamp(login),
       let database=lock.databaseID,(1...32767).contains(database),
@@ -35,7 +39,7 @@ public enum ActivityRequestTermination {
         AND l.resource_description=\(SQL.literal(lock.resource))
         AND l.request_owner_type=\(SQL.literal(lock.ownerType)) AND l.request_owner_id=\(owner)
     ) THROW 51081,N'Seçili application lock veya oturum değişmiş ya da kilit bırakılmış. Listeyi yenileyin.',1;
-    IF EXISTS (SELECT 1 FROM sys.dm_exec_requests WHERE session_id=\(lock.sessionID) AND (command LIKE N'BACKUP%' OR command LIKE N'%ROLLBACK%'))
+    IF EXISTS (SELECT 1 FROM sys.dm_exec_requests WHERE session_id=\(lock.sessionID) AND (command LIKE N'BACKUP%' OR command LIKE N'%ROLLBACK%' OR wait_type LIKE N'SP_SERVER_DIAGNOSTICS%'))
       THROW 51082,N'Yedekleme veya geri alma yapan oturum bu işlemle sonlandırılamaz.',1;
     KILL \(lock.sessionID);
     """
@@ -44,6 +48,7 @@ public enum ActivityRequestTermination {
     guard (51...32767).contains(request.sessionID),(0...Int64(Int32.max)).contains(request.requestID),
       !request.command.uppercased().hasPrefix("BACKUP"),
       !request.command.uppercased().contains("ROLLBACK"),
+      !request.wait.uppercased().hasPrefix("SP_SERVER_DIAGNOSTICS"),
       let login=request.sessionLoginTime,let start=request.requestStartTime,
       validTimestamp(login),validTimestamp(start) else {return false}
     return true
@@ -62,8 +67,9 @@ public enum ActivityRequestTermination {
         AND s.login_time=CONVERT(datetime,\(SQL.literal(login)),121)
         AND r.start_time=CONVERT(datetime,\(SQL.literal(start)),121)
         AND r.command NOT LIKE N'BACKUP%' AND r.command NOT LIKE N'%ROLLBACK%'
+        AND ISNULL(r.wait_type,N'') NOT LIKE N'SP_SERVER_DIAGNOSTICS%'
     ) THROW 51081,N'Seçili oturum veya sorgu değişmiş ya da tamamlanmış. DBA listesini yenileyin.',1;
-    IF EXISTS (SELECT 1 FROM sys.dm_exec_requests WHERE session_id=\(request.sessionID) AND (command LIKE N'BACKUP%' OR command LIKE N'%ROLLBACK%'))
+    IF EXISTS (SELECT 1 FROM sys.dm_exec_requests WHERE session_id=\(request.sessionID) AND (command LIKE N'BACKUP%' OR command LIKE N'%ROLLBACK%' OR wait_type LIKE N'SP_SERVER_DIAGNOSTICS%'))
       THROW 51082,N'Yedekleme veya geri alma yapan oturum bu işlemle sonlandırılamaz.',1;
     KILL \(request.sessionID);
     """

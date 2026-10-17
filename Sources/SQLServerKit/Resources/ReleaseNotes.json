@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.184",
+    "date": "2026-10-17",
+    "title": "Activity Monitor ve Profiler kullanımı iyileştirildi",
+    "changes": [
+      "Activity Monitor tablolarında kolonlara göre filtreleme yapabilir, sorguların çalışma süresini görebilirsiniz.",
+      "Uygulama kilitlerinde sonlandırma düğmesinin örnekleme sırasında pasifleşmesi düzeltildi. SQL Server tanılama beklemeleri sonlandırmaya karşı korunur.",
+      "Sonlandırmadan önce seçili sorgu yeniden kontrol edilir; işlem sırasında yükleme kartı gösterilir, tamamlanmış sorguda boş onay penceresi açılmaz.",
+      "Control+Tab ve Control+Shift+Tab ile uygulamanın açık pencereleri arasında geçiş yapabilirsiniz.",
+      "Profiler’ın Filtreleme bölümü açılıp kapatılabilir. Bilgi ve uyarıları birlikte gizleyebilir, ikonlu ortak Dışa Aktar seçicisini kullanabilirsiniz."
+    ]
+  },
+  {
     "version": "0.2.183",
     "date": "2026-10-17",
     "title": "Sekme kapanışı ve Profiler yerleşimi iyileştirildi",

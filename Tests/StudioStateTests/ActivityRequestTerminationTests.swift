@@ -8,6 +8,37 @@ import Testing
   private func request()->ActivityMonitoring.Request {
     .init(sessionID:71,requestID:0,command:"SELECT",sessionLoginTime:"2026-10-16 12:00:00.000",requestStartTime:"2026-10-16 12:01:02.003")
   }
+  @Test func validSessionLockActionRemainsEnabledDuringBackgroundSampling() async throws {
+    var output=Execution()
+    output.results=[Rows(values:[["0x01:0","71","0","Demo","Resource","X","GRANTED","SESSION","0","reader","Host","App","recent","SELECT 1","2026-10-16 12:00:00.000","5"]]),Rows()]
+    let lock=try #require(ActivityApplicationLocks.decode(output).locks.first)
+    let server=ConnectedServer(profile:.init(),password:"")
+    var pending:CheckedContinuation<Execution,any Error>?
+    let monitor=ActivityMonitorModel(server:server,reader:{_,_ in try await withCheckedThrowingContinuation {pending=$0}})
+    let action=ActivityRequestTerminationAction(monitor:monitor,model:monitor.termination,applicationLock:lock,applicationLockMode:true)
+    #expect(action.actionEnabled)
+    let task=Task {await monitor.load()}
+    for _ in 0..<100 where pending==nil {await Task.yield()}
+    #expect(monitor.loading && action.actionEnabled)
+    pending?.resume(throwing:CancellationError());pending=nil;await task.value
+    #expect(!monitor.loading && action.actionEnabled)
+  }
+  @Test func preparationIsReadOnlyAndCompletedRequestsCannotReachConfirmation() async throws {
+    let server=ConnectedServer(profile:.init(),password:"")
+    var statements:[String]=[]
+    server.catalogFixture={sql in
+      statements.append(sql)
+      var output=Execution();output.results=[Rows(fields:[Field("target_valid")],values:[["1"]])];return output
+    }
+    let model=ActivityRequestTerminationModel(server:server,writer:{_ in Issue.record("Preflight must never write");return Execution()})
+    #expect(await model.prepare(.request(request()),generation:server.generation))
+    #expect(statements.count==1 && !statements[0].contains("KILL 71;"))
+    #expect(model.phase.contains("doğrulanıyor") && !model.busy)
+    server.catalogFixture=nil
+    server.asyncCatalogFixture={_ in throw SQLFailure("Request completed")}
+    #expect(!(await model.prepare(.request(request()),generation:server.generation)))
+    #expect(model.failed && model.message.contains("Request completed"))
+  }
   @Test func confirmationShowsFullColoredSQLAndFitsBothThemes() async throws {
     _=NSApplication.shared
     let previous=StudioTheme.mode;defer {StudioTheme.apply(previous)}

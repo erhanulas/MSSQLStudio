@@ -19,8 +19,8 @@ struct ProfilerPanel:View {
   }
   private var relatedMessages:[SQLProfiler.Event] {
     guard let event=selectedEvent else {return []}
-    if event.kind=="error_reported" {return [event]}
-    return model.relations[event.id]?.messages ?? []
+    let messages=event.kind=="error_reported" ? [event]:model.relations[event.id]?.messages ?? []
+    return messages.filter {!model.displayFilter.hidesNotification($0)}
   }
   var body:some View {
     VStack(spacing:8) {
@@ -62,12 +62,12 @@ struct ProfilerPanel:View {
         HStack {
           StudioTabBar(items:[.init(id:0,title:"Olaylar",icon:"list.bullet"),.init(id:1,title:"Yoğun istemciler",icon:"desktopcomputer")],selection:Binding(get:{showClients ? 1:0},set:{showClients=$0==1})).frame(width:320)
           Spacer()
-          Menu {
-            ForEach(ProfilerExport.Format.allCases) {format in
-              Button("Seçili olaylar · "+format.title) {export(selectedEvents,format:format)}.disabled(selectedEvents.isEmpty)
-              Button("Tüm olaylar · "+format.title) {export(model.events,format:format)}.disabled(model.events.isEmpty)
-            }
-          } label:{Label(exporting ? "Aktarılıyor…":"Dışa Aktar",systemImage:"square.and.arrow.up")}.disabled(exporting)
+          StudioSelectionMenu(title:exporting ? "Aktarılıyor…":"Dışa Aktar",symbol:"square.and.arrow.up",items:
+            ProfilerExport.Format.allCases.flatMap {format in [
+              .init(title:"Seçili olaylar · "+format.title,enabled:!selectedEvents.isEmpty,action:{export(selectedEvents,format:format)}),
+              .init(title:"Tüm olaylar · "+format.title,enabled:!model.events.isEmpty,action:{export(model.events,format:format)})
+            ]}
+          ).frame(width:142).disabled(exporting)
         }
         VSplitView {
         Group {
@@ -98,7 +98,7 @@ struct ProfilerPanel:View {
           SQLReadOnlyPreview(sql:preview.sql,lexicalSnapshot:preview.tokens)
         }.padding(.top,8).frame(minHeight:90)
       }
-        }.frame(minWidth:440,maxWidth:.infinity,maxHeight:.infinity)
+        }.frame(minWidth:480,maxWidth:.infinity,maxHeight:.infinity)
       }.frame(maxWidth:.infinity,maxHeight:.infinity)
       HStack {
         Text("\(model.visibleEvents.count) / \(model.events.count) olay · Son 5.000 / 8 MB · Hedef \(model.pollingCaption)").foregroundStyle(.secondary)
