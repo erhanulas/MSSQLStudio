@@ -1,3 +1,14 @@
+## v0.2.187 / build 188 public release - 2026-10-17
+
+- Source/tag 8ceb9cb796639aa7e2bcc16dccf465093a5ae69a; Actions 39053440187 succeeded; public latest v0.2.187. Colored native Control+Tab card presentation and title/context refinements included.
+- No new suite run under explicit user instruction; exact-tag package suite skipped. Completed picker native/layout/bitmap/Release evidence reused. CI identity/package/manifest/feed verification passed.
+- Downloaded four assets matched GitHub digests/manifest; exact version/build and packaged/public exact-tag notes matched. Strict app/helper signatures, frozen helper bytes/archive and Icon Composer appearances verified. Downloaded signed application's Foundation feed check passed for 0.2.187.
+- MSSQLStudio-0.2.187.pkg SHA-256: `25e214705ddb973747277c84c87e2bd26fc01d05b4d392dd6087df27f2e54816`.
+- MSSQLStudio-0.2.187.zip SHA-256: `918631c97a8dc917a8825212f69f657d571e173bcaf3df6e9fc854d309ad0d74`.
+- MSSQLStudio-CredentialAgent-v1.zip SHA-256: `75bfb1d347f211607eda75ec2a511d3d3d38e3ffef786fec174cce932c6b5713`.
+- update.json SHA-256: `dadd0a3e97c6092df93a058712dd564116b8f4bf9c3c80ada7a22be3ed3b407c`.
+- Evidence /tmp/MSSQLStudio-187-public-verification/. Installer not run; installed app and user SQL sessions unchanged.
+
 ## v0.2.187 / build 188 release preparation - 2026-10-17
 
 - Explicit user request: publish without further tests. No new suite run; completed native picker regressions, bitmap review and Release evidence below reused. Only exact v0.2.187 package suite is exempted; signing/frozen helper/package/manifest/public feed verification remains required.
