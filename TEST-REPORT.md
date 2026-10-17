@@ -1,3 +1,8 @@
+## v0.2.182 release preparation - 2026-10-17
+
+- v0.2.181 Actions 39029151061 stopped before publication: only two synthetic offscreen hover assertions failed. Remaining native tests, core 415/77 and text 8/2 completed; small-screen geometry checks passed.
+- Native tracking correctly cancels synthetic hover when the real pointer is outside an offscreen fixture; increasing the wait did not fix this. Test now verifies mouseEntered-to-shared-owner revision and tooltip-change cancellation separately, then delayed single child panel rendering with an isolated StudioHoverHelp owner. Production hover safeguards unchanged. This is not physical-pointer validation. /tmp/mssql182-hover-tests.log: 15 native tests / 1 suite passed; architecture/source sync and diff checks passed.
+
 ## v0.2.181 yayın hazırlığı — 17 Ekim 2026
 
 - v0.2.180 Actions 39028097048 paket testlerinde başarısız oldu; public release açılmadı, latest v0.2.179 olarak kaldı. Native 580 test/97 suite içinden üç testte beş issue; SQLServerKit 415/77 ve SQLTextCore 8/2 tamamlandı.

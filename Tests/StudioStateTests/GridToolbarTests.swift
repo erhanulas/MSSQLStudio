@@ -109,23 +109,33 @@ import Testing
     let root=NSView(frame:NSRect(x:0,y:0,width:320,height:100))
     let window=NSWindow(contentRect:root.frame,styleMask:[.titled],backing:.buffered,defer:false)
     window.isReleasedWhenClosed=false;window.contentView=root
-    defer {StudioHoverHelp.shared.hide();window.close()}
+    let help=StudioHoverHelp()
+    defer {help.hide();StudioHoverHelp.shared.hide();window.close()}
     root.addSubview(button);button.translatesAutoresizingMaskIntoConstraints=false
     NSLayoutConstraint.activate([button.leadingAnchor.constraint(equalTo:root.leadingAnchor,constant:12),button.topAnchor.constraint(equalTo:root.topAnchor,constant:12)])
     window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil);root.layoutSubtreeIfNeeded()
     #expect(button.frame.size==NSSize(width:28,height:26))
     #expect(button.alignmentRectInsets.top==0 && button.alignmentRectInsets.bottom==0)
     let event=try #require(NSEvent.enterExitEvent(with:.mouseEntered,location:.zero,modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,eventNumber:0,trackingNumber:0,userData:nil))
+    let revision=StudioHoverHelp.shared.revision
     button.mouseEntered(with:event)
+    #expect(StudioHoverHelp.shared.revision != revision)
+    // Offscreen fixtures have no physical pointer: native tracking can cancel
+    // the synthetic hover. Verify delayed rendering with an isolated owner.
+    StudioHoverHelp.shared.hide()
+    help.schedule(for:button,title:button.toolTip)
     #expect(button.layer?.borderWidth==0 && button.clipsToBounds)
     #expect((button.cell as? NSButtonCell)?.highlightsBy.isEmpty==true)
     for _ in 0..<100 {
-      if StudioHoverHelp.shared.visibleTitle != nil {break}
+      if help.visibleTitle != nil {break}
       try await Task.sleep(for:.milliseconds(20))
     }
-    #expect(StudioHoverHelp.shared.visibleTitle=="Çalıştır · ⌃R")
+    #expect(help.visibleTitle=="Çalıştır · ⌃R")
     #expect(window.childWindows?.count==1)
+    help.hide()
+    let pendingRevision=StudioHoverHelp.shared.begin(for:button)
     button.toolTip="Yeni açıklama"
+    #expect(StudioHoverHelp.shared.revision != pendingRevision)
     #expect(StudioHoverHelp.shared.visibleTitle==nil && button.accessibilityHelp()=="Yeni açıklama")
     button.tracksActiveState=true;button.state = .on
     #expect(button.layer?.borderWidth==1)
