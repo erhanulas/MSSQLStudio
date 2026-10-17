@@ -1,3 +1,9 @@
+## v0.2.178 public yayın doğrulaması — 17 Ekim 2026
+
+- **0.2.178 / derleme 179**, kaynak `84349148a0eb67ee76a80e076dabad050eb5c788`; [public/latest yayın](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.178), [Actions 38986902083](https://github.com/erhanulas/MSSQLStudio/actions/runs/38986902083) başarılı. Önceki 12 native test, Release ve 22 sekmeli CUA hareket kanıtı yeniden kullanıldı; kullanıcı tekrar test istemediği için exact-tag paket testi atlandı.
+- İndirilen ZIP/PKG/update.json SHA-256 değerleri GitHub digest/manifestle eşleşti. Exact sürüm/derleme/notlar, app/helper strict imza, frozen helper byte eşliği ve ikon görünümleri doğrulandı. Signed app Foundation feed kontrolü 0.2.178 için geçti; public exact-tag notları kaynakla aynı.
+- Kanıt: `/tmp/MSSQLStudio-178-public-verification/{verification.json,verification.log,foundation-feed.log,public-notes.json}`. Kurulu uygulama/Keychain/DB değiştirilmedi; gerçek Installer ve kullanıcının cihazında fiziksel sürükleme FPS doğrulaması yapılmadı.
+
 ## 17 Ekim 2026 — Option+Tab doğrudan pencere taşıma düzeltmesi (yerel)
 
 - v0.2.177 saydam yüzey düzeltmesi kullanıcının sürükleme takılmasını gidermedi. TabSwitcherDragArea artık performDrag çağırmaz; mouseDown yalnız başlangıcı alır, mouseDragged yalnız setFrameOrigin uygular, mouseUp son konumu kaydeder. İç içe event/tracking döngüsü ve eşzamanlı display/layout çağrısı yoktur. Frame autosave taşıma boyunca kapalı, bırakmada geri yüklenir. SQL/seçim/lex revision değişmez.
