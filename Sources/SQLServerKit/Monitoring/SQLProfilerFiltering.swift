@@ -1,7 +1,7 @@
 import Foundation
 
 public enum SQLProfilerFiltering {
-  public enum Column:String,CaseIterable,Identifiable,Sendable {
+  public enum Column:String,CaseIterable,Identifiable,Sendable,Codable {
     case message,messageLevel,errorNumber,severity,clientPID,session,sql,host,application,login,database,kind,duration,cpu,reads,writes,timestamp
     public var id:String {rawValue}
     public var title:String {
@@ -49,21 +49,21 @@ public enum SQLProfilerFiltering {
       }
     }
   }
-  public enum Comparison:String,CaseIterable,Identifiable,Sendable {
+  public enum Comparison:String,CaseIterable,Identifiable,Sendable,Codable {
     case contains,notContains,equals,notEquals,atLeast,atMost
     public var id:String {rawValue}
     public var title:String {
       switch self {case .contains:"İçerir";case .notContains:"İçermez";case .equals:"Eşittir";case .notEquals:"Eşit değil";case .atLeast:"En az (≥)";case .atMost:"En çok (≤)"}
     }
   }
-  public struct Rule:Identifiable,Sendable,Equatable {
+  public struct Rule:Identifiable,Sendable,Equatable,Codable {
     public let id:UUID
     public var column:Column
     public var comparison:Comparison
     public var value:String
     public init(column:Column = .clientPID,comparison:Comparison = .equals,value:String="") {id=UUID();self.column=column;self.comparison=comparison;self.value=value}
   }
-  public struct Filter:Sendable,Equatable {
+  public struct Filter:Sendable,Equatable,Codable {
     public var hideInformational=true
     public var sqlSearch=""
     public var rules:[Rule]=[]

@@ -102,6 +102,7 @@ import UniformTypeIdentifiers
   var historyLoadFailed=false
   lazy var favorites = FavoriteQueriesModel(url: (Bundle.main.bundleIdentifier == "local.mssqlstudio.uitest" || ProcessInfo.processInfo.arguments.contains("--ui-smoke") || ProcessInfo.processInfo.arguments.contains(where:{$0.contains(".xctest")})
     ? URL(fileURLWithPath:"/tmp/MSSQLStudio-UI-\(ProcessInfo.processInfo.processIdentifier)") : folder).appendingPathComponent("favorites.json"))
+  lazy var profilerFilterTemplates = ProfilerFilterTemplatesModel(store:ProfilerFilterTemplateStore(url:folder.appendingPathComponent("profiler-filter-templates.json")))
   private var nextQueryNumber = 1
   var warnOnTabClose=UserDefaults.standard.object(forKey:"warnOnTabClose") as? Bool ?? true
   var warnOnObjectClose=UserDefaults.standard.object(forKey:"warnOnObjectClose") as? Bool ?? true

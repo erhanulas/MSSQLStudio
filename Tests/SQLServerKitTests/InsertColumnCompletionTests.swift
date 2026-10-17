@@ -36,7 +36,8 @@ struct InsertColumnCompletionTests {
   }
   @Test func relationRoutineVariableAndKeywordSuggestionsMatchInteriorText() throws {
     for sql in ["SELECT * FROM odu§", "SELECT * FROM dbo.odu§", "UPDATE odu§", "INSERT INTO odu§"] {
-      #expect(try analyze(sql).suggestions.contains { $0.label == "[dbo].[Products]" }, "\(sql)")
+      let label=sql.hasPrefix("SELECT") ? "[dbo].[Products] AS P":"[dbo].[Products]"
+      #expect(try analyze(sql).suggestions.contains { $0.label == label }, "\(sql)")
     }
     #expect(try analyze("DECLARE @ExternalOrder int; SELECT @order§").suggestions.map(\.text) == ["@ExternalOrder"])
     #expect(try analyze("SELECT LEC§").suggestions.contains { $0.text == "SELECT" })

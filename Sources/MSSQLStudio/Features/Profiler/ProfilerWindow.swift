@@ -60,7 +60,7 @@ extension WorkbenchController {
       let security=root?.children.first {if case .group=$0.kind {return $0.title=="Security"};return false}
       let branch=security?.children.first {if case .folder(.logins)=$0.kind {return true};return false}
       return .init(databases:server.databases.map(\.name),logins:branch?.loaded == true && branch?.error == nil ? branch?.children.map {$0.item?.name ?? $0.title}:nil)
-    })
+    },templates:state.profilerFilterTemplates)
     let owner=ProfilerWindowController(server:server,model:model,openQuery:{ [weak self,weak server] events in
       guard let self,let server,!events.isEmpty else {return}
       openProfilerSQL(events,server:server)

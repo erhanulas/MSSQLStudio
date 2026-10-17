@@ -1,6 +1,6 @@
 import Foundation
 
-public enum CellChoice: Hashable, Sendable {
+public enum CellChoice: Hashable, Sendable, Codable {
   case null
   case text(String)
   public init(_ value: String?) { self = value.map(Self.text) ?? .null }
@@ -11,7 +11,7 @@ public enum CellChoice: Hashable, Sendable {
     }
   }
 }
-public enum ColumnOperation: String, CaseIterable, Sendable {
+public enum ColumnOperation: String, CaseIterable, Sendable, Codable {
   case any = "Koşul yok"
   case contains = "İçerir"
   case notContains = "İçermez"
@@ -31,7 +31,7 @@ public enum ColumnOperation: String, CaseIterable, Sendable {
     [.contains, .notContains, .starts, .equal, .unequal, .greater, .less, .atLeast, .atMost, .between].contains(self)
   }
 }
-public struct ColumnRule: Equatable, Sendable {
+public struct ColumnRule: Equatable, Sendable, Codable {
   public var operation: ColumnOperation = .any
   public var first = ""
   public var second = ""

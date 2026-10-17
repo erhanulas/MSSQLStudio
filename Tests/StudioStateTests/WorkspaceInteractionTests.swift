@@ -165,6 +165,9 @@ import Testing
     let search = try #require(controls.compactMap { $0 as? NSSearchField }.first { $0.placeholderString == "Nesnelerde filtrele" })
     search.stringValue = "something"; NSApp.sendAction(search.action!,to:search.target,from:search)
     search.stringValue = ""; NSApp.sendAction(search.action!,to:search.target,from:search)
+    #expect(controller.showingSearch)
+    controller.explorerTabs.selectedSegment=0
+    #expect(NSApp.sendAction(try #require(controller.explorerTabs.action),to:controller.explorerTabs.target,from:controller.explorerTabs))
     #expect(outline.isItemExpanded(databases))
     #expect(outline.isItemExpanded(db))
     #expect(outline.isItemExpanded(tables))

@@ -43,6 +43,13 @@ public final class ODBCConnection: @unchecked Sendable {
               connection, SQLINTEGER(SQL_ATTR_LOGIN_TIMEOUT),
               UnsafeMutableRawPointer(bitPattern: 10), 0), kind: SQLSMALLINT(SQL_HANDLE_DBC),
             handle: connection)
+          // ODBC otherwise inherits the server's packet size, which can exceed
+          // TLS's 16 KiB fragment limit. This limits packets, not SQL batch size.
+          try check(
+            SQLSetConnectAttr(
+              connection, SQLINTEGER(SQL_ATTR_PACKET_SIZE),
+              UnsafeMutableRawPointer(bitPattern: 4096), 0), kind: SQLSMALLINT(SQL_HANDLE_DBC),
+            handle: connection)
           var utf16 = Array(string.utf16) + [0]
           let length = SQLSMALLINT(utf16.count - 1)
           let rc = utf16.withUnsafeMutableBufferPointer {
@@ -50,7 +57,14 @@ public final class ODBCConnection: @unchecked Sendable {
               connection, nil, $0.baseAddress, length, nil, 0, nil,
               SQLUSMALLINT(SQL_DRIVER_NOPROMPT))
           }
-          do { try check(rc, kind: SQLSMALLINT(SQL_HANDLE_DBC), handle: connection) } catch {
+          do {
+            try check(rc, kind: SQLSMALLINT(SQL_HANDLE_DBC), handle: connection)
+            var packetSize:SQLUINTEGER=0
+            try check(SQLGetConnectAttr(connection,SQLINTEGER(SQL_ATTR_PACKET_SIZE),&packetSize,SQLINTEGER(MemoryLayout<SQLUINTEGER>.size),nil),kind:SQLSMALLINT(SQL_HANDLE_DBC),handle:connection)
+            guard packetSize>0 && packetSize<=16368 else {
+              throw SQLFailure("SQL Server şifreli bağlantı için güvenli ağ paket boyutunu kabul etmedi. Bağlantı kurulamadı.")
+            }
+          } catch {
             let safe = ((error as? SQLFailure)?.message ?? error.localizedDescription).replacingOccurrences(
               of: password.isEmpty ? "\0" : password, with: "••••")
             throw SQLFailure(safe, diagnostics: (error as? SQLFailure)?.diagnostics.map {

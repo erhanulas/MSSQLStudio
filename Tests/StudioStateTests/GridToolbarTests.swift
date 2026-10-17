@@ -81,7 +81,8 @@ import Testing
           field.stringValue="customer"
           let cell=try #require(field.cell as? NSSearchFieldCell)
           #expect(field.bounds.contains(cell.searchTextRect(forBounds:field.bounds)))
-          cell.cancelButtonCell?.performClick(field)
+          let cancel=try #require(cell.cancelButtonCell)
+          #expect(NSApp.sendAction(try #require(cancel.action),to:cancel.target,from:field))
           #expect(field.stringValue.isEmpty && target.received.last=="")
         }
       }
@@ -408,7 +409,7 @@ import Testing
     controller.view.layoutSubtreeIfNeeded()
     #expect(label.stringValue == before)
     let last = try #require(controller.toolbar.arrangedSubviews.compactMap { $0 as? NSButton }.first { $0.tag == 3 })
-    last.performClick(nil)
+    #expect(NSApp.sendAction(try #require(last.action),to:last.target,from:last))
     #expect(label.stringValue == "9501–10000 / \(10_000.formatted())")
     let old = UserDefaults.standard.object(forKey: "gridCopyHeadersShortcut")
     defer { if let old { UserDefaults.standard.set(old, forKey: "gridCopyHeadersShortcut") } else { UserDefaults.standard.removeObject(forKey: "gridCopyHeadersShortcut") } }

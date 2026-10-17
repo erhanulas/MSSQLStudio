@@ -11,6 +11,8 @@ struct ProfilerFilters:View {
   var body:some View {
     ScrollView {
       VStack(alignment:.leading,spacing:8) {
+        ProfilerFilterTemplateControls(model:model)
+        Divider()
         Toggle("Bilgi bildirimlerini gizle",isOn:$model.displayFilter.hideInformational)
           .toggleStyle(.checkbox).accessibilityIdentifier("profilerHideInformational")
           .studioHelp("Bilgi düzeyindeki error_reported olaylarını görünümden gizler. Hata, uyarı ve düzeyi bilinmeyen olaylar korunur; yakalama ve tüm olayları dışa aktarma değişmez.")

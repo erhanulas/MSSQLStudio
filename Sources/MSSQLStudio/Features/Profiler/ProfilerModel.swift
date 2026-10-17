@@ -25,6 +25,7 @@ private actor ProfilerConnection {
   let serverID:UUID
   let choices:ProfilerChoicesModel
   let sessions:ProfilerSessionsModel
+  let templates:ProfilerFilterTemplatesModel
   @Published var configuration=SQLProfiler.Configuration()
   @Published private(set) var events:[SQLProfiler.Event]=[]
   @Published var displayFilter=SQLProfilerFiltering.Filter() {didSet {scheduleProjection(debounce:true)}}
@@ -56,13 +57,19 @@ private actor ProfilerConnection {
     let parts=interval.components
     return String(format:"%.0f ms",Double(parts.seconds)*1000+Double(parts.attoseconds)/1e15)
   }
-  init(server:ConnectedServer,executor:Executor?=nil,disconnect:(@Sendable () async -> Void)?=nil,interval:Duration = .milliseconds(ProfilerModel.defaultReadIntervalMilliseconds),explorerChoices:(()->ProfilerChoicesModel.ExplorerSnapshot)?=nil) {
+  init(server:ConnectedServer,executor:Executor?=nil,disconnect:(@Sendable () async -> Void)?=nil,interval:Duration = .milliseconds(ProfilerModel.defaultReadIntervalMilliseconds),explorerChoices:(()->ProfilerChoicesModel.ExplorerSnapshot)?=nil,templates:ProfilerFilterTemplatesModel?=nil) {
     serverName=server.profile.name;serverID=server.id;self.interval=interval
+    self.templates=templates ?? ProfilerFilterTemplatesModel()
     sessions=ProfilerSessionsModel(server:server)
     choices=ProfilerChoicesModel(server:server,explorer:explorerChoices)
     let connection=ProfilerConnection(profile:server.profile,password:server.password)
     self.executor=executor ?? {sql in try await connection.execute(sql)}
     self.disconnect=disconnect ?? {await connection.disconnect()}
+  }
+  func applyTemplate(_ value:ProfilerFilterTemplate) throws {
+    guard !hasSession,!busy else {throw SQLFailure("Şablon uygulamak için önce izlemeyi durdurun ve varsa sunucu oturumunu temizleyin.")}
+    try value.validate()
+    configuration=value.configuration;displayFilter=value.displayFilter
   }
   var hasSession:Bool {sessionName != nil}
   func preview(name:String) throws -> String {try SQLProfiler.createSQL(name:name,configuration:configuration)}

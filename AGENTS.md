@@ -155,6 +155,7 @@ Aşağıdaki yollar `Sources/SQLServerKit/` altındadır.
 | `ExplorerSearchController` | Debounce, iptal/generation, tek uçuş ve en son bekleyen disk araması |
 | `ProfilerChoicesModel` | Explorer DB/login seçenekleri, yakalanan istemci değerleri, sınırlı metadata tek uçuşu ve seçimden bağımsız liste yenileme |
 | `ProfilerPreviewPresentation` | Seçili olay SQL/lex snapshot’ı, tek utility worker, en son seçim revizyonu ve büyük kaynakta tam düz metin sunumu |
+| `ProfilerFilterTemplatesModel` | StudioState başına ortak genel şablon listesi, asenkron tek uçuşlu yükleme/kayıt/silme; kalıcılık ProfilerFilterTemplateStore actor’ündedir |
 | `ProfilerModel` | Bağımsız XE oturumu, açık kullanıcı eylemiyle başlatma, seri okuma, sınırlı olay snapshot’ı ve kapanış temizliği |
 | `EditorController` | Tek SQLTextView/undo, source-fold projection ve syntax sunumu |
 | `DefinitionLoadingPresentation` | QueryDocument definitionLoading/error durumunu ortak kart ve native hata alanına sunar; ağ/task sahibi değildir |
@@ -295,6 +296,7 @@ Numara alanı genişliği kaynak/snapshot değişince hesaplanır; scroll çizim
 ### Oturum ve yürütme
 
 - Her QueryDocument kendi ODBC bağlantısı, DB, SQL/sonuç/tanı ve transaction durumunu taşır. Metadata ayrı bağlantılardadır; sorgu DB context veya transaction'ına dokunmaz. Detached pencere aynı controller/document/session/undo'yu taşır.
+- ODBC bağlantısı SQLDriverConnectW öncesinde SQL_ATTR_PACKET_SIZE=4096 ister; sunucudaki büyük paket ayarı şifreli bağlantıya miras bırakılmaz. Bağlantı sonrasında SQLGetConnectAttr ile kabul edilen paket boyutu doğrulanır; sıfır veya 16.368 bayt üstü değerle oturum yayımlanmaz. Bu taşıma paketi sınırıdır, SQL batch boyutu değildir: uzun CREATE/ALTER metni parçalanmaz/kesilmez, Encrypt=yes ve sertifika doğrulama tercihi korunur. Kopma sonrasında belirsiz yazma otomatik tekrarlanmaz; mevcut oturumlara ayar uygulamak için açık yeniden bağlantı gerekir.
 - ODBC handle'ları tek worker queue'da yönetilir. SQLCancelHandle ayrı queue + generation/lock korumasıyla kullanılır. UTF-16 ve parçalı hücre okuma korunur. Execution ID/generation geç yanıtın yeni sonucu ezmesini önler.
 - **İptal rollback değildir.** Çalışan SQL/açık transaction/pending grid yazması kapatma ve tekrar gönderimde korunur. Kopmuş sorgu ready'ye dönmez; sonuç sonrası session probe kopmayı da yakalar.
 - GO yalnız bağımsız satırda ve string/bracket/nested comment dışında ayırır. Batch'ler aynı oturumda sıralıdır; byte/result-set bütçesi ortaktır, satır sınırı her sonuç kümesine ayrı uygulanır.
@@ -594,6 +596,9 @@ Alt durum çubuğu ortak statusCanvas açık/koyu token’ını kullanır; ayrı
 
 ### SQL Profiler
 
+- Filtre şablonları StudioState.profilerFilterTemplates üzerinden bütün Profiler sunucu pencerelerinde ortak, bağlantıdan bağımsızdır; `profiler-filter-templates.json` uygulama klasöründe sürüm 1 olarak saklanır, fixture/test yolu /tmp’dır. Yakalama Configuration, SQL araması, hideInformational, eski Rule ve ColumnRule (NULL/boş/seçim kümesi dahil) snapshot’ları saklanır; sunucu/profil kimliği, parola, XE oturum adı veya yakalanan olay/SQL saklanmaz. En fazla 100 şablon/512 KB, 120 karakter benzersiz ad; aynı ID açık Güncelle ile değiştirilir, aynı adla yeni kayıt reddedilir. Actor read-modify-write, atomic dosya yazımı ve 0700 klasör/0600 dosya kullanır; bozuk/gelecek sürüm dosyası üzerine yazılmaz. Ortak model tek uçuş ve görünür hata korur; yükleme başarısızken kayıt kapalı, yeniden yükleme açıktır. Sunucuda bulunmayan değerler serbest filtre olarak korunur; başka bağlantıda otomatik eşleme veya kaldırma yapılmaz.
+- Sol panelde ortak şablon seçicisi, Uygula, yeni kaydet ve güncelle/sil menüsü bulunur. Seçim tek başına filtre değiştirmez; Uygula mevcut capture/grid doğrulamasından geçerek iki snapshot’ı birlikte değiştirir, listeyi temizlemez/SQL yürütmez/izleme başlatmaz. Aktif veya temizlenmemiş XE oturumunda ve busy işlemde şablon uygulamak reddedilir; önce açık Durdur/Temizle gerekir. Kaydet mevcut filtreleri snapshot alır; silme adı ve bütün bağlantıları etkileyen kapsamıyla onay ister, mevcut uygulanmış filtreyi veya çalışan session’ı değiştirmez. Şablonlar uygulama yeniden açılınca korunur, son şablon kendiliğinden uygulanmaz.
+
 
 - Yakalama ve yerel filtreler 260 pt minimumlu, sabit üst genişlik sınırı olmayan native ayarlanabilir sol panelde, olay grid/SQL önizlemesi sağdaki dikey ayırıcıdadır. Çoklu seçim olay sırasıyla tam SQL’i GO satırlarıyla birleştirir; kopyalama önizlemenin sağ üstündedir. Seçili hücreler native backgroundStyle/selectedControlTextColor kullanır. Seçili veya bellekte tutulan tüm olaylar NSSavePanel ile SQL veya sürümlü mssqltrace.json olarak dışa aktarılır; bu dosyalar binary SSMS trc/xel değildir. Snapshot en fazla 5.000 olay/8 MB, JSON kodlama ve atomik dosya yazma utility worker’dadır; export SQL çalıştırmaz.
 
@@ -717,7 +722,7 @@ scripts/test.sh ve scripts/build-app.sh mimari kontrolünü çalıştırır. Fil
 
 ### Test kanıtı ve UI izolasyonu
 
-- Native suite'ler `--no-parallel` çalışır; build paralel olabilir. Aynı masaüstünde iki native test süreci çalıştırmayın; AppKit tema/odak/hover/field editor paylaşılır.
+- Native suite'ler `--no-parallel` çalışır; build paralel olabilir. Tam scripts/test.sh akışında NSApplication.stopModal kullanan modalAlertRestoresMovedPositionAcrossNewInstances testi sonraki async native testlerin olay döngüsünü etkilememek için ayrı son süreçte yürür; atlanmaz. İlk süreçte üç hedefin, ikinci süreçte tek modal testin tamamlanmış Swift Testing özetleri zorunlu doğrulanır; erken exit(0) başarı sayılmaz. Aynı masaüstünde iki native test süreci çalıştırmayın; AppKit tema/odak/hover/field editor paylaşılır.
 - Çıkış kodu tek başına başarı değildir. Tam suite çalışmasında StudioStateTests, SQLServerKitTests ve SQLTextCoreTests'in tamamlanmış `Test run with` özetlerini ayrı doğrulayın. Filtreli çalışmada seçilen hedefte beklenen testin gerçekten çalıştığını ve tamamlanmış özetini doğrulayın; bunu tam suite sonucu diye bildirmeyin. Geçen/atlanan/başarısız sayısı ve koşul ayrıdır; dış ortam nedeniyle skip, doğrulanmış davranış değildir. İlgili hedefte test bulunmayan filtre için sıfır testi başarı kanıtı gibi sunmayın.
 - Gerçek SQL Server testi yalnız adı belirtilmiş test/localhost ortamında benzersiz nesne/#temp, rollback/cleanup ile yapılır; mevcut kullanıcı DB'sine yazılmaz. Gerçek credential, API anahtarı ve kullanıcı sonucu source/fixture/log/sohbete konmaz.
 - StudioState.folder test/smoke başlangıcında `/tmp/MSSQLStudio-UI-<PID>` kullanır; Ayarlar Uygula dahil geçmiş/kurtarma gerçek kullanıcı yoluna yazamaz. UI smoke ayrı `/tmp` uygulaması ve `local.mssqlstudio.uitest` veya `--ui-smoke` kullanır; gerçek Keychain/history/favori/restore/network okunmaz. scripts/prepare-ui-test.sh imzalı ZIP'ten ayrı fixture hazırlar. Test tercihi/deposu kullanıcı tercihini değiştirmez.

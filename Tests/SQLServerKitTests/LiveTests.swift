@@ -5,6 +5,26 @@ import Testing
 
 @Suite(.serialized) struct LiveTests {
   @Test(.enabled(if: ProcessInfo.processInfo.environment["MSSQL_TEST_PASSWORD"] != nil))
+  func encryptedLargeProcedureUsesSafePacketsWithoutSplittingTheBatch() async throws {
+    let c=try await connection()
+    do {
+      let network=try await c.execute("SELECT net_packet_size, encrypt_option FROM sys.dm_exec_connections WHERE session_id=@@SPID;")
+      let row=try #require(network.results.first?.values.first)
+      #expect(row[0]=="4096" && row[1]?.uppercased()=="TRUE")
+      let padding=String(repeating:"-- İ🦊 large procedure payload\r\n",count:6000)
+      let create="CREATE PROCEDURE #LargePacketProbe AS BEGIN\n"+padding+"SELECT 41 AS Value; END;"
+      _=try await c.execute(create)
+      let alter="ALTER PROCEDURE #LargePacketProbe AS BEGIN\n"+padding+"SELECT 42 AS Value; END;"
+      _=try await c.execute(alter)
+      let result=try await c.execute("EXEC #LargePacketProbe;")
+      #expect(result.results.first?.values.first?[0]=="42")
+      let stored=try await c.execute("SELECT definition FROM tempdb.sys.sql_modules WHERE object_id=OBJECT_ID(N'tempdb..#LargePacketProbe');")
+      #expect(stored.results.first?.values.first?[0]==alter)
+      _=try await c.execute("DROP PROCEDURE #LargePacketProbe;")
+      await c.disconnect()
+    } catch {await c.disconnect();throw error}
+  }
+  @Test(.enabled(if: ProcessInfo.processInfo.environment["MSSQL_TEST_PASSWORD"] != nil))
   func writeNotificationsAndExecOutputBudgetsNeverCancelRemainingWrites() async throws {
     let c=try await connection()
     do {

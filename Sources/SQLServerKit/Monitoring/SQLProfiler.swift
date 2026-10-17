@@ -5,7 +5,7 @@ import FoundationXML
 
 /// Bounded, server-scoped Extended Events capture. Never adopts another session.
 public enum SQLProfiler {
-  public struct Configuration:Sendable,Equatable {
+  public struct Configuration:Sendable,Equatable,Codable {
     public var database=""
     public var application=""
     public var login=""

@@ -107,6 +107,12 @@ struct LanguageTests {
     #expect(batches[2].line == 8)
     #expect(throws: SQLFailure.self) { try TSQL.batches("SELECT 1;\nGO 101\n") }
   }
+  @Test func largeAlterProcedureRemainsOneCompleteUnicodeBatch() throws {
+    let sql="ALTER PROCEDURE dbo.LargePacketProbe AS BEGIN\n"+String(repeating:"-- İ🦊 GO is not a batch separator here\n",count:6000)+"SELECT N'COMPLETE_TAIL_İ🦊'; END;"
+    let batches=try TSQL.batches(sql)
+    #expect(sql.utf16.count*2>16384 && batches.count==1)
+    #expect(batches.first?.text==sql && batches.first?.line==1)
+  }
   @Test func lexerUTF16AndEscapes() {
     let text = "SELECT [odd]]name], N'İstanbul 🦊''x' /*a/*b*/c*/ -- end"
     let tokens = TSQL.lex(text)

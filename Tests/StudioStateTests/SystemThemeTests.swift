@@ -83,29 +83,28 @@ import Testing
     #expect(NSApp.appearance?.name == .darkAqua && StudioTheme.dark)
   }
 
-  @Test func systemThemeChoiceFitsSettingsAndDraftSelectionDoesNotApplyPreferences() async throws {
-    _ = NSApplication.shared
-    let oldTheme = UserDefaults.standard.string(forKey: "ssmsTheme"), oldAppearance = NSApp.appearance
+  @Test func sharedSystemThemeChoiceFitsAndDraftSelectionDoesNotApplyPreferences() throws {
+    _=NSApplication.shared
+    let oldTheme=UserDefaults.standard.string(forKey:"ssmsTheme"),oldAppearance=NSApp.appearance
     defer {
-      StudioTheme.apply(oldTheme ?? "light"); NSApp.appearance = oldAppearance
-      if oldTheme == nil { UserDefaults.standard.removeObject(forKey: "ssmsTheme") }
+      StudioTheme.apply(oldTheme ?? "light");NSApp.appearance=oldAppearance
+      if oldTheme==nil {UserDefaults.standard.removeObject(forKey:"ssmsTheme")}
     }
     StudioTheme.apply("system")
-    let state = StudioState(); state.historyEnabled = false; state.recoveryEnabled = false
-    let host = NSHostingController(rootView: SettingsPanel(state: state, definitionStorage:DefinitionIndexStorageModel(disk:CatalogDiskIndex(url:URL(fileURLWithPath:"/tmp/SettingsStorage-"+UUID().uuidString+"/index.sqlite"))))); host.sizingOptions = []
-    let window = NSWindow(contentViewController: host); window.isReleasedWhenClosed = false
-    defer { window.close() }
-    window.setFrame(window.frameRect(forContentRect: NSRect(x: -3000, y: 0, width: 780, height: 600)), display: true)
-    host.view.frame = NSRect(x: 0, y: 0, width: 780, height: 600)
-    try await Task.sleep(for: .milliseconds(90)); host.view.layoutSubtreeIfNeeded()
-    func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
-    let picker = try #require(descendants(host.view).compactMap { $0 as? NSSegmentedControl }.first { $0.segmentCount == 3 })
-    #expect((0..<3).map { picker.label(forSegment: $0) } == ["Sistem", "Studio Açık", "Studio Koyu"])
-    #expect(picker.selectedSegment == 0)
-    let rect = host.view.convert(picker.bounds, from: picker)
-    #expect(rect.minX >= 0 && rect.maxX <= 780)
-    picker.selectedSegment = 2; picker.sendAction(picker.action, to: picker.target)
-    try await Task.sleep(for: .milliseconds(90)); host.view.layoutSubtreeIfNeeded()
-    #expect(UserDefaults.standard.string(forKey: "ssmsTheme") == "system" && NSApp.appearance == nil)
+    var draft="system"
+    let choices=StudioChoiceTabs(choices:[("system","Sistem","circle.lefthalf.filled"),("light","Studio Açık","sun.max"),("dark","Studio Koyu","moon")],selection:Binding(get:{draft},set:{draft=$0}))
+    let tabs=try #require(choices.body as? StudioTabBar)
+    #expect(tabs.items.map(\.title)==["Sistem","Studio Açık","Studio Koyu"])
+    #expect(tabs.selection==0)
+    let host=NSHostingView(rootView:choices)
+    host.frame=NSRect(x:0,y:0,width:500,height:38)
+    let window=NSWindow(contentRect:host.frame,styleMask:.borderless,backing:.buffered,defer:false)
+    window.isReleasedWhenClosed=false;window.contentView=host;window.setFrameOrigin(NSPoint(x:-20000,y:0));window.orderFront(nil)
+    defer {window.close()}
+    host.layoutSubtreeIfNeeded()
+    #expect(host.fittingSize.width<=500 && host.fittingSize.height<=38)
+    tabs.$selection.wrappedValue=2
+    #expect(draft=="dark" && tabs.selection==2)
+    #expect(UserDefaults.standard.string(forKey:"ssmsTheme")=="system" && NSApp.appearance==nil)
   }
 }
