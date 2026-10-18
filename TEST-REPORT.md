@@ -1,3 +1,12 @@
+## Public 0.2.199 receipt — 2026-10-18
+
+- Published latest [v0.2.199](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.199), build 200; source a599b05d32217cb3c60e7a64f17c8166e0d7806f. [Release workflow](https://github.com/erhanulas/MSSQLStudio/actions/runs/39083472368) succeeded. No additional test suite executed, per explicit request; development evidence reused.
+- Downloaded ZIP, PKG, update.json and frozen helper match GitHub digests/manifest. Exact bundle version/build, tagged notes and GitHub notes agree. App/helper strict signatures, frozen helper bytes and icon appearances passed.
+- ZIP SHA-256: abac9b12627fc10f9042c6b62737ed35a44f7e86b96503eed6d337ba4dc22292
+- PKG SHA-256: f3df90ce44a8e7853b48e3604b0877fe82cde341ea1c4abb750967473b7258d2
+- Signed downloaded application's Foundation updater-feed check passed: 0.2.199. Evidence /tmp/MSSQLStudio-199-public-verification/verification.json and /tmp/mssql199-feed-check.log.
+- Installed app, live SQL, keyboard input source and user Keychain unchanged. Interactive Installer not tested.
+
 ## Public 0.2.199 preparation — 2026-10-18
 
 - Explicit request: publish without rerunning tests. Reused completed shortcut consistency evidence below (6 native tests and Release). Exact v0.2.199 release-package suite skipped; signing, manifest/hash/helper and feed verification retained.
