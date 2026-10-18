@@ -1,3 +1,27 @@
+## Public 0.2.202 preparation — 2026-10-18
+
+- Explicit request: publish without rerunning tests. Reused filter-panel and header interaction evidence below (20 related native regressions, presentation test and Release). Exact v0.2.202 release-package suite skipped; signing, manifest/hash/helper and feed checks retained.
+- Version 0.2.202, build 203. Installed app, live SQL and user Keychain unchanged. Real OS drag/resize not separately exercised.
+
+## Result header selection, separate sort and filter — 2026-10-18 (unpublished)
+
+- JetBrains reference https://www.jetbrains.com/help/datagrip/explore-data-in-data-editor.html documents whole-column header selection, arrow sorting and separate local-filter icon. Result grid header title now selects the column's visible grid rows; Command toggles columns, Shift follows visual order across frozen/main canonical positions.
+- Separate persistent sort control cycles ascending/descending/source order via existing ResultProjectionController, independent of filter hit/column selection. Native divider edges still route to AppKit; title drag returns queued drag to native reordering. Shared read-only Activity grids retain their previous header-click sorting because new selection/control callbacks opt in only on result grids.
+- FilterHeaderCell copy preserves new sort-control flag. Header sizing reserves room for title/type/sort/filter/pin. No server query, selection-cell enumeration or altered row budget.
+- 20 tests in 6 native suites passed (/tmp/mssql-header-select-sort-tests.log): new title/Command/Shift/pin/sort/filter isolation and raw numeric/source-order cases; existing header ownership, pinned editing/copy, shared Activity sorting, query copy and selection summary regressions. Isolated Release passed (/tmp/mssql-header-select-sort-release.log); architecture/source and diff checks passed.
+- Initial native event-queue attempt exited without a complete Swift Testing result; not counted as success. Tests now inject only header tracking-event wait because SwiftPM lacks an app event loop. Corrected Shift expectation to visual pinned-column order. Inspected /tmp/mssql-header-select-sort-light.png and dark.png; separate icons and selected cells readable.
+- Actual OS mouse drag/resize, installed app and live DB not exercised; native gesture paths retained but not claimed validated by simulated click tests.
+
+## Remove redundant filter-value hover hints — 2026-10-18 (unpublished)
+
+- Removed value-title studioHelp from shared ColumnFilterPanel list toggles; visible values, selection and filtering unchanged.
+- Isolated Release passed (/tmp/mssql-filter-value-tooltips-release.log); diff check passed. No additional test run for this one-line tooltip removal.
+
+## Always-visible filter condition — 2026-10-18 (unpublished)
+
+- Shared ColumnFilterPanel no longer has conditionExpanded/disclosure interaction. Static semantic Koşul heading and comparison picker always visible; operation-specific value/end fields, local choices, clear/apply and async choice loading unchanged. Shared Activity/Profiler grid callers inherit the same behavior.
+- Native light/dark filter/grid presentation test passed (1 test, /tmp/mssql-filter-condition-visible-tests.log); inspected light PNG /tmp/MSSQLStudio-result-filter-modern-light.png. Isolated Release passed (/tmp/mssql-filter-condition-visible-release.log); architecture/source/diff checks passed. No live SQL or installed-app verification.
+
 ## Public 0.2.201 receipt — 2026-10-18
 
 - Published latest [v0.2.201](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.201), build 202; source 3a375814661e34ef599d025599f4218787e1c0d5. [Release workflow](https://github.com/erhanulas/MSSQLStudio/actions/runs/39085255901) succeeded. No additional test suite executed, per explicit request; development evidence reused.

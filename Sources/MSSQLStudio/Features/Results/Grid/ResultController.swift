@@ -59,6 +59,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       column.isEditable=source.isEditable; column.sortDescriptorPrototype=source.sortDescriptorPrototype
       if let cell=source.dataCell as? NSCell {column.dataCell=cell.copy()}
       column.headerCell=FilterHeaderCell(textCell:source.title)
+      (column.headerCell as? FilterHeaderCell)?.showsSortControl=true
       frozenTable.addTableColumn(column)
     }
     frozenTable.sortDescriptors=table.sortDescriptors
@@ -421,6 +422,15 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       guard let target, target.tableColumns.indices.contains(position), let ordinal=Int(target.tableColumns[position].identifier.rawValue) else {return}
       self?.openColumnOrdinal(ordinal)
     }
+    header.selectColumn = { [weak target] position,modifiers in target?.selectHeaderColumn(position,modifiers:modifiers) }
+    header.sortColumn = { [weak target] position in
+      guard let target,target.tableColumns.indices.contains(position),
+        let prototype=target.tableColumns[position].sortDescriptorPrototype else {return}
+      let current=target.sortDescriptors.first
+      if current?.key != prototype.key {target.sortDescriptors=[prototype]}
+      else if current?.ascending == true {target.sortDescriptors=[NSSortDescriptor(key:prototype.key,ascending:false)]}
+      else {target.sortDescriptors=[]}
+    }
     header.openMenu = { [weak self,weak target,weak header] position,event in
       guard let self, let target, let header else {return}
       let ordinal=target.tableColumns.indices.contains(position) ? Int(target.tableColumns[position].identifier.rawValue):nil
@@ -619,6 +629,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       for (i, f) in rows.fields.enumerated() {
         let c = NSTableColumn(identifier: .init(String(i)))
         let header = FilterHeaderCell(textCell: f.name)
+        header.showsSortControl=true
         header.typeSymbol = f.type == -7 ? "checkmark.square" : f.numeric ? "number" : ([91, 92, 93, -9_101, -9_102].contains(Int(f.type)) ? "calendar" : "textformat")
         header.typeDetail = f.dataType
         c.headerCell = header

@@ -11,6 +11,7 @@ import SwiftUI
   var typeSymbol = "textformat"
   var typeDetail = ""
   var showsFilter = true
+  var showsSortControl = false
   var ascending: Bool?
   private static var symbols: [String: NSImage] = [:]
   private static let titleFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
@@ -23,7 +24,7 @@ import SwiftUI
     cell.active=active;cell.pinned=pinned;cell.primaryKey=primaryKey
     cell.hovered=hovered;cell.navigationTarget=navigationTarget
     cell.typeSymbol=typeSymbol;cell.typeDetail=typeDetail
-    cell.showsFilter=showsFilter;cell.ascending=ascending
+    cell.showsFilter=showsFilter;cell.showsSortControl=showsSortControl;cell.ascending=ascending
     cell.font=font;cell.alignment=alignment;cell.textColor=textColor
     cell.backgroundColor=backgroundColor;cell.backgroundStyle=backgroundStyle
     cell.isEnabled=isEnabled;cell.isHighlighted=isHighlighted
@@ -55,7 +56,7 @@ import SwiftUI
   override func drawInterior(withFrame frame: NSRect, in controlView: NSView) {
     guard !stringValue.isEmpty else { return }
     let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
-    let textWidth = max(0, frame.width - (pinned ? 92 : 76))
+    let textWidth = max(0, frame.width - (pinned ? 98 : 82))
     stringValue.draw(in: NSRect(x: frame.minX + 25, y: typeDetail.isEmpty ? frame.midY - 8 : frame.minY + 5, width: textWidth, height: 16),
       withAttributes: [.font: Self.titleFont, .foregroundColor: StudioTheme.text, .paragraphStyle: paragraph])
     if !typeDetail.isEmpty {
@@ -63,8 +64,11 @@ import SwiftUI
         withAttributes: [.font: Self.detailFont, .foregroundColor: StudioTheme.muted, .paragraphStyle: paragraph])
     }
     symbol(primaryKey ? "key.fill" : typeSymbol, accent: primaryKey)?.draw(in: NSRect(x: frame.minX + 7, y: frame.midY - 6, width: 12, height: 12))
-    if pinned { symbol("pin.fill", accent: true)?.draw(in: NSRect(x: frame.maxX - 60, y: frame.midY - 5, width: 9, height: 10)) }
-    if let ascending { symbol(ascending ? "chevron.up" : "chevron.down", accent: true)?.draw(in: NSRect(x: frame.maxX - 44, y: frame.midY - 4, width: 8, height: 8)) }
+    if pinned { symbol("pin.fill", accent: true)?.draw(in: NSRect(x: frame.maxX - 70, y: frame.midY - 5, width: 9, height: 10)) }
+    if showsSortControl || ascending != nil {
+      let name=ascending.map {$0 ? "arrow.up":"arrow.down"} ?? "arrow.up.arrow.down"
+      symbol(name,accent:ascending != nil)?.draw(in:NSRect(x:frame.maxX-50,y:frame.midY-6,width:12,height:12))
+    }
     if showsFilter {
       if hovered || active {
         StudioTheme.selection.setFill()
@@ -81,7 +85,7 @@ import SwiftUI
   static func headerWidth(_ name: String, detail: String = "") -> CGFloat {
     let title = name.size(withAttributes: [.font: NSFont.systemFont(ofSize: 11, weight: .semibold)]).width
     let type = detail.size(withAttributes: [.font: NSFont.systemFont(ofSize: 9)]).width
-    return ceil(max(title, type)) + 80
+    return ceil(max(title, type)) + 86
   }
 }
 @MainActor final class FilterHeader: NSTableHeaderView {
@@ -114,22 +118,46 @@ import SwiftUI
   override func rightMouseDown(with event: NSEvent) {
     openMenu?(column(at: convert(event.locationInWindow, from: nil)), event)
   }
-  override func mouseDown(with event: NSEvent) {
-    let p = convert(event.locationInWindow, from: nil)
-    let c = column(at: p)
-    if c >= 0 && filterHitRect(column:c).contains(p) {
-      // The outer 12 pt belong exclusively to native column resizing.
-      var dragged = false
-      while let next = window?.nextEvent(matching:[.leftMouseDragged,.leftMouseUp]) {
-        let location = convert(next.locationInWindow,from:nil)
-        if hypot(location.x-p.x,location.y-p.y) > 3 { dragged = true }
-        if next.type == .leftMouseUp {
-          if !dragged && filterHitRect(column:c).contains(location) { openFilter?(c) }
-          break
+  func sortHitRect(column:Int)->NSRect {
+    guard let tableView,tableView.tableColumns.indices.contains(column),
+      (tableView.tableColumns[column].headerCell as? FilterHeaderCell)?.showsSortControl == true else {return .zero}
+    let rect=headerRect(ofColumn:column)
+    return NSRect(x:rect.maxX-54,y:rect.minY+3,width:20,height:max(0,rect.height-6))
+  }
+  var trackingEventFixture:(()->NSEvent?)?
+  private func nextTrackingEvent()->NSEvent? {
+    if let trackingEventFixture {return trackingEventFixture()}
+    return window?.nextEvent(matching:[.leftMouseDragged,.leftMouseUp])
+  }
+  var selectColumn:((Int,NSEvent.ModifierFlags)->Void)?
+  var sortColumn:((Int)->Void)?
+  override func mouseDown(with event:NSEvent) {
+    let point=convert(event.locationInWindow,from:nil),column=column(at:convert(event.locationInWindow,from:nil))
+    guard column>=0 else {super.mouseDown(with:event);return}
+    let filter=filterHitRect(column:column),sort=sortHitRect(column:column),rect=headerRect(ofColumn:column)
+    let hitsFilter=filter.contains(point),hitsSort=sort.contains(point)
+    // Native resizing keeps exclusive ownership of the divider edges.
+    if !hitsFilter && !hitsSort && (selectColumn==nil || point.x>=rect.maxX-12 || point.x<rect.minX+4) {
+      super.mouseDown(with:event);return
+    }
+    var dragged=false
+    while let next=nextTrackingEvent() {
+      let location=convert(next.locationInWindow,from:nil)
+      if hypot(location.x-point.x,location.y-point.y)>3 {
+        dragged=true
+        if !hitsFilter && !hitsSort && next.type == .leftMouseDragged {
+          // Let AppKit continue its native column-reordering gesture.
+          NSApp.postEvent(next,atStart:true)
+          super.mouseDown(with:event);return
         }
       }
-    } else {
-      super.mouseDown(with: event)
+      if next.type == .leftMouseUp {
+        guard !dragged else {return}
+        if hitsFilter && filter.contains(location) {openFilter?(column)}
+        else if hitsSort && sort.contains(location) {sortColumn?(column)}
+        else if !hitsFilter && !hitsSort && self.column(at:location)==column {selectColumn?(column,event.modifierFlags)}
+        return
+      }
     }
   }
 }

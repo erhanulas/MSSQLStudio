@@ -11,14 +11,12 @@ struct ColumnFilterPanel: View {
   @State private var values: [CellChoice] = []
   @State private var truncated = false
   @State private var loading = false
-  @State private var conditionExpanded: Bool
   @State private var error = ""
   init(rows: Rows, column: Int, initial: ColumnRule, apply: @escaping (ColumnRule) throws -> Void) {
     self.rows = rows
     self.column = column
     self.apply = apply
     _rule = State(initialValue: initial)
-    _conditionExpanded = State(initialValue: initial.operation != .any)
   }
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -50,7 +48,6 @@ struct ColumnFilterPanel: View {
               .toggleStyle(.checkbox).font(.system(size: 12)).lineLimit(1)
               .padding(.horizontal, 10).padding(.vertical, 4)
               .frame(maxWidth: .infinity, alignment: .leading)
-              .studioHelp(String(value.title.prefix(4000)))
           }
           if values.isEmpty && !loading { Text("Eşleşen değer yok").foregroundStyle(.secondary).padding(12) }
         }.frame(maxWidth: .infinity, alignment: .leading)
@@ -61,23 +58,22 @@ struct ColumnFilterPanel: View {
       Text(rule.choices.map { "\($0.count) değer seçili" } ?? "Tüm değerler · Henüz değer seçimi yok")
         .font(.caption).foregroundStyle(.secondary)
       if truncated { Text("İlk 500 farklı değer gösteriliyor; diğerlerini arayabilirsiniz. Seçimler korunur.").font(.caption).foregroundStyle(.secondary) }
-      StudioDisclosureHeader(title:"Koşul",icon:"line.3.horizontal.decrease",tint:StudioTheme.accent,expanded:conditionExpanded) {conditionExpanded.toggle()}
+      Label("Koşul",systemImage:"line.3.horizontal.decrease")
+        .font(.system(size:12,weight:.semibold)).foregroundStyle(Color(nsColor:StudioTheme.accent))
         .frame(height:StudioMetrics.controlHeight)
-      if conditionExpanded {
-        VStack(alignment: .leading, spacing: 8) {
-          Picker("Karşılaştırma", selection: $rule.operation) {
-            ForEach(ColumnOperation.allCases, id: \.self) { operation in
-              if !rows.fields[column].numeric && !ResultFiltering.isDate(rows.fields[column]) || ![.contains, .notContains, .starts, .empty, .notEmpty].contains(operation) {
-                Text(operation.rawValue).tag(operation)
-              }
+      VStack(alignment: .leading, spacing: 8) {
+        Picker("Karşılaştırma", selection: $rule.operation) {
+          ForEach(ColumnOperation.allCases, id: \.self) { operation in
+            if !rows.fields[column].numeric && !ResultFiltering.isDate(rows.fields[column]) || ![.contains, .notContains, .starts, .empty, .notEmpty].contains(operation) {
+              Text(operation.rawValue).tag(operation)
             }
           }
-          if rule.operation.needsValue {
-            TextField(ResultFiltering.isDate(rows.fields[column]) ? "YYYY-MM-DD veya ISO 8601" : "Değer", text: $rule.first).textFieldStyle(.roundedBorder)
-          }
-          if rule.operation == .between { TextField("Bitiş (dahil)", text: $rule.second).textFieldStyle(.roundedBorder) }
-        }.padding(.top, 6)
-      }
+        }
+        if rule.operation.needsValue {
+          TextField(ResultFiltering.isDate(rows.fields[column]) ? "YYYY-MM-DD veya ISO 8601" : "Değer", text: $rule.first).textFieldStyle(.roundedBorder)
+        }
+        if rule.operation == .between { TextField("Bitiş (dahil)", text: $rule.second).textFieldStyle(.roundedBorder) }
+      }.padding(.top, 6)
       if !error.isEmpty { Text(error).font(.caption).foregroundStyle(.red).lineLimit(3) }
       Divider()
       HStack {

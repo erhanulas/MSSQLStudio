@@ -76,6 +76,19 @@ import SwiftUI
     }
     needsDisplay=true
   }
+  func selectHeaderColumn(_ position:Int,modifiers:NSEvent.ModifierFlags) {
+    guard let column=canonicalPosition(position),column>0,
+      owner.numberOfRows>0,window?.makeFirstResponder(self) != false else {return}
+    let selection:IndexSet
+    if modifiers.contains(.shift),let anchor=owner.anchor {selection=owner.cellRange(anchor.column,column)}
+    else if modifiers.contains(.command),!owner.cellColumns.isEmpty {selection=owner.cellColumns.symmetricDifference(IndexSet(integer:column))}
+    else {selection=IndexSet(integer:column)}
+    owner.disjoint=nil
+    owner.selectRowIndexes(selection.isEmpty ? []:IndexSet(integersIn:0..<owner.numberOfRows),byExtendingSelection:false)
+    owner.cellColumns=selection
+    if !modifiers.contains(.shift) {owner.anchor=(0,column)}
+    owner.needsDisplay=true;needsDisplay=true;owner.cellSelectionChanged?()
+  }
   func remapSelectionAfterColumnMove(from:Int,to:Int) {
     func moved(_ position:Int) -> Int {
       if position == from {return to}

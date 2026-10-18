@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.202",
+    "date": "2026-10-18",
+    "title": "Kolon seçimi, sıralama ve filtreleme ayrıldı",
+    "changes": [
+      "Sonuç gridinde kolon başlığına tıklayınca o kolonun görünen hücreleri seçilir. Command ile kolon ekleyip kaldırabilir, Shift ile kolon aralığı seçebilirsiniz.",
+      "Sıralama artık ayrı ok ikonuyla yapılır: artan, azalan ve ilk sıra. Filtre ikonu yalnız filtre panelini açar.",
+      "Filtre panelinde Koşul alanı sürekli görünür; açıp kapatma adımı kaldırıldı.",
+      "Filtre değerlerinin üzerinde aynı metni tekrarlayan ipuçları kaldırıldı."
+    ]
+  },
+  {
     "version": "0.2.201",
     "date": "2026-10-18",
     "title": "Sonuç satır sayısı filtreye göre güncellenir",
