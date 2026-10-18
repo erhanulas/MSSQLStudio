@@ -64,7 +64,7 @@ private actor ImportedProfiles122 {
     doc.confirmDiscardResultEdits={false};#expect(!state.close(doc));doc.confirmDiscardResultEdits=nil
     #expect(state.close(doc) && state.lastClosedTab?.text=="SELECT 1;")
   }
-  @Test func unknownOrOpenTransactionCanCloseWithExplicitDisconnectApproval() async {
+  @Test func probeFailureClosesNormallyAndKnownOpenTransactionNeedsDisconnectApproval() async {
     let (state,server,_,window)=fixture();defer {window.close()}
     state.warnOnTabClose=false
     for known in [false,true] {
@@ -76,14 +76,19 @@ private actor ImportedProfiles122 {
         var result=Execution();result.results=[Rows(values:[["1","Demo","1"]])];return result
       }
       doc.execute();await doc.task?.value
-      #expect(doc.transactionStatusKnown == known && !doc.hasClosedTransaction)
-      state.transactionCloseConfirmationFixture={_ in false}
-      #expect(!state.close(doc) && state.documents.contains {$0 === doc} && doc.state == .ready)
+      #expect(doc.transactionStatusKnown == known && doc.hasClosedTransaction == !known)
+      var confirmations=0
+      state.transactionCloseConfirmationFixture={_ in confirmations+=1;return false}
+      if known {
+        #expect(!state.close(doc) && state.documents.contains {$0 === doc} && doc.state == .ready)
+        #expect(confirmations==1)
+      }
       state.transactionCloseConfirmationFixture={_ in true}
       doc.confirmDiscardResultEdits={false}
       #expect(!state.close(doc))
       doc.confirmDiscardResultEdits=nil
       #expect(state.close(doc) && doc.state == .disconnected && !state.documents.contains {$0 === doc})
+      if !known {#expect(confirmations==0)}
     }
   }
   @Test func importsStayOfflineNeverOverwriteExistingProfileAndPersistOnlyNewProfiles() async throws {

@@ -35,7 +35,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
   var lastIndexStatusScope = ""
   let searchStatus = NSTextField(labelWithString: "Seçili veritabanı / nesne türünde ara")
   var searchScope: TreeNode?
-  let explorerTabs = StudioTabControl(items:[.init(id:0,title:"Bağlantılar",icon:"square.stack.3d.up"),.init(id:1,title:"Arama",icon:"magnifyingglass")])
+  let explorerTabs = StudioTabControl(items:[.init(id:0,title:"Bağlantılar",icon:"square.stack.3d.up",tone:.accent),.init(id:1,title:"Arama",icon:"magnifyingglass",tone:.accent)])
   var showingSearch = false
   var savedExpanded: [TreeNode] = []
   var savedTreeSelection: TreeNode?
@@ -504,7 +504,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       status.toolTip=doc.connectionError ?? state.connectionErrors[doc.server.id] ?? doc.server.startupError
       status.setAccessibilityIdentifier("queryStatus")
       presentation.apply(to:status,icon:statusIcon,detail:
-        "   |   \(doc.database)   |   \(rows)   |   \(String(format:"%.3f",doc.elapsed)) s\(doc.partial ? "   |   PARTIAL" : "")\(!doc.transactionStatusKnown ? "   |   TRAN: bilinmiyor":doc.transactionCount > 0 ? "   |   TRAN: \(doc.transactionCount)" : "")")
+        "   |   \(doc.database)   |   \(rows)   |   \(String(format:"%.3f",doc.elapsed)) s\(doc.partial ? "   |   PARTIAL" : "")\(doc.transactionCount > 0 ? "   |   TRAN: \(doc.transactionCount)" : "")")
     } else {
       database.updateChoices([],selected:nil,contextID:nil,enabled:false)
       context.stringValue = ""

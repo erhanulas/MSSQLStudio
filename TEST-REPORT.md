@@ -1,3 +1,31 @@
+## Public 0.2.196 preparation — 2026-10-18
+
+- Explicit user request: publish without rerunning tests. Reused completed session-metadata, Activity identity, DBA semantic tabs and navigation-icon development evidence below. Exact v0.2.196 package suite skipped; signing, package, manifest/hash/helper and feed checks retained.
+- Version 0.2.196, build 197. Installed application, live SQL and user Keychain untouched.
+
+## Semantic navigation icons across tools — 2026-10-18 (unpublished)
+
+- Applied existing optional StudioTabBar tone to Explorer Connections/Search, History Queries/Closed Tabs, Activity Charts/DBA and Profiler Events (accent); Profiler Busy Clients uses warning. No status meaning assigned to connection navigation, no new count/data reads, no title/selection/action changes.
+- Shared control unchanged from the immediately verified DBA work; reused its native theme/layout evidence rather than rerunning identical tests. Isolated Release incorporating all affected views passed: /tmp/mssql-tool-tab-tones-release.log. Architecture/source and diff checks passed. No live SQL/installed-app check.
+
+## DBA semantic tab icons and nonzero counts — 2026-10-18 (unpublished)
+
+- StudioTabBar optional semantic tone colors icons and nonzero count capsules; zero stays muted and existing callers without tone retain their prior appearance. DBA blocked=danger, long-running/application locks=warning, backups=success, active=accent. Titles, selection, actions and data loading unchanged.
+- Native populated Activity layout test passed (16 theme/state presentations), shared mounted-tab bidirectional theme regression passed (2 tests total). Logs /tmp/mssql-dba-tab-tones-tests.log and /tmp/mssql-dba-tab-tones-shared-tests.log.
+- Isolated Release passed (/tmp/mssql-dba-tab-tones-release.log); architecture/source synchronization and diff checks passed. Inspected /tmp/mssql-activity-dba-light.png and dark.png: colored nonzero counts/icons, neutral zero, intact selection and layout. No installed app/live SQL verification.
+
+## Activity identity labels without grouping — 2026-10-18 (unpublished)
+
+- SwiftUI numeric interpolation localized session IDs in blocking-chain chips, selected request details and application-lock details. Convert IDs to String before localized Text/Label interpolation; 1026 remains 1026 in every locale. Grid columns and confirmation cards already used raw String; metric formatting and numeric sort/filter unchanged.
+- Existing populated Activity Monitor native layout/theme test passed (1 test exercising 16 light/dark populated states): /tmp/mssql-activity-identifiers-tests.log. Isolated Release passed: /tmp/mssql-activity-identifiers-release.log. Architecture/source and diff checks passed. No live DB/installed-app verification.
+
+## Best-effort session metadata without workspace intervention — 2026-10-18 (unpublished)
+
+- User requested removal of transaction-probe warnings and intervention. Invalid/failed post-query metadata no longer appends warnings, colors Ready, displays TRAN: unknown, or blocks refresh, result editing, close/quit/profile reset solely because verification failed. Previously confirmed open transaction guards remain.
+- Internal best-effort session metadata and generation validation retained for actual DB context and committed-DDL publication; failed verification never authorizes DDL success callbacks. Actual user SQL errors and transport disconnection handling unchanged; no automatic commit/rollback or write retry.
+- 19 tests in ConnectionReadLimitTests, Workspace122Tests and QueryStatusPresentationTests passed (/tmp/mssql-silent-probe-tests.log). Covers failed/partial probe with editable results, normal close after probe failure, known-open confirmation, result draft veto, timeout/cancellation and no repeated write. First attempt waited in a now-reachable native save dialog; isolated bulk-discard fixture added and rerun passed.
+- Isolated Release passed (/tmp/mssql-silent-probe-release.log); architecture/source synchronization and diff checks passed. No live DB or installed-app verification.
+
 ## Public 0.2.195 receipt — 2026-10-18
 
 - Published latest [v0.2.195](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.195), build 196; source 2fc05d1d1311ec30dc0d95796be880a2eab2bb64. [Release workflow](https://github.com/erhanulas/MSSQLStudio/actions/runs/39079828444) succeeded. No additional test suite executed, per user request; completed development evidence reused.

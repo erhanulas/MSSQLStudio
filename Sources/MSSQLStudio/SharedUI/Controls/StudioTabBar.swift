@@ -2,11 +2,23 @@ import SwiftUI
 
 /// Compact full-area navigation with explicit selection and native button focus.
 struct StudioTabBar:View {
+  enum Tone {
+    case accent,success,warning,danger
+    @MainActor var color:NSColor {
+      switch self {
+      case .accent:StudioTheme.accent
+      case .success:StudioTheme.success
+      case .warning:StudioTheme.warning
+      case .danger:StudioTheme.danger
+      }
+    }
+  }
   struct Item:Identifiable {
     let id:Int
     let title:String
     let icon:String
     var count:Int?=nil
+    var tone:Tone?=nil
   }
   let items:[Item]
   @Binding var selection:Int
@@ -22,11 +34,15 @@ struct StudioTabBar:View {
         Button {selection=item.id} label: {
           HStack(spacing:6) {
             Image(systemName:item.icon).font(.system(size:12))
+              .foregroundStyle(Color(nsColor:item.tone?.color ?? (selected ? StudioTheme.accent:StudioTheme.muted)))
             Text(item.title).font(.system(size:12,weight:selected ? .semibold:.regular)).lineLimit(1)
             if let count=item.count {
-              Text(String(count)).font(.system(size:10,weight:.medium)).monospacedDigit()
+              let emphasized=count>0 && item.tone != nil
+              let badgeColor=emphasized ? item.tone!.color:StudioTheme.muted
+              Text(String(count)).font(.system(size:10,weight:emphasized ? .semibold:.medium)).monospacedDigit()
+                .foregroundStyle(Color(nsColor:emphasized ? badgeColor:selected ? StudioTheme.accent:StudioTheme.muted))
                 .padding(.horizontal,5).padding(.vertical,2)
-                .background(Color(nsColor:StudioTheme.muted).opacity(0.09),in:Capsule())
+                .background(Color(nsColor:badgeColor).opacity(emphasized ? 0.14:0.09),in:Capsule())
             }
           }.foregroundStyle(Color(nsColor:selected ? StudioTheme.accent:StudioTheme.muted))
             .padding(.horizontal,10).frame(height:30).frame(maxWidth:.infinity)

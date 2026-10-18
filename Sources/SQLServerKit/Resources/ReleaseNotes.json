@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.196",
+    "date": "2026-10-18",
+    "title": "Daha sakin sorgu durumu ve renkli izleme sekmeleri",
+    "changes": [
+      "Sorgu sonrası transaction bilgisi okunamadığında gereksiz uyarı, sarı durum simgesi ve sekme kapatma veya sonuç düzenleme engeli oluşmaz.",
+      "Activity Monitor’de oturum numaraları binlik ayırıcı olmadan gösterilir.",
+      "DBA sekmelerinde ikonlar ve sıfırdan büyük sayılar uygun renklerle vurgulanır; sıfırlar nötr kalır.",
+      "Explorer, Geçmiş, Profiler ve Activity Monitor gezinme ikonları daha belirgin hale getirildi."
+    ]
+  },
+  {
     "version": "0.2.195",
     "date": "2026-10-18",
     "title": "Sekme kapatma ve sonuçlarla çalışma iyileştirildi",

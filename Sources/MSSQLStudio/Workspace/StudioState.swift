@@ -491,7 +491,7 @@ import UniformTypeIdentifiers
     guard !doc.hasClosedTransaction else {return true}
     if let fixture=transactionCloseConfirmationFixture {return fixture(doc)}
     let alert=StudioAlert(role:"queryTransactionCloseConfirmation")
-    alert.messageText=doc.transactionStatusKnown ? "Açık transaction olan sekme kapatılsın mı?":"Transaction durumu doğrulanamayan sekme kapatılsın mı?"
+    alert.messageText="Açık transaction olan sekme kapatılsın mı?"
     alert.informativeText="Sekmenin bağlantısı kapatılacak. Commit edilmemiş değişiklikler SQL Server tarafından geri alınır; tamamlanmış değişiklikler korunur. Geri alma sunucuda zaman alabilir. Otomatik COMMIT yapılmaz."
     alert.addButton(withTitle:"Vazgeç")
     alert.addButton(withTitle:"Bağlantıyı kapat ve sekmeyi kapat")

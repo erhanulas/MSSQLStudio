@@ -31,7 +31,7 @@ struct ActivityApplicationLocksPanel:View {
         if let lock {
           VStack(alignment:.leading,spacing:8) {
             HStack {
-              Label("Oturum \(lock.sessionID) · \(lock.ownerType) · \(lock.ownerID)",systemImage:"lock.shield").fontWeight(.medium)
+              Label("Oturum \(String(lock.sessionID)) · \(lock.ownerType) · \(lock.ownerID)",systemImage:"lock.shield").fontWeight(.medium)
               Spacer()
               StudioActionButton("SQL’i Kopyala",icon:"doc.on.doc") {NSPasteboard.general.clearContents();NSPasteboard.general.setString(lock.sql,forType:.string)}.disabled(lock.sql.isEmpty)
             }

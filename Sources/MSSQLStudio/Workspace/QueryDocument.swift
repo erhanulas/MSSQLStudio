@@ -52,7 +52,6 @@ struct ObjectEditorKey: Codable, Equatable {
     case .ready: break
     }
     guard lastExecutionSucceeded, let lastExecutedSQL else { return "Önce bu sekmede bir okuma sorgusunu başarıyla çalıştırın." }
-    guard transactionStatusKnown else {return "Transaction durumu doğrulanamadı. Aynı sekmede @@TRANCOUNT ve XACT_STATE() kontrolü yapın."}
     guard transactionCount == 0 else { return "Açık transaction var (\(transactionCount)). Yenilemeden önce COMMIT veya ROLLBACK ile tamamlayın." }
     guard lastExecutedDatabase == database else { return "Veritabanı değişti. Bu veritabanında sorguyu yeniden çalıştırın." }
     guard TSQL.canRepeatRead(lastExecutedSQL) else { return "Bu sorgu güvenli bir salt okunur sorgu olarak tekrarlanamıyor. Çalıştır düğmesini kullanın." }
@@ -81,7 +80,7 @@ struct ObjectEditorKey: Codable, Equatable {
   var selectedResult = 0
   var transactionCount = 0
   private(set) var transactionStatusKnown=true
-  var hasClosedTransaction:Bool {transactionCount==0 && (transactionStatusKnown || state == .disconnected)}
+  var hasClosedTransaction:Bool {transactionCount==0}
   var symbols: [CatalogSymbol] = []
   var intelligenceCatalog: SQLIntelligence.Catalog?
   var catalogDatabase: String?
@@ -452,7 +451,10 @@ struct ObjectEditorKey: Codable, Equatable {
             }
           } else {throw SQLFailure("Sorgu sonrası oturum yanıtı eksik.")}
         } catch {
-          if executionID==token,server === executionServer,server.generation==executionServerGeneration {transactionStatusKnown=false;messages += "Transaction durumu doğrulanamadı. Aynı sekmede @@TRANCOUNT ve XACT_STATE() değerlerini kontrol edin.\n"+error.localizedDescription+"\n"}
+          // Best-effort metadata failure must not turn a completed user query into
+          // a warning or block ordinary workspace actions. Keep the verification
+          // bit only for publishing committed DDL through another connection.
+          if executionID==token,server === executionServer,server.generation==executionServerGeneration {transactionStatusKnown=false}
           if executionID==token,server === executionServer,server.generation==executionServerGeneration,self.database==executionDatabase {await recordConnectionFailure(error)}
           else if executionID==token {lastExecutedDatabase=nil}
         }

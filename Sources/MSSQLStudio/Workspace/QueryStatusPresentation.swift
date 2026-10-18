@@ -13,7 +13,7 @@ import AppKit
     switch document.state {
     case .ready:
       if document.executionFailed {text="Hata";symbol="exclamationmark.circle.fill";color=StudioTheme.danger}
-      else if document.partial || !document.transactionStatusKnown || document.transactionCount>0 {text="Ready";symbol="exclamationmark.triangle.fill";color=StudioTheme.warning}
+      else if document.partial || document.transactionCount>0 {text="Ready";symbol="exclamationmark.triangle.fill";color=StudioTheme.warning}
       else {text="Ready";symbol="checkmark.circle.fill";color=StudioTheme.success}
     case .running:text="Executing…";symbol="play.circle.fill";color=StudioTheme.accent
     case .connecting:text="Connecting…";symbol="network";color=StudioTheme.accent

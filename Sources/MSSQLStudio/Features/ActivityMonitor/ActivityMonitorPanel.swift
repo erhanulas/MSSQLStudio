@@ -221,7 +221,7 @@ struct ActivityMonitorPanel:View {
   }
   private var controls:some View {
     HStack(spacing:10) {
-      StudioTabBar(items:[.init(id:0,title:"Grafikler",icon:"chart.xyaxis.line"),.init(id:2,title:"DBA",icon:"server.rack")],selection:$mode)
+      StudioTabBar(items:[.init(id:0,title:"Grafikler",icon:"chart.xyaxis.line",tone:.accent),.init(id:2,title:"DBA",icon:"server.rack",tone:.accent)],selection:$mode)
         .frame(width:260).accessibilityIdentifier("activityMode")
       Spacer(minLength:8)
       Picker("Aralık",selection:$range) {ForEach([5,10,15,30,45,60],id:\.self) {Text($0==60 ? "Son 1 saat":"Son \($0) dakika").tag($0)}}
@@ -268,11 +268,11 @@ struct ActivityMonitorPanel:View {
     VStack(alignment:.leading,spacing:8) {
       HStack {
         StudioTabBar(items:[
-          .init(id:0,title:"Bloklanan",icon:"lock",count:model.diagnostics.blocked.count),
-          .init(id:1,title:"Uzun süren",icon:"clock",count:model.diagnostics.longRunning.count),
-          .init(id:2,title:"Yedekleme",icon:"externaldrive",count:model.diagnostics.backups.count),
-          .init(id:3,title:"Uygulama kilitleri",icon:"app.badge",count:model.applicationLocksTime==nil || !model.applicationLockIssues.isEmpty || !model.applicationLockError.isEmpty ? nil:model.applicationLocks.count),
-          .init(id:4,title:"Aktif sorgular",icon:"bolt",count:model.diagnostics.active.count)
+          .init(id:0,title:"Bloklanan",icon:"lock",count:model.diagnostics.blocked.count,tone:.danger),
+          .init(id:1,title:"Uzun süren",icon:"clock",count:model.diagnostics.longRunning.count,tone:.warning),
+          .init(id:2,title:"Yedekleme",icon:"externaldrive",count:model.diagnostics.backups.count,tone:.success),
+          .init(id:3,title:"Uygulama kilitleri",icon:"app.badge",count:model.applicationLocksTime==nil || !model.applicationLockIssues.isEmpty || !model.applicationLockError.isEmpty ? nil:model.applicationLocks.count,tone:.warning),
+          .init(id:4,title:"Aktif sorgular",icon:"bolt",count:model.diagnostics.active.count,tone:.accent)
         ],selection:$diagnosticKind).frame(maxWidth:.infinity).accessibilityIdentifier("activityDiagnosticKind")
       }
       if diagnosticKind==3 {ActivityApplicationLocksPanel(model:model)}
@@ -313,7 +313,7 @@ struct ActivityMonitorPanel:View {
     } else if let selected {
       VStack(alignment:.leading,spacing:6) {
         HStack(spacing:14) {
-          Label("Oturum \(selected.sessionID) · \(selected.status)",systemImage:"text.alignleft").fontWeight(.medium)
+          Label("Oturum \(String(selected.sessionID)) · \(selected.status)",systemImage:"text.alignleft").fontWeight(.medium)
           Text("Fiziksel okuma \(ActivityFormat.count(selected.reads)) · Yazma \(ActivityFormat.count(selected.writes)) · Tx \(ActivityFormat.count(selected.openTransactions))").foregroundStyle(.secondary)
           Spacer(minLength:0)
 
@@ -359,7 +359,7 @@ struct ActivityMonitorPanel:View {
               HStack(spacing:6) {
                 Image(systemName:leaf ? "hourglass":index == 0 && chain.termination == .root ? "lock.fill":"link")
                 VStack(alignment:.leading,spacing:2) {
-                  Text("Oturum \(id)").font(.system(size:11,weight:.semibold))
+                  Text("Oturum \(String(id))").font(.system(size:11,weight:.semibold))
                   Text(leaf ? "Bloklanan istek":node == nil ? "Ayrıntı okunamadı":index == 0 && chain.termination == .root ? "Üst bloklayan · \(node!.status)":"Ara oturum · \(node!.status)")
                     .font(.system(size:9)).lineLimit(1)
                 }

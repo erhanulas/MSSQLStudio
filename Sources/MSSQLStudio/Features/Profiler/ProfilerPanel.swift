@@ -62,7 +62,7 @@ struct ProfilerPanel:View {
       } content: {
         VStack(spacing:4) {
         HStack {
-          StudioTabBar(items:[.init(id:0,title:"Olaylar",icon:"list.bullet"),.init(id:1,title:"Yoğun istemciler",icon:"desktopcomputer")],selection:Binding(get:{showClients ? 1:0},set:{showClients=$0==1})).frame(width:320)
+          StudioTabBar(items:[.init(id:0,title:"Olaylar",icon:"list.bullet",tone:.accent),.init(id:1,title:"Yoğun istemciler",icon:"desktopcomputer",tone:.warning)],selection:Binding(get:{showClients ? 1:0},set:{showClients=$0==1})).frame(width:320)
           Spacer()
           StudioSelectionMenu(title:exporting ? "Aktarılıyor…":"Dışa Aktar",symbol:"square.and.arrow.up",items:
             ProfilerExport.Format.allCases.flatMap {format in [

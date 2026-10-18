@@ -166,9 +166,9 @@ import Testing
     doc.sessionProbeFixture={_,_ in throw SQLFailure("Probe failed")}
     var applied=false;doc.managedObjectApplied={applied=true}
     doc.execute();await doc.task?.value
-    #expect(doc.messages.contains("Transaction durumu doğrulanamadı") && !applied && !doc.hasClosedTransaction && !doc.canRefresh)
-    let state=StudioState();state.documents=[doc];state.closeErrorFixture={_ in}
-    #expect(!state.canBeginBulkClose() && state.confirmBulkClose()==nil)
+    #expect(!doc.messages.contains("Transaction durumu doğrulanamadı") && !doc.messages.contains("Probe failed") && !applied && doc.hasClosedTransaction && doc.canRefresh)
+    let state=StudioState();state.documents=[doc];state.closeErrorFixture={_ in};state.bulkCloseChoiceFixture={.discard}
+    #expect(state.canBeginBulkClose() && state.confirmBulkClose()==true)
     doc.sessionProbeFixture={_,_ in var output=Execution();output.results=[Rows(values:[["0","master","0"]])];return output}
     doc.execute();await doc.task?.value
     #expect(doc.transactionStatusKnown && doc.hasClosedTransaction)
@@ -189,7 +189,7 @@ import Testing
     #expect(doc.canEditLoadedRows && !doc.messages.contains("Transaction durumu doğrulanamadı"))
     doc.sessionProbeFixture={_,_ in var result=Execution();result.partial=true;result.results=[Rows(values:[["0","master","0"]])];return result}
     doc.execute();await doc.task?.value
-    #expect(!doc.transactionStatusKnown && !doc.canEditLoadedRows)
+    #expect(!doc.transactionStatusKnown && doc.canEditLoadedRows && !doc.messages.contains("oturum yanıtı"))
   }
 
 }
