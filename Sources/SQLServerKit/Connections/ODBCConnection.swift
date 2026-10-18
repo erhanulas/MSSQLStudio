@@ -302,8 +302,8 @@ public final class ODBCConnection: @unchecked Sendable {
             }
             if budget.reached {
               rows.truncated=true;output.partial=true
-              let message="Sonuç \(resultIndex+1): \(budget.maximum) satır sınırına ulaşıldı; daha fazla satır olabilir. Sonraki sonuçlar ayrı okunur."
-              output.messages.append(message);events?(.message(message))
+              // Row limits are shown by the result toolbar and partial state.
+              // Do not emit an additional console warning for normal capped reads.
             }
           } catch {
             rows.truncated = true

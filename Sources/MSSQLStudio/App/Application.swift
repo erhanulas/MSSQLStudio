@@ -248,7 +248,10 @@ import SwiftUI
       SchemaComparisonModel.activeApplications==0 && TableDesignerModel.activeApplications==0 && !workbench.hasActiveProfilers && (Self.updateTerminationApproved
         ? studio.canBeginBulkClose() && studio.saveSnapshot()
         : studio.canQuit())
-    },terminate:{sender.terminate(nil)},cancelled:{ [self] in cancelUpdateTermination() })
+    },terminate:{ [self] in
+      studio.rememberConnectedExplorers()
+      sender.terminate(nil)
+    },cancelled:{ [self] in cancelUpdateTermination() })
   }
   func applicationShouldTerminate(_ sender:NSApplication)->NSApplication.TerminateReply {
     guard SchemaComparisonModel.activeApplications==0 && TableDesignerModel.activeApplications==0 else {cancelUpdateTermination();NSSound.beep();return .terminateCancel}

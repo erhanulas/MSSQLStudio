@@ -173,7 +173,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     explorerToggle.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: "Object Explorer’ı Göster / Gizle")
     explorerToggle.target = self; explorerToggle.action = #selector(toggleExplorer)
     explorerToggle.bezelStyle = .inline; explorerToggle.isBordered = false
-    explorerToggle.toolTip = "Object Explorer’ı Göster / Gizle"
+    explorerToggle.toolTip = StudioCommandCatalog.help("Object Explorer’ı Göster / Gizle",selector:#selector(toggleExplorer))
     queryToolbarHost.setAccessibilityIdentifier("queryToolbarHost")
     queryToolbarHost.isHidden=true
     let row = NSStackView(views: [explorerToggle, database, queryToolbarHost, context])
@@ -302,6 +302,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
     }
     if let menu = NSApp.mainMenu { update(menu) }
     if isViewLoaded {
+      explorerToggle.toolTip=StudioCommandCatalog.help("Object Explorer’ı Göster / Gizle",selector:#selector(toggleExplorer))
       for item in view.window?.toolbar?.items ?? [] {
         let help=StudioCommandCatalog.help(item.label,selector:item.action)
         if let button=item.view as? StudioToolbarButton {button.toolTip=help;item.toolTip=nil}

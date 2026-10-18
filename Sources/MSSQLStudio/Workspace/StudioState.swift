@@ -280,6 +280,18 @@ import UniformTypeIdentifiers
     if selected { ids.append(id.uuidString) }
     explorerOrderDefaults.set(ids, forKey: "explorerActiveServerIDs")
   }
+  private static let startupPriorityKey="explorerLastConnectedServerIDs"
+  func rememberConnectedExplorers() {
+    let connected=servers.filter(\.online)
+    let activeID=active?.server.id
+    let prioritized=connected.filter {$0.id == activeID}+connected.filter {$0.id != activeID}
+    explorerOrderDefaults.set(prioritized.map {$0.id.uuidString},forKey:Self.startupPriorityKey)
+  }
+  var startupExplorerServers:[ConnectedServer] {
+    let ids=ExplorerPersistence.orderedIDs(servers.map(\.id),previous:explorerOrderDefaults.stringArray(forKey:Self.startupPriorityKey))
+    let available=Dictionary(uniqueKeysWithValues:servers.map {($0.id,$0)})
+    return ids.compactMap {available[$0]}
+  }
   func restoreExplorers() async -> Bool {
     do {
       let saved = try await Task.detached { try ServerVault().list() }.value
@@ -304,7 +316,7 @@ import UniformTypeIdentifiers
         } catch { showError(error.localizedDescription) }
       }
       changed?()
-      for server in servers where !server.online {
+      for server in startupExplorerServers where !server.online {
         connectionActivities[server.id]="Explorer bağlanıyor: " + server.profile.name;changed?()
         defer {connectionActivities[server.id]=nil;changed?()}
         let activeBefore=active
@@ -613,6 +625,8 @@ import UniformTypeIdentifiers
       for doc in documents {doc.disconnect()}
       documents=[];active=nil;changed?()
     }
-    return !recoveryEnabled || saveSnapshot()
+    guard !recoveryEnabled || saveSnapshot() else {return false}
+    rememberConnectedExplorers()
+    return true
   }
 }

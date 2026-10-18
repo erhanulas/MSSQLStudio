@@ -179,12 +179,12 @@ struct ActivityMonitorPanel:View {
     return values
   }
   var body:some View {
-    VStack(alignment:.leading,spacing:mode == 2 ? 4:12) {
+    VStack(alignment:.leading,spacing:4) {
       HStack {
         StudioPanelHeading(title:"Activity Monitor",icon:"waveform.path.ecg",subtitle:model.server.profile.name+" · Sunucu sağlığı ve DBA")
         samplingStatus
       }
-      controls
+      controls.fixedSize(horizontal:false,vertical:true)
       healthCards
       resourceCards
       if !notices.isEmpty {issueBanner(notices.joined(separator:" · "),critical:!model.error.isEmpty || (mode == 2 && !model.diagnosticsError.isEmpty))}
@@ -222,7 +222,7 @@ struct ActivityMonitorPanel:View {
   private var controls:some View {
     HStack(spacing:10) {
       StudioTabBar(items:[.init(id:0,title:"Grafikler",icon:"chart.xyaxis.line",tone:.accent),.init(id:2,title:"DBA",icon:"server.rack",tone:.accent)],selection:$mode)
-        .frame(width:260).accessibilityIdentifier("activityMode")
+        .frame(width:260,height:38).fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("activityMode")
       Spacer(minLength:8)
       Picker("Aralık",selection:$range) {ForEach([5,10,15,30,45,60],id:\.self) {Text($0==60 ? "Son 1 saat":"Son \($0) dakika").tag($0)}}
         .labelsHidden().frame(width:140).studioHelp("Grafik ve örnek tablosunun zaman aralığı").accessibilityLabel("Zaman aralığı")

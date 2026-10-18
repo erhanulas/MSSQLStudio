@@ -32,6 +32,26 @@ import Testing
     #expect(!sidebar.isCollapsed)
     #expect(controller.explorerToggle.state == .off && controller.explorerToggle.layer?.borderWidth==0)
   }
+  @Test func explorerButtonTooltipTracksAssignedAndClearedShortcut() throws {
+    _=NSApplication.shared
+    let key="shortcut.explorer",previous=UserDefaults.standard.data(forKey:"shortcut.explorer")
+    defer {
+      if let previous {UserDefaults.standard.set(previous,forKey:key)} else {UserDefaults.standard.removeObject(forKey:key)}
+      NotificationCenter.default.post(name:GridShortcuts.changed,object:nil)
+    }
+    let binding=GridShortcuts.Binding(key:"1",modifiers:NSEvent.ModifierFlags.command.rawValue)
+    UserDefaults.standard.set(try JSONEncoder().encode(binding),forKey:key)
+    let state=StudioState();state.recoveryEnabled=false;state.historyEnabled=false
+    let controller=WorkbenchController(state:state);_=controller.view
+    #expect(controller.explorerToggle.toolTip=="Object Explorer’ı Göster / Gizle  ·  "+binding.label)
+    let changed=GridShortcuts.Binding(key:"b",modifiers:NSEvent.ModifierFlags([.control,.shift]).rawValue)
+    UserDefaults.standard.set(try JSONEncoder().encode(changed),forKey:key)
+    NotificationCenter.default.post(name:GridShortcuts.changed,object:nil)
+    #expect(controller.explorerToggle.toolTip=="Object Explorer’ı Göster / Gizle  ·  "+changed.label)
+    UserDefaults.standard.set(try JSONEncoder().encode(GridShortcuts.Binding(key:"",modifiers:0)),forKey:key)
+    NotificationCenter.default.post(name:GridShortcuts.changed,object:nil)
+    #expect(controller.explorerToggle.toolTip=="Object Explorer’ı Göster / Gizle")
+  }
   @Test func switchingThemeKeepsSemanticTypographyAndGridState() async throws {
     _ = NSApplication.shared
     let old = UserDefaults.standard.string(forKey: "ssmsTheme")

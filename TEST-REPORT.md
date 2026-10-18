@@ -1,3 +1,32 @@
+## Public 0.2.197 preparation — 2026-10-18
+
+- Explicit request: publish without rerunning tests. Reused completed startup-priority, read-budget, Activity layout and Explorer tooltip evidence below. Exact v0.2.197 release-package test suite skipped; signing, manifest, hash/helper and feed checks retained.
+- Version 0.2.197, build 198. Installed app, live SQL and user Keychain unchanged.
+
+## Explorer button assigned shortcut tooltip — 2026-10-18 (unpublished)
+
+- Editor-header Explorer toggle used a fixed tooltip unlike command toolbar controls. Initial construction and existing GridShortcuts.changed observer now use StudioCommandCatalog.help; assigned/reassigned key appears immediately, cleared binding removes key/separator. No duplicate tooltip host or button active state added.
+- 2 native PremiumLayoutTests passed (/tmp/mssql-explorer-tooltip-tests.log): actual assigned/changed/cleared notification flow and existing collapse/hover-state behavior. Isolated Release passed (/tmp/mssql-explorer-tooltip-release.log); architecture/source/diff checks passed. Installed app not changed.
+
+## Activity mode controls keep their dimensions — 2026-10-18 (unpublished)
+
+- Removed mode-dependent outer spacing (Charts 12 / DBA 4), uses 4 consistently. Mode tabs fixed 260×38; control row retains intrinsic vertical height rather than yielding to selected DBA content. Data/loading/selection behavior unchanged.
+- Native populated theme/minimum layout test passed across 16 states (/tmp/mssql-activity-stable-tabs-tests.log); isolated Release passed (/tmp/mssql-activity-stable-tabs-release.log). Architecture/source/diff checks passed.
+- Explored forced zero-minimum detail frame and smaller SQL preview; native tests exposed overflow/readability regressions, so both experiments were reverted. Existing 100 pt preview and grid minimums retained. No installed app/live SQL verification.
+
+## Row-limit console notices removed — 2026-10-18 (unpublished)
+
+- ODBC reader emitted the normal row-limit notice both as QueryEvent.message and Execution.messages; QueryDocument displayed both paths. Removed this notice at its source per user request, without text-based filtering of server diagnostics.
+- Rows.truncated/Execution.partial, row count and KISMİ summary/toolbar indicators remain. Byte/cell/rowset budget and SQL error messages unchanged; no row-fetch/SQLMoreResults behavior changed.
+- QueryReadBudgetTests: 7 passed (/tmp/mssql-row-limit-messages-tests.log). Isolated Release passed (/tmp/mssql-row-limit-messages-release.log); architecture/source and diff checks passed. No live ODBC/UI session verification.
+
+## Explorer startup connection priority — 2026-10-18 (unpublished)
+
+- Restore keeps the visible server array/order unchanged but attempts last-shutdown online server UUIDs first, then remaining displayed servers. Existing orderedIDs handles missing/deleted/invalid/duplicate IDs. No extra connections or automatic SQL execution.
+- Normal canQuit and final normal/updater termination persist the online UUID snapshot to explorerLastConnectedServerIDs independently of SQL tab recovery. Active document's online server is preferred when still available; all prior online servers precede offline ones.
+- Workspace122Tests 9 native tests and StartupUpdate-related core suites 14 tests passed (/tmp/mssql-startup-priority-tests.log). New regression covers default order, saved online priority, unchanged display order, deleted server and all-offline reset using isolated defaults.
+- Isolated Release passed (/tmp/mssql-startup-priority-release.log); architecture/source and diff checks passed. Live startup credentials/network sequencing and forced/crash termination not tested; crash exit cannot guarantee a last-moment snapshot.
+
 ## Public 0.2.196 receipt — 2026-10-18
 
 - Published latest [v0.2.196](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.196), build 197; source 869a5e83c6d9ddb74868d9aa757d17eba6327820. [Release workflow](https://github.com/erhanulas/MSSQLStudio/actions/runs/39081357958) succeeded. No additional test suite executed, per user request; completed development evidence reused.

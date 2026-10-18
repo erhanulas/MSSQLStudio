@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.2.197",
+    "date": "2026-10-18",
+    "title": "Explorer açılışı ve izleme görünümü iyileştirildi",
+    "changes": [
+      "Uygulama açılırken, kapanışta bağlı olan Explorer sunucuları önce denenir. Bağlantıların görünür sırası değişmez.",
+      "Satır sınırına ulaşıldığında Messages’a eklenen tekrarlı bilgilendirme kaldırıldı. Satır sayısı ve kısmi sonuç göstergesi korunur.",
+      "Activity Monitor’de Grafikler ve DBA geçişinde değişen boşluklar düzeltildi; üst sekmelerin ölçüleri sabitlendi.",
+      "Explorer göster/gizle düğmesinin ipucunda atanmış kısayol gösterilir ve ayar değişiklikleri hemen yansır."
+    ]
+  },
+  {
     "version": "0.2.196",
     "date": "2026-10-18",
     "title": "Daha sakin sorgu durumu ve renkli izleme sekmeleri",

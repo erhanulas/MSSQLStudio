@@ -91,6 +91,25 @@ private actor ImportedProfiles122 {
       if !known {#expect(confirmations==0)}
     }
   }
+  @Test func startupPrioritizesPreviouslyOnlineExplorersWithoutChangingDisplayOrder() {
+    let state=StudioState();state.recoveryEnabled=false;state.historyEnabled=false
+    let defaults=UserDefaults(suiteName:"StartupPriority-"+UUID().uuidString)!
+    state.explorerOrderDefaults=defaults
+    let servers=(0..<4).map {ConnectedServer(profile:.init(name:"Server \($0)"),password:"")}
+    state.servers=servers
+    for server in servers {server.online=false}
+    #expect(state.startupExplorerServers.map(\.id)==servers.map(\.id))
+    servers[1].online=true;servers[3].online=true
+    let doc=state.newQuery(server:servers[3],text:"SELECT 1;");doc.savedText=doc.sql
+    #expect(state.canQuit(choice:.discard,preservingWorkspace:true))
+    #expect(state.servers.map(\.id)==servers.map(\.id))
+    for server in servers {server.online=false}
+    #expect(state.startupExplorerServers.map(\.id)==[servers[3].id,servers[1].id,servers[0].id,servers[2].id])
+    state.servers.removeAll {$0 === servers[3]}
+    #expect(state.startupExplorerServers.map(\.id)==[servers[1].id,servers[0].id,servers[2].id])
+    state.rememberConnectedExplorers()
+    #expect(state.startupExplorerServers.map(\.id)==state.servers.map(\.id))
+  }
   @Test func importsStayOfflineNeverOverwriteExistingProfileAndPersistOnlyNewProfiles() async throws {
     let (state,server,_,window)=fixture();defer {window.close()}
     let doc=state.newQuery(server:server,database:"Demo",text:"SELECT 1;")
