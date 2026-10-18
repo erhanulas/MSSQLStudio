@@ -696,7 +696,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
       return
     }
     info.textColor = StudioTheme.muted
-    info.stringValue = busy ? "İşleniyor…" : (partial ? "Kısmi sonuç" : isReadLimited ? "Sınırlandı" : "")
+    info.stringValue = busy ? "İşleniyor…" : (!partial && isReadLimited ? "Sınırlandı" : "")
     info.isHidden = info.stringValue.isEmpty
     info.toolTip = "\(loadedRowCount.formatted()) önbellekte · ilk \(result.values.count.formatted()) satır sınırında \(visibleCount.formatted()) eşleşme · Filtre/sıralama yalnızca sınır içindeki satırlara uygulanır."
     updateRange()

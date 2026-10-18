@@ -29,8 +29,11 @@ import Testing
       doc.state = .ready;doc.executionFailed=true;host.updateControls()
       #expect(host.status.stringValue.hasPrefix("Hata") && host.statusIcon.contentTintColor==StudioTheme.danger)
       doc.executionFailed=false;doc.partial=true;host.updateControls()
+      #expect(host.status.stringValue.hasPrefix("Ready") && host.statusIcon.contentTintColor==StudioTheme.success)
+      #expect(!host.status.stringValue.contains("PARTIAL"))
+      doc.transactionCount=1;host.updateControls()
       #expect(host.statusIcon.contentTintColor==StudioTheme.warning)
-      doc.partial=false
+      doc.transactionCount=0;doc.partial=false
     }
   }
   @Test func detachedWindowUsesTheSameStatusAppearance() throws {
@@ -45,5 +48,7 @@ import Testing
     #expect(icon.image != nil && icon.contentTintColor==StudioTheme.success && label.stringValue.hasPrefix("Ready"))
     doc.state = .running;owner.updateStatus()
     #expect(icon.contentTintColor==StudioTheme.accent && label.stringValue.hasPrefix("Executing"))
+    doc.state = .ready;doc.partial=true;owner.updateStatus()
+    #expect(icon.contentTintColor==StudioTheme.success && label.stringValue.hasPrefix("Ready"))
   }
 }

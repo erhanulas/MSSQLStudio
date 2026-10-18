@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.198",
+    "date": "2026-10-18",
+    "title": "Kısmi sonuç göstergeleri sadeleştirildi",
+    "changes": [
+      "Alt durum çubuğundaki PARTIAL yazısı kaldırıldı.",
+      "Kısmi sonuç tek başına Ready yanında uyarı simgesi göstermez; yeşil onay simgesi korunur.",
+      "Satır sınırının yanındaki tekrarlı Kısmi sonuç yazısı kaldırıldı. Results sekmesindeki KISMİ etiketi ve satır sayısı korunur."
+    ]
+  },
+  {
     "version": "0.2.197",
     "date": "2026-10-18",
     "title": "Explorer açılışı ve izleme görünümü iyileştirildi",

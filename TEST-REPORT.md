@@ -1,3 +1,23 @@
+## Public 0.2.198 preparation — 2026-10-18
+
+- Explicit request: publish without rerunning tests. Reused completed partial-footer, Ready icon and toolbar label evidence below. Exact v0.2.198 release-package suite skipped; signing, manifest/hash/helper and feed verification retained.
+- Version 0.2.198, build 199. Installed app, live SQL and user Keychain unchanged.
+
+## Single partial-result label in result tabs — 2026-10-18 (unpublished)
+
+- Removed duplicate Kısmi sonuç toolbar info beside row-limit selector; Results tab KISMİ, row count/+ and actual partial state remain. Busy and edit-validation feedback retained; local-prefix Sınırlandı still shown only for non-partial results.
+- Isolated Release passed (/tmp/mssql-partial-toolbar-label-release.log); diff check passed. No additional tests for this small text-removal presentation change.
+
+## Partial reads keep Ready success icon — 2026-10-18 (unpublished)
+
+- Partial result alone no longer selects warning tone in shared QueryStatusPresentation; normal Ready uses green checkmark in main/detached query footer. Actual query failures and known-open transaction warning unchanged; result-area partial state retained.
+- 2 native QueryStatusPresentationTests passed: both themes, partial-ready success, absent PARTIAL footer text, known-open warning and detached partial-ready. Log /tmp/mssql-partial-ready-icon-tests.log. Isolated Release passed /tmp/mssql-partial-ready-icon-release.log; diff check passed.
+
+## Remove PARTIAL from workspace footer — 2026-10-18 (unpublished)
+
+- Removed only PARTIAL text from the main query footer. Underlying partial state, result-area indicators, status icon, row count and duration unchanged. Detached footer had no PARTIAL label.
+- Isolated Release passed (/tmp/mssql-footer-partial-release.log); diff check passed. No extra tests added/run for this presentation-only removal.
+
 ## Public 0.2.197 receipt — 2026-10-18
 
 - Published latest [v0.2.197](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.197), build 198; source ce8b98e81e804ffdd44d02afeee83c095a69036d. [Release workflow](https://github.com/erhanulas/MSSQLStudio/actions/runs/39082453879) succeeded. No additional test suite executed, per explicit request; completed development evidence reused.

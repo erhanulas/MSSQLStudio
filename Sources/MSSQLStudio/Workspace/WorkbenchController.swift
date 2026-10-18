@@ -505,7 +505,7 @@ final class WorkbenchController: NSViewController, NSToolbarDelegate, NSOutlineV
       status.toolTip=doc.connectionError ?? state.connectionErrors[doc.server.id] ?? doc.server.startupError
       status.setAccessibilityIdentifier("queryStatus")
       presentation.apply(to:status,icon:statusIcon,detail:
-        "   |   \(doc.database)   |   \(rows)   |   \(String(format:"%.3f",doc.elapsed)) s\(doc.partial ? "   |   PARTIAL" : "")\(doc.transactionCount > 0 ? "   |   TRAN: \(doc.transactionCount)" : "")")
+        "   |   \(doc.database)   |   \(rows)   |   \(String(format:"%.3f",doc.elapsed)) s\(doc.transactionCount > 0 ? "   |   TRAN: \(doc.transactionCount)" : "")")
     } else {
       database.updateChoices([],selected:nil,contextID:nil,enabled:false)
       context.stringValue = ""
