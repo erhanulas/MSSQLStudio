@@ -1,3 +1,12 @@
+## Public 0.2.200 receipt — 2026-10-18
+
+- Published latest [v0.2.200](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.200), build 201; source e0e4e8c3f8e43255008ded42d088936d5bf5403e. [Release workflow](https://github.com/erhanulas/MSSQLStudio/actions/runs/39084215934) succeeded. No test suite executed, per explicit request; compile/static/package checks only.
+- Downloaded ZIP, PKG, update.json and frozen helper match GitHub digests/manifest. Exact bundle version/build, tagged notes and GitHub notes agree. App/helper strict signatures, frozen helper bytes and icon appearances passed. An initial hash check ran before PKG download finished and was rejected; after download completion all checks passed.
+- ZIP SHA-256: 39628f529172fdb5befc9ae46606ce0bbf09c1370eb68a99fbec42c7408c625b
+- PKG SHA-256: 10263f0a03989f48ad337f16b26faff074a750b72e912a1266c9785e42023819
+- Signed downloaded application's Foundation updater-feed check passed: 0.2.200. Evidence /tmp/MSSQLStudio-200-public-verification/verification.json and /tmp/mssql200-feed-check.log.
+- Installed app, live SQL and user Keychain unchanged. Native UI interaction and interactive Installer not tested.
+
 ## Public 0.2.200 preparation — 2026-10-18
 
 - User explicitly requested implement and publish without tests. No test suite run; exact v0.2.200 release-package suite skipped. SettingsPanel now tracks collapsed cards (empty default) rather than a partial expanded allowlist, so all current/future cards start open. Manual collapse and search/index reveal remain.
