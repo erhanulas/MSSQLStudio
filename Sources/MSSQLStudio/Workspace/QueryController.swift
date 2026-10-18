@@ -1,7 +1,6 @@
 import AppKit
 import SQLServerKit
 import SwiftUI
-
 @MainActor final class QueryController: NSViewController, NSTabViewDelegate, NSSplitViewDelegate {
   let document: QueryDocument
   var changed: (() -> Void)?
@@ -18,6 +17,7 @@ import SwiftUI
   private let resultStrip = NSStackView()
   private let stripScroll = NSScrollView()
   private var selectedPageSize = 0
+  private weak var resultsToggle:NSButton?
   private let columnSearchButton = StudioToolbarButton(symbol: "text.magnifyingglass", label: "Kolon başlığında ara", tone: .neutral)
   private let autoRefreshButton = StudioToolbarButton(symbol:"clock.arrow.circlepath",label:"Otomatik yenileme",tone:.neutral)
   private var optionsPopover: NSPopover?
@@ -135,7 +135,7 @@ import SwiftUI
       action: #selector(toggleResults))
     toggle.bezelStyle = .inline
     toggle.isBordered = false
-    toggle.toolTip = "Sonuçları Göster / Gizle (⌘R)"
+    resultsToggle=toggle
     toggle.setAccessibilityIdentifier("toggleResults")
     actual.controlSize = .small
     compareModuleButton.image = NSImage(systemSymbolName: "arrow.left.arrow.right", accessibilityDescription: "Farkları Gör")
@@ -344,7 +344,6 @@ import SwiftUI
       panes.setPosition(panes.bounds.height * 0.60, ofDividerAt: 0)
     }
     editor.resizeToViewport()
-
   }
   @objc func toggleResults() {
     guard isViewLoaded else { return }
@@ -366,8 +365,9 @@ import SwiftUI
     selectionStatusChanged?()
   }
   @objc private func updateShortcutHints() {
-    copyHeadersButton.toolTip = "Seçili hücreleri veya satırları kolon başlıklarıyla kopyala (\(GridShortcuts.headersLabel))"
-    columnSearchButton.toolTip="Kolon başlığında ara (\(GridShortcuts.binding(.columns).label))"
+    resultsToggle?.toolTip=StudioCommandCatalog.help("Sonuçları Göster / Gizle",action:.results)
+    copyHeadersButton.toolTip=StudioCommandCatalog.help("Seçili hücreleri veya satırları kolon başlıklarıyla kopyala",action:.headers)
+    columnSearchButton.toolTip=StudioCommandCatalog.help("Kolon başlığında ara",action:.columns)
   }
   @objc private func copyHeadersSelection() {
     guard let index = (resultTabs.selectedTabViewItem?.identifier as? NSNumber)?.intValue else { return }

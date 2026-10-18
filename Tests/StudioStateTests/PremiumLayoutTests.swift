@@ -52,6 +52,22 @@ import Testing
     NotificationCenter.default.post(name:GridShortcuts.changed,object:nil)
     #expect(controller.explorerToggle.toolTip=="Object Explorer’ı Göster / Gizle")
   }
+  @Test func assignedMenuKeysNeverUseAutomaticLayoutTranslation() throws {
+    for action in GridShortcuts.Action.allCases {
+      guard let definition=StudioCommandCatalog.definitions[action] else {continue}
+      let item=NSMenuItem(title:definition.title,action:Selector(definition.selector),keyEquivalent:"")
+      StudioCommandCatalog.decorate(item)
+      #expect(!item.allowsAutomaticKeyEquivalentLocalization && !item.allowsAutomaticKeyEquivalentMirroring)
+      #expect(item.keyEquivalent==GridShortcuts.binding(action).key)
+    }
+    let key="shortcut.gridCopyQuery",old=UserDefaults.standard.data(forKey:"shortcut.gridCopyQuery")
+    defer {if let old {UserDefaults.standard.set(old,forKey:key)} else {UserDefaults.standard.removeObject(forKey:key)}}
+    let binding=GridShortcuts.Binding(key:",",modifiers:NSEvent.ModifierFlags.command.rawValue)
+    UserDefaults.standard.set(try JSONEncoder().encode(binding),forKey:key)
+    let menu=StudioMenu();let item=menu.addItem(withTitle:"Bu değerlerle sorgu kopyala",action:Selector(("copyQueryWithValues")),keyEquivalent:"")
+    #expect(item.keyEquivalent=="," && item.keyEquivalentModifierMask == .command)
+    #expect(StudioCommandCatalog.help("Kopyala",action:.gridCopyQuery)=="Kopyala  ·  "+binding.label)
+  }
   @Test func switchingThemeKeepsSemanticTypographyAndGridState() async throws {
     _ = NSApplication.shared
     let old = UserDefaults.standard.string(forKey: "ssmsTheme")

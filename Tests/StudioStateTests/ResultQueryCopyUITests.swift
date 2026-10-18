@@ -54,6 +54,7 @@ import Testing
     #expect(window.makeFirstResponder(grid.table))
     let menuItem=try item(grid.table)
     #expect(menuItem.keyEquivalent=="g" && menuItem.keyEquivalentModifierMask==[.control,.option])
+    #expect(!menuItem.allowsAutomaticKeyEquivalentLocalization && !menuItem.allowsAutomaticKeyEquivalentMirroring)
     #expect(grid.table.performKeyEquivalent(with:event))
     #expect(NSPasteboard.general.string(forType:.string)=="SELECT * FROM T WHERE ID IN (1, 2);")
     grid.setColumnPinned(0,pinned:true)

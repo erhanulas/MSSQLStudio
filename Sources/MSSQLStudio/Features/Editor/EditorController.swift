@@ -217,7 +217,7 @@ import SQLServerKit
       object: scroll.contentView)
     NotificationCenter.default.addObserver(
       self, selector: #selector(applyTheme), name: StudioTheme.changed, object: nil)
-    NotificationCenter.default.addObserver(self,selector:#selector(updateCommentHint),name:GridShortcuts.changed,object:nil)
+    NotificationCenter.default.addObserver(self,selector:#selector(shortcutHintsChanged),name:GridShortcuts.changed,object:nil)
     NotificationCenter.default.addObserver(self,selector:#selector(hideCommentHint),name:NSWindow.didResignKeyNotification,object:nil)
     for name in [
       Notification.Name.NSUndoManagerDidUndoChange, Notification.Name.NSUndoManagerDidRedoChange,
@@ -409,6 +409,10 @@ import SQLServerKit
     }
     ruler.needsDisplay = true
     updateCommentHint()
+  }
+  @objc private func shortcutHintsChanged() {
+    updateCommentHint()
+    decorateCollapsedRegions()
   }
   @objc private func hideCommentHint() {commentHint.isHidden=true}
   @objc func updateCommentHint() {
@@ -707,7 +711,7 @@ import SQLServerKit
     let source=document.sql as NSString
     for marker in collapsedMarkers where NSMaxRange(marker.range) <= storage.length {
       let region=marker.region,preview=NSRange(location:region.header.location,length:min(4000,NSMaxRange(region.hidden)-region.header.location))
-      storage.addAttributes([.backgroundColor:NSColor.controlAccentColor.withAlphaComponent(0.16),.foregroundColor:NSColor.secondaryLabelColor,.toolTip:"Katlanmış blok · \(source.substring(with:region.hidden).utf16.filter {$0 == 10}.count) satır gizli · Çift tık veya + ile aç (⌥⌘[)\n"+source.substring(with:preview)],range:marker.range)
+      storage.addAttributes([.backgroundColor:NSColor.controlAccentColor.withAlphaComponent(0.16),.foregroundColor:NSColor.secondaryLabelColor,.toolTip:"Katlanmış blok · \(source.substring(with:region.hidden).utf16.filter {$0 == 10}.count) satır gizli · \(StudioCommandCatalog.help("Çift tık veya + ile aç",action:.fold))\n"+source.substring(with:preview)],range:marker.range)
     }
   }
   func expandAll() {

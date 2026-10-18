@@ -113,10 +113,17 @@ import AppKit
       let action:GridShortcuts.Action? = selector == Selector(("tabMenuAction:")) ? [0:GridShortcuts.Action.pinTab,1:.closeWindow,2:.closeRight,3:.closeLeft,4:.closeOthers,5:.closeAll][tag]:action(for:selector)
       return action.map {GridShortcuts.binding($0)}
     }
-    if let binding {item.keyEquivalent=binding.key;item.keyEquivalentModifierMask=binding.flags}
+    if let binding {
+      item.allowsAutomaticKeyEquivalentLocalization=false
+      item.allowsAutomaticKeyEquivalentMirroring=false
+      item.keyEquivalent=binding.key;item.keyEquivalentModifierMask=binding.flags
+    }
   }
   static func help(_ title:String,selector:Selector?)->String {
     guard let action=action(for:selector) else {return title}
+    return help(title,action:action)
+  }
+  static func help(_ title:String,action:GridShortcuts.Action)->String {
     let binding=GridShortcuts.binding(action)
     return binding.key.isEmpty ? title:title+"  ·  "+binding.label
   }

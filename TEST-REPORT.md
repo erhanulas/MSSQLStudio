@@ -1,3 +1,15 @@
+## Public 0.2.199 preparation — 2026-10-18
+
+- Explicit request: publish without rerunning tests. Reused completed shortcut consistency evidence below (6 native tests and Release). Exact v0.2.199 release-package suite skipped; signing, manifest/hash/helper and feed verification retained.
+- Version 0.2.199, build 200. Installed app, live SQL, user input source/preferences and Keychain unchanged.
+
+## Shortcut display consistency across native menus and hints — 2026-10-18 (unpublished)
+
+- Exact saved gridCopyQuery binding was comma with Command; screenshot showed Ö. AppKit NSMenuItem allowsAutomaticKeyEquivalentLocalization defaults true and can substitute a reachable keyboard-layout equivalent. StudioCommandCatalog.decorate now disables automatic localization/mirroring for all recognized assignable commands, retaining exact stored key/modifiers.
+- Reviewed menu construction, common decoration/update, headers, result-query copy and toolbar hints. Replaced fixed results-toggle Command-R and collapsed-block Option-Command-[ hints with current shared binding; results/header/column hints update on existing shortcut notification; folded marker hints refresh on that notification without selection-driven full redecorations.
+- 6 native tests in PremiumLayoutTests (assigned menus/comma/Explorer tooltip) and ResultQueryCopyUITests passed (/tmp/mssql-shortcut-consistency-tests.log). Covers every command definition's native flags/key agreement and focused-grid query copying/reassignment/clear. Initial test compile syntax error corrected before successful run.
+- Isolated Release passed (/tmp/mssql-shortcut-consistency-release.log); architecture/source/diff checks passed. Installed app, keyboard input source and user preferences were not changed; live Turkish layout menu drawing not separately exercised.
+
 ## Public 0.2.198 receipt — 2026-10-18
 
 - Published latest [v0.2.198](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.198), build 199; source ecf5726faba4972c9f57795789905ce9a6a875f4. [Release workflow](https://github.com/erhanulas/MSSQLStudio/actions/runs/39083026418) succeeded. No additional test suite executed, per explicit request; completed development evidence reused.

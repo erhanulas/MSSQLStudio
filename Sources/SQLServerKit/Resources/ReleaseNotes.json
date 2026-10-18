@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.199",
+    "date": "2026-10-18",
+    "title": "Kısayollar menü ve ipuçlarında tutarlı gösterilir",
+    "changes": [
+      "Menülerdeki atanabilir kısayolların klavye düzeni nedeniyle farklı bir tuşla gösterilmesi düzeltildi. Ayarlardaki atama korunur.",
+      "Sonuçları göster/gizle düğmesinin ipucu güncel kısayol atamasını gösterir.",
+      "Katlanmış SQL blokları, kolon araması ve başlıklarla kopyalama ipuçları güncel atamayı kullanır; atama kaldırıldığında kısayol gösterilmez."
+    ]
+  },
+  {
     "version": "0.2.198",
     "date": "2026-10-18",
     "title": "Kısmi sonuç göstergeleri sadeleştirildi",
