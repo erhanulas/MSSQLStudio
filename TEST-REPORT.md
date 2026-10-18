@@ -1,3 +1,12 @@
+## Public 0.2.203 receipt — 2026-10-18
+
+- Published latest [v0.2.203](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.203), build 204; source fb675ed3d788c4e569b4ac228961e931de17193d. [Release workflow](https://github.com/erhanulas/MSSQLStudio/actions/runs/39087186489) succeeded. No additional test suite executed, per explicit request; development evidence reused.
+- Downloaded ZIP, PKG, update.json and frozen helper match GitHub digests/manifest. Exact bundle version/build, tagged notes and GitHub notes agree. App/helper strict signatures, frozen helper bytes and icon appearances passed.
+- ZIP SHA-256: fb63f02c942466167ecaca99509d9d3d9db5792105adfdb25d3f7f7315fa91dc
+- PKG SHA-256: a0ada56c8e4ea6398f055157829651a1d93a3770282b0dfc7cec190ec309dfb3
+- Signed downloaded application's Foundation updater-feed check passed: 0.2.203. Evidence /tmp/MSSQLStudio-203-public-verification/verification.json and /tmp/mssql203-feed-check.log.
+- Installed app, live SQL and user Keychain unchanged. Interactive Installer and OS mouse drag/resize not tested.
+
 ## Public 0.2.203 preparation — 2026-10-18
 
 - Explicit request: publish without rerunning tests. Reused shared-header evidence below (27 native regressions and Release). Exact v0.2.203 release-package suite skipped; signing, manifest/hash/helper and feed checks retained.
