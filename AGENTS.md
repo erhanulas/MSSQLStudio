@@ -290,6 +290,8 @@ Numara alanı genişliği kaynak/snapshot değişince hesaplanır; scroll çizim
 
 ### Ayarlar standardı
 
+- Ayarlar kartları her yeni pencere açılışında varsayılan açık gelir. SettingsPanel yalnız kullanıcının daralttığı kartları yerel collapsedCards kümesinde tutar; arama sonucu/indeks kısayolu hedef kartı açar. Yeni kartlar ek bir açık-kart listesine kaydedilmeden açık başlar.
+
 - Sol native kategori listesi altı bölüm sunar: Görünüm, SQL Editörü, Kısayollar, Çalışma Alanı, Güncellemeler, Güvenlik. Sağda StudioDisclosureHeader başlığının tamamından kartlar kompakt açılır/kapanır; seçili bölüm render edilir, taslakların sahibi SettingsPanel’dır. Sonuç tercihleri yalnız sonuç alanındadır.
 - Pencere yeniden kullanılır; minimum içerik 820×620 pt, istenen başlangıç 960×720 pt (kullanılabilir ekrana native constrainFrameRect ile sığdırılır), gerçek frame `frameRect(forContentRect:)` ile hesaplanır. Kartlar hizalı, Uygula/geri bildirim sabittir. Uygula sabit 100×34 pt SwiftUI slotunda native SettingsApplyButton → StudioPrimaryActionButton’dır; zemin ve ink aynı draw içinde çizilir, sistem bezelColor/contentTintColor karışımına bırakılmaz; footer 16 pt iç boşluk bırakır. Pencere native ekran kısıtı ilk hosting layout’tan önce uygulanır; hosting layout ilk gösterim öncesinde/sonrasında tamamlanır; kullanıcının resize yapması beklenmez.
 - Tema/depo ve diğer taslaklar sekme, arama ve görünüm değişiminde korunur. Uygula öncesi global tercih/tema değiştirilmez; kısayolların anlık kaydı ayrı mevcut davranıştır.

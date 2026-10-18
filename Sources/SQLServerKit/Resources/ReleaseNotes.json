@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.200",
+    "date": "2026-10-18",
+    "title": "Ayarlar bölümleri açık başlar",
+    "changes": [
+      "Ayarlar ekranındaki tüm açılır bölümler varsayılan olarak açık gelir. İstediğiniz bölümü yine daraltabilirsiniz.",
+      "Ayar aramasından bir sonuca gittiğinizde ilgili bölüm açık gösterilir."
+    ]
+  },
+  {
     "version": "0.2.199",
     "date": "2026-10-18",
     "title": "Kısayollar menü ve ipuçlarında tutarlı gösterilir",

@@ -52,7 +52,7 @@ struct SettingsPanel: View {
   @State private var renewingKeychain = false
   @State private var message = ""
   @State private var selectedTab: SettingsSection
-  @State private var expandedCards:Set<String>=["Renk teması","Otomatik tamamlama","Klavye kısayolları","Sekmeler ve pencereler","GitHub yayınları","Parola erişimi"]
+  @State private var collapsedCards:Set<String>=[]
   @State private var search=""
   @State private var searchTarget:SettingsSearchEntry?
   @State private var searchFocused=false
@@ -66,7 +66,7 @@ struct SettingsPanel: View {
       HStack(spacing: 12) {
         StudioPanelHeading(title:"Ayarlar",icon:"slider.horizontal.3",subtitle:"Çalışma ortamı ve uygulama tercihleri")
         Spacer()
-        Button {selectedTab = .workspace;expandedCards.insert("Nesne tanım indeksi")} label: {
+        Button {selectedTab = .workspace;collapsedCards.remove("Nesne tanım indeksi")} label: {
           VStack(alignment:.trailing,spacing:3) {
             Label("Tanım indeksi",systemImage:"internaldrive").font(.caption)
             Text(definitionStorage.usageText).font(.caption2).monospacedDigit()
@@ -357,14 +357,14 @@ struct SettingsPanel: View {
       .background(Color(nsColor:StudioTheme.panel)).accessibilityIdentifier("settingsSearchResults")
   }
   private func openSearchResult(_ result:SettingsSearchEntry) {
-    searchFocused=false;expandedCards.insert(result.card);selectedTab=result.section;searchTarget=result;search=""
+    searchFocused=false;collapsedCards.remove(result.card);selectedTab=result.section;searchTarget=result;search=""
   }
   private func settingsCard<Content: View>(_ title: String, icon: String, tint: Color = Color(nsColor: StudioTheme.accent), @ViewBuilder content: @escaping () -> Content) -> some View {
     VStack(alignment:.leading,spacing:0) {
-      StudioDisclosureHeader(title:title,icon:icon,tint:NSColor(tint),expanded:expandedCards.contains(title)) {
-        if expandedCards.contains(title) {expandedCards.remove(title)} else {expandedCards.insert(title)}
+      StudioDisclosureHeader(title:title,icon:icon,tint:NSColor(tint),expanded:!collapsedCards.contains(title)) {
+        if collapsedCards.contains(title) {collapsedCards.remove(title)} else {collapsedCards.insert(title)}
       }.frame(height:32)
-      if expandedCards.contains(title) {VStack(alignment:.leading,spacing:10) {content()}.padding(.top,8)}
+      if !collapsedCards.contains(title) {VStack(alignment:.leading,spacing:10) {content()}.padding(.top,8)}
     }.frame(maxWidth:.infinity,alignment:.leading).studioCard().id(title)
       .overlay(RoundedRectangle(cornerRadius:12).strokeBorder(searchTarget?.card == title ? Color(nsColor:StudioTheme.accent):.clear,lineWidth:2))
   }

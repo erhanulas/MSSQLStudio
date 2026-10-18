@@ -1,3 +1,9 @@
+## Public 0.2.200 preparation — 2026-10-18
+
+- User explicitly requested implement and publish without tests. No test suite run; exact v0.2.200 release-package suite skipped. SettingsPanel now tracks collapsed cards (empty default) rather than a partial expanded allowlist, so all current/future cards start open. Manual collapse and search/index reveal remain.
+- Isolated Release passed (/tmp/mssql-settings-expanded-release.log); architecture/source synchronization and diff checks passed. Signing, manifest/hash/helper and feed checks retained. Version 0.2.200, build 201.
+- Installed application, live SQL and user Keychain unchanged; native UI interaction not tested for this change.
+
 ## Public 0.2.199 receipt — 2026-10-18
 
 - Published latest [v0.2.199](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.199), build 200; source a599b05d32217cb3c60e7a64f17c8166e0d7806f. [Release workflow](https://github.com/erhanulas/MSSQLStudio/actions/runs/39083472368) succeeded. No additional test suite executed, per explicit request; development evidence reused.
