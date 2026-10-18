@@ -101,7 +101,7 @@ struct HistoryPanel: View {
         row.tabTitle != nil ? "clock.arrow.circlepath":row.status=="Hata" ? "xmark.circle":row.status=="Kısmi" ? "exclamationmark.circle":"checkmark.circle"
       }),
       .init(title:"Süre",width:86,numeric:true,value:{String($0.seconds)},display:{String(format:"%.3f sn",$0.seconds)})
-    ],selection:$selected,identifier:"historyTable",revision:gridRevision,menu:{record in
+    ],selection:$selected,identifier:"historyTable",revision:gridRevision,fitsColumns:true,menu:{record in
       [.init(title:record.tabTitle == nil ? "Yeni Sekmede Aç":"Kapatılan Sekmeyi Aç",enabled:state.historyServer(record) != nil,perform:{open(record)})]
     },activate:{record in insertRecord(record)})
   }

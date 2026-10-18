@@ -41,6 +41,32 @@ import Testing
     #expect(grid.frozenTable.selectedRowIndexes==grid.table.selectedRowIndexes)
     #expect((grid.frozenTable.tableColumns[1].headerCell as? FilterHeaderCell)?.showsSortControl==true)
   }
+  @Test func hoverHighlightsOnlyExactActionAndActionSurfacesShareHitGeometry() throws {
+    let (grid,window)=fixture();defer {window.close()}
+    let header=try #require(grid.table.headerView as? FilterHeader)
+    let cell=try #require(grid.table.tableColumns[1].headerCell as? FilterHeaderCell)
+    let frame=header.headerRect(ofColumn:1)
+    let sort=header.sortHitRect(column:1),filter=header.filterHitRect(column:1)
+    #expect(sort.width==28 && filter.width==28 && !sort.intersects(filter))
+    #expect(filter.maxX==frame.maxX-12)
+    #expect(sort==GridHeaderActionLayout.rect(in:frame,sort:true) && filter==GridHeaderActionLayout.rect(in:frame,sort:false))
+    func move(_ point:NSPoint) throws {
+      let event=try #require(NSEvent.mouseEvent(with:.mouseMoved,location:header.convert(point,to:nil),modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,eventNumber:1,clickCount:0,pressure:0))
+      header.mouseMoved(with:event)
+    }
+    try move(NSPoint(x:frame.minX+30,y:frame.midY))
+    #expect(!cell.hovered && !cell.sortHovered)
+    try move(NSPoint(x:filter.minX+1,y:filter.midY))
+    #expect(cell.hovered && !cell.sortHovered)
+    try move(NSPoint(x:sort.minX+1,y:sort.midY))
+    #expect(!cell.hovered && cell.sortHovered)
+    // The edge of each framed control is clickable, not just its glyph.
+    var filtered=false;header.openFilter={_ in filtered=true}
+    try click(header,point:NSPoint(x:filter.minX+1,y:filter.midY))
+    #expect(filtered && grid.table.sortDescriptors.isEmpty)
+    try click(header,point:NSPoint(x:sort.minX+1,y:sort.midY))
+    #expect(grid.table.sortDescriptors.first?.ascending==true)
+  }
   @Test func sortAndFilterHitsAreIndependentAndSortCyclesWithoutSelectingColumn() async throws {
     let (grid,window)=fixture();defer {window.close()}
     let header=try #require(grid.table.headerView as? FilterHeader)

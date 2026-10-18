@@ -9,7 +9,7 @@ private final class ProfilerTextCell:NSTextFieldCell {
   }
 }
 
-private final class ProfilerRowView:NSTableRowView {
+private final class ProfilerRowView:StudioColumnSelectionRowView {
   override var isSelected:Bool {didSet {updateInk()}}
   override var isEmphasized:Bool {didSet {updateInk()}}
   override func didAddSubview(_ subview:NSView) {super.didAddSubview(subview);updateInk()}
@@ -20,7 +20,7 @@ private final class ProfilerRowView:NSTableRowView {
   }
 }
 
-private final class ProfilerTableView:NSTableView {
+private final class ProfilerTableView:StudioColumnSelectionTable {
   var contextMenu:((Int,Int)->NSMenu)?
   override func mouseDown(with event:NSEvent) {
     let modifiers=event.modifierFlags.intersection([.command,.shift,.option,.control])
@@ -48,8 +48,8 @@ struct ProfilerEventGrid:NSViewRepresentable {
     table.usesAlternatingRowBackgroundColors=true;table.rowHeight=24;table.intercellSpacing=NSSize(width:8,height:0)
     table.columnAutoresizingStyle = .noColumnAutoresizing;table.allowsMultipleSelection=true
     for (key,title,width) in Coordinator.columns {
-      let column=NSTableColumn(identifier:.init(key));column.title=title;column.width=width;column.minWidth=44
-      let cell=FilterHeaderCell(textCell:title);cell.typeSymbol=key=="timestamp" ? "clock":SQLProfilerFiltering.Column(rawValue:key)?.numeric==true ? "number":"textformat"
+      let column=NSTableColumn(identifier:.init(key));column.title=title;column.width=width;column.minWidth=100
+      let cell=FilterHeaderCell(textCell:title);cell.showsSortControl=true;cell.typeSymbol=key=="timestamp" ? "clock":SQLProfilerFiltering.Column(rawValue:key)?.numeric==true ? "number":"textformat"
       column.headerCell=cell;column.width=max(width,GridColumnSizing.headerWidth(title))
       table.addTableColumn(column)
     }
@@ -57,6 +57,11 @@ struct ProfilerEventGrid:NSViewRepresentable {
     header.openFilter={ [weak table,weak owner=context.coordinator] position in
       guard let table,table.tableColumns.indices.contains(position) else {return}
       owner?.openColumnFilter(table,column:table.tableColumns[position])
+    }
+    header.enableColumnSelection(on:table)
+    header.sortColumn={ [weak table,weak owner=context.coordinator] position in
+      guard let table,table.tableColumns.indices.contains(position) else {return}
+      owner?.tableView(table,didClick:table.tableColumns[position])
     }
     table.headerView=header
     table.dataSource=context.coordinator;table.delegate=context.coordinator
@@ -174,7 +179,10 @@ struct ProfilerEventGrid:NSViewRepresentable {
       return result
     }
     init(model:ProfilerModel,selection:Binding<Set<UInt64>>,sortingFailure:Binding<String> = .constant("")) {self.model=model;self.selection=selection;self.sortingFailure=sortingFailure}
-    func tableView(_ tableView:NSTableView,rowViewForRow row:Int)->NSTableRowView? {ProfilerRowView()}
+    func tableView(_ tableView:NSTableView,rowViewForRow row:Int)->NSTableRowView? {
+      let view=ProfilerRowView();view.columnSelectionTable=tableView as? StudioColumnSelectionTable
+      return view
+    }
     func numberOfRows(in tableView:NSTableView)->Int {events.count}
     func tableViewSelectionDidChange(_ notification:Notification) {
       guard !updating,let table=notification.object as? NSTableView else {return}

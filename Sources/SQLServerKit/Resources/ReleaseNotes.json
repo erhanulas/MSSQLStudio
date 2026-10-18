@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.203",
+    "date": "2026-10-18",
+    "title": "Grid başlıkları daha kolay kullanılır",
+    "changes": [
+      "Filtre simgesi yenilendi. Sıralama ve filtre ikonlarının etrafına eşit, daha rahat tıklanan çerçeveli alanlar eklendi.",
+      "Kolon başlığının üzerine gelmek filtre ikonunu vurgulamaz; yalnız üzerinde olduğunuz işlem vurgulanır.",
+      "Ortak başlık görünümü ve ayrı sıralama/filtre işlemleri Activity Monitor, Profiler ve Geçmiş gridlerine de uygulandı.",
+      "Salt okunur gridlerde kolon seçimi satır seçimini temizler; önceki satır işlem hedefi olarak kalmaz.",
+      "Geçmiş ekranındaki kolonlar dar pencereye uyum sağlar."
+    ]
+  },
+  {
     "version": "0.2.202",
     "date": "2026-10-18",
     "title": "Kolon seçimi, sıralama ve filtreleme ayrıldı",

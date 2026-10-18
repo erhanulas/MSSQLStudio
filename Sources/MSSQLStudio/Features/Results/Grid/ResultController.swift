@@ -639,7 +639,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
         c.headerToolTip = "\(f.name) · \(f.dataType)"
         c.maxWidth = max(10_000, GridColumnSizing.headerWidth(f.name, detail: f.dataType))
         c.width = max(150, GridColumnSizing.headerWidth(f.name, detail: f.dataType))
-        c.minWidth = 70
+        c.minWidth = 100
         c.sortDescriptorPrototype = NSSortDescriptor(key: String(i), ascending: true)
         table.addTableColumn(c)
       }

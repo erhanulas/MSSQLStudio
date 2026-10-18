@@ -19,7 +19,29 @@ struct StudioGridMenuAction {
   var enabled=true
   let perform:()->Void
 }
-private final class StudioDataGridTable:NSTableView {
+private final class StudioDataGridScrollView:NSScrollView {
+  var fitsColumns=false
+  private var fittingColumns=false
+  private var fittedWidth:CGFloat=0
+  override func tile() {
+    super.tile()
+    guard fitsColumns,!fittingColumns,let table=documentView as? NSTableView,
+      !table.tableColumns.isEmpty,contentSize.width>0,abs(contentSize.width-fittedWidth)>0.5 else {return}
+    let spacing=table.intercellSpacing.width*CGFloat(table.tableColumns.count)
+    let available=contentSize.width-spacing
+    let minimum=table.tableColumns.reduce(CGFloat(0)) {$0+$1.minWidth}
+    guard available>=minimum else {return}
+    fittingColumns=true;defer {fittingColumns=false}
+    fittedWidth=contentSize.width
+    let flexible=table.tableColumns.reduce(CGFloat(0)) {$0+max(0,$1.width-$1.minWidth)}
+    let remaining=available-minimum
+    for column in table.tableColumns {
+      let fraction=flexible>0 ? max(0,column.width-column.minWidth)/flexible:1/CGFloat(table.tableColumns.count)
+      column.width=column.minWidth+remaining*fraction
+    }
+  }
+}
+private final class StudioDataGridTable:StudioColumnSelectionTable {
   var rowMenu:((Int)->NSMenu?)?
   override func menu(for event:NSEvent)->NSMenu? {
     let index=row(at:convert(event.locationInWindow,from:nil))
@@ -75,24 +97,31 @@ struct StudioDataGrid<Row:Identifiable>:NSViewRepresentable {
   @Binding var selection:Row.ID?
   var identifier="activityGrid"
   var revision:UUID?=nil
+  var fitsColumns=false
   var menu:((Row)->[StudioGridMenuAction])?
   var activate:((Row)->Void)?
   func makeCoordinator()->Coordinator {Coordinator(selection:$selection)}
   func makeNSView(context:Context)->NSScrollView {
-    let scroll=NSScrollView(),table=StudioDataGridTable()
+    let scroll=StudioDataGridScrollView(),table=StudioDataGridTable()
+    scroll.fitsColumns=fitsColumns
     scroll.documentView=table;scroll.hasVerticalScroller=true;scroll.hasHorizontalScroller=true;scroll.autohidesScrollers=true
     table.rowHeight=24;table.intercellSpacing = .zero;table.usesAlternatingRowBackgroundColors=true;table.columnAutoresizingStyle = .noColumnAutoresizing
     table.allowsMultipleSelection=false;table.dataSource=context.coordinator;table.delegate=context.coordinator
     for (index,column) in columns.enumerated() {
       let native=NSTableColumn(identifier:.init(String(index)));native.title=column.title
-      native.width=max(column.width,GridColumnSizing.headerWidth(column.title));native.minWidth=44
-      let cell=FilterHeaderCell(textCell:column.title);cell.typeSymbol=column.numeric ? "number":"textformat"
+      native.width=max(column.width,GridColumnSizing.headerWidth(column.title));native.minWidth=100
+      let cell=FilterHeaderCell(textCell:column.title);cell.showsSortControl=true;cell.typeSymbol=column.numeric ? "number":"textformat"
       native.headerCell=cell;table.addTableColumn(native)
     }
     let header=FilterHeader(frame:NSRect(x:0,y:0,width:0,height:28))
     header.openFilter={ [weak owner=context.coordinator,weak table] index in
       guard let table,table.tableColumns.indices.contains(index) else {return}
       owner?.openColumnFilter(table,column:table.tableColumns[index])
+    }
+    header.enableColumnSelection(on:table)
+    header.sortColumn={ [weak owner=context.coordinator,weak table] index in
+      guard let table,table.tableColumns.indices.contains(index) else {return}
+      owner?.tableView(table,didClick:table.tableColumns[index])
     }
     table.headerView=header;table.setAccessibilityIdentifier(identifier)
     table.target=context.coordinator;table.doubleAction=#selector(Coordinator.activateRow(_:))
@@ -167,6 +196,10 @@ struct StudioDataGrid<Row:Identifiable>:NSViewRepresentable {
       if let id=selection.wrappedValue,let index=indices.firstIndex(where:{ids[$0]==id}) {table.selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false)}
       else {table.deselectAll(nil)}
       updateStatusSelection(table)
+    }
+    func tableView(_ table:NSTableView,rowViewForRow row:Int)->NSTableRowView? {
+      let view=StudioColumnSelectionRowView();view.columnSelectionTable=table as? StudioColumnSelectionTable
+      return view
     }
     func numberOfRows(in tableView:NSTableView)->Int {indices.count}
     func tableViewSelectionDidChange(_ notification:Notification) {

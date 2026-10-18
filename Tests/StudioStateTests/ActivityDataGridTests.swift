@@ -97,6 +97,16 @@ import SQLServerKit
     #expect(throws:SQLFailure.self) {try owner.setRule(rule,column:0,table:table)}
     try owner.setRule(.init(),column:0,table:table)
     #expect(table.numberOfRows==3 && table.selectedRow==1 && rows.count==3)
+    let header=try #require(table.headerView as? FilterHeader)
+    #expect((table.tableColumns[0].headerCell as? FilterHeaderCell)?.showsSortControl==true)
+    header.selectColumn?(0,[])
+    #expect((table as? StudioColumnSelectionTable)?.headerSelectedColumns==IndexSet(integer:0) && table.selectedRowIndexes.isEmpty && selected==nil)
+    host.layoutSubtreeIfNeeded()
+    let image=try #require(host.bitmapImageRepForCachingDisplay(in:host.bounds));host.cacheDisplay(in:host.bounds,to:image)
+    try image.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-shared-grid-column-selection.png"))
+    header.sortColumn?(0)
+    for _ in 0..<100 where table.numberOfRows != 3 {try await Task.sleep(for:.milliseconds(10))}
+    #expect(table.selectedRowIndexes.isEmpty)
     owner.update(rows:[],columns:[.init(title:"Value",numeric:true,value:{$0.value})],table:table)
     try owner.setRule(.init(),column:0,table:table)
     #expect(table.numberOfRows==0)

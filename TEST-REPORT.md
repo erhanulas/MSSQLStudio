@@ -1,3 +1,17 @@
+## Public 0.2.203 preparation — 2026-10-18
+
+- Explicit request: publish without rerunning tests. Reused shared-header evidence below (27 native regressions and Release). Exact v0.2.203 release-package suite skipped; signing, manifest/hash/helper and feed checks retained.
+- Version 0.2.203, build 204. Installed app, live SQL and user Keychain unchanged. Actual OS drag/resize not separately exercised.
+
+## Shared grid header actions and precise hover — 2026-10-18 (unpublished)
+
+- Moved FilterHeader/FilterHeaderCell/GridColumnSizing from Results/Grid into SharedUI/Controls; same types/APIs remain. GridHeaderActionLayout gives both painted surfaces and hit regions identical 28 pt width with 12 pt native resize edge. Sort/filter have equal rounded border surfaces, filter uses line.3.horizontal.decrease.circle, precise action-specific hover replaces column-wide filter hover.
+- Result grids, StudioDataGrid (Activity/History/busy clients) and Profiler events all configure separate sort controls and column selection. Existing CopyTable canonical selected cells retained. View-based read-only tables use StudioColumnSelectionTable/RowView: only available native row views redraw selected-column backgrounds; clear selected row/ID first so destructive actions cannot retain a stale target. No cell/row/ID enumeration or server reads added.
+- AppKit reports native column selection unsupported for view-based tables; initial native-flag approach was replaced by this visible-row presentation and no such warning remains. Native title drag/edge resizing routes preserved; OS drag/resize not exercised.
+- Wider controls exposed History narrow-window overflow in DesktopLayoutTests. Added opt-in fitsColumns for its six-column table only; scroll tile rescales flexible widths above minimums only when viewport width changes. Default monitor/profiler horizontal scrolling unchanged.
+- Final 27 tests in 6 native suites passed (/tmp/mssql-shared-header-actions-tests.log): exact hover transitions and edge-of-surface clicks; result/pinned selection/filter/sort/copy; shared Activity column selection clears row action; configured Profiler sort/select callbacks clear selected event IDs; History minimum/theme layout. Corrective compact-layout run 9 tests passed (/tmp/mssql-shared-header-compact-tests.log).
+- Isolated Release passed (/tmp/mssql-shared-header-actions-release.log); Xcode source synchronization, architecture and diff checks passed. Inspected light/dark result headers plus /tmp/mssql-shared-grid-column-selection.png and /tmp/mssql-profiler-column-selection.png: separate framed controls and selected-column backgrounds visible. Installed app/live SQL not touched.
+
 ## Public 0.2.202 receipt — 2026-10-18
 
 - Published latest [v0.2.202](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.202), build 203; source c517336fdd19131334b8cb49c02fe25b82b7abbe. [Release workflow](https://github.com/erhanulas/MSSQLStudio/actions/runs/39086255495) succeeded. No additional test suite executed, per explicit request; development evidence reused.

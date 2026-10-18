@@ -42,13 +42,20 @@ private actor ProfilerFilteringProbe {
     let owner=try #require(table.delegate as? ProfilerEventGrid.Coordinator)
     let column=table.tableColumns[table.column(withIdentifier:.init("clientPID"))]
     let source=model.visibleEvents
-    owner.tableView(table,didClick:column)
+    let header=try #require(table.headerView as? FilterHeader),position=table.column(withIdentifier:column.identifier)
+    #expect((column.headerCell as? FilterHeaderCell)?.showsSortControl==true)
+    header.sortColumn?(position)
     try await wait {owner.events.first?.clientPID=="71"}
     #expect(owner.filterPopover==nil && selection==[source[0].id] && model.visibleEvents==source)
-    owner.tableView(table,didClick:column)
+    header.sortColumn?(position)
     try await wait {owner.events.first?.clientPID=="123"}
-    owner.tableView(table,didClick:column)
+    header.sortColumn?(position)
     #expect(owner.events==source && (column.headerCell as? FilterHeaderCell)?.ascending==nil)
+    header.selectColumn?(position,[])
+    #expect((table as? StudioColumnSelectionTable)?.headerSelectedColumns==IndexSet(integer:position) && table.selectedRowIndexes.isEmpty && selection.isEmpty)
+    table.scrollColumnToVisible(position);host.layoutSubtreeIfNeeded()
+    let image=try #require(host.bitmapImageRepForCachingDisplay(in:host.bounds));host.cacheDisplay(in:host.bounds,to:image)
+    try image.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/mssql-profiler-column-selection.png"))
     owner.cancelSorting();#expect(await model.stop())
   }
   @Test func correlatedPreviewUsesHiddenStartAndPreservesRawExport() async throws {
