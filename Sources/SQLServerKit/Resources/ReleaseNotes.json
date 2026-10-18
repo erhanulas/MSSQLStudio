@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.2.201",
+    "date": "2026-10-18",
+    "title": "Sonuç satır sayısı filtreye göre güncellenir",
+    "changes": [
+      "Sonuç ekranının sol üstündeki satır sayısı artık kolon filtrelerine ve sonuç aramasına göre değişir.",
+      "Filtre temizlendiğinde yüklenen sonuç sayısı yeniden gösterilir. Satır sınırı ayarı değişmez ve ek sorgu çalıştırılmaz."
+    ]
+  },
+  {
     "version": "0.2.200",
     "date": "2026-10-18",
     "title": "Ayarlar bölümleri açık başlar",

@@ -299,6 +299,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
   @objc private func deleteResultRow() { table.window?.makeFirstResponder(nil); toggleSelectedDeletion() }
   @objc private func revertResultRows() { table.window?.makeFirstResponder(nil); revertSelectedRows() }
   var editsChanged: (() -> Void)?
+  var rowCountChanged:(()->Void)?
   var editingAllowed: (() -> Bool)?
   func discardEdits() { _ = table.abortEditing(); _ = frozenTable.abortEditing(); pendingEdits = [:]; newRowOrder = []; nextNewRow = -1; editValidationMessage = nil; editDefinition = nil; editObjectID = nil; editMetadataSignature = nil; editMetadataCached = false; table.reloadData(); updateInfo(); editsChanged?() }
   func pendingSQL() throws -> String {
@@ -587,6 +588,7 @@ final class ResultController: NSViewController, NSTableViewDataSource, NSTableVi
     toolbar.setAccessibilityValue(label)
     toolbar.setAccessibilityHelp("Geçerli sayfa / sınır içindeki satırlar. \(visibleCount.formatted()) filtrelenen · \(result.values.count.formatted()) sınır içinde · \(loadedRowCount.formatted()) önbellekte.")
     for button in navigation { button.isHidden = pageSize == 0; button.isEnabled = pageSize > 0 && visibleCount > 0 && (button.tag < 2 ? pageStart > 0 : pageStart + basePageCount < visibleCount) }
+    rowCountChanged?()
   }
   func update(_ rows: Rows, generation: Int = 0) {
     _ = view

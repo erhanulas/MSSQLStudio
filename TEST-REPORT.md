@@ -1,3 +1,14 @@
+## Public 0.2.201 preparation — 2026-10-18
+
+- Explicit request: publish without rerunning tests. Reused completed filtered-count evidence below (5 native tests and Release). Exact v0.2.201 release-package suite skipped; signing, manifest/hash/helper and feed checks retained.
+- Version 0.2.201, build 202. Installed app, live SQL and user Keychain unchanged.
+
+## Filtered row count in read-limit selector — 2026-10-18 (unpublished)
+
+- QueryController read-limit display uses selected grid visibleCount (existing filtered/search projection) instead of unfiltered result count. ResultController rowCountChanged updates only presentation after range/projection changes; no extra row scan/server query. Read-limit setting, partial/+ semantics, snapshot and SQL unchanged.
+- SnapshotReadLimitTests: 5 passed (/tmp/mssql-filtered-row-count-tests.log). New native regression covers 300→1→0→300 through column choices, search→clear, same cached disk-backed rows/limit and no execution. Existing cap/sort/pin/edit/stale-projection paths passed. Initial test compilation referenced nonexistent equals field; corrected to supported ColumnRule choices before successful run.
+- Isolated Release passed (/tmp/mssql-filtered-row-count-release.log); architecture/source/diff checks passed. Installed application/live SQL not tested.
+
 ## Public 0.2.200 receipt — 2026-10-18
 
 - Published latest [v0.2.200](https://github.com/erhanulas/MSSQLStudio/releases/tag/v0.2.200), build 201; source e0e4e8c3f8e43255008ded42d088936d5bf5403e. [Release workflow](https://github.com/erhanulas/MSSQLStudio/actions/runs/39084215934) succeeded. No test suite executed, per explicit request; compile/static/package checks only.

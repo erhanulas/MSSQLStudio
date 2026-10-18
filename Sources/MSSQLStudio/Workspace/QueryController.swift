@@ -586,7 +586,6 @@ import SwiftUI
     guard (0...3600).contains(seconds) else { return }
     guard seconds > 0, document.canRefresh, !tables.values.contains(where: { $0.editDefinition != nil }) else { return }
     selectedRefreshSeconds=seconds
-
     refreshTask = Task { [weak self] in
       while !Task.isCancelled {
         do { try await Task.sleep(for: .seconds(seconds)) } catch { return }
@@ -791,6 +790,7 @@ import SwiftUI
             return true
           }
           controller.editsChanged = { [weak self] in self?.syncDataActions() }
+          controller.rowCountChanged = { [weak self] in self?.syncReadOptionsHelp() }
           controller.selectionSummary.changed = { [weak self,weak controller] in
             guard let self,let controller,selectedGrid === controller else {return}
             selectionStatusChanged?()
@@ -985,7 +985,7 @@ import SwiftUI
     NSApp.sendAction(action,to:item.target,from:item)
   }
   private func syncReadOptionsHelp() {
-    let grid=selectedGrid,count=grid?.result.values.count ?? 0
+    let grid=selectedGrid,count=grid?.visibleCount ?? 0
     rowLimit.displayTitle="\(count.formatted())\(grid?.partial == true || grid?.isReadLimited == true ? "+":"") satır"
     let enabled = !document.busy && !submittingData && canChangeReadLimit
     if rowLimit.isEnabled && !enabled {rowLimit.invalidateChoices()}

@@ -50,6 +50,27 @@ import Testing
     #expect(grids[0].result.values[1199][0] == "1199" && doc.resultGeneration == generation)
     #expect(tabs.tabViewItems.filter {$0.label.hasPrefix("Results")}.allSatisfy {!$0.label.contains("SINIRLI")})
   }
+  @Test func rowLimitSelectorTracksFilteredCountAndRestoresWithoutQueryExecution() async throws {
+    _=NSApplication.shared
+    let doc=QueryDocument(server:ConnectedServer(profile:.init(),password:""),database:"master",title:"Filtered count")
+    doc.server.online=false;doc.state = .ready;doc.limits=ResultReadPreferences.limits(rows:1000)
+    doc.results=[try rows(300)];doc.rowCount=300
+    let controller=QueryController(document:doc),window=NSWindow(contentViewController:controller)
+    window.isReleasedWhenClosed=false;defer {window.close()}
+    let grid=try #require(controller.children.compactMap {$0 as? ResultController}.first)
+    let popup=try #require(descendants(controller.view).compactMap {$0 as? StudioSearchablePopUpButton}.first {$0.accessibilityIdentifier()=="gridRowOptions"})
+    #expect(popup.displayTitle=="300 satır")
+    var rule=ColumnRule();rule.choices=[.text("42")];try grid.setRule(rule,column:0);try await wait(grid)
+    #expect(grid.visibleCount==1 && popup.displayTitle=="1 satır")
+    rule.choices=[];try grid.setRule(rule,column:0);try await wait(grid)
+    #expect(grid.visibleCount==0 && popup.displayTitle=="0 satır")
+    try grid.setRule(ColumnRule(),column:0);try await wait(grid)
+    #expect(popup.displayTitle=="300 satır")
+    grid.filter="Row 299";try await wait(grid)
+    #expect(popup.displayTitle=="1 satır")
+    grid.filter="";try await wait(grid)
+    #expect(popup.displayTitle=="300 satır" && doc.task==nil && doc.results[0].values.count==300 && doc.limits.rows==1000)
+  }
   @Test func capPrecedesSortAndFilterKeepsPinnedRowsGutterAndCopyInOneSourceMapping() async throws {
     _=NSApplication.shared
     let grid=ResultController(),window=NSWindow(contentViewController:grid);window.isReleasedWhenClosed=false;defer {window.close()}
